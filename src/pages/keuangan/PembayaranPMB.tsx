@@ -7,14 +7,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { supabase } from "@/integrations/supabase/client";
-import { useLembaga, useJenisPembayaran, usePembayaranBySiswa, useCreatePembayaran, formatRupiah } from "@/hooks/useKeuangan";
-import { useQuery } from "@tanstack/react-query";
+import { useLembaga, useJenisPembayaran, usePembayaranBySiswa, useTahunAjaranAktif, formatRupiah } from "@/hooks/useKeuangan";
+import { prosesPembayaran } from "@/server/pembayaran";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Search } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 
 export default function PembayaranPMB() {
+  const qc = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSiswa, setSelectedSiswa] = useState<any>(null);
   const [departemenId, setDepartemenId] = useState("");
@@ -25,8 +27,38 @@ export default function PembayaranPMB() {
 
   const { data: lembagaList } = useLembaga();
   const { data: jenisList = [] } = useJenisPembayaran(departemenId || undefined);
+  const { data: tahunAktif } = useTahunAjaranAktif();
   const { data: riwayat, isLoading: loadRiwayat } = usePembayaranBySiswa(selectedSiswa?.id);
-  const createMutation = useCreatePembayaran();
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedSiswa || !jenisId || !jumlah || !tahunAktif?.id) {
+        throw new Error("Data pembayaran atau tahun ajaran aktif belum lengkap");
+      }
+      return await prosesPembayaran({
+        data: {
+          siswa_id: selectedSiswa.id,
+          jenis_id: jenisId,
+          bulan: 0,
+          jumlah: Number(jumlah),
+          tanggal_bayar: tanggalBayar,
+          keterangan: keterangan || "Pembayaran PMB",
+          departemen_id: departemenId || undefined,
+          tahun_ajaran_id: tahunAktif.id,
+          is_bayar_dimuka: false,
+        },
+      });
+    },
+    onSuccess: async (result) => {
+      await qc.invalidateQueries({ queryKey: ["pembayaran"] });
+      await qc.invalidateQueries({ queryKey: ["rekap"] });
+      toast.success(`Pembayaran dan jurnal ${result.nomor_jurnal} berhasil dibuat`);
+      setJenisId("");
+      setJumlah("");
+      setKeterangan("");
+    },
+    onError: (e: any) => toast.error(e.message || "Gagal menyimpan pembayaran PMB"),
+  });
 
   const { data: pmbConfig } = useQuery({
     queryKey: ["konfigurasi_pmb", departemenId],
@@ -67,18 +99,7 @@ export default function PembayaranPMB() {
       toast.error("Jenis pembayaran tidak sesuai konfigurasi PMB lembaga ini");
       return;
     }
-    await createMutation.mutateAsync({
-      siswa_id: selectedSiswa.id,
-      jenis_id: jenisId,
-      bulan: 0,
-      jumlah: Number(jumlah),
-      tanggal_bayar: tanggalBayar,
-      keterangan: keterangan || "Pembayaran PMB",
-      departemen_id: departemenId || undefined,
-    });
-    setJenisId("");
-    setJumlah("");
-    setKeterangan("");
+    await createMutation.mutateAsync();
   };
 
   const riwayatColumns: DataTableColumn<any>[] = [
@@ -92,7 +113,7 @@ export default function PembayaranPMB() {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Pembayaran Calon Siswa (PMB)</h1>
-        <p className="text-sm text-muted-foreground">Input pembayaran pendaftaran untuk siswa berstatus calon.</p>
+        <p className="text-sm text-muted-foreground">Input pembayaran pendaftaran untuk siswa berstatus calon. Setiap transaksi dibuat bersama jurnal keuangan secara atomik.</p>
       </div>
 
       <Card>
@@ -173,6 +194,7 @@ export default function PembayaranPMB() {
                 <div>
                   <Label>Jumlah (Rp)</Label>
                   <Input type="number" value={jumlah} onChange={(e) => setJumlah(e.target.value)} placeholder="0" />
+                  <p className="text-xs text-muted-foreground mt-1">Nominal final divalidasi ulang dari tarif di server sebelum jurnal dibuat.</p>
                 </div>
                 <div>
                   <Label>Tanggal Bayar</Label>
@@ -182,8 +204,8 @@ export default function PembayaranPMB() {
                   <Label>Keterangan</Label>
                   <Textarea value={keterangan} onChange={(e) => setKeterangan(e.target.value)} placeholder="Pembayaran PMB" />
                 </div>
-                <Button onClick={handleSubmit} disabled={!jenisId || !jumlah || createMutation.isPending} className="w-full">
-                  {createMutation.isPending ? "Menyimpan..." : "Simpan Pembayaran"}
+                <Button onClick={handleSubmit} disabled={!jenisId || !jumlah || !tahunAktif?.id || createMutation.isPending} className="w-full">
+                  {createMutation.isPending ? "Menyimpan..." : "Simpan Pembayaran & Jurnal"}
                 </Button>
               </CardContent>
             </Card>
