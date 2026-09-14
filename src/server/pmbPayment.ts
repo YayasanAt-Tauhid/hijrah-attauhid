@@ -32,7 +32,6 @@ export const pmbCreatePayment = createServerFn({ method: "POST" })
     const token = (data.payment_token || "").trim();
     if (!siswaId || !token) throw new Error("Data checkout PMB tidak lengkap");
 
-    // Token membuktikan bahwa browser ini adalah pendaftar yang baru membuat data siswa.
     const { data: detail } = await (admin.from("siswa_detail") as any)
       .select("siswa_id, pmb_payment_token")
       .eq("siswa_id", siswaId)
@@ -48,29 +47,38 @@ export const pmbCreatePayment = createServerFn({ method: "POST" })
       .maybeSingle();
     if (siswaErr || !siswa || !siswa.departemen_id) throw new Error("Calon siswa tidak ditemukan");
 
-    // Jangan buat transaksi baru bila pembayaran PMB sudah sukses.
+    // Gunakan konfigurasi PMB eksplisit per lembaga. Jangan menebak dari nama jenis pembayaran.
+    const { data: config, error: configErr } = await (admin.from("konfigurasi_pmb") as any)
+      .select("jenis_pembayaran_id, pembayaran_online_aktif")
+      .eq("departemen_id", siswa.departemen_id)
+      .maybeSingle();
+    if (configErr) throw configErr;
+    if (!config) throw new Error("Konfigurasi pembayaran PMB belum diset untuk lembaga ini");
+    if (!config.pembayaran_online_aktif) throw new Error("Pembayaran online PMB sedang dinonaktifkan untuk lembaga ini");
+
+    const { data: jenis, error: jenisErr } = await admin
+      .from("jenis_pembayaran")
+      .select("id, nama, nominal, departemen_id, akun_pendapatan_id, aktif")
+      .eq("id", config.jenis_pembayaran_id)
+      .eq("aktif", true)
+      .maybeSingle();
+    if (jenisErr) throw jenisErr;
+    if (!jenis) throw new Error("Jenis pembayaran PMB yang dikonfigurasi tidak ditemukan atau tidak aktif");
+    if (jenis.departemen_id && jenis.departemen_id !== siswa.departemen_id) {
+      throw new Error("Jenis pembayaran PMB tidak berlaku untuk lembaga calon siswa ini");
+    }
+    if (!jenis.akun_pendapatan_id) throw new Error(`Akun pendapatan untuk ${jenis.nama} belum dikonfigurasi`);
+
+    // Tolak hanya jika jenis pembayaran PMB yang dikonfigurasi ini sudah dibayar.
     const { data: paidItems } = await admin
       .from("transaksi_midtrans_item")
       .select("id, pembayaran_id, transaksi_midtrans!inner(status)")
       .eq("siswa_id", siswaId)
+      .eq("jenis_id", jenis.id)
       .not("pembayaran_id", "is", null)
       .limit(1);
-    if (paidItems && paidItems.length > 0) throw new Error("Uang pendaftaran sudah dibayar");
+    if (paidItems && paidItems.length > 0) throw new Error(`${jenis.nama} sudah dibayar`);
 
-    // Jenis PMB menggunakan jenis pembayaran aktif bernama Pendaftaran/PMB pada lembaga.
-    // Prioritaskan jenis milik lembaga; fallback ke jenis global (departemen_id NULL).
-    const { data: jenisList, error: jenisErr } = await admin
-      .from("jenis_pembayaran")
-      .select("id, nama, nominal, departemen_id, akun_pendapatan_id")
-      .eq("aktif", true)
-      .or(`departemen_id.eq.${siswa.departemen_id},departemen_id.is.null`)
-      .order("departemen_id", { ascending: false });
-    if (jenisErr) throw jenisErr;
-    const jenis = (jenisList || []).find((j) => /pendaftaran|\bpmb\b/i.test(j.nama || ""));
-    if (!jenis) throw new Error("Jenis pembayaran Uang Pendaftaran/PMB belum dikonfigurasi untuk lembaga ini");
-    if (!jenis.akun_pendapatan_id) throw new Error(`Akun pendapatan untuk ${jenis.nama} belum dikonfigurasi`);
-
-    // Tarif tetap diambil dari DB, bukan dari browser.
     const { data: tarif } = await admin.rpc("get_tarif_siswa", {
       p_jenis_id: jenis.id,
       p_siswa_id: siswa.id,
@@ -85,9 +93,9 @@ export const pmbCreatePayment = createServerFn({ method: "POST" })
       .select("id")
       .eq("siswa_id", siswa.id)
       .eq("jenis_id", jenis.id)
-      .is("bulan", null)
-      .maybeSingle();
-    if (existingPayment) throw new Error("Uang pendaftaran sudah dibayar");
+      .or("bulan.is.null,bulan.eq.0")
+      .limit(1);
+    if (existingPayment && existingPayment.length > 0) throw new Error(`${jenis.nama} sudah dibayar`);
 
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "");
@@ -102,7 +110,7 @@ export const pmbCreatePayment = createServerFn({ method: "POST" })
         biaya_admin: 0,
         status: "pending",
         expired_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        metadata: { source: "pmb_public", siswa_id: siswa.id },
+        metadata: { source: "pmb_public", siswa_id: siswa.id, jenis_id: jenis.id },
       })
       .select("id")
       .single();
