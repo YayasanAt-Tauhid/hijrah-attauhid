@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { supabase } from "@/integrations/supabase/client";
-import { useLembaga, useJenisPembayaran, usePembayaranBySiswa, useCreatePembayaran, formatRupiah, namaBulan } from "@/hooks/useKeuangan";
+import { useLembaga, useJenisPembayaran, usePembayaranBySiswa, useCreatePembayaran, formatRupiah } from "@/hooks/useKeuangan";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Search } from "lucide-react";
@@ -24,11 +24,28 @@ export default function PembayaranPMB() {
   const [keterangan, setKeterangan] = useState("");
 
   const { data: lembagaList } = useLembaga();
-  const { data: jenisList } = useJenisPembayaran(departemenId || undefined);
+  const { data: jenisList = [] } = useJenisPembayaran(departemenId || undefined);
   const { data: riwayat, isLoading: loadRiwayat } = usePembayaranBySiswa(selectedSiswa?.id);
   const createMutation = useCreatePembayaran();
 
-  // Search calon siswa only
+  const { data: pmbConfig } = useQuery({
+    queryKey: ["konfigurasi_pmb", departemenId],
+    enabled: !!departemenId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("konfigurasi_pmb")
+        .select("jenis_pembayaran_id")
+        .eq("departemen_id", departemenId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { jenis_pembayaran_id: string } | null;
+    },
+  });
+
+  const pmbJenisList = pmbConfig
+    ? jenisList.filter((j: any) => j.id === pmbConfig.jenis_pembayaran_id)
+    : [];
+
   const { data: searchResults } = useQuery({
     queryKey: ["search_calon", searchTerm, departemenId],
     enabled: searchTerm.length >= 2 && !!departemenId,
@@ -38,6 +55,7 @@ export default function PembayaranPMB() {
         .select("id, nis, nama, foto_url, status")
         .or(`nama.ilike.%${searchTerm}%,nis.ilike.%${searchTerm}%`)
         .eq("status", "calon")
+        .eq("departemen_id", departemenId)
         .limit(10);
       return data || [];
     },
@@ -45,10 +63,14 @@ export default function PembayaranPMB() {
 
   const handleSubmit = async () => {
     if (!selectedSiswa || !jenisId || !jumlah) return;
+    if (!pmbConfig || jenisId !== pmbConfig.jenis_pembayaran_id) {
+      toast.error("Jenis pembayaran tidak sesuai konfigurasi PMB lembaga ini");
+      return;
+    }
     await createMutation.mutateAsync({
       siswa_id: selectedSiswa.id,
       jenis_id: jenisId,
-      bulan: 0, // PMB tidak terikat bulan
+      bulan: 0,
       jumlah: Number(jumlah),
       tanggal_bayar: tanggalBayar,
       keterangan: keterangan || "Pembayaran PMB",
@@ -58,8 +80,6 @@ export default function PembayaranPMB() {
     setJumlah("");
     setKeterangan("");
   };
-
-  const selectedJenis = jenisList?.find((j: any) => j.id === jenisId);
 
   const riwayatColumns: DataTableColumn<any>[] = [
     { key: "jenis", label: "Jenis", render: (_, r) => (r as any).jenis_pembayaran?.nama || "-" },
@@ -72,20 +92,23 @@ export default function PembayaranPMB() {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Pembayaran Calon Siswa (PMB)</h1>
-        <p className="text-sm text-muted-foreground">Input pembayaran untuk siswa berstatus calon (pendaftaran, uang pangkal, dll)</p>
+        <p className="text-sm text-muted-foreground">Input pembayaran pendaftaran untuk siswa berstatus calon.</p>
       </div>
 
       <Card>
         <CardContent className="pt-6 space-y-4">
           <div className="max-w-md">
             <Label>Pilih Lembaga</Label>
-            <Select value={departemenId} onValueChange={(v) => { setDepartemenId(v); setSelectedSiswa(null); }}>
+            <Select value={departemenId} onValueChange={(v) => { setDepartemenId(v); setSelectedSiswa(null); setJenisId(""); setJumlah(""); }}>
               <SelectTrigger><SelectValue placeholder="Pilih lembaga" /></SelectTrigger>
               <SelectContent>
                 {lembagaList?.map((l: any) => <SelectItem key={l.id} value={l.id}>{l.kode} — {l.nama}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
+          {departemenId && !pmbConfig && (
+            <p className="text-sm text-destructive">Konfigurasi PMB untuk lembaga ini belum dibuat. Atur terlebih dahulu di Akademik → Konfigurasi PMB.</p>
+          )}
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -136,12 +159,12 @@ export default function PembayaranPMB() {
                   <Label>Jenis Pembayaran</Label>
                   <Select value={jenisId} onValueChange={(v) => {
                     setJenisId(v);
-                    const j = jenisList?.find((x: any) => x.id === v);
+                    const j = pmbJenisList.find((x: any) => x.id === v) as any;
                     if (j?.nominal) setJumlah(String(j.nominal));
-                  }}>
-                    <SelectTrigger><SelectValue placeholder="Pilih jenis" /></SelectTrigger>
+                  }} disabled={!pmbConfig}>
+                    <SelectTrigger><SelectValue placeholder={pmbConfig ? "Pilih jenis" : "Konfigurasi PMB belum tersedia"} /></SelectTrigger>
                     <SelectContent>
-                      {jenisList?.map((j: any) => (
+                      {pmbJenisList.map((j: any) => (
                         <SelectItem key={j.id} value={j.id}>{j.nama} {j.nominal ? `(${formatRupiah(Number(j.nominal))})` : ""}</SelectItem>
                       ))}
                     </SelectContent>
