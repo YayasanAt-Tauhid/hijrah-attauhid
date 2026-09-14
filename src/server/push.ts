@@ -29,11 +29,13 @@ export interface KirimPushResult {
 
 export async function kirimPushKeOrtu(
   admin: SupabaseClient<Database>,
-  userId: string,
+  userId: string | null | undefined,
   judul: string,
   pesan: string,
   data?: Record<string, unknown>
 ): Promise<KirimPushResult> {
+  if (!userId) return { sent: 0, failed: 0 };
+
   try {
     const { data: perangkat } = await admin
       .from("perangkat_push_ortu")
@@ -90,7 +92,6 @@ export async function kirimPushKeOrtu(
 
     return { sent, failed };
   } catch {
-    // best-effort — jangan ganggu alur pemanggil
     return { sent: 0, failed: 0 };
   }
 }
