@@ -87,13 +87,14 @@ function TabJenisPembayaran() {
   const [formDepartemenId, setFormDepartemenId] = useState("");
   const [akunPendapatanId, setAkunPendapatanId] = useState("");
   const [akunDimukaId, setAkunDimukaId] = useState("");
+  const [perluDimuka, setPerluDimuka] = useState(true);
   const [tipe, setTipe] = useState("bulanan");
   const [tahunMasukDari, setTahunMasukDari] = useState("");
   const [tahunMasukSampai, setTahunMasukSampai] = useState("");
 
-  const openAdd = () => { setEditItem(null); setNama(""); setNominal(""); setKeterangan(""); setAktif(true); setFormDepartemenId(""); setAkunPendapatanId(""); setAkunDimukaId(""); setTipe("bulanan"); setTahunMasukDari(""); setTahunMasukSampai(""); setDialogOpen(true); };
+  const openAdd = () => { setEditItem(null); setNama(""); setNominal(""); setKeterangan(""); setAktif(true); setFormDepartemenId(""); setAkunPendapatanId(""); setAkunDimukaId(""); setPerluDimuka(true); setTipe("bulanan"); setTahunMasukDari(""); setTahunMasukSampai(""); setDialogOpen(true); };
   const openEdit = (item: any) => {
-    setEditItem(item); setNama(item.nama); setNominal(String(item.nominal || "")); setKeterangan(item.keterangan || ""); setAktif(item.aktif !== false); setFormDepartemenId(item.departemen_id || ""); setAkunPendapatanId(item.akun_pendapatan_id || ""); setAkunDimukaId(item.akun_dimuka_id || ""); setTipe(item.tipe || "bulanan");
+    setEditItem(item); setNama(item.nama); setNominal(String(item.nominal || "")); setKeterangan(item.keterangan || ""); setAktif(item.aktif !== false); setFormDepartemenId(item.departemen_id || ""); setAkunPendapatanId(item.akun_pendapatan_id || ""); setAkunDimukaId(item.akun_dimuka_id || ""); setPerluDimuka(item.perlu_dimuka !== false); setTipe(item.tipe || "bulanan");
     setTahunMasukDari(item.tahun_masuk_dari != null ? String(item.tahun_masuk_dari) : "");
     setTahunMasukSampai(item.tahun_masuk_sampai != null ? String(item.tahun_masuk_sampai) : "");
     setDialogOpen(true);
@@ -102,7 +103,7 @@ function TabJenisPembayaran() {
   const handleSave = async () => {
     const values = {
       nama, nominal: nominal ? Number(nominal) : undefined, keterangan: keterangan || undefined, aktif,
-      departemen_id: formDepartemenId || undefined, akun_pendapatan_id: akunPendapatanId || null, akun_dimuka_id: akunDimukaId || null, tipe,
+      departemen_id: formDepartemenId || undefined, akun_pendapatan_id: akunPendapatanId || null, perlu_dimuka: perluDimuka, akun_dimuka_id: perluDimuka ? (akunDimukaId || null) : null, tipe,
       tahun_masuk_dari: tahunMasukDari ? Number(tahunMasukDari) : null,
       tahun_masuk_sampai: tahunMasukSampai ? Number(tahunMasukSampai) : null,
     };
@@ -138,6 +139,7 @@ function TabJenisPembayaran() {
     {
       key: "akun_dimuka", label: "Akun Dimuka",
       render: (_, r) => {
+        if ((r as any).perlu_dimuka === false) return <span className="text-xs text-muted-foreground">Tidak digunakan</span>;
         const akun = (r as any).akun_dimuka;
         if (akun) return <span className="text-sm">{akun.kode} - {akun.nama}</span>;
         return <span className="text-xs text-muted-foreground">Global</span>;
@@ -242,19 +244,40 @@ function TabJenisPembayaran() {
               </Select>
               <p className="text-xs text-muted-foreground mt-1">Akun yang di-kredit saat menerima pembayaran jenis ini</p>
             </div>
-            <div>
-              <Label>Akun Pendapatan Dimuka (untuk pembayaran di muka)</Label>
-              <Select value={akunDimukaId || "__none__"} onValueChange={(v) => setAkunDimukaId(v === "__none__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Pilih akun dimuka..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— Pakai setting global —</SelectItem>
-                  {akunLiabilitasList?.map((a: any) => (
-                    <SelectItem key={a.id} value={a.id}>{a.kode} - {a.nama}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground mt-1">Akun liabilitas yang di-kredit saat jenis ini dibayar sebelum tahun ajaran dimulai. Kosongkan untuk pakai setting AKUN_PENDAPATAN_DIMUKA.</p>
-            </div>
+            <div className="space-y-2">
+    <div className="flex items-center gap-2">
+      <Switch
+        checked={perluDimuka}
+        onCheckedChange={(checked) => {
+          setPerluDimuka(checked);
+          if (!checked) setAkunDimukaId("");
+        }}
+      />
+      <Label>Gunakan Pendapatan Dimuka</Label>
+    </div>
+    <p className="text-xs text-muted-foreground">
+      Aktifkan hanya jika pembayaran sebelum jatuh tempo belum boleh diakui sebagai pendapatan dan harus dicatat sebagai liabilitas.
+    </p>
+  </div>
+  {perluDimuka ? (
+    <div>
+      <Label>Akun Pendapatan Dimuka (untuk pembayaran di muka)</Label>
+      <Select value={akunDimukaId || "__none__"} onValueChange={(v) => setAkunDimukaId(v === "__none__" ? "" : v)}>
+        <SelectTrigger><SelectValue placeholder="Pilih akun dimuka..." /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none__">— Pakai setting global —</SelectItem>
+          {akunLiabilitasList?.map((a: any) => (
+            <SelectItem key={a.id} value={a.id}>{a.kode} - {a.nama}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground mt-1">Akun liabilitas yang di-kredit saat pembayaran memang harus ditangguhkan. Kosongkan untuk pakai setting AKUN_PENDAPATAN_DIMUKA.</p>
+    </div>
+  ) : (
+    <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+      Akun Pendapatan Dimuka tidak digunakan untuk jenis penerimaan ini. Pembayaran yang belum membentuk piutang akan langsung dikredit ke akun pendapatan di atas.
+    </div>
+  )}
             <div><Label>Keterangan</Label><Textarea value={keterangan} onChange={(e) => setKeterangan(e.target.value)} /></div>
             <div className="flex items-center gap-2"><Switch checked={aktif} onCheckedChange={setAktif} /><Label>Aktif</Label></div>
           </div>
