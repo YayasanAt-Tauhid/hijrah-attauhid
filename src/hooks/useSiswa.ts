@@ -17,8 +17,10 @@ export interface SiswaWithRelations {
   foto_url: string | null;
   status: string | null;
   angkatan_id: string | null;
+  departemen_id?: string | null;
   created_at: string | null;
   angkatan?: { id: string; nama: string } | null;
+  siswa_detail?: any;
   kelas_siswa?: {
     id: string;
     aktif: boolean | null;
@@ -37,6 +39,7 @@ export function useSiswaList() {
           .select(`
             *,
             angkatan:angkatan_id(id, nama),
+            siswa_detail(status_asrama, kategori),
             kelas_siswa(
               id, aktif,
               kelas:kelas_id(id, nama, tingkat:tingkat_id(id, nama), departemen:departemen_id(id, nama)),
@@ -125,6 +128,7 @@ export function useCreateSiswa() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["siswa"] });
+      qc.invalidateQueries({ queryKey: ["siswa_detail"] });
       toast.success("Siswa berhasil ditambahkan");
     },
     onError: (err: Error) => {
@@ -169,16 +173,13 @@ export function useUpdateSiswa() {
         }
       }
 
-      // Update kelas_siswa assignment
       if (values.kelas_siswa?.kelas_id && values.kelas_siswa?.tahun_ajaran_id) {
-        // Deactivate existing active assignments
         await supabase
           .from("kelas_siswa")
           .update({ aktif: false } as any)
           .eq("siswa_id", values.id)
           .eq("aktif", true);
 
-        // Check if this exact assignment already exists
         const { data: existingKs } = await supabase
           .from("kelas_siswa")
           .select("id")
@@ -206,8 +207,10 @@ export function useUpdateSiswa() {
         }
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ["siswa"] });
+      qc.invalidateQueries({ queryKey: ["siswa", variables.id] });
+      qc.invalidateQueries({ queryKey: ["siswa_detail", variables.id] });
       toast.success("Data siswa berhasil diperbarui");
     },
     onError: (err: Error) => {
@@ -225,6 +228,7 @@ export function useDeleteSiswa() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["siswa"] });
+      qc.invalidateQueries({ queryKey: ["siswa_detail"] });
       toast.success("Siswa berhasil dihapus");
     },
     onError: (err: Error) => {
