@@ -20,6 +20,8 @@ const JENIS_OPTIONS = [
   { value: "alumni_internal", label: "Alumni Internal (Naik Jenjang)" },
 ];
 
+const PEKERJAAN_OPTIONS = ["PNS", "TNI/Polri", "Wiraswasta", "Karyawan Swasta", "Petani", "Nelayan", "Buruh", "Guru/Dosen", "Dokter", "Lainnya"];
+
 const initialForm = {
   nama: "", jenis_kelamin: "L", tempat_lahir: "", tanggal_lahir: "",
   alamat: "", telepon: "", departemen_id: "", angkatan_id: "",
@@ -123,7 +125,6 @@ export default function PMBDaftar() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Jenis Pendaftaran */}
               <FormSection title="Jenis Pendaftaran" description="Pilih jenis pendaftaran siswa">
                 <div>
                   <Label>Jenis Pendaftaran *</Label>
@@ -163,7 +164,6 @@ export default function PMBDaftar() {
                 )}
               </FormSection>
 
-              {/* Data Siswa */}
               <FormSection title="Data Calon Siswa" description="Informasi identitas calon siswa">
                 <div>
                   <Label>Nama Lengkap *</Label>
@@ -225,7 +225,6 @@ export default function PMBDaftar() {
                 </div>
               </FormSection>
 
-              {/* Data Ortu */}
               <FormSection title="Data Orang Tua / Wali" description="Informasi orang tua atau wali siswa">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -240,11 +239,25 @@ export default function PMBDaftar() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Pekerjaan Ayah</Label>
-                    <Input value={form.pekerjaan_ayah} onChange={set("pekerjaan_ayah")} />
+                    <Select value={form.pekerjaan_ayah} onValueChange={v => setForm(f => ({ ...f, pekerjaan_ayah: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Pilih pekerjaan" /></SelectTrigger>
+                      <SelectContent>
+                        {PEKERJAAN_OPTIONS.map(pekerjaan => (
+                          <SelectItem key={pekerjaan} value={pekerjaan}>{pekerjaan}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label>Pekerjaan Ibu</Label>
-                    <Input value={form.pekerjaan_ibu} onChange={set("pekerjaan_ibu")} />
+                    <Select value={form.pekerjaan_ibu} onValueChange={v => setForm(f => ({ ...f, pekerjaan_ibu: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Pilih pekerjaan" /></SelectTrigger>
+                      <SelectContent>
+                        {PEKERJAAN_OPTIONS.map(pekerjaan => (
+                          <SelectItem key={pekerjaan} value={pekerjaan}>{pekerjaan}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div>
