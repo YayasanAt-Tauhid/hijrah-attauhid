@@ -77,7 +77,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
 
     const { data: jenis, error: jenisErr } = await admin
       .from("jenis_pembayaran")
-      .select("id, nama, tipe, akun_pendapatan_id, akun_dimuka_id")
+      .select("id, nama, tipe, akun_pendapatan_id, akun_dimuka_id, perlu_dimuka")
       .eq("id", jenis_id)
       .single();
     if (jenisErr || !jenis) throw new Error("Jenis pembayaran tidak ditemukan");
@@ -163,12 +163,11 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     if (!kasAkunId)
       throw new Error("Akun Kas Tunai belum dikonfigurasi di Pengaturan Akun");
 
-    // Tagihan yang belum jatuh tempo (status 'terjadwal') belum pernah
-    // dibukukan sebagai piutang dan jasanya belum diberikan, jadi uangnya tidak
-    // boleh mengkredit Piutang maupun Pendapatan — harus masuk liabilitas
-    // Pendapatan Diterima di Muka, lalu diakui saat periodenya tiba oleh RPC
-    // akui_pendapatan_dimuka_jatuh_tempo. Kasir tidak perlu (dan gampang lupa)
-    // mencentang "bayar di muka" sendiri; status tagihanlah yang menentukan.
+    // Tagihan 'terjadwal' belum pernah dibukukan sebagai piutang. Untuk jenis
+    // yang memang perlu pendapatan dimuka, pembayaran sebelum jatuh tempo masuk
+    // liabilitas. Untuk jenis yang perlu_dimuka=false (mis. biaya pendaftaran),
+    // pembayaran langsung diakui sebagai pendapatan dan tidak boleh mengkredit
+    // Piutang yang belum pernah dibentuk.
     let tagihanQuery = admin
       .from("tagihan")
       .select("id, status")
@@ -185,7 +184,9 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     const { data: tagihanRows } = await tagihanQuery.limit(1);
     const tagihanFound = tagihanRows?.[0];
     const belumJatuhTempo = tagihanFound?.status === "terjadwal";
-    const pakaiDimuka = is_bayar_dimuka || belumJatuhTempo;
+    const tagihanSudahDiakuiPiutang = tagihanFound?.status === "belum_bayar";
+    const pakaiDimuka =
+      jenis.perlu_dimuka !== false && (is_bayar_dimuka || belumJatuhTempo);
     // Tagihan efektif = yang dikirim caller, atau yang ditemukan lewat
     // siswa+jenis+bulan+tahun_ajaran di atas (mis. pembayaran massal tunggakan
     // yang tidak mengirim tagihan_id sama sekali). Tanpa fallback ini,
@@ -204,7 +205,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         );
       kreditAkunId = dimukaJenisAkunId;
       kreditLabel = `Pendapatan Diterima di Muka — ${jenis.nama}`;
-    } else if (tagihanEfektifId && piutangAkunId) {
+    } else if (tagihanSudahDiakuiPiutang && piutangAkunId) {
       kreditAkunId = piutangAkunId;
       kreditLabel = "Piutang Siswa";
     } else {
@@ -221,7 +222,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     } - ${namaSiswa}`;
     const autoKet = pakaiDimuka
       ? `Pembayaran Diterima di Muka ${identitasTagihan}`
-      : tagihanEfektifId && piutangAkunId
+      : tagihanSudahDiakuiPiutang && piutangAkunId
         ? `Pembayaran Piutang ${identitasTagihan}`
         : `Pembayaran ${identitasTagihan}`;
     const keteranganFinal = keterangan
