@@ -67,6 +67,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test
+        run: npm test
+
       - name: Build (Cloudflare Workers)
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}

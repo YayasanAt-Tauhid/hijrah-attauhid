@@ -1,60 +1,22 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllPages } from "@/lib/fetchAll";
-import { toast } from "sonner";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  type AngkatanRef, type DepartemenRef, type ExistingStudentForImport, type KelasRef,
+  type PreparedImportRow, type SiswaImportRow, type TahunAjaranRef, type TingkatRef,
+  normalize, prepareImportRows, rowHasAnyImportValue, templateWorkbook,
+} from "@/lib/siswaImport";
+import { toast } from "sonner";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Download,
-  Upload,
-  FileSpreadsheet,
-  Loader2,
-  CheckCircle2,
-} from "lucide-react";
-
-interface DepartemenRef {
-  id: string;
-  nama: string;
-}
-interface TingkatRef {
-  id: string;
-  nama: string;
-  departemen_id: string | null;
-}
-interface KelasRef {
-  id: string;
-  nama: string;
-  tingkat_id: string | null;
-  departemen_id: string | null;
-}
-interface TahunAjaranRef {
-  id: string;
-  nama: string;
-}
-interface AngkatanRef {
-  id: string;
-  nama: string;
-  departemen_id: string | null;
-}
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CheckCircle2, Download, FileSpreadsheet, Loader2, Upload, XCircle } from "lucide-react";
 
 interface ImportSiswaDialogProps {
   open: boolean;
@@ -67,646 +29,280 @@ interface ImportSiswaDialogProps {
   onImported: () => void;
 }
 
-interface SiswaImportRow {
-  nis?: string;
-  nama?: string;
-  jenis_kelamin?: string;
-  tempat_lahir?: string;
-  tanggal_lahir?: string | number;
-  agama?: string;
-  alamat?: string;
-  telepon?: string;
-  email?: string;
-  status?: string;
-  departemen?: string;
-  tingkat?: string;
-  kelas?: string;
-  tahun_ajaran?: string;
-  angkatan?: string;
-  nama_ayah?: string;
-  nama_ibu?: string;
-  telepon_ortu?: string;
-  error?: string;
-  _action?: "insert" | "update";
-  _existingSiswaId?: string;
+type UiImportRow = PreparedImportRow & { runStatus: "pending" | "success" | "error"; runMessage?: string };
+interface ImportResult { success: number; updated: number; error: number }
+const QUERY_CHUNK_SIZE = 150;
+
+function chunks<T>(items: T[], size = QUERY_CHUNK_SIZE): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < items.length; i += size) result.push(items.slice(i, i + size));
+  return result;
 }
-
-const STATUS_VALID = ["aktif", "alumni", "pindah", "keluar"];
-
-function normalize(v: unknown): string {
-  return (v ?? "").toString().trim();
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) return String((error as { message?: unknown }).message || "Gagal menyimpan");
+  return "Gagal menyimpan baris";
 }
-
-function excelDateToISO(value: string | number | undefined): string | null {
-  if (value === undefined || value === null || value === "") return null;
-  if (typeof value === "number") {
-    // Excel serial date -> JS Date
-    const date = XLSX.SSF?.parse_date_code
-      ? XLSX.SSF.parse_date_code(value)
-      : null;
-    if (date) {
-      const y = date.y;
-      const m = String(date.m).padStart(2, "0");
-      const d = String(date.d).padStart(2, "0");
-      return `${y}-${m}-${d}`;
-    }
-    return null;
-  }
-  const str = value.toString().trim();
-  // Coba format dd/mm/yyyy atau yyyy-mm-dd
-  const dmy = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (dmy) {
-    const [, d, m, y] = dmy;
-    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  }
-  const ymd = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (ymd) {
-    const [, y, m, d] = ymd;
-    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  }
-  return null;
+function detailRecord(detail: unknown): Record<string, any> {
+  if (Array.isArray(detail)) return (detail[0] as Record<string, any>) || {};
+  return (detail as Record<string, any> | null) || {};
 }
 
 export function ImportSiswaDialog({
-  open,
-  onOpenChange,
-  departemenList,
-  tingkatList,
-  kelasList,
-  tahunAjaranList,
-  angkatanList,
-  onImported,
+  open, onOpenChange, departemenList, tingkatList, kelasList, tahunAjaranList, angkatanList, onImported,
 }: ImportSiswaDialogProps) {
-  const [rows, setRows] = useState<SiswaImportRow[]>([]);
+  const queryClient = useQueryClient();
+  const [rows, setRows] = useState<UiImportRow[]>([]);
+  const [rawRows, setRawRows] = useState<SiswaImportRow[]>([]);
   const [importing, setImporting] = useState(false);
   const [validating, setValidating] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<{ success: number; error: number; updated: number } | null>(null);
+  const [result, setResult] = useState<ImportResult | null>(null);
   const [updateExisting, setUpdateExisting] = useState(false);
   const [exportingCurrent, setExportingCurrent] = useState(false);
+  const validationRevisionRef = useRef(0);
+  const importGuardRef = useRef(false);
 
-  const findByNama = <T extends { nama: string }>(list: T[], nama?: string): T | undefined => {
-    if (!nama) return undefined;
-    const target = nama.toString().trim().toLowerCase();
-    return list.find((item) => item.nama.trim().toLowerCase() === target);
-  };
+  const busy = importing || validating || exportingCurrent;
+  const executableRows = rows.filter((row) => row.errors.length === 0 && row.runStatus !== "success");
+  const hasValidationErrors = rows.some((row) => row.errors.length > 0);
 
-  const validateRows = async (
-    data: SiswaImportRow[],
-    allowUpdate: boolean
-  ): Promise<SiswaImportRow[]> => {
-    // Cek NIS yang sudah terdaftar di database (satu query untuk semua baris)
-    const nisList = data.map((r) => normalize(r.nis)).filter(Boolean);
-    let existingByNis = new Map<string, string>(); // nis -> siswa_id
-    if (allowUpdate && nisList.length > 0) {
-      const { data: existing, error } = await supabase
-        .from("siswa")
-        .select("id, nis")
-        .in("nis", nisList);
-      if (!error && existing) {
-        existingByNis = new Map(existing.map((s: any) => [s.nis as string, s.id as string]));
-      }
+  const loadExistingStudents = async (data: SiswaImportRow[]): Promise<ExistingStudentForImport[]> => {
+    const ids = [...new Set(data.map((row) => normalize(row.siswa_id)).filter(Boolean))];
+    const nisList = [...new Set(data.map((row) => normalize(row.nis)).filter(Boolean))];
+    const found = new Map<string, ExistingStudentForImport>();
+    for (const idChunk of chunks(ids)) {
+      const { data: existing, error } = await supabase.from("siswa").select("id, nis, status, departemen_id").in("id", idChunk);
+      if (error) throw error;
+      for (const student of existing || []) found.set(student.id, student as ExistingStudentForImport);
     }
-
-    return data.map((r) => {
-      const errors: string[] = [];
-      const nama = normalize(r.nama);
-      if (!nama) errors.push("nama kosong");
-
-      const jk = normalize(r.jenis_kelamin).toUpperCase();
-      if (jk && jk !== "L" && jk !== "P") {
-        errors.push(`jenis_kelamin harus L/P (ditemukan: ${r.jenis_kelamin})`);
-      }
-
-      const status = normalize(r.status).toLowerCase();
-      if (status && !STATUS_VALID.includes(status)) {
-        errors.push(`status invalid: ${r.status}`);
-      }
-
-      if (r.email && normalize(r.email) && !/^\S+@\S+\.\S+$/.test(normalize(r.email))) {
-        errors.push(`email tidak valid: ${r.email}`);
-      }
-
-      let departemenId: string | undefined;
-      if (normalize(r.departemen)) {
-        const dept = findByNama(departemenList, r.departemen);
-        if (!dept) errors.push(`departemen tidak ditemukan: ${r.departemen}`);
-        else departemenId = dept.id;
-      }
-
-      let tingkatId: string | undefined;
-      if (normalize(r.tingkat)) {
-        const candidates = tingkatList.filter(
-          (t) => !departemenId || t.departemen_id === departemenId
-        );
-        const tingkat = findByNama(candidates, r.tingkat);
-        if (!tingkat) errors.push(`tingkat tidak ditemukan: ${r.tingkat}`);
-        else tingkatId = tingkat.id;
-      }
-
-      let kelasId: string | undefined;
-      if (normalize(r.kelas)) {
-        const candidates = kelasList.filter(
-          (k) => !tingkatId || k.tingkat_id === tingkatId
-        );
-        const kelas = findByNama(candidates, r.kelas);
-        if (!kelas) errors.push(`kelas tidak ditemukan: ${r.kelas}`);
-        else kelasId = kelas.id;
-      }
-
-      let tahunAjaranId: string | undefined;
-      if (normalize(r.tahun_ajaran)) {
-        const ta = findByNama(tahunAjaranList, r.tahun_ajaran);
-        if (!ta) errors.push(`tahun ajaran tidak ditemukan: ${r.tahun_ajaran}`);
-        else tahunAjaranId = ta.id;
-      } else if (kelasId) {
-        errors.push("tahun_ajaran wajib diisi jika kelas diisi");
-      }
-
-      let angkatanId: string | undefined;
-      if (normalize(r.angkatan)) {
-        const candidates = angkatanList.filter(
-          (a) => !departemenId || a.departemen_id === departemenId
-        );
-        const angkatan = findByNama(candidates, r.angkatan);
-        if (!angkatan) errors.push(`angkatan tidak ditemukan: ${r.angkatan}`);
-        else angkatanId = angkatan.id;
-      }
-
-      const tanggalLahirIso =
-        r.tanggal_lahir !== undefined && r.tanggal_lahir !== ""
-          ? excelDateToISO(r.tanggal_lahir)
-          : null;
-      if (r.tanggal_lahir && normalize(r.tanggal_lahir as string) && !tanggalLahirIso) {
-        errors.push(`tanggal_lahir tidak valid: ${r.tanggal_lahir}`);
-      }
-
-      const nisNorm = normalize(r.nis);
-      const existingId = nisNorm ? existingByNis.get(nisNorm) : undefined;
-
-      return {
-        ...r,
-        error: errors.length ? errors.join("; ") : undefined,
-        _action: existingId ? "update" : "insert",
-        _existingSiswaId: existingId,
-      };
-    });
+    for (const nisChunk of chunks(nisList)) {
+      const { data: existing, error } = await supabase.from("siswa").select("id, nis, status, departemen_id").in("nis", nisChunk);
+      if (error) throw error;
+      for (const student of existing || []) found.set(student.id, student as ExistingStudentForImport);
+    }
+    return [...found.values()];
   };
 
-  const hasErrors = rows.some((r) => r.error);
+  const validateData = async (data: SiswaImportRow[], allowUpdate: boolean) => {
+    const revision = ++validationRevisionRef.current;
+    setValidating(true); setResult(null);
+    try {
+      const existing = await loadExistingStudents(data);
+      const prepared = prepareImportRows(data, { departemenList, tingkatList, kelasList, tahunAjaranList, angkatanList }, existing, allowUpdate);
+      if (revision !== validationRevisionRef.current) return;
+      setRows(prepared.map((row) => ({ ...row, runStatus: "pending" as const })));
+      setProgress(0);
+    } catch (error) {
+      if (revision !== validationRevisionRef.current) return;
+      setRows([]); toast.error("Gagal memvalidasi file: " + errorMessage(error));
+    } finally {
+      if (revision === validationRevisionRef.current) setValidating(false);
+    }
+  };
 
-  const [rawRows, setRawRows] = useState<SiswaImportRow[]>([]);
-
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || importing) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const wb = XLSX.read(ev.target?.result, { type: "binary", cellDates: false });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json<SiswaImportRow>(ws, { defval: "" });
-        setRawRows(data);
-        setValidating(true);
-        validateRows(data, updateExisting)
-          .then(setRows)
-          .finally(() => setValidating(false));
-        setResult(null);
-      } catch (err) {
-        toast.error("Gagal membaca file Excel. Pastikan format sesuai template.");
+        const workbook = XLSX.read(ev.target?.result, { type: "array", cellDates: false });
+        const sheetName = workbook.SheetNames.includes("Template") ? "Template" : workbook.SheetNames[0];
+        const parsed = XLSX.utils.sheet_to_json<SiswaImportRow>(workbook.Sheets[sheetName], { defval: "", raw: true }).filter(rowHasAnyImportValue);
+        if (!parsed.length) {
+          setRawRows([]); setRows([]); setResult(null); toast.error("File tidak berisi baris siswa untuk diimport."); return;
+        }
+        setRawRows(parsed); void validateData(parsed, updateExisting);
+      } catch {
+        setRawRows([]); setRows([]); setResult(null); toast.error("Gagal membaca file Excel. Gunakan template import terbaru.");
       }
     };
-    reader.readAsBinaryString(file);
-    e.target.value = "";
+    reader.readAsArrayBuffer(file); event.target.value = "";
   };
 
   const handleToggleUpdateExisting = (checked: boolean) => {
+    if (busy) return;
     setUpdateExisting(checked);
-    if (rawRows.length > 0) {
-      setValidating(true);
-      validateRows(rawRows, checked)
-        .then(setRows)
-        .finally(() => setValidating(false));
-    }
+    if (rawRows.length) void validateData(rawRows, checked);
   };
 
-  const downloadTemplate = () => {
-    const template = [
-      {
-        nis: "",
-        nama: "Ahmad Fauzan",
-        jenis_kelamin: "L",
-        tempat_lahir: "Surabaya",
-        tanggal_lahir: "2012-05-14",
-        agama: "Islam",
-        alamat: "Jl. Contoh No. 1",
-        telepon: "081234567890",
-        email: "",
-        status: "aktif",
-        departemen: "",
-        tingkat: "",
-        kelas: "",
-        tahun_ajaran: "",
-        angkatan: "",
-        nama_ayah: "",
-        nama_ibu: "",
-        telepon_ortu: "",
-      },
-    ];
-    const ws = XLSX.utils.json_to_sheet(template);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Template");
-    XLSX.writeFile(wb, "template_import_siswa.xlsx");
-  };
+  const downloadTemplate = () => XLSX.writeFile(templateWorkbook(), "template_import_siswa.xlsx");
 
   const downloadDataSiswaSaatIni = async () => {
+    if (busy) return;
     setExportingCurrent(true);
     try {
       const siswaData = await fetchAllPages<any>((from, to) =>
-        supabase
-          .from("siswa")
-          .select(`
-            id, nis, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, agama, alamat,
-            telepon, email, status,
-            angkatan:angkatan_id(id, nama),
-            kelas_siswa(
-              id, aktif,
-              kelas:kelas_id(id, nama, tingkat:tingkat_id(id, nama), departemen:departemen_id(id, nama)),
-              tahun_ajaran:tahun_ajaran_id(id, nama)
-            )
-          `)
-          .order("nama")
-          .order("id")
-          .range(from, to)
+        supabase.from("siswa").select(`
+          id, nis, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, agama, alamat,
+          telepon, email, status, departemen_id,
+          angkatan:angkatan_id(id, nama), siswa_detail(*),
+          kelas_siswa(id, aktif, kelas:kelas_id(id, nama, tingkat:tingkat_id(id, nama), departemen:departemen_id(id, nama)), tahun_ajaran:tahun_ajaran_id(id, nama))
+        `).order("nama").order("id").range(from, to)
       );
-
-      const siswaDetailList = await fetchAllPages<any>((from, to) =>
-        supabase
-          .from("siswa_detail")
-          .select("siswa_id, nama_ayah, nama_ibu, telepon_ortu")
-          .range(from, to)
-      );
-      const detailBySiswaId = new Map<string, any>(
-        siswaDetailList.map((d) => [d.siswa_id as string, d])
-      );
-
-      const template = siswaData.map((s: any) => {
-        const activeKs = (s.kelas_siswa || []).find((ks: any) => ks.aktif) || s.kelas_siswa?.[0];
-        const detail = detailBySiswaId.get(s.id as string);
+      const exportRows = siswaData.map((student: any) => {
+        const activeClass = (student.kelas_siswa || []).find((item: any) => item.aktif) || student.kelas_siswa?.[0];
+        const detail = detailRecord(student.siswa_detail);
+        const department = departemenList.find((item) => item.id === student.departemen_id);
+        const registrationPeriod = tahunAjaranList.find((item) => item.id === detail.tahun_ajaran_id);
         return {
-          nis: s.nis || "",
-          nama: s.nama || "",
-          jenis_kelamin: s.jenis_kelamin || "",
-          tempat_lahir: s.tempat_lahir || "",
-          tanggal_lahir: s.tanggal_lahir || "",
-          agama: s.agama || "",
-          alamat: s.alamat || "",
-          telepon: s.telepon || "",
-          email: s.email || "",
-          status: s.status || "",
-          departemen: activeKs?.kelas?.departemen?.nama || "",
-          tingkat: activeKs?.kelas?.tingkat?.nama || "",
-          kelas: activeKs?.kelas?.nama || "",
-          tahun_ajaran: activeKs?.tahun_ajaran?.nama || "",
-          angkatan: s.angkatan?.nama || "",
-          nama_ayah: detail?.nama_ayah || "",
-          nama_ibu: detail?.nama_ibu || "",
-          telepon_ortu: detail?.telepon_ortu || "",
+          siswa_id: student.id, nis: student.nis || "", nama: student.nama || "", jenis_kelamin: student.jenis_kelamin || "",
+          tempat_lahir: student.tempat_lahir || "", tanggal_lahir: student.tanggal_lahir || "", agama: student.agama || "", alamat: student.alamat || "",
+          telepon: student.telepon || "", email: student.email || "", status: student.status || "",
+          departemen: department?.nama || activeClass?.kelas?.departemen?.nama || "", tingkat: activeClass?.kelas?.tingkat?.nama || "",
+          kelas: activeClass?.kelas?.nama || "", tahun_ajaran: activeClass?.tahun_ajaran?.nama || "", angkatan: student.angkatan?.nama || "",
+          periode_pendaftaran: registrationPeriod?.nama || "", jenis_pendaftaran: detail.jenis_pendaftaran || "", nik: detail.nik || "", no_kk: detail.no_kk || "",
+          kategori: detail.kategori || "", status_asrama: detail.status_asrama || "", anak_ke: detail.anak_ke ?? "", jumlah_bersaudara: detail.jumlah_bersaudara ?? "",
+          tinggi_badan_cm: detail.tinggi_badan_cm ?? "", berat_badan_kg: detail.berat_badan_kg ?? "", lingkar_kepala_cm: detail.lingkar_kepala_cm ?? "",
+          ukuran_baju: detail.ukuran_baju || "", penyakit_pernah_diderita: detail.penyakit_pernah_diderita || "", jarak_rumah_km: detail.jarak_rumah_km ?? "",
+          waktu_perjalanan_menit: detail.waktu_perjalanan_menit ?? "", transportasi: detail.transportasi || "",
+          nama_ayah: detail.nama_ayah || "", nik_ayah: detail.nik_ayah || "", tempat_lahir_ayah: detail.tempat_lahir_ayah || "", tanggal_lahir_ayah: detail.tanggal_lahir_ayah || "",
+          pendidikan_ayah: detail.pendidikan_ayah || "", pekerjaan_ayah: detail.pekerjaan_ayah || "", penghasilan_ayah: detail.penghasilan_ayah ?? "",
+          telepon_ayah: detail.telepon_ayah || detail.telepon_ortu || "", alamat_ayah: detail.alamat_ayah || detail.alamat_ortu || "",
+          nama_ibu: detail.nama_ibu || "", nik_ibu: detail.nik_ibu || "", tempat_lahir_ibu: detail.tempat_lahir_ibu || "", tanggal_lahir_ibu: detail.tanggal_lahir_ibu || "",
+          pendidikan_ibu: detail.pendidikan_ibu || "", pekerjaan_ibu: detail.pekerjaan_ibu || "", penghasilan_ibu: detail.penghasilan_ibu ?? "",
+          telepon_ibu: detail.telepon_ibu || "", alamat_ibu: detail.alamat_ibu || "",
+          asal_sekolah: detail.asal_sekolah || "", alamat_sekolah_asal: detail.alamat_sekolah_asal || "", kabupaten_sekolah_asal: detail.kabupaten_sekolah_asal || "",
+          kecamatan_sekolah_asal: detail.kecamatan_sekolah_asal || "", kelurahan_sekolah_asal: detail.kelurahan_sekolah_asal || "",
+          kelas_terakhir: detail.kelas_terakhir || "", alasan_pindah: detail.alasan_pindah || "", kemampuan_iqro: detail.kemampuan_iqro || "",
+          membaca_latin: detail.membaca_latin || "", menulis_latin: detail.menulis_latin || "", hafalan_quran: detail.hafalan_quran || "",
         };
       });
+      const worksheet = XLSX.utils.json_to_sheet(exportRows);
+      const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, "Data Siswa");
+      XLSX.writeFile(workbook, "data_siswa_untuk_update.xlsx");
+      toast.success("Data siswa berhasil diunduh. siswa_id disertakan agar siswa tanpa NIS tetap dapat diperbarui dengan aman.");
+    } catch (error) {
+      toast.error("Gagal mengunduh data siswa: " + errorMessage(error));
+    } finally { setExportingCurrent(false); }
+  };
 
-      const ws = XLSX.utils.json_to_sheet(template);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Data Siswa");
-      XLSX.writeFile(wb, "data_siswa_untuk_update.xlsx");
-      toast.success("Data siswa berhasil diunduh. Edit lalu upload kembali dengan opsi \"Update data siswa\" dicentang.");
-    } catch (err) {
-      toast.error("Gagal mengunduh data siswa.");
-    } finally {
-      setExportingCurrent(false);
-    }
+  const updateRow = (index: number, patch: Partial<UiImportRow>) => {
+    setRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
   };
 
   const handleImport = async () => {
-    if (hasErrors || rows.length === 0) return;
-    setImporting(true);
-    setProgress(0);
-    let success = 0;
-    let updated = 0;
-    let errorCount = 0;
-    const total = rows.length;
-
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
-      try {
-        const dept = normalize(r.departemen) ? findByNama(departemenList, r.departemen) : undefined;
-        const tingkatCandidates = dept
-          ? tingkatList.filter((t) => t.departemen_id === dept.id)
-          : tingkatList;
-        const tingkat = normalize(r.tingkat) ? findByNama(tingkatCandidates, r.tingkat) : undefined;
-        const kelasCandidates = tingkat
-          ? kelasList.filter((k) => k.tingkat_id === tingkat.id)
-          : kelasList;
-        const kelas = normalize(r.kelas) ? findByNama(kelasCandidates, r.kelas) : undefined;
-        const tahunAjaran = normalize(r.tahun_ajaran)
-          ? findByNama(tahunAjaranList, r.tahun_ajaran)
-          : undefined;
-        const angkatanCandidates = dept
-          ? angkatanList.filter((a) => a.departemen_id === dept.id)
-          : angkatanList;
-        const angkatan = normalize(r.angkatan) ? findByNama(angkatanCandidates, r.angkatan) : undefined;
-
-        const siswaPayload: Record<string, unknown> = {
-          nis: normalize(r.nis) || null,
-          nama: normalize(r.nama),
-          jenis_kelamin: normalize(r.jenis_kelamin).toUpperCase() || null,
-          tempat_lahir: normalize(r.tempat_lahir) || null,
-          tanggal_lahir: excelDateToISO(r.tanggal_lahir),
-          agama: normalize(r.agama) || null,
-          alamat: normalize(r.alamat) || null,
-          telepon: normalize(r.telepon) || null,
-          email: normalize(r.email) || null,
-          status: normalize(r.status).toLowerCase() || "aktif",
-          angkatan_id: angkatan?.id || null,
-          departemen_id: dept?.id || null,
-        };
-
-        const isUpdate = r._action === "update" && r._existingSiswaId;
-        let siswaId: string;
-
-        if (isUpdate) {
-          const { error: updateErr } = await supabase
-            .from("siswa")
-            .update(siswaPayload as any)
-            .eq("id", r._existingSiswaId as string);
-          if (updateErr) throw updateErr;
-          siswaId = r._existingSiswaId as string;
-        } else {
-          const { data: newSiswa, error: siswaErr } = await supabase
-            .from("siswa")
-            .insert(siswaPayload as any)
-            .select("id")
-            .single();
-          if (siswaErr) throw siswaErr;
-          siswaId = newSiswa.id;
+    if (importGuardRef.current || importing || validating || !executableRows.length) return;
+    importGuardRef.current = true; setImporting(true); setProgress(0); setResult(null);
+    const pending = rows.map((row, index) => ({ row, index })).filter(({ row }) => row.errors.length === 0 && row.runStatus !== "success");
+    let inserted = rows.filter((row) => row.runStatus === "success" && row.action === "insert").length;
+    let updated = rows.filter((row) => row.runStatus === "success" && row.action === "update").length;
+    let failedThisRun = 0;
+    const validationFailures = rows.filter((row) => row.errors.length > 0).length;
+    try {
+      for (let cursor = 0; cursor < pending.length; cursor++) {
+        const { row, index } = pending[cursor];
+        try {
+          const { error } = await (supabase as any).rpc("akademik_save_siswa", {
+            p_siswa: row.siswaPayload,
+            p_detail: Object.keys(row.detailPayload).length ? row.detailPayload : null,
+            p_kelas: row.kelasPayload,
+            p_id: row.action === "update" ? row.existingId || null : null,
+          });
+          if (error) throw error;
+          updateRow(index, { runStatus: "success", runMessage: row.action === "update" ? "Berhasil diperbarui" : "Berhasil ditambahkan" });
+          if (row.action === "update") updated++; else inserted++;
+        } catch (error) {
+          failedThisRun++; updateRow(index, { runStatus: "error", runMessage: errorMessage(error) });
         }
-
-        const hasOrtuData = normalize(r.nama_ayah) || normalize(r.nama_ibu) || normalize(r.telepon_ortu);
-        if (hasOrtuData) {
-          const detailPayload = {
-            nama_ayah: normalize(r.nama_ayah) || null,
-            nama_ibu: normalize(r.nama_ibu) || null,
-            telepon_ortu: normalize(r.telepon_ortu) || null,
-          };
-          if (isUpdate) {
-            const { data: existingDetail } = await supabase
-              .from("siswa_detail")
-              .select("id")
-              .eq("siswa_id", siswaId)
-              .maybeSingle();
-            if (existingDetail) {
-              const { error: detailErr } = await supabase
-                .from("siswa_detail")
-                .update(detailPayload as any)
-                .eq("id", existingDetail.id);
-              if (detailErr) throw detailErr;
-            } else {
-              const { error: detailErr } = await supabase
-                .from("siswa_detail")
-                .insert({ siswa_id: siswaId, ...detailPayload } as any);
-              if (detailErr) throw detailErr;
-            }
-          } else {
-            const { error: detailErr } = await supabase
-              .from("siswa_detail")
-              .insert({ siswa_id: siswaId, ...detailPayload } as any);
-            if (detailErr) throw detailErr;
-          }
-        }
-
-        if (kelas && tahunAjaran) {
-          if (isUpdate) {
-            // Nonaktifkan penempatan kelas aktif sebelumnya di tahun ajaran yang sama
-            // agar tidak menumpuk baris aktif ganda, lalu catat penempatan baru.
-            await supabase
-              .from("kelas_siswa")
-              .update({ aktif: false } as any)
-              .eq("siswa_id", siswaId)
-              .eq("tahun_ajaran_id", tahunAjaran.id)
-              .eq("aktif", true);
-
-            const { data: existingKelasSiswa } = await supabase
-              .from("kelas_siswa")
-              .select("id")
-              .eq("siswa_id", siswaId)
-              .eq("tahun_ajaran_id", tahunAjaran.id)
-              .eq("kelas_id", kelas.id)
-              .maybeSingle();
-
-            if (existingKelasSiswa) {
-              const { error: kelasErr } = await supabase
-                .from("kelas_siswa")
-                .update({ aktif: true } as any)
-                .eq("id", existingKelasSiswa.id);
-              if (kelasErr) throw kelasErr;
-            } else {
-              const { error: kelasErr } = await supabase.from("kelas_siswa").insert({
-                siswa_id: siswaId,
-                kelas_id: kelas.id,
-                tahun_ajaran_id: tahunAjaran.id,
-                aktif: true,
-              } as any);
-              if (kelasErr) throw kelasErr;
-            }
-          } else {
-            const { error: kelasErr } = await supabase.from("kelas_siswa").insert({
-              siswa_id: siswaId,
-              kelas_id: kelas.id,
-              tahun_ajaran_id: tahunAjaran.id,
-              aktif: true,
-            } as any);
-            if (kelasErr) throw kelasErr;
-          }
-        }
-
-        if (isUpdate) updated++;
-        else success++;
-      } catch (err) {
-        errorCount++;
+        setProgress(Math.round(((cursor + 1) / pending.length) * 100));
       }
-      setProgress(Math.round(((i + 1) / total) * 100));
-    }
-
-    setResult({ success, error: errorCount, updated });
-    setImporting(false);
-    if (success > 0 || updated > 0) onImported();
-    if (errorCount === 0) {
-      const parts = [];
-      if (success > 0) parts.push(`${success} baru`);
-      if (updated > 0) parts.push(`${updated} diupdate`);
-      toast.success(`Import selesai: ${parts.join(", ")}`);
-    } else {
-      toast.warning(`Import selesai: ${success} baru, ${updated} diupdate, ${errorCount} gagal`);
-    }
+      const failed = validationFailures + failedThisRun;
+      setResult({ success: inserted, updated, error: failed });
+      if (inserted || updated) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["siswa"] }),
+          queryClient.invalidateQueries({ queryKey: ["siswa_detail"] }),
+          queryClient.invalidateQueries({ queryKey: ["statistik_siswa"] }),
+        ]);
+        onImported();
+      }
+      if (!failed) toast.success(`Import selesai: ${inserted} baru, ${updated} diperbarui.`);
+      else toast.warning(`Import selesai: ${inserted} baru, ${updated} diperbarui, ${failed} gagal. Unduh laporan untuk rinciannya.`);
+    } finally { setImporting(false); importGuardRef.current = false; }
   };
 
+  const downloadReport = () => {
+    const report = rows.map((row) => ({
+      baris_excel: row.rowNumber, siswa_id: normalize(row.raw.siswa_id), nis: normalize(row.raw.nis), nama: normalize(row.raw.nama),
+      aksi: row.action === "update" ? "update" : "baru",
+      hasil: row.errors.length ? "gagal_validasi" : row.runStatus === "success" ? "berhasil" : row.runStatus === "error" ? "gagal_simpan" : "belum_diproses",
+      alasan: row.errors.length ? row.errors.join("; ") : row.runMessage || "",
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(report); const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Hasil Import"); XLSX.writeFile(workbook, "laporan_import_siswa.xlsx");
+  };
 
   const handleClose = (nextOpen: boolean) => {
+    if (!nextOpen && busy) { toast.info("Proses sedang berjalan. Dialog tetap terbuka sampai proses selesai."); return; }
     if (!nextOpen) {
-      setRows([]);
-      setRawRows([]);
-      setResult(null);
-      setProgress(0);
+      validationRevisionRef.current++; setRows([]); setRawRows([]); setResult(null); setProgress(0); setUpdateExisting(false);
     }
     onOpenChange(nextOpen);
   };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="h-5 w-5" /> Import Data Siswa dari Excel
-          </DialogTitle>
-        </DialogHeader>
-
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" onEscapeKeyDown={(event) => busy && event.preventDefault()} onPointerDownOutside={(event) => busy && event.preventDefault()}>
+        <DialogHeader><DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5" /> Import Data Siswa dari Excel</DialogTitle></DialogHeader>
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Download template, isi data siswa, lalu upload kembali. Kolom{" "}
-            <span className="font-medium">departemen</span>,{" "}
-            <span className="font-medium">tingkat</span>,{" "}
-            <span className="font-medium">kelas</span>,{" "}
-            <span className="font-medium">tahun_ajaran</span>, dan{" "}
-            <span className="font-medium">angkatan</span> diisi dengan nama persis
-            seperti yang ada di sistem (opsional, boleh dikosongkan). Untuk update data
-            siswa yang sudah ada, gunakan{" "}
-            <span className="font-medium">Download Data Siswa (untuk Update)</span>{" "}
-            agar file berisi data terkini beserta NIS-nya, edit kolom yang perlu diubah,
-            lalu upload kembali dengan centang{" "}
-            <span className="font-medium">Update data siswa</span> di bawah.
-          </p>
+          <div className="space-y-1 text-sm text-muted-foreground">
+            <p>Untuk siswa baru, <span className="font-medium text-foreground">departemen wajib</span>. Kelas harus sesuai lembaga dan tingkat serta diisi bersama tahun ajaran. Untuk update, gunakan file unduhan yang berisi <span className="font-medium text-foreground">siswa_id</span>; siswa tanpa NIS tetap dapat dicocokkan dengan aman.</p>
+            <p>Sel kosong saat update mempertahankan nilai lama. Penghapusan nilai, perubahan status siswa existing, dan upload dokumen KK/Akta/Rapor/Ijazah dilakukan melalui Edit Siswa/SPMB/Mutasi. NIK dan No. KK harus 16 digit dan disimpan sebagai teks di Excel.</p>
+          </div>
 
           <div className="flex flex-wrap gap-3">
-            <Button variant="outline" onClick={downloadTemplate}>
-              <Download className="mr-2 h-4 w-4" />
-              Download Template
-            </Button>
-            <Button variant="outline" onClick={downloadDataSiswaSaatIni} disabled={exportingCurrent}>
-              {exportingCurrent ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="mr-2 h-4 w-4" />
-              )}
-              Download Data Siswa (untuk Update)
-            </Button>
-            <Label htmlFor="upload-siswa" className="cursor-pointer">
-              <Button variant="outline" asChild>
-                <span>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload File Excel
-                </span>
-              </Button>
+            <Button variant="outline" onClick={downloadTemplate} disabled={busy}><Download className="mr-2 h-4 w-4" /> Download Template</Button>
+            <Button variant="outline" onClick={downloadDataSiswaSaatIni} disabled={busy}>{exportingCurrent ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />} Download Data Siswa (untuk Update)</Button>
+            <Label htmlFor="upload-siswa" className={busy ? "cursor-not-allowed opacity-50" : "cursor-pointer"}>
+              <Button variant="outline" asChild disabled={busy}><span><Upload className="mr-2 h-4 w-4" /> Upload File Excel</span></Button>
             </Label>
-            <input
-              id="upload-siswa"
-              type="file"
-              accept=".xlsx,.xls"
-              className="hidden"
-              onChange={handleUpload}
-            />
+            <input id="upload-siswa" type="file" accept=".xlsx,.xls" className="hidden" onChange={handleUpload} disabled={busy} />
+            {!!rows.length && <Button variant="outline" onClick={downloadReport} disabled={importing}><Download className="mr-2 h-4 w-4" /> Download Laporan</Button>}
           </div>
 
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="update-existing"
-              checked={updateExisting}
-              onCheckedChange={(checked) => handleToggleUpdateExisting(checked === true)}
-            />
-            <Label htmlFor="update-existing" className="text-sm cursor-pointer font-normal">
-              Update data siswa jika NIS sudah terdaftar (jika tidak dicentang, baris dengan NIS yang
-              sudah ada akan tetap dibuat sebagai data baru)
-            </Label>
+          <div className="flex items-start gap-2 rounded-md border p-3">
+            <Checkbox id="update-existing" checked={updateExisting} disabled={busy} onCheckedChange={(checked) => handleToggleUpdateExisting(checked === true)} />
+            <Label htmlFor="update-existing" className="text-sm cursor-pointer font-normal leading-5">Izinkan update siswa yang sudah ada. Tanpa opsi ini, NIS/siswa_id yang sudah terdaftar menjadi error—tidak pernah dibuat sebagai duplikat baru.</Label>
           </div>
 
-          {rows.length > 0 && (
+          {!!rows.length && (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Preview: {Math.min(10, rows.length)} dari {rows.length} baris
-                {validating && " (memeriksa data yang sudah ada...)"}
-              </p>
-              <div className="border rounded-md overflow-auto max-h-[350px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>NIS</TableHead>
-                      <TableHead>Nama</TableHead>
-                      <TableHead>JK</TableHead>
-                      <TableHead>Kelas</TableHead>
-                      <TableHead>Aksi</TableHead>
-                      <TableHead>Status</TableHead>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+                <span>Preview {Math.min(20, rows.length)} dari {rows.length} baris{validating ? " (memvalidasi...)" : ""}</span>
+                <span>{rows.filter((row) => !row.errors.length).length} valid · {rows.filter((row) => row.errors.length).length} bermasalah</span>
+              </div>
+              <div className="border rounded-md overflow-auto max-h-[420px]">
+                <Table><TableHeader><TableRow><TableHead>Baris</TableHead><TableHead>ID / NIS</TableHead><TableHead>Nama</TableHead><TableHead>Lembaga / Kelas</TableHead><TableHead>Aksi</TableHead><TableHead>Hasil / Alasan</TableHead></TableRow></TableHeader>
+                  <TableBody>{rows.slice(0, 20).map((row) => (
+                    <TableRow key={`${row.rowNumber}-${normalize(row.raw.siswa_id)}-${normalize(row.raw.nis)}`} className={row.errors.length || row.runStatus === "error" ? "bg-destructive/10" : ""}>
+                      <TableCell>{row.rowNumber}</TableCell>
+                      <TableCell className="font-mono text-xs"><div>{normalize(row.raw.siswa_id) || "-"}</div><div className="text-muted-foreground">NIS: {normalize(row.raw.nis) || "-"}</div></TableCell>
+                      <TableCell>{normalize(row.raw.nama) || "-"}</TableCell>
+                      <TableCell><div>{normalize(row.raw.departemen) || "(dipertahankan)"}</div><div className="text-xs text-muted-foreground">{normalize(row.raw.kelas) || "-"}</div></TableCell>
+                      <TableCell>{row.action === "update" ? <Badge variant="secondary">Update</Badge> : <Badge variant="outline">Baru</Badge>}</TableCell>
+                      <TableCell className="max-w-[360px]">
+                        {row.errors.length ? <span className="text-destructive text-xs">{row.errors.join("; ")}</span>
+                          : row.runStatus === "success" ? <span className="inline-flex items-center gap-1 text-xs text-green-700"><CheckCircle2 className="h-4 w-4" /> {row.runMessage}</span>
+                          : row.runStatus === "error" ? <span className="inline-flex items-start gap-1 text-xs text-destructive"><XCircle className="h-4 w-4 shrink-0" /> {row.runMessage}</span>
+                          : <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><CheckCircle2 className="h-4 w-4" /> Siap diproses</span>}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.slice(0, 10).map((r, i) => (
-                      <TableRow key={i} className={r.error ? "bg-destructive/10" : ""}>
-                        <TableCell className="font-mono text-sm">{r.nis || "-"}</TableCell>
-                        <TableCell>{r.nama}</TableCell>
-                        <TableCell>{r.jenis_kelamin}</TableCell>
-                        <TableCell>{r.kelas || "-"}</TableCell>
-                        <TableCell>
-                          {r._action === "update" ? (
-                            <Badge variant="secondary">Update</Badge>
-                          ) : (
-                            <Badge variant="outline">Baru</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {r.error ? (
-                            <span className="text-destructive text-xs">{r.error}</span>
-                          ) : (
-                            <CheckCircle2 className="h-4 w-4 text-green-600" />
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
+                  ))}</TableBody>
                 </Table>
               </div>
-
               {importing && <Progress value={progress} className="h-2" />}
-
-              {result && (
-                <div className="flex gap-3 text-sm">
-                  {result.success > 0 && <Badge variant="outline">{result.success} baru</Badge>}
-                  {result.updated > 0 && <Badge variant="secondary">{result.updated} diupdate</Badge>}
-                  {result.error > 0 && (
-                    <Badge variant="destructive">{result.error} gagal</Badge>
-                  )}
-                </div>
-              )}
-
-              {hasErrors && (
-                <p className="text-xs text-destructive">
-                  Perbaiki baris yang bermasalah pada file Excel lalu upload ulang.
-                </p>
-              )}
+              {result && <div className="flex flex-wrap gap-3 text-sm">{result.success > 0 && <Badge variant="outline">{result.success} baru berhasil</Badge>}{result.updated > 0 && <Badge variant="secondary">{result.updated} update berhasil</Badge>}{result.error > 0 && <Badge variant="destructive">{result.error} gagal</Badge>}</div>}
+              {hasValidationErrors && <p className="text-xs text-destructive">Baris dengan error validasi tidak akan disimpan. Baris valid tetap dapat diproses secara atomik per baris; rincian lengkap tersedia di laporan.</p>}
+              {rows.some((row) => row.runStatus === "success") && executableRows.length > 0 && <p className="text-xs text-muted-foreground">Jika proses dijalankan lagi, baris yang sudah berhasil otomatis dilewati.</p>}
             </div>
           )}
         </div>
-
         <DialogFooter>
-          <Button variant="outline" onClick={() => handleClose(false)}>
-            Tutup
-          </Button>
-          <Button onClick={handleImport} disabled={rows.length === 0 || hasErrors || importing || validating}>
-            {importing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Mengimport...
-              </>
-            ) : (
-              "Simpan ke Database"
-            )}
+          <Button variant="outline" onClick={() => handleClose(false)} disabled={busy}>Tutup</Button>
+          <Button onClick={handleImport} disabled={!rows.length || !executableRows.length || importing || validating}>
+            {importing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Mengimport...</> : `Simpan ${executableRows.length} Baris Valid`}
           </Button>
         </DialogFooter>
       </DialogContent>
