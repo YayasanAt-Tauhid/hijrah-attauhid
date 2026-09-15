@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@/lib/router-compat";
 import { pmbDaftar, pmbOptions } from "@/server/pmb";
-import { pmbCreatePayment, type PmbPaymentResult } from "@/server/pmbPayment";
+import {
+  pmbCreatePayment,
+  pmbGetStatus,
+  type PmbPaymentResult,
+  type PmbRegistrationStatusResult,
+} from "@/server/pmbPayment";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -9,17 +14,29 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormSection } from "@/components/shared/FormSection";
-import { CheckCircle2, CreditCard, UserPlus } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock3, CreditCard, RefreshCw, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 interface Departemen { id: string; nama: string; kode: string | null }
 interface Angkatan { id: string; nama: string; departemen_id: string | null }
 const PEKERJAAN_OPTIONS = ["PNS", "TNI/Polri", "Wiraswasta", "Karyawan Swasta", "Petani", "Nelayan", "Buruh", "Guru/Dosen", "Dokter", "Lainnya"];
+const STORAGE_KEY = "hat_pmb_registration_token";
 const initialForm = {
   nama: "", jenis_kelamin: "L", tempat_lahir: "", tanggal_lahir: "", alamat: "", telepon: "",
   departemen_id: "", angkatan_id: "", jenis_pendaftaran: "baru", asal_sekolah: "", kelas_terakhir: "", alasan_pindah: "",
   nama_ayah: "", nama_ibu: "", pekerjaan_ayah: "", pekerjaan_ibu: "", telepon_ortu: "", alamat_ortu: "",
 };
+
+function labelStatusPendaftaran(status: string): string {
+  if (status === "calon") return "Menunggu verifikasi sekolah";
+  if (status === "diterima") return "Diterima";
+  if (status === "aktif") return "Aktif sebagai siswa";
+  return status || "Terdaftar";
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 export default function PMBDaftarOnline() {
   const [departemenList, setDepartemenList] = useState<Departemen[]>([]);
@@ -27,14 +44,73 @@ export default function PMBDaftarOnline() {
   const [form, setForm] = useState({ ...initialForm });
   const [loading, setLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
   const [registration, setRegistration] = useState<{ siswa_id: string; payment_token: string } | null>(null);
+  const [statusToken, setStatusToken] = useState<string | null>(null);
+  const [paymentReturn, setPaymentReturn] = useState<string | null>(null);
+  const [registrationStatus, setRegistrationStatus] = useState<PmbRegistrationStatusResult | null>(null);
   const [payment, setPayment] = useState<PmbPaymentResult | null>(null);
 
   useEffect(() => {
     pmbOptions().then((d) => { setDepartemenList(d.departemen || []); setAllAngkatan(d.angkatan || []); }).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const callbackToken = url.searchParams.get("registration");
+    const callbackPayment = url.searchParams.get("payment");
+    const storedToken = window.localStorage.getItem(STORAGE_KEY);
+    setPaymentReturn(callbackPayment);
+    const token = callbackToken || storedToken;
+
+    if (callbackToken) {
+      window.localStorage.setItem(STORAGE_KEY, callbackToken);
+      // Token callback cukup dipakai sekali. Hapus dari address bar agar tidak
+      // mudah ikut tersalin ke screenshot, history sharing, atau referrer.
+      url.searchParams.delete("registration");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+
+    if (!token) return;
+    setStatusToken(token);
+    setStatusLoading(true);
+    pmbGetStatus({ data: { payment_token: token } })
+      .then(setRegistrationStatus)
+      .catch(() => {
+        window.localStorage.removeItem(STORAGE_KEY);
+        setStatusToken(null);
+      })
+      .finally(() => setStatusLoading(false));
+  }, []);
+
+  const currentPaymentStatus = registrationStatus?.payment_status;
+  useEffect(() => {
+    if (!statusToken || !currentPaymentStatus) return;
+    if (!["pending", "processing"].includes(currentPaymentStatus)) return;
+
+    const timer = window.setInterval(() => {
+      pmbGetStatus({ data: { payment_token: statusToken } })
+        .then(setRegistrationStatus)
+        .catch(() => undefined);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [statusToken, currentPaymentStatus]);
+
   const angkatanList = useMemo(() => allAngkatan.filter((a) => !form.departemen_id || a.departemen_id === form.departemen_id), [allAngkatan, form.departemen_id]);
   const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  async function refreshStatus(token = statusToken) {
+    if (!token) return;
+    setStatusLoading(true);
+    try {
+      const next = await pmbGetStatus({ data: { payment_token: token } });
+      setRegistrationStatus(next);
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Gagal memuat status pendaftaran"));
+    } finally {
+      setStatusLoading(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -42,39 +118,169 @@ export default function PMBDaftarOnline() {
     setLoading(true);
     try {
       const r = await pmbDaftar({ data: form });
-      setRegistration({ siswa_id: r.siswa_id, payment_token: r.payment_token });
-    } catch (err: any) { toast.error(err?.message || "Gagal mendaftar"); }
-    finally { setLoading(false); }
+      const nextRegistration = { siswa_id: r.siswa_id, payment_token: r.payment_token };
+      setRegistration(nextRegistration);
+      setStatusToken(r.payment_token);
+      window.localStorage.setItem(STORAGE_KEY, r.payment_token);
+      try {
+        const nextStatus = await pmbGetStatus({ data: { payment_token: r.payment_token } });
+        setRegistrationStatus(nextStatus);
+      } catch {
+        // Pendaftaran sudah berhasil walaupun status gagal dimuat sesaat.
+      }
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Gagal mendaftar"));
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function mulaiBayar() {
-    if (!registration) return;
+    const token = registration?.payment_token || statusToken;
+    if (!token) return;
     setCheckoutLoading(true);
     try {
-      const r = await pmbCreatePayment({ data: registration });
+      const r = await pmbCreatePayment({
+        data: {
+          payment_token: token,
+          siswa_id: registration?.siswa_id || registrationStatus?.siswa_id,
+        },
+      });
       setPayment(r);
+      window.localStorage.setItem(STORAGE_KEY, token);
       window.location.assign(r.redirect_url);
-    } catch (err: any) { toast.error(err?.message || "Gagal membuat pembayaran"); }
-    finally { setCheckoutLoading(false); }
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Gagal membuat pembayaran"));
+      await refreshStatus(token);
+    } finally {
+      setCheckoutLoading(false);
+    }
   }
 
-  if (registration) return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 p-4">
-      <Card className="w-full max-w-md border-emerald-200 shadow-lg">
-        <CardContent className="pt-8 pb-8 space-y-5 text-center">
-          <CheckCircle2 className="h-16 w-16 text-emerald-600 mx-auto" />
-          <div><h2 className="text-xl font-bold text-emerald-800">Pendaftaran Berhasil</h2><p className="mt-2 text-sm text-muted-foreground">Data calon siswa <strong>{form.nama}</strong> sudah tersimpan. Selesaikan uang pendaftaran untuk melanjutkan proses PMB.</p></div>
-          {payment && <div className="rounded-lg bg-muted p-3 text-sm">{payment.jenis_nama}: <strong>Rp {payment.total_amount.toLocaleString("id-ID")}</strong></div>}
-          <Button onClick={mulaiBayar} disabled={checkoutLoading} className="w-full bg-emerald-600 hover:bg-emerald-700">
-            <CreditCard className="h-4 w-4 mr-2" />{checkoutLoading ? "Menyiapkan pembayaran..." : "Bayar Uang Pendaftaran"}
-          </Button>
-          <p className="text-xs text-muted-foreground">Pembayaran diproses melalui Midtrans. Setelah pembayaran terkonfirmasi, penerimaan tercatat otomatis pada pembayaran siswa dan jurnal keuangan.</p>
-          <Button variant="outline" className="w-full" onClick={() => { setRegistration(null); setPayment(null); setForm({ ...initialForm }); }}>Daftarkan Siswa Lain</Button>
-          <Link to="/portal/login"><Button variant="link" className="w-full text-emerald-700">Login Portal Orang Tua</Button></Link>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  function clearRegistration() {
+    window.localStorage.removeItem(STORAGE_KEY);
+    setRegistration(null);
+    setStatusToken(null);
+    setRegistrationStatus(null);
+    setPaymentReturn(null);
+    setPayment(null);
+    setForm({ ...initialForm });
+    window.history.replaceState({}, "", "/pmb");
+  }
+
+  if (statusLoading && statusToken && !registrationStatus && !registration) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 p-4">
+        <Card className="w-full max-w-md border-emerald-200 shadow-lg">
+          <CardContent className="py-10 text-center space-y-3">
+            <RefreshCw className="h-10 w-10 animate-spin text-emerald-600 mx-auto" />
+            <h2 className="font-semibold text-lg">Memuat status pendaftaran</h2>
+            <p className="text-sm text-muted-foreground">Mohon jangan melakukan pendaftaran ulang.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (registrationStatus || registration) {
+    const status = registrationStatus?.payment_status || "unpaid";
+    const nama = registrationStatus?.nama || form.nama;
+    const isPaid = status === "paid";
+    const returnedFinishPending = paymentReturn === "finish" && status === "pending";
+    const isProcessing = status === "processing" || returnedFinishPending;
+    const isPending = status === "pending" && !returnedFinishPending;
+    const isFailed = status === "failed" || status === "expired";
+    const canPay = registrationStatus ? registrationStatus.can_pay : true;
+    const totalAmount = registrationStatus?.total_amount || payment?.total_amount || null;
+
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 p-4">
+        <Card className="w-full max-w-md border-emerald-200 shadow-lg">
+          <CardContent className="pt-8 pb-8 space-y-5 text-center">
+            {isPaid ? (
+              <CheckCircle2 className="h-16 w-16 text-emerald-600 mx-auto" />
+            ) : isProcessing || isPending ? (
+              <Clock3 className="h-16 w-16 text-amber-600 mx-auto" />
+            ) : isFailed ? (
+              <AlertCircle className="h-16 w-16 text-red-600 mx-auto" />
+            ) : (
+              <CheckCircle2 className="h-16 w-16 text-emerald-600 mx-auto" />
+            )}
+
+            <div>
+              <h2 className="text-xl font-bold text-emerald-800">
+                {isPaid
+                  ? "Pembayaran Berhasil"
+                  : isProcessing
+                    ? "Pembayaran Sedang Dikonfirmasi"
+                    : isPending
+                      ? "Menunggu Pembayaran"
+                      : isFailed
+                        ? "Pembayaran Belum Berhasil"
+                        : "Pendaftaran Berhasil"}
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Data calon siswa <strong>{nama}</strong> sudah tersimpan.
+                {isPaid && " Pembayaran sudah tercatat. Anda tidak perlu mendaftar ulang."}
+                {isProcessing && " Midtrans sudah mengirim konfirmasi; sistem sedang menyelesaikan pencatatan pembayaran dan jurnal. Jangan membayar ulang."}
+                {isPending && " Transaksi masih dapat dilanjutkan. Jangan membuat pendaftaran baru untuk siswa yang sama."}
+                {isFailed && " Pendaftaran tetap tersimpan. Anda cukup mencoba pembayaran lagi, bukan mendaftar ulang."}
+              </p>
+            </div>
+
+            {registrationStatus && (
+              <div className="rounded-lg border bg-white/70 p-4 text-left text-sm space-y-2">
+                <div className="flex justify-between gap-4"><span className="text-muted-foreground">Calon siswa</span><strong className="text-right">{registrationStatus.nama}</strong></div>
+                <div className="flex justify-between gap-4"><span className="text-muted-foreground">Lembaga</span><strong className="text-right">{registrationStatus.departemen_nama || "-"}</strong></div>
+                {registrationStatus.jenis_nama && <div className="flex justify-between gap-4"><span className="text-muted-foreground">Pembayaran</span><strong className="text-right">{registrationStatus.jenis_nama}</strong></div>}
+                {totalAmount !== null && <div className="flex justify-between gap-4"><span className="text-muted-foreground">Nominal</span><strong>Rp {Number(totalAmount).toLocaleString("id-ID")}</strong></div>}
+                <div className="flex justify-between gap-4"><span className="text-muted-foreground">Status pendaftaran</span><strong className="text-right">{labelStatusPendaftaran(registrationStatus.status_pendaftaran)}</strong></div>
+                <div className="flex justify-between gap-4"><span className="text-muted-foreground">Status pembayaran</span><strong className="text-right">{isPaid ? "Lunas" : isProcessing ? "Sedang dikonfirmasi" : isPending ? "Pending" : isFailed ? (status === "expired" ? "Kedaluwarsa" : "Gagal") : "Belum dibayar"}</strong></div>
+              </div>
+            )}
+
+            {!registrationStatus && payment && (
+              <div className="rounded-lg bg-muted p-3 text-sm">{payment.jenis_nama}: <strong>Rp {payment.total_amount.toLocaleString("id-ID")}</strong></div>
+            )}
+
+            {canPay && !isPaid && !isProcessing && (
+              <Button onClick={mulaiBayar} disabled={checkoutLoading} className="w-full bg-emerald-600 hover:bg-emerald-700">
+                <CreditCard className="h-4 w-4 mr-2" />
+                {checkoutLoading
+                  ? "Menyiapkan pembayaran..."
+                  : isPending
+                    ? "Lanjutkan Pembayaran"
+                    : isFailed
+                      ? "Coba Bayar Lagi"
+                      : "Bayar Uang Pendaftaran"}
+              </Button>
+            )}
+
+            {!canPay && !isPaid && !isProcessing && !isPending && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                Pembayaran online belum dapat dilakukan. Pendaftaran tetap tersimpan; silakan hubungi sekolah jika kondisi ini berlanjut.
+              </div>
+            )}
+
+            {(registrationStatus || statusToken) && (
+              <Button variant="outline" className="w-full" onClick={() => refreshStatus()} disabled={statusLoading}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${statusLoading ? "animate-spin" : ""}`} />
+                Perbarui Status
+              </Button>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              Status "Lunas" hanya ditampilkan setelah pembayaran benar-benar tercatat di sistem sekolah. Konfirmasi gateway yang masih diproses tidak akan meminta Anda membayar ulang.
+            </p>
+
+            {isPaid && (
+              <Button variant="outline" className="w-full" onClick={clearRegistration}>Daftarkan Siswa Lain</Button>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const showAsal = form.jenis_pendaftaran !== "baru";
   return (
@@ -104,7 +310,7 @@ export default function PMBDaftarOnline() {
           <Button type="submit" disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700"><UserPlus className="h-4 w-4 mr-2" />{loading ? "Mendaftarkan..." : "Daftarkan Calon Siswa"}</Button>
         </form>
       </CardContent></Card>
-      <p className="mt-4 text-center text-xs text-muted-foreground">Sudah terdaftar? <Link to="/portal/login" className="text-emerald-700 underline font-medium">Login Portal Orang Tua</Link></p>
+      <p className="mt-4 text-center text-xs text-muted-foreground">Sudah memiliki akun Portal Orang Tua? <Link to="/portal/login" className="text-emerald-700 underline font-medium">Login Portal Orang Tua</Link></p>
     </div></div>
   );
 }
