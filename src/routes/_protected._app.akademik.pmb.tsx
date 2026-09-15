@@ -1,6 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
-import PMB from "@/pages/akademik/PMB";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+// Legacy alias: PMB -> SPMB.
 export const Route = createFileRoute("/_protected/_app/akademik/pmb")({
-  component: PMB,
+  beforeLoad: () => {
+    throw redirect({ to: "/akademik/spmb" });
+  },
 });

@@ -1,6 +1,8 @@
+// Legacy alias: /pmb tetap dibuka agar callback pembayaran/link lama tidak putus.
+// Komponen akan mengubah URL menjadi /spmb sambil mempertahankan query callback.
 import { createFileRoute } from "@tanstack/react-router";
-import PMBDaftarOnline from "@/pages/portal/PMBDaftarOnline";
+import SPMBDaftarOnline from "@/pages/portal/SPMBDaftarOnline";
 
 export const Route = createFileRoute("/pmb")({
-  component: PMBDaftarOnline,
+  component: SPMBDaftarOnline,
 });

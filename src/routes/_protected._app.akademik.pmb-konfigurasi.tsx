@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import KonfigurasiPMB from "@/pages/akademik/KonfigurasiPMB";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_protected/_app/akademik/pmb-konfigurasi")({
-  component: KonfigurasiPMB,
+  beforeLoad: () => {
+    throw redirect({ to: "/akademik/spmb-konfigurasi" });
+  },
 });

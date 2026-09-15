@@ -72,9 +72,9 @@ export default function KonfigurasiPMB() {
         }, { onConflict: "departemen_id" });
       if (error) throw error;
       await qc.invalidateQueries({ queryKey: ["konfigurasi_pmb", departemenId] });
-      toast.success("Konfigurasi PMB berhasil disimpan");
+      toast.success("Konfigurasi SPMB berhasil disimpan");
     } catch (e: any) {
-      toast.error(e.message || "Gagal menyimpan konfigurasi PMB");
+      toast.error(e.message || "Gagal menyimpan konfigurasi SPMB");
     } finally {
       setSaving(false);
     }
@@ -83,15 +83,15 @@ export default function KonfigurasiPMB() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Konfigurasi PMB</h1>
+        <h1 className="text-2xl font-bold text-foreground">Konfigurasi SPMB</h1>
         <p className="text-sm text-muted-foreground">
-          Tentukan jenis pembayaran pendaftaran yang digunakan untuk setiap lembaga dan checkout mandiri di /pmb.
+          Tentukan jenis pembayaran pendaftaran yang digunakan untuk setiap lembaga dan checkout mandiri di /spmb.
         </p>
       </div>
 
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle>Pembayaran Pendaftaran</CardTitle>
+          <CardTitle>Pembayaran Pendaftaran SPMB</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
@@ -125,7 +125,7 @@ export default function KonfigurasiPMB() {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Jenis ini menjadi satu-satunya pilihan di Pembayaran PMB manual dan dipakai otomatis oleh pembayaran online /pmb.
+              Jenis ini menjadi satu-satunya pilihan di Pembayaran SPMB manual dan dipakai otomatis oleh pembayaran online /spmb.
             </p>
           </div>
 
@@ -142,7 +142,7 @@ export default function KonfigurasiPMB() {
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div>
               <Label>Pembayaran online aktif</Label>
-              <p className="text-xs text-muted-foreground">Izinkan orang tua melanjutkan pembayaran Midtrans dari halaman /pmb.</p>
+              <p className="text-xs text-muted-foreground">Izinkan orang tua melanjutkan pembayaran Midtrans dari halaman /spmb.</p>
             </div>
             <Switch checked={onlineAktif} onCheckedChange={setOnlineAktif} />
           </div>

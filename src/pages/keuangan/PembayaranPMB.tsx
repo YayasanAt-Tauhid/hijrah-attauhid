@@ -42,7 +42,7 @@ export default function PembayaranPMB() {
           bulan: 0,
           jumlah: Number(jumlah),
           tanggal_bayar: tanggalBayar,
-          keterangan: keterangan || "Pembayaran PMB",
+          keterangan: keterangan || "Pembayaran SPMB",
           departemen_id: departemenId || undefined,
           tahun_ajaran_id: tahunAktif.id,
           is_bayar_dimuka: false,
@@ -57,7 +57,7 @@ export default function PembayaranPMB() {
       setJumlah("");
       setKeterangan("");
     },
-    onError: (e: any) => toast.error(e.message || "Gagal menyimpan pembayaran PMB"),
+    onError: (e: any) => toast.error(e.message || "Gagal menyimpan pembayaran SPMB"),
   });
 
   const { data: pmbConfig } = useQuery({
@@ -96,7 +96,7 @@ export default function PembayaranPMB() {
   const handleSubmit = async () => {
     if (!selectedSiswa || !jenisId || !jumlah) return;
     if (!pmbConfig || jenisId !== pmbConfig.jenis_pembayaran_id) {
-      toast.error("Jenis pembayaran tidak sesuai konfigurasi PMB lembaga ini");
+      toast.error("Jenis pembayaran tidak sesuai konfigurasi SPMB lembaga ini");
       return;
     }
     await createMutation.mutateAsync();
@@ -112,8 +112,8 @@ export default function PembayaranPMB() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Pembayaran Calon Siswa (PMB)</h1>
-        <p className="text-sm text-muted-foreground">Input pembayaran pendaftaran untuk siswa berstatus calon. Setiap transaksi dibuat bersama jurnal keuangan secara atomik.</p>
+        <h1 className="text-2xl font-bold text-foreground">Pembayaran Calon Murid (SPMB)</h1>
+        <p className="text-sm text-muted-foreground">Input pembayaran pendaftaran SPMB untuk murid berstatus calon. Setiap transaksi dibuat bersama jurnal keuangan secara atomik.</p>
       </div>
 
       <Card>
@@ -128,12 +128,12 @@ export default function PembayaranPMB() {
             </Select>
           </div>
           {departemenId && !pmbConfig && (
-            <p className="text-sm text-destructive">Konfigurasi PMB untuk lembaga ini belum dibuat. Atur terlebih dahulu di Akademik → Konfigurasi PMB.</p>
+            <p className="text-sm text-destructive">Konfigurasi SPMB untuk lembaga ini belum dibuat. Atur terlebih dahulu di Akademik → Konfigurasi SPMB.</p>
           )}
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Cari calon siswa (nama)..."
+              placeholder="Cari calon murid (nama)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9"
@@ -166,7 +166,7 @@ export default function PembayaranPMB() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-lg">{selectedSiswa.nama}</h3>
-                  <p className="text-sm text-muted-foreground">Status: Calon Siswa</p>
+                  <p className="text-sm text-muted-foreground">Status: Calon Murid</p>
                 </div>
               </div>
             </CardContent>
@@ -174,7 +174,7 @@ export default function PembayaranPMB() {
 
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
-              <CardHeader><CardTitle>Input Pembayaran PMB</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Input Pembayaran SPMB</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <Label>Jenis Pembayaran</Label>
@@ -183,7 +183,7 @@ export default function PembayaranPMB() {
                     const j = pmbJenisList.find((x: any) => x.id === v) as any;
                     if (j?.nominal) setJumlah(String(j.nominal));
                   }} disabled={!pmbConfig}>
-                    <SelectTrigger><SelectValue placeholder={pmbConfig ? "Pilih jenis" : "Konfigurasi PMB belum tersedia"} /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={pmbConfig ? "Pilih jenis" : "Konfigurasi SPMB belum tersedia"} /></SelectTrigger>
                     <SelectContent>
                       {pmbJenisList.map((j: any) => (
                         <SelectItem key={j.id} value={j.id}>{j.nama} {j.nominal ? `(${formatRupiah(Number(j.nominal))})` : ""}</SelectItem>
@@ -202,7 +202,7 @@ export default function PembayaranPMB() {
                 </div>
                 <div>
                   <Label>Keterangan</Label>
-                  <Textarea value={keterangan} onChange={(e) => setKeterangan(e.target.value)} placeholder="Pembayaran PMB" />
+                  <Textarea value={keterangan} onChange={(e) => setKeterangan(e.target.value)} placeholder="Pembayaran SPMB" />
                 </div>
                 <Button onClick={handleSubmit} disabled={!jenisId || !jumlah || !tahunAktif?.id || createMutation.isPending} className="w-full">
                   {createMutation.isPending ? "Menyimpan..." : "Simpan Pembayaran & Jurnal"}
@@ -211,7 +211,7 @@ export default function PembayaranPMB() {
             </Card>
 
             <Card>
-              <CardHeader><CardTitle>Riwayat Pembayaran PMB</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Riwayat Pembayaran SPMB</CardTitle></CardHeader>
               <CardContent>
                 <DataTable columns={riwayatColumns} data={(riwayat as any[]) || []} loading={loadRiwayat} searchable={false} pageSize={10} emptyMessage="Belum ada pembayaran" />
               </CardContent>
