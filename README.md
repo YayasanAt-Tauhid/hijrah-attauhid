@@ -18,7 +18,7 @@ Changes made via Lovable will be committed automatically to this repo.
 
 If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Install Node.js 22 (including npm) and [Bun](https://bun.com/docs/installation) 1.4.2. Production builds run Vite with Bun; dependency installation uses the existing npm lockfile.
 
 Follow these steps:
 
@@ -75,20 +75,20 @@ TanStack Router.
 
 ```sh
 npm run dev      # start the dev server (SSR) on http://localhost:8080
-npm run build    # production build into .output (Cloudflare Workers by default)
+bun --bun run build    # production build into .output (Cloudflare Workers by default)
 npm run start    # run the built server (node .output/server/index.mjs)
 npm test         # run unit tests (vitest)
 ```
 
 ## Deploy to Cloudflare Workers
 
-`npm run build` targets Cloudflare Workers by default (Nitro
+`bun --bun run build` targets Cloudflare Workers by default (Nitro
 `cloudflare-module` preset). The build emits `.output/server/` with a ready
 `wrangler.json` (`nodejs_compat` flag + an `ASSETS` binding that serves the
 client bundle from `.output/public`).
 
 ```sh
-npm run build                        # produces .output for Cloudflare Workers
+bun --bun run build                        # produces .output for Cloudflare Workers
 npx wrangler deploy -c .output/server/wrangler.json
 # or: npx nitro deploy --prebuilt
 ```
@@ -101,10 +101,10 @@ Notes:
 - Set the Worker `name`/route in `.output/server/wrangler.json` (or edit
   `compatibilityDate` / preset in `vite.config.ts`).
 - To build a plain Node server instead, override the preset:
-  `SERVER_PRESET=node-server npm run build`.
+  `SERVER_PRESET=node-server bun --bun run build`.
 
 Other Nitro targets (Node, Vercel, Netlify, Deno, …) work the same way via
-`SERVER_PRESET=<preset> npm run build`.
+`SERVER_PRESET=<preset> bun --bun run build`.
 
 ## Can I connect a custom domain to my Lovable project?
 
