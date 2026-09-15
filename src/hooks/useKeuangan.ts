@@ -654,15 +654,32 @@ export function useUpdateJenisPembayaran() {
 export function useDeleteJenisPembayaran() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (id: string): Promise<{ action: "deleted" | "deactivated" }> => {
       const { error } = await supabase.from("jenis_pembayaran").delete().eq("id", id);
-      if (error) throw error;
+      if (!error) return { action: "deleted" };
+
+      // Jenis penerimaan yang sudah dipakai transaksi/tagihan wajib tetap ada
+      // agar histori akuntansi tidak kehilangan referensi. FK 23503 adalah
+      // sinyal bahwa record sedang direferensikan tabel lain.
+      if (error.code !== "23503") throw error;
+
+      const { error: deactivateError } = await supabase
+        .from("jenis_pembayaran")
+        .update({ aktif: false })
+        .eq("id", id);
+      if (deactivateError) throw deactivateError;
+
+      return { action: "deactivated" };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["jenis_pembayaran"] });
-      toast.success("Jenis pembayaran berhasil dihapus");
+      if (result.action === "deactivated") {
+        toast.warning("Jenis penerimaan sudah digunakan, sehingga tidak dihapus. Statusnya dinonaktifkan agar histori transaksi tetap aman.");
+      } else {
+        toast.success("Jenis penerimaan berhasil dihapus");
+      }
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error("Gagal memproses jenis penerimaan: " + e.message),
   });
 }
 

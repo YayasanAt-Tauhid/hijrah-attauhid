@@ -287,7 +287,7 @@ function TabJenisPembayaran() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <ConfirmDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)} title="Hapus Jenis Penerimaan" description="Yakin ingin menghapus?" onConfirm={() => { if (deleteId) deleteMut.mutate(deleteId); setDeleteId(null); }} />
+      <ConfirmDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)} title="Hapus / Nonaktifkan Jenis Penerimaan" description="Jika belum pernah digunakan, jenis penerimaan akan dihapus. Jika sudah terkait transaksi atau tagihan, data akan dinonaktifkan agar histori keuangan tetap utuh." confirmLabel="Hapus / Nonaktifkan" onConfirm={() => { if (deleteId) deleteMut.mutate(deleteId); setDeleteId(null); }} />
     </>
   );
 }
