@@ -23,6 +23,7 @@ jobs:
         run: |
           python <<'PY'
           from pathlib import Path
+          import re
 
           def replace_exact(text: str, old: str, new: str, expected: int = 1) -> str:
               count = text.count(old)
@@ -30,7 +31,6 @@ jobs:
                   raise SystemExit(f"Expected {expected} occurrence(s), found {count}: {old[:120]!r}")
               return text.replace(old, new)
 
-          # Hook: expose and persist perlu_dimuka.
           path = Path("src/hooks/useKeuangan.ts")
           text = path.read_text()
           text = replace_exact(
@@ -46,7 +46,6 @@ jobs:
           )
           path.write_text(text)
 
-          # Reference form: make pendapatan dimuka an explicit toggle and hide account selector when off.
           path = Path("src/pages/keuangan/ReferensiKeuangan.tsx")
           text = path.read_text()
           text = replace_exact(
@@ -74,19 +73,13 @@ jobs:
               '        const akun = (r as any).akun_dimuka;\n        if (akun) return <span className="text-sm">{akun.kode} - {akun.nama}</span>;\n        return <span className="text-xs text-muted-foreground">Global</span>;',
               '        if ((r as any).perlu_dimuka === false) return <span className="text-xs text-muted-foreground">Tidak digunakan</span>;\n        const akun = (r as any).akun_dimuka;\n        if (akun) return <span className="text-sm">{akun.kode} - {akun.nama}</span>;\n        return <span className="text-xs text-muted-foreground">Global</span>;',
           )
-          old_block = '''            <div>
-              <Label>Akun Pendapatan Dimuka (untuk pembayaran di muka)</Label>
-              <Select value={akunDimukaId || "__none__"} onValueChange={(v) => setAkunDimukaId(v === "__none__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Pilih akun dimuka..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— Pakai setting global —</SelectItem>
-                  {akunLiabilitasList?.map((a: any) => (
-                    <SelectItem key={a.id} value={a.id}>{a.kode} - {a.nama}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground mt-1">Akun liabilitas yang di-kredit saat jenis ini dibayar sebelum tahun ajaran dimulai. Kosongkan untuk pakai setting AKUN_PENDAPATAN_DIMUKA.</p>
-            </div>'''
+
+          pattern = re.compile(
+              r'\s{12}<div>\n\s{14}<Label>Akun Pendapatan Dimuka \(untuk pembayaran di muka\)</Label>.*?'
+              r'\s{14}<p className="text-xs text-muted-foreground mt-1">Akun liabilitas yang di-kredit saat jenis ini dibayar sebelum tahun ajaran dimulai\. Kosongkan untuk pakai setting AKUN_PENDAPATAN_DIMUKA\.</p>\n'
+              r'\s{12}</div>',
+              re.S,
+          )
           new_block = '''            <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Switch
@@ -121,28 +114,9 @@ jobs:
                 Akun Pendapatan Dimuka tidak digunakan untuk jenis penerimaan ini. Pembayaran yang belum membentuk piutang akan langsung dikredit ke akun pendapatan di atas.
               </div>
             )}'''
-          text = replace_exact(text, old_block, new_block)
-          path.write_text(text)
-
-          # Cash/manual payment path: respect perlu_dimuka and never credit Piutang for a terjadwal tagihan when dimuka is disabled.
-          path = Path("src/server/pembayaran.ts")
-          text = path.read_text()
-          text = replace_exact(
-              text,
-              '.select("id, nama, tipe, akun_pendapatan_id, akun_dimuka_id")',
-              '.select("id, nama, tipe, akun_pendapatan_id, akun_dimuka_id, perlu_dimuka")',
-          )
-          text = replace_exact(
-              text,
-              '    const belumJatuhTempo = tagihanFound?.status === "terjadwal";\n    const pakaiDimuka = is_bayar_dimuka || belumJatuhTempo;',
-              '    const belumJatuhTempo = tagihanFound?.status === "terjadwal";\n    const tagihanSudahDiakuiPiutang = tagihanFound?.status === "belum_bayar";\n    const pakaiDimuka = jenis.perlu_dimuka !== false && (is_bayar_dimuka || belumJatuhTempo);',
-          )
-          text = replace_exact(
-              text,
-              'tagihanEfektifId && piutangAkunId',
-              'tagihanSudahDiakuiPiutang && piutangAkunId',
-              expected=2,
-          )
+          text, count = pattern.subn(new_block, text, count=1)
+          if count != 1:
+              raise SystemExit(f"Expected account block once, replaced {count}")
           path.write_text(text)
           PY
 
@@ -162,6 +136,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/hooks/useKeuangan.ts src/pages/keuangan/ReferensiKeuangan.tsx src/server/pembayaran.ts
+          git add src/hooks/useKeuangan.ts src/pages/keuangan/ReferensiKeuangan.tsx
           git commit -m "fix(keuangan): make pendapatan dimuka explicit"
           git push origin HEAD:fix/pendapatan-dimuka-ui
