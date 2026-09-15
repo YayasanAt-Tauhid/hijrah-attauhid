@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import PMBDaftar from "@/pages/portal/PMBDaftar";
+import PMBDaftarOnline from "@/pages/portal/PMBDaftarOnline";
 
 export const Route = createFileRoute("/pmb")({
-  component: PMBDaftar,
+  component: PMBDaftarOnline,
 });

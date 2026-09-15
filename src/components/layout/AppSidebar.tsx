@@ -57,6 +57,7 @@ const menuItems: MenuItem[] = [
           { title: "Daftar Siswa", url: "/akademik/siswa" },
           { title: "Data Alumni", url: "/akademik/alumni" },
           { title: "PMB", url: "/akademik/pmb" },
+          { title: "Konfigurasi PMB", url: "/akademik/pmb-konfigurasi" },
           { title: "Mutasi Siswa", url: "/akademik/mutasi" },
           { title: "Statistik Siswa", url: "/akademik/statistik" },
         ],

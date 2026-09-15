@@ -785,6 +785,45 @@ export type Database = {
           },
         ]
       }
+      konfigurasi_pmb: {
+        Row: {
+          created_at: string
+          departemen_id: string
+          jenis_pembayaran_id: string
+          pembayaran_online_aktif: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          departemen_id: string
+          jenis_pembayaran_id: string
+          pembayaran_online_aktif?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          departemen_id?: string
+          jenis_pembayaran_id?: string
+          pembayaran_online_aktif?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "konfigurasi_pmb_departemen_id_fkey"
+            columns: ["departemen_id"]
+            isOneToOne: true
+            referencedRelation: "departemen"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "konfigurasi_pmb_jenis_pembayaran_id_fkey"
+            columns: ["jenis_pembayaran_id"]
+            isOneToOne: false
+            referencedRelation: "jenis_pembayaran"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kalender_akademik: {
         Row: {
           created_at: string | null
@@ -3669,6 +3708,7 @@ export type Database = {
           nama_ibu: string | null
           pekerjaan_ayah: string | null
           pekerjaan_ibu: string | null
+          pmb_payment_token: string | null
           siswa_id: string | null
           telepon_ortu: string | null
         }
@@ -3683,6 +3723,7 @@ export type Database = {
           nama_ibu?: string | null
           pekerjaan_ayah?: string | null
           pekerjaan_ibu?: string | null
+          pmb_payment_token?: string | null
           siswa_id?: string | null
           telepon_ortu?: string | null
         }
@@ -3697,6 +3738,7 @@ export type Database = {
           nama_ibu?: string | null
           pekerjaan_ayah?: string | null
           pekerjaan_ibu?: string | null
+          pmb_payment_token?: string | null
           siswa_id?: string | null
           telepon_ortu?: string | null
         }
@@ -4319,7 +4361,7 @@ export type Database = {
           status: string
           total_amount: number
           updated_at: string | null
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           biaya_admin?: number
@@ -4337,7 +4379,7 @@ export type Database = {
           status?: string
           total_amount: number
           updated_at?: string | null
-          user_id: string
+          user_id: string | null
         }
         Update: {
           biaya_admin?: number
@@ -4355,7 +4397,7 @@ export type Database = {
           status?: string
           total_amount?: number
           updated_at?: string | null
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
