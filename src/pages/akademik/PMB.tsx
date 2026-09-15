@@ -12,9 +12,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { NISPreview } from "@/components/shared/NISPreview";
-import { useAngkatan, useDepartemen, useKelas } from "@/hooks/useAkademikData";
+import { useAngkatan, useDepartemen, useKelas, useTahunAjaran } from "@/hooks/useAkademikData";
 import { generateNISViaEdgeFunction } from "@/utils/nisGenerator";
 import { UserPlus, Users, UserCheck, Clock, AlertTriangle, RefreshCw, Pencil, ShieldCheck, CheckCircle2, Eye } from "lucide-react";
+import { fetchAllPages } from "@/lib/fetchAll";
 import { toast } from "sonner";
 
 function diagnosaNIS(row: Record<string, unknown>): { alasan?: "no_dept_angkatan" | "no_kelas" } {
@@ -33,6 +34,7 @@ function departemenPerluAsrama(dept: any): boolean {
 type KesiapanPenerimaan = { siap: boolean; kekurangan: string[] };
 
 function getKesiapanPenerimaan(row: Record<string, unknown>): KesiapanPenerimaan {
+  if (row._readiness) return row._readiness as KesiapanPenerimaan;
   const kekurangan: string[] = [];
   const departemen = row.departemen as { npsn?: string | null; kode?: string | null; nama?: string | null } | null;
   const detail = row._spmbDetail as Record<string, any> | null;
@@ -63,15 +65,17 @@ export default function PMB() {
   const { data: angkatanList = [] } = useAngkatan();
   const { data: departemenList = [] } = useDepartemen();
   const { data: kelasList = [] } = useKelas();
+  const { data: tahunList = [] } = useTahunAjaran();
+  const [isSaving, setIsSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [nisLoadingId, setNisLoadingId] = useState<string | null>(null);
   const [modePendaftaran, setModePendaftaran] = useState<"lengkap" | "cepat">("lengkap");
   const [formData, setFormData] = useState({
     nama: "", jenis_kelamin: "L", telepon: "", alamat: "",
-    angkatan_id: "", departemen_id: "", kelas_id: "",
+    angkatan_id: "", departemen_id: "", kelas_id: "", tahun_ajaran_id: "",
   });
 
-  const resetForm = () => setFormData({ nama: "", jenis_kelamin: "L", telepon: "", alamat: "", angkatan_id: "", departemen_id: "", kelas_id: "" });
+  const resetForm = () => setFormData({ nama: "", jenis_kelamin: "L", telepon: "", alamat: "", angkatan_id: "", departemen_id: "", kelas_id: "", tahun_ajaran_id: "" });
 
   const filteredKelas = kelasList.filter((k: any) => !formData.departemen_id || k.departemen_id === formData.departemen_id);
   const filteredAngkatan = angkatanList.filter((a: any) => !formData.departemen_id || a.departemen_id === formData.departemen_id);
@@ -83,63 +87,24 @@ export default function PMB() {
   const { data: calonList = [], isLoading } = useQuery({
     queryKey: ["siswa", "calon"],
     queryFn: async () => {
-      const { data: siswaRows, error } = await supabase
-        .from("siswa")
-        .select("*, angkatan:angkatan_id(nama), departemen:departemen_id(nama,kode,npsn)")
-        .in("status", ["calon", "diterima"])
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      if (!siswaRows?.length) return [];
+      const siswaRows = await fetchAllPages<any>((from, to) => supabase
+        .from("siswa").select("*, angkatan:angkatan_id(nama), departemen:departemen_id(nama,kode,npsn)")
+        .in("status", ["calon", "diterima"]).order("created_at", { ascending: false }).order("id").range(from, to));
+      if (!siswaRows.length) return [];
 
       const siswaIds = siswaRows.map((s) => s.id);
-      const departemenIds = Array.from(new Set(siswaRows.map((s) => s.departemen_id).filter(Boolean))) as string[];
-
-      const [configResult, kelasResult, detailResult] = await Promise.all([
-        departemenIds.length
-          ? (supabase as any).from("konfigurasi_pmb").select("departemen_id, jenis_pembayaran_id").in("departemen_id", departemenIds)
-          : Promise.resolve({ data: [], error: null }),
-        supabase.from("kelas_siswa").select("siswa_id, kelas_id").in("siswa_id", siswaIds).eq("aktif", true),
-        (supabase as any).from("siswa_detail").select("siswa_id, status_asrama, dokumen_kk_path, dokumen_akta_path, kategori").in("siswa_id", siswaIds),
-      ]);
-
-      if (configResult.error) throw configResult.error;
-      if (kelasResult.error) throw kelasResult.error;
-      if (detailResult.error) throw detailResult.error;
-
-      const configByDepartemen = new Map<string, string>((configResult.data || []).map((c: any) => [c.departemen_id, c.jenis_pembayaran_id]));
-      const punyaKelas = new Set((kelasResult.data || []).map((k) => k.siswa_id));
-      const detailBySiswa = new Map<string, any>((detailResult.data || []).map((d: any) => [d.siswa_id, d]));
-      const jenisPmbIds = Array.from(new Set(configByDepartemen.values()));
-
-      let pembayaranRows: Array<{ siswa_id: string | null; jenis_id: string | null; jurnal_id: string | null; tanggal_bayar: string | null }> = [];
-      if (jenisPmbIds.length) {
-        const { data: payments, error: paymentError } = await supabase
-          .from("pembayaran")
-          .select("siswa_id, jenis_id, jurnal_id, tanggal_bayar")
-          .in("siswa_id", siswaIds)
-          .in("jenis_id", jenisPmbIds);
-        if (paymentError) throw paymentError;
-        pembayaranRows = payments || [];
-      }
-
-      const siswaById = new Map(siswaRows.map((s) => [s.id, s]));
-      const pembayaranPmbBySiswa = new Map<string, { tanggal_bayar: string | null }>();
-      for (const payment of pembayaranRows) {
-        if (!payment.siswa_id || !payment.jenis_id || !payment.jurnal_id) continue;
-        const siswa = siswaById.get(payment.siswa_id);
-        if (!siswa?.departemen_id) continue;
-        if (configByDepartemen.get(siswa.departemen_id) !== payment.jenis_id) continue;
-        pembayaranPmbBySiswa.set(payment.siswa_id, { tanggal_bayar: payment.tanggal_bayar });
-      }
-
-      return siswaRows.map((s) => ({
-        ...s,
-        _pmbConfigured: !!(s.departemen_id && configByDepartemen.has(s.departemen_id)),
-        _pmbLunas: pembayaranPmbBySiswa.has(s.id),
-        _pmbTanggalBayar: pembayaranPmbBySiswa.get(s.id)?.tanggal_bayar || null,
-        _punyaKelas: punyaKelas.has(s.id),
-        _spmbDetail: detailBySiswa.get(s.id) || null,
-      }));
+      const { data: readinessRows, error } = await (supabase as any).rpc("spmb_readiness_list", { p_ids: siswaIds });
+      if (error) throw error;
+      const byId = new Map<string, any>((readinessRows || []).map((r: any) => [r.siswa_id, r.readiness]));
+      const { data: details, error: detailError } = await (supabase as any).from("siswa_detail")
+        .select("siswa_id, status_asrama").in("siswa_id", siswaIds);
+      if (detailError) throw detailError;
+      const detailById = new Map<string, any>((details || []).map((d: any) => [d.siswa_id, d]));
+      return siswaRows.map((s) => {
+        const r = byId.get(s.id);
+        return { ...s, _readiness: r, _pmbConfigured: r?.configured, _pmbLunas: r?.lunas,
+          _punyaKelas: r?.punya_kelas, _spmbDetail: detailById.get(s.id) };
+      });
     },
   });
 
@@ -156,34 +121,23 @@ export default function PMB() {
       if (!formData.kelas_id) { toast.error("Kelas wajib diisi (mode lengkap)"); return; }
     }
 
-    const { data: siswa, error: insertErr } = await supabase
-      .from("siswa")
-      .insert({
-        nama: formData.nama,
-        jenis_kelamin: formData.jenis_kelamin,
-        telepon: formData.telepon || null,
-        alamat: formData.alamat || null,
-        angkatan_id: formData.angkatan_id || null,
-        departemen_id: formData.departemen_id,
-        agama: "Islam",
-        status: "calon",
-      } as any)
-      .select("id")
-      .single();
-
-    if (insertErr || !siswa) { toast.error(insertErr?.message || "Gagal mendaftarkan"); return; }
-
-    if (formData.kelas_id) {
-      const { error: ksErr } = await supabase.from("kelas_siswa").insert({ siswa_id: siswa.id, kelas_id: formData.kelas_id, aktif: true } as any);
-      if (ksErr) toast.warning("Siswa terdaftar, tapi gagal dimasukkan ke kelas: " + ksErr.message);
-    }
-
-    qc.invalidateQueries({ queryKey: ["siswa"] });
-    toast.success("Calon murid berhasil didaftarkan", {
-      description: "Lengkapi biodata dan dokumen pada Edit Data sebelum proses verifikasi/penerimaan.",
-    });
-    setDialogOpen(false);
-    resetForm();
+    if (formData.kelas_id && !formData.tahun_ajaran_id) { toast.error("Pilih tahun ajaran untuk kelas"); return; }
+    setIsSaving(true);
+    try {
+      const { error } = await (supabase as any).rpc("akademik_save_siswa", {
+        p_siswa: { nama: formData.nama, jenis_kelamin: formData.jenis_kelamin, telepon: formData.telepon || null,
+          alamat: formData.alamat || null, angkatan_id: formData.angkatan_id || null,
+          departemen_id: formData.departemen_id, agama: "Islam", status: "calon" },
+        p_detail: { tahun_ajaran_id: formData.tahun_ajaran_id || null },
+        p_kelas: formData.kelas_id ? { kelas_id: formData.kelas_id, tahun_ajaran_id: formData.tahun_ajaran_id } : null,
+      });
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ["siswa"] });
+      toast.success("Calon murid berhasil didaftarkan", { description: "Lengkapi biodata dan dokumen pada Edit Data sebelum penerimaan." });
+      setDialogOpen(false);
+      resetForm();
+    } catch (e: any) { toast.error(e.message || "Gagal mendaftarkan"); }
+    finally { setIsSaving(false); }
   };
 
   const generateNIS = async (siswaId: string, departemenId: string, angkatanId: string, namaSiswa: string): Promise<boolean> => {
@@ -259,8 +213,8 @@ export default function PMB() {
   };
 
   const handleVerifikasi = async (row: Record<string, unknown>) => {
-    const kesiapan = getKesiapanPenerimaan({ ...row, terverifikasi: true });
-    const kekuranganSelainVerifikasi = kesiapan.kekurangan;
+    const kesiapan = getKesiapanPenerimaan(row);
+    const kekuranganSelainVerifikasi = kesiapan.kekurangan.filter((v) => v !== "verifikasi data");
     if (kekuranganSelainVerifikasi.length) {
       toast.warning("Data belum lengkap untuk penerimaan", { description: `Masih perlu: ${kekuranganSelainVerifikasi.join(", ")}. Verifikasi tetap dapat dilakukan setelah pemeriksaan.` });
     }
@@ -369,7 +323,8 @@ export default function PMB() {
               {canPreviewNIS && <NISPreview npsn={selectedDept!.npsn} namaKelas={selectedKelas!.nama} namaAngkatan={selectedAngkatan!.nama} estimasiUrut={1} />}
               <div><Label>Telepon</Label><Input value={formData.telepon} onChange={(e) => setFormData({ ...formData, telepon: e.target.value })} /></div>
               <div><Label>Alamat</Label><Textarea value={formData.alamat} onChange={(e) => setFormData({ ...formData, alamat: e.target.value })} /></div>
-              <Button className="w-full" onClick={handleDaftar}>Daftarkan</Button>
+              <div><Label>Tahun Ajaran {formData.kelas_id ? "*" : "(opsional)"}</Label><Select value={formData.tahun_ajaran_id} onValueChange={(v) => setFormData({ ...formData, tahun_ajaran_id: v })}><SelectTrigger><SelectValue placeholder="Pilih tahun ajaran" /></SelectTrigger><SelectContent>{tahunList.map((t) => <SelectItem key={t.id} value={t.id}>{t.nama}</SelectItem>)}</SelectContent></Select></div>
+              <Button className="w-full" disabled={isSaving} onClick={handleDaftar}>{isSaving ? "Menyimpan..." : "Daftarkan"}</Button>
             </div>
           </DialogContent>
         </Dialog>

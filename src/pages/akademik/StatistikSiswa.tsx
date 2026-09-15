@@ -32,7 +32,7 @@ export default function StatistikSiswa() {
 
       const total = all.length;
       const aktif = all.filter((s: any) => s.status === "aktif").length;
-      const lulus = all.filter((s: any) => s.status === "lulus").length;
+      const lulus = all.filter((s: any) => ["alumni", "lulus"].includes(s.status)).length;
       const nonAktif = total - aktif;
 
       // Gender

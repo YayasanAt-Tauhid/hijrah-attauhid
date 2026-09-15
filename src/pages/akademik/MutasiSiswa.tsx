@@ -42,17 +42,12 @@ export default function MutasiSiswa() {
     }
     setIsProcessing(true);
     try {
-      // Deactivate old kelas_siswa
-      for (const siswaId of selected) {
-        const { error: deactErr } = await supabase.from("kelas_siswa").update({ aktif: false } as any).eq("siswa_id", siswaId).eq("aktif", true);
-        if (deactErr) throw deactErr;
-        const { error: insErr } = await supabase.from("kelas_siswa").upsert(
-          { siswa_id: siswaId, kelas_id: targetKelas, tahun_ajaran_id: targetTA, aktif: true } as any,
-          { onConflict: "siswa_id,kelas_id,tahun_ajaran_id" },
-        );
-        if (insErr) throw insErr;
-      }
+      const { error } = await (supabase as any).rpc("akademik_mutasi", {
+        p_ids: Array.from(selected), p_action: "kelas", p_kelas_id: targetKelas, p_tahun_ajaran_id: targetTA,
+      });
+      if (error) throw error;
       qc.invalidateQueries({ queryKey: ["siswa"] });
+      qc.invalidateQueries({ queryKey: ["statistik_siswa"] });
       toast.success(`${selected.size} siswa berhasil dipindahkan`);
       setSelected(new Set());
     } catch (e: any) {
@@ -65,15 +60,12 @@ export default function MutasiSiswa() {
     if (selected.size === 0) { toast.error("Pilih siswa terlebih dahulu"); return; }
     setIsProcessing(true);
     try {
-      for (const siswaId of selected) {
-        const { error: statusErr } = await supabase.from("siswa").update({ status } as any).eq("id", siswaId);
-        if (statusErr) throw statusErr;
-        if (status !== "aktif") {
-          const { error: ksErr } = await supabase.from("kelas_siswa").update({ aktif: false } as any).eq("siswa_id", siswaId).eq("aktif", true);
-          if (ksErr) throw ksErr;
-        }
-      }
+      const { error } = await (supabase as any).rpc("akademik_mutasi", {
+        p_ids: Array.from(selected), p_action: status,
+      });
+      if (error) throw error;
       qc.invalidateQueries({ queryKey: ["siswa"] });
+      qc.invalidateQueries({ queryKey: ["statistik_siswa"] });
       toast.success(`${selected.size} siswa diubah statusnya menjadi "${status}"`);
       setSelected(new Set());
     } catch (e: any) {
@@ -202,20 +194,12 @@ export default function MutasiSiswa() {
                   if (!targetTA || selected.size === 0) { toast.error("Pilih siswa dan tahun ajaran"); return; }
                   setIsProcessing(true);
                   try {
-                    for (const siswaId of selected) {
-                      const current = activeSiswa.find((s) => s.id === siswaId);
-                      const kelasId = current?.kelas_siswa?.find((ks) => ks.aktif)?.kelas?.id;
-                      if (kelasId) {
-                        const { error: deactErr } = await supabase.from("kelas_siswa").update({ aktif: false } as any).eq("siswa_id", siswaId).eq("aktif", true);
-                        if (deactErr) throw deactErr;
-                        const { error: insErr } = await supabase.from("kelas_siswa").upsert(
-                          { siswa_id: siswaId, kelas_id: kelasId, tahun_ajaran_id: targetTA, aktif: true } as any,
-                          { onConflict: "siswa_id,kelas_id,tahun_ajaran_id" },
-                        );
-                        if (insErr) throw insErr;
-                      }
-                    }
+                    const { error } = await (supabase as any).rpc("akademik_mutasi", {
+                      p_ids: Array.from(selected), p_action: "tinggal", p_tahun_ajaran_id: targetTA,
+                    });
+                    if (error) throw error;
                     qc.invalidateQueries({ queryKey: ["siswa"] });
+      qc.invalidateQueries({ queryKey: ["statistik_siswa"] });
                     toast.success(`${selected.size} siswa tinggal kelas`);
                     setSelected(new Set());
                   } catch (e: any) { toast.error(e.message); }

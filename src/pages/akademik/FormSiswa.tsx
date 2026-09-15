@@ -17,10 +17,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { FileUpload } from "@/components/shared/FileUpload";
 import { FormSection } from "@/components/shared/FormSection";
+import { SpmbDocumentUpload } from "@/components/akademik/SpmbDocumentUpload";
 import { ArrowLeft, Save, Wand2, Pencil, Loader2 } from "lucide-react";
 
 const optionalString = z.string().optional();
 const siswaSchema = z.object({
+  dokumen_kk_path: optionalString,
+  dokumen_akta_path: optionalString,
+  dokumen_rapor_path: optionalString,
+  dokumen_ijazah_path: optionalString,
   nis: optionalString,
   nama: z.string().min(2, "Nama minimal 2 karakter"),
   jenis_kelamin: z.enum(["L", "P"], { required_error: "Pilih jenis kelamin" }),
@@ -33,7 +38,7 @@ const siswaSchema = z.object({
   foto_url: optionalString,
   status: z.string().default("aktif"),
   angkatan_id: optionalString,
-  departemen_id: optionalString,
+  departemen_id: z.string().uuid("Lembaga wajib dipilih"),
   tingkat_id: optionalString,
   kelas_id: optionalString,
   tahun_ajaran_id: optionalString,
@@ -191,6 +196,7 @@ export default function FormSiswa() {
   const { data: departemenList = [] } = useDepartemenPendidikan();
   const { data: tahunAjaranList = [] } = useTahunAjaran();
 
+  const [uploadsBusy, setUploadsBusy] = useState(0);
   const [nisMode, setNisMode] = useState<"otomatis" | "manual" | "ketik">(isEdit ? "manual" : "otomatis");
   const [savedSiswaId, setSavedSiswaId] = useState<string | null>(null);
   const [isGeneratingNis, setIsGeneratingNis] = useState(false);
@@ -212,13 +218,15 @@ export default function FormSiswa() {
   const nisParamsComplete = !!(watchDept && watchAngkatan && watchKelas);
 
   useEffect(() => {
-    if (!wajibAsrama && form.getValues("status_asrama")) form.setValue("status_asrama", "");
-  }, [wajibAsrama, form]);
+    if (departemenList.length && !wajibAsrama && form.getValues("status_asrama")) form.setValue("status_asrama", "");
+  }, [wajibAsrama, departemenList, form]);
 
   useEffect(() => {
-    if (!isEdit || !siswa) return;
+    if (!isEdit || !siswa || detailRaw === undefined) return;
     const activeKelas = siswa.kelas_siswa?.find((ks) => ks.aktif);
     form.reset({
+      dokumen_kk_path: detail?.dokumen_kk_path || "", dokumen_akta_path: detail?.dokumen_akta_path || "",
+      dokumen_rapor_path: detail?.dokumen_rapor_path || "", dokumen_ijazah_path: detail?.dokumen_ijazah_path || "",
       nis: siswa.nis || "", nama: siswa.nama, jenis_kelamin: (siswa.jenis_kelamin as "L" | "P") || undefined,
       tempat_lahir: siswa.tempat_lahir || "", tanggal_lahir: siswa.tanggal_lahir || "", agama: siswa.agama || "Islam",
       alamat: siswa.alamat || "", telepon: siswa.telepon || "", email: siswa.email || "", foto_url: siswa.foto_url || "",
@@ -269,6 +277,11 @@ export default function FormSiswa() {
   };
 
   const onSubmit = async (values: SiswaForm) => {
+    if (uploadsBusy > 0) { toast.error("Tunggu upload dokumen selesai"); return; }
+    if (values.kelas_id && !values.tahun_ajaran_id) { toast.error("Tahun ajaran wajib diisi untuk kelas"); return; }
+    if (isEdit && ["calon", "diterima"].includes(siswa?.status || "") && values.status !== siswa?.status) {
+      toast.error("Ubah status penerimaan melalui halaman SPMB"); return;
+    }
     if (wajibAsrama && !values.status_asrama) {
       toast.error("Pilihan Asrama / Non Asrama wajib diisi untuk SMP, SMA, atau MTA");
       return;
@@ -283,6 +296,8 @@ export default function FormSiswa() {
     };
 
     const detailData: Record<string, unknown> = {
+      dokumen_kk_path: values.dokumen_kk_path || null, dokumen_akta_path: values.dokumen_akta_path || null,
+      dokumen_rapor_path: values.dokumen_rapor_path || null, dokumen_ijazah_path: values.dokumen_ijazah_path || null,
       tahun_ajaran_id: values.spmb_tahun_ajaran_id || null, jenis_pendaftaran: values.jenis_pendaftaran || null,
       nik: values.nik || null, no_kk: values.no_kk || null, kategori: values.kategori || null,
       status_asrama: wajibAsrama ? values.status_asrama || null : null,
@@ -428,7 +443,7 @@ export default function FormSiswa() {
                       <FormField control={form.control} name="tahun_ajaran_id" render={({ field }) => (
                         <FormItem><FormLabel>Tahun Ajaran Kelas</FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Pilih tahun ajaran" /></SelectTrigger></FormControl><SelectContent>{tahunAjaranList.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.nama} {t.aktif ? "(Aktif)" : ""}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                       )} />
-                      <SelectField form={form} name="status" label="Status Siswa" options={statusOptions} />
+                      <SelectField form={form} name="status" label="Status Siswa" options={isEdit && ["calon", "diterima"].includes(siswa?.status || "") ? statusOptions.filter((o) => o.value === siswa?.status) : statusOptions.filter((o) => o.value !== "diterima")} />
                     </div>
                   </FormSection>
                 </CardContent>
@@ -436,6 +451,13 @@ export default function FormSiswa() {
             </TabsContent>
 
             <TabsContent value="spmb">
+              <Card className="mb-4"><CardContent className="pt-6 space-y-4">
+                <p className="font-medium">Dokumen SPMB</p>
+                {([ ["kk", "Kartu Keluarga (wajib)"], ["akta", "Akta Kelahiran (wajib)"], ["rapor", "Rapor"], ["ijazah", "Ijazah/SKHUN (bila sudah ada)"] ] as const).map(([kind, label]) => {
+                  const name = `dokumen_${kind}_path` as keyof SiswaForm;
+                  return <SpmbDocumentUpload key={kind} kind={kind} label={label} value={form.watch(name)} onChange={(path) => form.setValue(name, path, { shouldDirty: true })} onBusy={(busy) => setUploadsBusy((n) => n + (busy ? 1 : -1))} />;
+                })}
+              </CardContent></Card>
               <Card>
                 <CardContent className="pt-6 space-y-6">
                   <FormSection title="Data Pendaftaran SPMB">
@@ -532,7 +554,7 @@ export default function FormSiswa() {
 
           <div className="sticky bottom-0 bg-background border-t py-4 mt-6 flex justify-end gap-3">
             <Button type="button" variant="outline" onClick={() => navigate(-1)}>Batal</Button>
-            <Button type="submit" disabled={createSiswa.isPending || updateSiswa.isPending || isGeneratingNis}>
+            <Button type="submit" disabled={uploadsBusy > 0 || createSiswa.isPending || updateSiswa.isPending || isGeneratingNis}>
               <Save className="h-4 w-4 mr-2" />{isEdit ? "Simpan Perubahan" : "Simpan Siswa"}
             </Button>
           </div>

@@ -103,31 +103,16 @@ export function useCreateSiswa() {
       detail?: Record<string, unknown>;
       kelas_siswa?: Record<string, unknown>;
     }) => {
-      const { data: siswa, error: siswaErr } = await supabase
-        .from("siswa")
-        .insert(values.siswa as any)
-        .select()
-        .single();
-      if (siswaErr) throw siswaErr;
-
-      if (values.detail) {
-        const { error: detailErr } = await supabase
-          .from("siswa_detail")
-          .insert({ ...values.detail, siswa_id: siswa.id } as any);
-        if (detailErr) throw detailErr;
-      }
-
-      if (values.kelas_siswa) {
-        const { error: kelasErr } = await supabase
-          .from("kelas_siswa")
-          .insert({ ...values.kelas_siswa, siswa_id: siswa.id } as any);
-        if (kelasErr) throw kelasErr;
-      }
-
-      return siswa;
+      const { data, error } = await (supabase as any).rpc("akademik_save_siswa", {
+        p_siswa: values.siswa, p_detail: values.detail || null,
+        p_kelas: values.kelas_siswa || null, p_id: null,
+      });
+      if (error) throw error;
+      return data as { id: string };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["siswa"] });
+      qc.invalidateQueries({ queryKey: ["statistik_siswa"] });
       qc.invalidateQueries({ queryKey: ["siswa_detail"] });
       toast.success("Siswa berhasil ditambahkan");
     },
@@ -146,69 +131,15 @@ export function useUpdateSiswa() {
       detail?: Record<string, unknown>;
       kelas_siswa?: { kelas_id: string; tahun_ajaran_id: string };
     }) => {
-      const { error: siswaErr } = await supabase
-        .from("siswa")
-        .update(values.siswa as any)
-        .eq("id", values.id);
-      if (siswaErr) throw siswaErr;
-
-      if (values.detail) {
-        const { data: existing } = await supabase
-          .from("siswa_detail")
-          .select("id")
-          .eq("siswa_id", values.id)
-          .maybeSingle();
-
-        if (existing) {
-          const { error } = await supabase
-            .from("siswa_detail")
-            .update(values.detail as any)
-            .eq("siswa_id", values.id);
-          if (error) throw error;
-        } else {
-          const { error } = await supabase
-            .from("siswa_detail")
-            .insert({ ...values.detail, siswa_id: values.id } as any);
-          if (error) throw error;
-        }
-      }
-
-      if (values.kelas_siswa?.kelas_id && values.kelas_siswa?.tahun_ajaran_id) {
-        await supabase
-          .from("kelas_siswa")
-          .update({ aktif: false } as any)
-          .eq("siswa_id", values.id)
-          .eq("aktif", true);
-
-        const { data: existingKs } = await supabase
-          .from("kelas_siswa")
-          .select("id")
-          .eq("siswa_id", values.id)
-          .eq("kelas_id", values.kelas_siswa.kelas_id)
-          .eq("tahun_ajaran_id", values.kelas_siswa.tahun_ajaran_id)
-          .maybeSingle();
-
-        if (existingKs) {
-          const { error } = await supabase
-            .from("kelas_siswa")
-            .update({ aktif: true } as any)
-            .eq("id", existingKs.id);
-          if (error) throw error;
-        } else {
-          const { error } = await supabase
-            .from("kelas_siswa")
-            .insert({
-              siswa_id: values.id,
-              kelas_id: values.kelas_siswa.kelas_id,
-              tahun_ajaran_id: values.kelas_siswa.tahun_ajaran_id,
-              aktif: true,
-            } as any);
-          if (error) throw error;
-        }
-      }
+      const { error } = await (supabase as any).rpc("akademik_save_siswa", {
+        p_siswa: values.siswa, p_detail: values.detail || null,
+        p_kelas: values.kelas_siswa || null, p_id: values.id,
+      });
+      if (error) throw error;
     },
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ["siswa"] });
+      qc.invalidateQueries({ queryKey: ["statistik_siswa"] });
       qc.invalidateQueries({ queryKey: ["siswa", variables.id] });
       qc.invalidateQueries({ queryKey: ["siswa_detail", variables.id] });
       toast.success("Data siswa berhasil diperbarui");
@@ -228,6 +159,7 @@ export function useDeleteSiswa() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["siswa"] });
+      qc.invalidateQueries({ queryKey: ["statistik_siswa"] });
       qc.invalidateQueries({ queryKey: ["siswa_detail"] });
       toast.success("Siswa berhasil dihapus");
     },
