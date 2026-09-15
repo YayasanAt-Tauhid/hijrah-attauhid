@@ -7,7 +7,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Pencil, Printer, User, BookOpen, CalendarDays, Wallet } from "lucide-react";
+import { SiswaSpmbDetail } from "@/components/akademik/SiswaSpmbDetail";
+import { ArrowLeft, Pencil, Printer, User, BookOpen, CalendarDays, Wallet, ClipboardList } from "lucide-react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { useQuery } from "@tanstack/react-query";
@@ -17,7 +18,8 @@ export default function DetailSiswa() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: siswa, isLoading } = useSiswaDetail(id || "");
-  const { data: orangtua } = useSiswaDetailOrangtua(id || "");
+  const { data: detailRaw } = useSiswaDetailOrangtua(id || "");
+  const detail = detailRaw as Record<string, any> | null | undefined;
 
   const { data: nilaiList = [] } = useQuery({
     queryKey: ["penilaian", id],
@@ -76,8 +78,7 @@ export default function DetailSiswa() {
   }
 
   const activeKelas = siswa.kelas_siswa?.find((ks) => ks.aktif);
-  const formatDate = (d: string | null) =>
-    d ? format(new Date(d), "dd MMMM yyyy", { locale: localeId }) : "-";
+  const formatDate = (d: string | null) => d ? format(new Date(d), "dd MMMM yyyy", { locale: localeId }) : "-";
 
   const InfoRow = ({ label, value }: { label: string; value: string | React.ReactNode }) => (
     <div className="grid grid-cols-3 gap-2 py-2 border-b last:border-0">
@@ -103,12 +104,11 @@ export default function DetailSiswa() {
             <Printer className="h-4 w-4 mr-2" /> Print
           </Button>
           <Button size="sm" onClick={() => navigate(`/akademik/siswa/${id}/edit`)}>
-            <Pencil className="h-4 w-4 mr-2" /> Edit
+            <Pencil className="h-4 w-4 mr-2" /> Edit Data Lengkap
           </Button>
         </div>
       </div>
 
-      {/* Header Card */}
       <Card>
         <CardContent className="flex flex-col sm:flex-row items-start gap-6 pt-6">
           <Avatar className="h-24 w-24">
@@ -116,33 +116,22 @@ export default function DetailSiswa() {
             <AvatarFallback className="text-2xl">{siswa.nama.charAt(0)}</AvatarFallback>
           </Avatar>
           <div className="flex-1 grid gap-2 sm:grid-cols-3">
-            <div>
-              <p className="text-xs text-muted-foreground">Kelas</p>
-              <p className="font-medium">{activeKelas?.kelas?.nama || "-"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Tingkat</p>
-              <p className="font-medium">{activeKelas?.kelas?.tingkat?.nama || "-"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Departemen</p>
-              <p className="font-medium">{activeKelas?.kelas?.departemen?.nama || "-"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Angkatan</p>
-              <p className="font-medium">{siswa.angkatan?.nama || "-"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Status</p>
-              <StatusBadge status={siswa.status || "aktif"} type="siswa" />
-            </div>
+            <div><p className="text-xs text-muted-foreground">Kelas</p><p className="font-medium">{activeKelas?.kelas?.nama || "-"}</p></div>
+            <div><p className="text-xs text-muted-foreground">Tingkat</p><p className="font-medium">{activeKelas?.kelas?.tingkat?.nama || "-"}</p></div>
+            <div><p className="text-xs text-muted-foreground">Departemen</p><p className="font-medium">{activeKelas?.kelas?.departemen?.nama || "-"}</p></div>
+            <div><p className="text-xs text-muted-foreground">Angkatan</p><p className="font-medium">{siswa.angkatan?.nama || "-"}</p></div>
+            <div><p className="text-xs text-muted-foreground">Status</p><StatusBadge status={siswa.status || "aktif"} type="siswa" /></div>
+            {detail?.status_asrama && (
+              <div><p className="text-xs text-muted-foreground">Asrama</p><p className="font-medium">{detail.status_asrama === "asrama" ? "Asrama" : "Non Asrama"}</p></div>
+            )}
           </div>
         </CardContent>
       </Card>
 
       <Tabs defaultValue="profil">
-        <TabsList>
+        <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="profil"><User className="h-3.5 w-3.5 mr-1.5" />Profil</TabsTrigger>
+          <TabsTrigger value="spmb"><ClipboardList className="h-3.5 w-3.5 mr-1.5" />Data SPMB</TabsTrigger>
           <TabsTrigger value="kelas"><BookOpen className="h-3.5 w-3.5 mr-1.5" />Riwayat Kelas</TabsTrigger>
           <TabsTrigger value="nilai"><BookOpen className="h-3.5 w-3.5 mr-1.5" />Nilai</TabsTrigger>
           <TabsTrigger value="presensi"><CalendarDays className="h-3.5 w-3.5 mr-1.5" />Presensi</TabsTrigger>
@@ -164,141 +153,83 @@ export default function DetailSiswa() {
             </CardContent>
           </Card>
 
-          {orangtua && (
+          {detail && (
             <Card>
-              <CardHeader><CardTitle className="text-base">Data Orang Tua</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">Ringkasan Orang Tua</CardTitle></CardHeader>
               <CardContent>
-                <InfoRow label="Nama Ayah" value={orangtua.nama_ayah || "-"} />
-                <InfoRow label="Nama Ibu" value={orangtua.nama_ibu || "-"} />
-                <InfoRow label="Pekerjaan Ayah" value={orangtua.pekerjaan_ayah || "-"} />
-                <InfoRow label="Pekerjaan Ibu" value={orangtua.pekerjaan_ibu || "-"} />
-                <InfoRow label="Telepon Ortu" value={orangtua.telepon_ortu || "-"} />
-                <InfoRow label="Alamat Ortu" value={orangtua.alamat_ortu || "-"} />
+                <InfoRow label="Nama Ayah" value={detail.nama_ayah || "-"} />
+                <InfoRow label="Nama Ibu" value={detail.nama_ibu || "-"} />
+                <InfoRow label="No. HP Ayah" value={detail.telepon_ayah || detail.telepon_ortu || "-"} />
+                <InfoRow label="No. HP Ibu" value={detail.telepon_ibu || "-"} />
               </CardContent>
             </Card>
           )}
         </TabsContent>
 
+        <TabsContent value="spmb" className="mt-4">
+          <SiswaSpmbDetail detail={detail} />
+        </TabsContent>
+
         <TabsContent value="kelas" className="mt-4">
-          <Card>
-            <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Tahun Ajaran</TableHead>
-                    <TableHead>Kelas</TableHead>
-                    <TableHead>Tingkat</TableHead>
-                    <TableHead>Status</TableHead>
+          <Card><CardContent className="pt-6">
+            <Table>
+              <TableHeader><TableRow><TableHead>Tahun Ajaran</TableHead><TableHead>Kelas</TableHead><TableHead>Tingkat</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {(siswa.kelas_siswa || []).map((ks) => (
+                  <TableRow key={ks.id}>
+                    <TableCell>{ks.tahun_ajaran?.nama || "-"}</TableCell>
+                    <TableCell>{ks.kelas?.nama || "-"}</TableCell>
+                    <TableCell>{ks.kelas?.tingkat?.nama || "-"}</TableCell>
+                    <TableCell><StatusBadge status={ks.aktif ? "aktif" : "alumni"} type="siswa" /></TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(siswa.kelas_siswa || []).map((ks) => (
-                    <TableRow key={ks.id}>
-                      <TableCell>{ks.tahun_ajaran?.nama || "-"}</TableCell>
-                      <TableCell>{ks.kelas?.nama || "-"}</TableCell>
-                      <TableCell>{ks.kelas?.tingkat?.nama || "-"}</TableCell>
-                      <TableCell>
-                        <StatusBadge status={ks.aktif ? "aktif" : "alumni"} type="siswa" />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {(!siswa.kelas_siswa || siswa.kelas_siswa.length === 0) && (
-                    <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Belum ada data riwayat kelas</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                ))}
+                {(!siswa.kelas_siswa || siswa.kelas_siswa.length === 0) && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Belum ada data riwayat kelas</TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          </CardContent></Card>
         </TabsContent>
 
         <TabsContent value="nilai" className="mt-4">
-          <Card>
-            <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mata Pelajaran</TableHead>
-                    <TableHead>Jenis Ujian</TableHead>
-                    <TableHead>Nilai</TableHead>
-                    <TableHead>Semester</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {nilaiList.map((n: any) => (
-                    <TableRow key={n.id}>
-                      <TableCell>{n.mapel?.nama || "-"}</TableCell>
-                      <TableCell>{n.jenis_ujian || "-"}</TableCell>
-                      <TableCell className="font-medium">{n.nilai ?? "-"}</TableCell>
-                      <TableCell>{n.semester?.nama || "-"}</TableCell>
-                    </TableRow>
-                  ))}
-                  {nilaiList.length === 0 && (
-                    <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Belum ada data nilai</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <Card><CardContent className="pt-6">
+            <Table>
+              <TableHeader><TableRow><TableHead>Mata Pelajaran</TableHead><TableHead>Jenis Ujian</TableHead><TableHead>Nilai</TableHead><TableHead>Semester</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {nilaiList.map((n: any) => <TableRow key={n.id}><TableCell>{n.mapel?.nama || "-"}</TableCell><TableCell>{n.jenis_ujian || "-"}</TableCell><TableCell className="font-medium">{n.nilai ?? "-"}</TableCell><TableCell>{n.semester?.nama || "-"}</TableCell></TableRow>)}
+                {nilaiList.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Belum ada data nilai</TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          </CardContent></Card>
         </TabsContent>
 
         <TabsContent value="presensi" className="mt-4">
-          <Card>
-            <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Tanggal</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Keterangan</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {presensiList.map((p: any) => (
-                    <TableRow key={p.id}>
-                      <TableCell>{formatDate(p.tanggal)}</TableCell>
-                      <TableCell><StatusBadge status={p.status || ""} type="presensi" /></TableCell>
-                      <TableCell>{p.keterangan || "-"}</TableCell>
-                    </TableRow>
-                  ))}
-                  {presensiList.length === 0 && (
-                    <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">Belum ada data presensi</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <Card><CardContent className="pt-6">
+            <Table>
+              <TableHeader><TableRow><TableHead>Tanggal</TableHead><TableHead>Status</TableHead><TableHead>Keterangan</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {presensiList.map((p: any) => <TableRow key={p.id}><TableCell>{formatDate(p.tanggal)}</TableCell><TableCell><StatusBadge status={p.status || ""} type="presensi" /></TableCell><TableCell>{p.keterangan || "-"}</TableCell></TableRow>)}
+                {presensiList.length === 0 && <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">Belum ada data presensi</TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          </CardContent></Card>
         </TabsContent>
 
         <TabsContent value="pembayaran" className="mt-4">
-          <Card>
-            <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Tanggal</TableHead>
-                    <TableHead>Jenis</TableHead>
-                    <TableHead>Jumlah</TableHead>
-                    <TableHead>Keterangan</TableHead>
+          <Card><CardContent className="pt-6">
+            <Table>
+              <TableHeader><TableRow><TableHead>Tanggal</TableHead><TableHead>Jenis</TableHead><TableHead>Jumlah</TableHead><TableHead>Keterangan</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {pembayaranList.map((p: any) => (
+                  <TableRow key={p.id}>
+                    <TableCell>{formatDate(p.tanggal_bayar)}</TableCell>
+                    <TableCell>{p.jenis?.nama || "-"}</TableCell>
+                    <TableCell className="font-medium">{p.jumlah ? `Rp ${Number(p.jumlah).toLocaleString("id-ID")}` : "-"}</TableCell>
+                    <TableCell>{p.keterangan || "-"}</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pembayaranList.map((p: any) => (
-                    <TableRow key={p.id}>
-                      <TableCell>{formatDate(p.tanggal_bayar)}</TableCell>
-                      <TableCell>{p.jenis?.nama || "-"}</TableCell>
-                      <TableCell className="font-medium">
-                        {p.jumlah ? `Rp ${Number(p.jumlah).toLocaleString("id-ID")}` : "-"}
-                      </TableCell>
-                      <TableCell>{p.keterangan || "-"}</TableCell>
-                    </TableRow>
-                  ))}
-                  {pembayaranList.length === 0 && (
-                    <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Belum ada data pembayaran</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                ))}
+                {pembayaranList.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Belum ada data pembayaran</TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          </CardContent></Card>
         </TabsContent>
       </Tabs>
     </div>
