@@ -61,6 +61,17 @@ describe("prepareImportRows", () => {
     expect(row.errors.join(" ")).toContain("kelas tidak ditemukan pada lembaga/tingkat");
   });
 
+  it("requires a new class, year, and angkatan when changing an existing student's department", () => {
+    const [missingAngkatan] = prepare([{ siswa_id: STUDENT_A, departemen: "SMPIT At-Tauhid", tingkat: "7", kelas: "7A", tahun_ajaran: "2026/2027" }]);
+    expect(missingAngkatan.errors.join(" ")).toContain("angkatan baru yang sesuai");
+
+    const [complete] = prepare([{ siswa_id: STUDENT_A, departemen: "SMPIT At-Tauhid", tingkat: "7", kelas: "7A", tahun_ajaran: "2026/2027", angkatan: "2026" }]);
+    expect(complete.errors).toEqual([]);
+    expect(complete.siswaPayload.departemen_id).toBe("d-smp");
+    expect(complete.siswaPayload.angkatan_id).toBe("a-26-smp");
+    expect(complete.kelasPayload).toEqual({ kelas_id: "k-7a", tahun_ajaran_id: "ta-26" });
+  });
+
   it("blocks status changes for existing students", () => {
     const [row] = prepare([{ siswa_id: STUDENT_A, status: "alumni" }]);
     expect(row.errors.join(" ")).toContain("status siswa existing tidak boleh diubah lewat import");

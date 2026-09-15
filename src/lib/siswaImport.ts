@@ -182,6 +182,7 @@ export function prepareImportRows(rawRows: SiswaImportRow[], references: ImportR
     else if (effectiveDeptId) dept = references.departemenList.find((item) => item.id === effectiveDeptId);
     if (effectiveDeptId) siswaPayload.departemen_id = effectiveDeptId;
     else if (existing) errors.push("siswa existing belum memiliki departemen; isi departemen pada file sebelum update");
+    const departmentChanged = !!existing && !!effectiveDeptId && effectiveDeptId !== existing.departemen_id;
 
     let tingkat: TingkatRef | undefined;
     if (normalize(raw.tingkat)) {
@@ -213,8 +214,11 @@ export function prepareImportRows(rawRows: SiswaImportRow[], references: ImportR
       else if (!found.item) errors.push(`angkatan tidak ditemukan pada lembaga: ${normalize(raw.angkatan)}`); else siswaPayload.angkatan_id = found.item.id;
     } else if (insert) siswaPayload.angkatan_id = null;
 
-    if (existing && siswaPayload.departemen_id && siswaPayload.departemen_id !== existing.departemen_id && !(kelas && tahunAjaran)) {
+    if (departmentChanged && !(kelas && tahunAjaran)) {
       errors.push("perubahan departemen siswa existing harus disertai kelas dan tahun_ajaran baru yang sesuai");
+    }
+    if (departmentChanged && !normalize(raw.angkatan)) {
+      errors.push("perubahan departemen siswa existing harus disertai angkatan baru yang sesuai");
     }
     const kelasPayload = kelas && tahunAjaran ? { kelas_id: kelas.id, tahun_ajaran_id: tahunAjaran.id } : null;
 
@@ -297,6 +301,7 @@ export function templateWorkbook(): XLSX.WorkBook {
     ["6", "Dokumen KK/Akta/Rapor/Ijazah tidak diimport dari Excel; unggah melalui Edit Siswa."],
     ["7", "Status siswa existing tidak dapat diubah lewat import. Gunakan alur SPMB atau Mutasi."],
     ["8", "status_asrama: asrama / non_asrama, khusus SMP/SMA/MTA."],
+    ["9", "Jika mengganti departemen siswa existing, kelas, tahun_ajaran, dan angkatan baru wajib diisi dan harus sesuai lembaga baru."],
   ]);
   info["!cols"] = [{ wch: 5 }, { wch: 110 }];
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, info, "Petunjuk"); XLSX.utils.book_append_sheet(wb, ws, "Template"); return wb;

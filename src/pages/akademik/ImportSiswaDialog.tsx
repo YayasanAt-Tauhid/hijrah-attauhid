@@ -64,6 +64,7 @@ export function ImportSiswaDialog({
   const importGuardRef = useRef(false);
 
   const busy = importing || validating || exportingCurrent;
+  const hasSuccessfulRows = rows.some((row) => row.runStatus === "success");
   const executableRows = rows.filter((row) => row.errors.length === 0 && row.runStatus !== "success");
   const hasValidationErrors = rows.some((row) => row.errors.length > 0);
 
@@ -103,7 +104,7 @@ export function ImportSiswaDialog({
 
   const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || importing) return;
+    if (!file || importing || hasSuccessfulRows) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
@@ -123,6 +124,10 @@ export function ImportSiswaDialog({
 
   const handleToggleUpdateExisting = (checked: boolean) => {
     if (busy) return;
+    if (hasSuccessfulRows) {
+      toast.info("Opsi update dikunci setelah ada baris berhasil agar hasil yang sudah tersimpan tidak diproses ulang.");
+      return;
+    }
     setUpdateExisting(checked);
     if (rawRows.length) void validateData(rawRows, checked);
   };
@@ -255,17 +260,19 @@ export function ImportSiswaDialog({
           <div className="flex flex-wrap gap-3">
             <Button variant="outline" onClick={downloadTemplate} disabled={busy}><Download className="mr-2 h-4 w-4" /> Download Template</Button>
             <Button variant="outline" onClick={downloadDataSiswaSaatIni} disabled={busy}>{exportingCurrent ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />} Download Data Siswa (untuk Update)</Button>
-            <Label htmlFor="upload-siswa" className={busy ? "cursor-not-allowed opacity-50" : "cursor-pointer"}>
-              <Button variant="outline" asChild disabled={busy}><span><Upload className="mr-2 h-4 w-4" /> Upload File Excel</span></Button>
+            <Label htmlFor="upload-siswa" className={busy || hasSuccessfulRows ? "cursor-not-allowed opacity-50" : "cursor-pointer"}>
+              <Button variant="outline" asChild disabled={busy || hasSuccessfulRows}><span><Upload className="mr-2 h-4 w-4" /> Upload File Excel</span></Button>
             </Label>
-            <input id="upload-siswa" type="file" accept=".xlsx,.xls" className="hidden" onChange={handleUpload} disabled={busy} />
+            <input id="upload-siswa" type="file" accept=".xlsx,.xls" className="hidden" onChange={handleUpload} disabled={busy || hasSuccessfulRows} />
             {!!rows.length && <Button variant="outline" onClick={downloadReport} disabled={importing}><Download className="mr-2 h-4 w-4" /> Download Laporan</Button>}
           </div>
 
           <div className="flex items-start gap-2 rounded-md border p-3">
-            <Checkbox id="update-existing" checked={updateExisting} disabled={busy} onCheckedChange={(checked) => handleToggleUpdateExisting(checked === true)} />
+            <Checkbox id="update-existing" checked={updateExisting} disabled={busy || hasSuccessfulRows} onCheckedChange={(checked) => handleToggleUpdateExisting(checked === true)} />
             <Label htmlFor="update-existing" className="text-sm cursor-pointer font-normal leading-5">Izinkan update siswa yang sudah ada. Tanpa opsi ini, NIS/siswa_id yang sudah terdaftar menjadi error—tidak pernah dibuat sebagai duplikat baru.</Label>
           </div>
+
+          {hasSuccessfulRows && <p className="text-xs text-muted-foreground">File dan opsi update dikunci setelah ada baris berhasil. Tutup dialog untuk memulai file baru; baris sukses pada proses ini tidak akan dijalankan ulang.</p>}
 
           {!!rows.length && (
             <div className="space-y-3">
@@ -295,7 +302,7 @@ export function ImportSiswaDialog({
               {importing && <Progress value={progress} className="h-2" />}
               {result && <div className="flex flex-wrap gap-3 text-sm">{result.success > 0 && <Badge variant="outline">{result.success} baru berhasil</Badge>}{result.updated > 0 && <Badge variant="secondary">{result.updated} update berhasil</Badge>}{result.error > 0 && <Badge variant="destructive">{result.error} gagal</Badge>}</div>}
               {hasValidationErrors && <p className="text-xs text-destructive">Baris dengan error validasi tidak akan disimpan. Baris valid tetap dapat diproses secara atomik per baris; rincian lengkap tersedia di laporan.</p>}
-              {rows.some((row) => row.runStatus === "success") && executableRows.length > 0 && <p className="text-xs text-muted-foreground">Jika proses dijalankan lagi, baris yang sudah berhasil otomatis dilewati.</p>}
+              {hasSuccessfulRows && executableRows.length > 0 && <p className="text-xs text-muted-foreground">Jika proses dijalankan lagi, baris yang sudah berhasil otomatis dilewati.</p>}
             </div>
           )}
         </div>
