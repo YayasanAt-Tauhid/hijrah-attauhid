@@ -14,6 +14,7 @@ import { toast } from "sonner";
 
 interface Departemen { id: string; nama: string; kode: string | null }
 interface Angkatan { id: string; nama: string; departemen_id: string | null }
+const PEKERJAAN_OPTIONS = ["PNS", "TNI/Polri", "Wiraswasta", "Karyawan Swasta", "Petani", "Nelayan", "Buruh", "Guru/Dosen", "Dokter", "Lainnya"];
 const initialForm = {
   nama: "", jenis_kelamin: "L", tempat_lahir: "", tanggal_lahir: "", alamat: "", telepon: "",
   departemen_id: "", angkatan_id: "", jenis_pendaftaran: "baru", asal_sekolah: "", kelas_terakhir: "", alasan_pindah: "",
@@ -94,7 +95,10 @@ export default function PMBDaftarOnline() {
           </FormSection>
           <FormSection title="Data Orang Tua / Wali" description="Informasi orang tua atau wali siswa">
             <div className="grid grid-cols-2 gap-4"><div><Label>Nama Ayah</Label><Input value={form.nama_ayah} onChange={set("nama_ayah")} /></div><div><Label>Nama Ibu</Label><Input value={form.nama_ibu} onChange={set("nama_ibu")} /></div></div>
-            <div className="grid grid-cols-2 gap-4"><div><Label>Pekerjaan Ayah</Label><Input value={form.pekerjaan_ayah} onChange={set("pekerjaan_ayah")} /></div><div><Label>Pekerjaan Ibu</Label><Input value={form.pekerjaan_ibu} onChange={set("pekerjaan_ibu")} /></div></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div><Label>Pekerjaan Ayah</Label><Select value={form.pekerjaan_ayah} onValueChange={(v) => setForm((f) => ({ ...f, pekerjaan_ayah: v }))}><SelectTrigger><SelectValue placeholder="Pilih pekerjaan" /></SelectTrigger><SelectContent>{PEKERJAAN_OPTIONS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select></div>
+              <div><Label>Pekerjaan Ibu</Label><Select value={form.pekerjaan_ibu} onValueChange={(v) => setForm((f) => ({ ...f, pekerjaan_ibu: v }))}><SelectTrigger><SelectValue placeholder="Pilih pekerjaan" /></SelectTrigger><SelectContent>{PEKERJAAN_OPTIONS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select></div>
+            </div>
             <div><Label>Telepon Orang Tua</Label><Input value={form.telepon_ortu} onChange={set("telepon_ortu")} placeholder="08xxxxxxxxxx" /></div><div><Label>Alamat Orang Tua</Label><Textarea value={form.alamat_ortu} onChange={set("alamat_ortu")} /></div>
           </FormSection>
           <Button type="submit" disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700"><UserPlus className="h-4 w-4 mr-2" />{loading ? "Mendaftarkan..." : "Daftarkan Calon Siswa"}</Button>
