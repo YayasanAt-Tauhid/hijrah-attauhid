@@ -38,7 +38,7 @@ name: Deploy to Cloudflare Workers
 
 on:
   push:
-    branches: [main, staging]
+    branches: [main, staging, fix/pendapatan-dimuka-ui]
   workflow_dispatch: {}
 
 # Never run two deploys of the same app at once; cancel superseded ones.
@@ -48,10 +48,149 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  feature_patch:
+    if: github.ref_name == 'fix/pendapatan-dimuka-ui' && github.event.head_commit.message == 'chore: run pendapatan dimuka patch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: fix/pendapatan-dimuka-ui
+
+      - name: Patch jenis penerimaan UI
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace_exact(text: str, old: str, new: str, expected: int = 1) -> str:
+              count = text.count(old)
+              if count != expected:
+                  raise SystemExit(f"Expected {expected} occurrence(s), found {count}: {old[:120]!r}")
+              return text.replace(old, new)
+
+          path = Path("src/hooks/useKeuangan.ts")
+          text = path.read_text()
+          text = replace_exact(
+              text,
+              'akun_pendapatan_id, akun_dimuka_id, tipe, tahun_masuk_dari, tahun_masuk_sampai,',
+              'akun_pendapatan_id, akun_dimuka_id, perlu_dimuka, tipe, tahun_masuk_dari, tahun_masuk_sampai,',
+          )
+          text = replace_exact(
+              text,
+              'akun_dimuka_id?: string | null; tipe?: string;',
+              'akun_dimuka_id?: string | null; perlu_dimuka?: boolean; tipe?: string;',
+              expected=2,
+          )
+          path.write_text(text)
+
+          path = Path("src/pages/keuangan/ReferensiKeuangan.tsx")
+          text = path.read_text()
+          text = replace_exact(
+              text,
+              '  const [akunDimukaId, setAkunDimukaId] = useState("");\n  const [tipe, setTipe] = useState("bulanan");',
+              '  const [akunDimukaId, setAkunDimukaId] = useState("");\n  const [perluDimuka, setPerluDimuka] = useState(true);\n  const [tipe, setTipe] = useState("bulanan");',
+          )
+          text = replace_exact(
+              text,
+              'setAkunPendapatanId(""); setAkunDimukaId(""); setTipe("bulanan");',
+              'setAkunPendapatanId(""); setAkunDimukaId(""); setPerluDimuka(true); setTipe("bulanan");',
+          )
+          text = replace_exact(
+              text,
+              'setAkunPendapatanId(item.akun_pendapatan_id || ""); setAkunDimukaId(item.akun_dimuka_id || ""); setTipe(item.tipe || "bulanan");',
+              'setAkunPendapatanId(item.akun_pendapatan_id || ""); setAkunDimukaId(item.akun_dimuka_id || ""); setPerluDimuka(item.perlu_dimuka !== false); setTipe(item.tipe || "bulanan");',
+          )
+          text = replace_exact(
+              text,
+              'departemen_id: formDepartemenId || undefined, akun_pendapatan_id: akunPendapatanId || null, akun_dimuka_id: akunDimukaId || null, tipe,',
+              'departemen_id: formDepartemenId || undefined, akun_pendapatan_id: akunPendapatanId || null, perlu_dimuka: perluDimuka, akun_dimuka_id: perluDimuka ? (akunDimukaId || null) : null, tipe,',
+          )
+          text = replace_exact(
+              text,
+              '        const akun = (r as any).akun_dimuka;\n        if (akun) return <span className="text-sm">{akun.kode} - {akun.nama}</span>;\n        return <span className="text-xs text-muted-foreground">Global</span>;',
+              '        if ((r as any).perlu_dimuka === false) return <span className="text-xs text-muted-foreground">Tidak digunakan</span>;\n        const akun = (r as any).akun_dimuka;\n        if (akun) return <span className="text-sm">{akun.kode} - {akun.nama}</span>;\n        return <span className="text-xs text-muted-foreground">Global</span>;',
+          )
+          old_block = '''            <div>
+              <Label>Akun Pendapatan Dimuka (untuk pembayaran di muka)</Label>
+              <Select value={akunDimukaId || "__none__"} onValueChange={(v) => setAkunDimukaId(v === "__none__" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="Pilih akun dimuka..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Pakai setting global —</SelectItem>
+                  {akunLiabilitasList?.map((a: any) => (
+                    <SelectItem key={a.id} value={a.id}>{a.kode} - {a.nama}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">Akun liabilitas yang di-kredit saat jenis ini dibayar sebelum tahun ajaran dimulai. Kosongkan untuk pakai setting AKUN_PENDAPATAN_DIMUKA.</p>
+            </div>'''
+          new_block = '''            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={perluDimuka}
+                  onCheckedChange={(checked) => {
+                    setPerluDimuka(checked);
+                    if (!checked) setAkunDimukaId("");
+                  }}
+                />
+                <Label>Gunakan Pendapatan Dimuka</Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Aktifkan hanya jika pembayaran sebelum jatuh tempo belum boleh diakui sebagai pendapatan dan harus dicatat sebagai liabilitas.
+              </p>
+            </div>
+            {perluDimuka ? (
+              <div>
+                <Label>Akun Pendapatan Dimuka (untuk pembayaran di muka)</Label>
+                <Select value={akunDimukaId || "__none__"} onValueChange={(v) => setAkunDimukaId(v === "__none__" ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="Pilih akun dimuka..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Pakai setting global —</SelectItem>
+                    {akunLiabilitasList?.map((a: any) => (
+                      <SelectItem key={a.id} value={a.id}>{a.kode} - {a.nama}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">Akun liabilitas yang di-kredit saat pembayaran memang harus ditangguhkan. Kosongkan untuk pakai setting AKUN_PENDAPATAN_DIMUKA.</p>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                Akun Pendapatan Dimuka tidak digunakan untuk jenis penerimaan ini. Pembayaran yang belum membentuk piutang akan langsung dikredit ke akun pendapatan di atas.
+              </div>
+            )}'''
+          text = replace_exact(text, old_block, new_block)
+          path.write_text(text)
+          PY
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: npm run build
+
+      - name: Commit patched source
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/hooks/useKeuangan.ts src/pages/keuangan/ReferensiKeuangan.tsx
+          git commit -m "fix(keuangan): make pendapatan dimuka explicit"
+          git push origin HEAD:fix/pendapatan-dimuka-ui
+
   deploy:
+    if: github.ref_name != 'fix/pendapatan-dimuka-ui'
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
