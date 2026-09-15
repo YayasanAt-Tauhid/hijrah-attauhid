@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import PembayaranPMB from "@/pages/keuangan/PembayaranPMB";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_protected/_app/_finance/keuangan/pembayaran-pmb")({
-  component: PembayaranPMB,
+  beforeLoad: () => {
+    throw redirect({ to: "/keuangan/pembayaran-spmb" });
+  },
 });

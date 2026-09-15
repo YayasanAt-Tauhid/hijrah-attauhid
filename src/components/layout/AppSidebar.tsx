@@ -56,8 +56,8 @@ const menuItems: MenuItem[] = [
         items: [
           { title: "Daftar Siswa", url: "/akademik/siswa" },
           { title: "Data Alumni", url: "/akademik/alumni" },
-          { title: "PMB", url: "/akademik/pmb" },
-          { title: "Konfigurasi PMB", url: "/akademik/pmb-konfigurasi" },
+          { title: "SPMB", url: "/akademik/spmb" },
+          { title: "Konfigurasi SPMB", url: "/akademik/spmb-konfigurasi" },
           { title: "Mutasi Siswa", url: "/akademik/mutasi" },
           { title: "Statistik Siswa", url: "/akademik/statistik" },
         ],
@@ -112,7 +112,7 @@ const menuItems: MenuItem[] = [
         roles: ["admin", "kepala_sekolah", "keuangan", "kasir"],
         items: [
           { title: "Input Pembayaran", url: "/keuangan/pembayaran", roles: ["admin", "kepala_sekolah", "keuangan", "kasir"] },
-          { title: "Pembayaran PMB", url: "/keuangan/pembayaran-pmb", roles: ["admin", "kepala_sekolah", "keuangan"] },
+          { title: "Pembayaran SPMB", url: "/keuangan/pembayaran-spmb", roles: ["admin", "kepala_sekolah", "keuangan"] },
           { title: "Penerimaan Lain", url: "/keuangan/penerimaan-lain", roles: ["admin", "kepala_sekolah", "keuangan"] },
           { title: "Pengeluaran", url: "/keuangan/pengeluaran", roles: ["admin", "kepala_sekolah", "keuangan"] },
           { title: "Kas Kecil", url: "/keuangan/kas-kecil", roles: ["admin", "kepala_sekolah", "keuangan"] },

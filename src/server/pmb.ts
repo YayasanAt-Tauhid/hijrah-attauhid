@@ -1,5 +1,9 @@
 /**
- * Server functions PMB publik.
+ * Server functions SPMB publik.
+ *
+ * Nama tabel/fungsi internal tetap `pmb*` untuk menjaga kompatibilitas data
+ * dan integrasi pembayaran yang sudah berjalan. Istilah yang tampil ke pengguna
+ * adalah SPMB (Sistem Penerimaan Murid Baru).
  */
 import { createServerFn } from "@tanstack/react-start";
 import { createAdminClient } from "./supabase";
@@ -7,6 +11,16 @@ import { createAdminClient } from "./supabase";
 const PMB_DOCUMENT_BUCKET = "pmb-dokumen";
 const PMB_DOCUMENT_KINDS = ["kk", "akta", "rapor", "ijazah"] as const;
 type PmbDocumentKind = (typeof PMB_DOCUMENT_KINDS)[number];
+
+const UKURAN_BAJU_OPTIONS = ["S", "M", "L", "XL", "XXL", "X3L", "X4L", "X5L"] as const;
+const TRANSPORTASI_OPTIONS = ["Mobil Pribadi", "Sepeda Motor", "Mobil/Bus Antar Jemput", "Sepeda", "Jalan Kaki", "Lainnya"] as const;
+const PENDIDIKAN_OPTIONS = ["SD", "SMP", "SMA", "D3", "S1", "S2", "S3"] as const;
+const PEKERJAAN_OPTIONS = ["PNS/TNI/POLRI", "KARYAWAN BUMN", "KARYAWAN SWASTA", "WIRASWASTA", "LAINNYA", "SUDAH MENINGGAL"] as const;
+const KATEGORI_OPTIONS = ["MURID BARU", "MURID PINDAHAN"] as const;
+const IQRO_OPTIONS = ["0", "1", "2", "3", "4", "5", "6", "7"] as const;
+const LATIN_OPTIONS = ["BAIK", "CUKUP", "KURANG"] as const;
+const HAFALAN_OPTIONS = ["0", "1", "2", "3"] as const;
+const STATUS_ASRAMA_OPTIONS = ["asrama", "non_asrama"] as const;
 
 export interface PmbOptionsResult {
   departemen: { id: string; nama: string; kode: string | null }[];
@@ -47,7 +61,7 @@ export const pmbCreateDocumentUpload = createServerFn({ method: "POST" })
   .inputValidator((d: PmbDocumentUploadInput) => d)
   .handler(async ({ data }): Promise<PmbDocumentUploadResult> => {
     const kind = data.kind;
-    if (!PMB_DOCUMENT_KINDS.includes(kind)) throw new Error("Jenis dokumen PMB tidak valid");
+    if (!PMB_DOCUMENT_KINDS.includes(kind)) throw new Error("Jenis dokumen SPMB tidak valid");
 
     const ext = (data.file_name || "").split(".").pop()?.toLowerCase() || "";
     if (!["pdf", "jpg", "jpeg", "png"].includes(ext)) {
@@ -75,6 +89,7 @@ export interface PmbDaftarInput {
   nik?: string;
   no_kk?: string;
   kategori?: string;
+  status_asrama?: string;
   anak_ke?: string | number;
   jumlah_bersaudara?: string | number;
   tinggi_badan_cm?: string | number;
@@ -133,6 +148,13 @@ function cleanText(value: unknown, maxLength: number): string | null {
   return text ? text.slice(0, maxLength) : null;
 }
 
+function cleanChoice(value: unknown, allowed: readonly string[], label: string): string | null {
+  const text = cleanText(value, 100);
+  if (!text) return null;
+  if (!allowed.includes(text)) throw new Error(`${label} tidak valid`);
+  return text;
+}
+
 function cleanNumber(value: unknown): number | null {
   if (value === "" || value === null || value === undefined) return null;
   const number = Number(value);
@@ -152,8 +174,14 @@ function validateDocumentPath(path: string | undefined, kind: PmbDocumentKind, r
   }
   const escapedKind = kind.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(`^${escapedKind}/[0-9a-f-]+\\.(pdf|jpg|jpeg|png)$`, "i");
-  if (!pattern.test(value)) throw new Error("Path dokumen PMB tidak valid");
+  if (!pattern.test(value)) throw new Error("Path dokumen SPMB tidak valid");
   return value;
+}
+
+function departemenPerluAsrama(dept: { kode?: string | null; nama?: string | null }): boolean {
+  const kode = (dept.kode || "").trim().toUpperCase();
+  const nama = (dept.nama || "").trim().toUpperCase();
+  return ["SMP", "SMA", "MTA"].includes(kode) || /(^|\s)(SMP|SMA|MTA)(\s|$)/.test(nama);
 }
 
 export const pmbDaftar = createServerFn({ method: "POST" })
@@ -174,8 +202,20 @@ export const pmbDaftar = createServerFn({ method: "POST" })
     const dokumenRaporPath = validateDocumentPath(data.dokumen_rapor_path, "rapor", false);
     const dokumenIjazahPath = validateDocumentPath(data.dokumen_ijazah_path, "ijazah", false);
 
-    const { data: dept } = await admin.from("departemen").select("id").eq("id", departemen_id).eq("aktif", true).eq("kategori", "unit_pendidikan").eq("psb_dibuka", true).single();
-    if (!dept) throw new Error("Departemen tidak valid atau PMB belum dibuka untuk lembaga ini");
+    const { data: dept } = await admin.from("departemen")
+      .select("id, nama, kode")
+      .eq("id", departemen_id)
+      .eq("aktif", true)
+      .eq("kategori", "unit_pendidikan")
+      .eq("psb_dibuka", true)
+      .single();
+    if (!dept) throw new Error("Departemen tidak valid atau SPMB belum dibuka untuk lembaga ini");
+
+    const perluAsrama = departemenPerluAsrama(dept);
+    const statusAsrama = perluAsrama
+      ? cleanChoice(data.status_asrama, STATUS_ASRAMA_OPTIONS, "Pilihan asrama")
+      : null;
+    if (perluAsrama && !statusAsrama) throw new Error("Pilihan Asrama / Non Asrama wajib dipilih untuk SMP, SMA, atau MTA");
 
     if (angkatan_id) {
       const { data: angkatan, error } = await admin.from("angkatan").select("id").eq("id", angkatan_id).eq("departemen_id", departemen_id).eq("aktif", true).maybeSingle();
@@ -186,6 +226,18 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       const { data: tahunAjaran, error } = await admin.from("tahun_ajaran").select("id").eq("id", tahun_ajaran_id).maybeSingle();
       if (error || !tahunAjaran) throw new Error("Periode tahun ajaran tidak valid");
     }
+
+    const kategori = cleanChoice(data.kategori, KATEGORI_OPTIONS, "Kategori");
+    const ukuranBaju = cleanChoice(data.ukuran_baju, UKURAN_BAJU_OPTIONS, "Ukuran baju");
+    const transportasi = cleanChoice(data.transportasi, TRANSPORTASI_OPTIONS, "Transportasi");
+    const pendidikanAyah = cleanChoice(data.pendidikan_ayah, PENDIDIKAN_OPTIONS, "Pendidikan ayah");
+    const pendidikanIbu = cleanChoice(data.pendidikan_ibu, PENDIDIKAN_OPTIONS, "Pendidikan ibu");
+    const pekerjaanAyah = cleanChoice(data.pekerjaan_ayah, PEKERJAAN_OPTIONS, "Pekerjaan ayah");
+    const pekerjaanIbu = cleanChoice(data.pekerjaan_ibu, PEKERJAAN_OPTIONS, "Pekerjaan ibu");
+    const kemampuanIqro = cleanChoice(data.kemampuan_iqro, IQRO_OPTIONS, "Kemampuan Iqro");
+    const membacaLatin = cleanChoice(data.membaca_latin, LATIN_OPTIONS, "Kemampuan membaca Latin");
+    const menulisLatin = cleanChoice(data.menulis_latin, LATIN_OPTIONS, "Kemampuan menulis Latin");
+    const hafalanQuran = cleanChoice(data.hafalan_quran, HAFALAN_OPTIONS, "Hafalan Qur'an");
 
     const { data: siswa, error: siswaError } = await admin.from("siswa").insert({
       nama,
@@ -207,23 +259,24 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       tahun_ajaran_id,
       nik: cleanText(data.nik, 32),
       no_kk: cleanText(data.no_kk, 32),
-      kategori: cleanText(data.kategori, 100),
+      kategori,
+      status_asrama: statusAsrama,
       anak_ke: cleanInteger(data.anak_ke),
       jumlah_bersaudara: cleanInteger(data.jumlah_bersaudara),
       tinggi_badan_cm: cleanNumber(data.tinggi_badan_cm),
       berat_badan_kg: cleanNumber(data.berat_badan_kg),
       lingkar_kepala_cm: cleanNumber(data.lingkar_kepala_cm),
-      ukuran_baju: cleanText(data.ukuran_baju, 50),
+      ukuran_baju: ukuranBaju,
       penyakit_pernah_diderita: cleanText(data.penyakit_pernah_diderita, 500),
       jarak_rumah_km: cleanNumber(data.jarak_rumah_km),
       waktu_perjalanan_menit: cleanInteger(data.waktu_perjalanan_menit),
-      transportasi: cleanText(data.transportasi, 100),
+      transportasi,
       nama_ayah: cleanText(data.nama_ayah, 200),
       nik_ayah: cleanText(data.nik_ayah, 32),
       tempat_lahir_ayah: cleanText(data.tempat_lahir_ayah, 100),
       tanggal_lahir_ayah: data.tanggal_lahir_ayah || null,
-      pendidikan_ayah: cleanText(data.pendidikan_ayah, 100),
-      pekerjaan_ayah: cleanText(data.pekerjaan_ayah, 100),
+      pendidikan_ayah: pendidikanAyah,
+      pekerjaan_ayah: pekerjaanAyah,
       penghasilan_ayah: cleanNumber(data.penghasilan_ayah),
       telepon_ayah: cleanText(data.telepon_ayah, 20),
       alamat_ayah: cleanText(data.alamat_ayah, 500),
@@ -231,8 +284,8 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       nik_ibu: cleanText(data.nik_ibu, 32),
       tempat_lahir_ibu: cleanText(data.tempat_lahir_ibu, 100),
       tanggal_lahir_ibu: data.tanggal_lahir_ibu || null,
-      pendidikan_ibu: cleanText(data.pendidikan_ibu, 100),
-      pekerjaan_ibu: cleanText(data.pekerjaan_ibu, 100),
+      pendidikan_ibu: pendidikanIbu,
+      pekerjaan_ibu: pekerjaanIbu,
       penghasilan_ibu: cleanNumber(data.penghasilan_ibu),
       telepon_ibu: cleanText(data.telepon_ibu, 20),
       alamat_ibu: cleanText(data.alamat_ibu, 500),
@@ -246,10 +299,10 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       kabupaten_sekolah_asal: cleanText(data.kabupaten_sekolah_asal, 100),
       kecamatan_sekolah_asal: cleanText(data.kecamatan_sekolah_asal, 100),
       kelurahan_sekolah_asal: cleanText(data.kelurahan_sekolah_asal, 100),
-      kemampuan_iqro: cleanText(data.kemampuan_iqro, 100),
-      membaca_latin: cleanText(data.membaca_latin, 100),
-      menulis_latin: cleanText(data.menulis_latin, 100),
-      hafalan_quran: cleanText(data.hafalan_quran, 200),
+      kemampuan_iqro: kemampuanIqro,
+      membaca_latin: membacaLatin,
+      menulis_latin: menulisLatin,
+      hafalan_quran: hafalanQuran,
       dokumen_kk_path: dokumenKkPath,
       dokumen_akta_path: dokumenAktaPath,
       dokumen_rapor_path: dokumenRaporPath,

@@ -8,8 +8,8 @@ import {
 
 const subModules = [
   { title: "Data Siswa", desc: "Kelola data siswa dan orang tua", icon: GraduationCap, url: "/akademik/siswa" },
-  { title: "Penerimaan Murid Baru", desc: "Proses pendaftaran siswa baru (PMB)", icon: UserPlus, url: "/akademik/pmb" },
-  { title: "Konfigurasi PMB", desc: "Atur jenis pembayaran pendaftaran dan pembayaran online", icon: Settings, url: "/akademik/pmb-konfigurasi" },
+  { title: "SPMB", desc: "Sistem Penerimaan Murid Baru", icon: UserPlus, url: "/akademik/spmb" },
+  { title: "Konfigurasi SPMB", desc: "Atur jenis pembayaran pendaftaran dan pembayaran online", icon: Settings, url: "/akademik/spmb-konfigurasi" },
   { title: "Mutasi Siswa", desc: "Pindah masuk/keluar dan status siswa", icon: ArrowRightLeft, url: "/akademik/mutasi" },
   { title: "Jadwal Pelajaran", desc: "Atur jadwal kelas dan guru", icon: Calendar, url: "/akademik/jadwal" },
   { title: "Presensi Siswa", desc: "Input dan rekap kehadiran harian", icon: Clock, url: "/akademik/presensi" },
