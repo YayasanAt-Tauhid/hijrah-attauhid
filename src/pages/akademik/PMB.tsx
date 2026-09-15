@@ -24,6 +24,26 @@ function diagnosaNIS(row: Record<string, unknown>): { alasan?: "no_dept_angkatan
   return {};
 }
 
+type KesiapanPenerimaan = {
+  siap: boolean;
+  kekurangan: string[];
+};
+
+function getKesiapanPenerimaan(row: Record<string, unknown>): KesiapanPenerimaan {
+  const kekurangan: string[] = [];
+  const departemen = row.departemen as { npsn?: string | null } | null;
+
+  if (!row.terverifikasi) kekurangan.push("verifikasi data");
+  if (!row._pmbConfigured) kekurangan.push("konfigurasi pembayaran PMB");
+  else if (!row._pmbLunas) kekurangan.push("pembayaran PMB");
+  if (!row.departemen_id) kekurangan.push("lembaga");
+  if (!row.angkatan_id) kekurangan.push("angkatan");
+  if (!row._punyaKelas) kekurangan.push("kelas");
+  if (!departemen?.npsn) kekurangan.push("NPSN lembaga");
+
+  return { siap: kekurangan.length === 0, kekurangan };
+}
+
 export default function PMB() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -64,19 +84,77 @@ export default function PMB() {
   const { data: calonList = [], isLoading } = useQuery({
     queryKey: ["siswa", "calon"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: siswaRows, error } = await supabase
         .from("siswa")
-        .select("*, angkatan:angkatan_id(nama), departemen:departemen_id(nama)")
+        .select("*, angkatan:angkatan_id(nama), departemen:departemen_id(nama,npsn)")
         .in("status", ["calon", "diterima"])
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      if (!siswaRows?.length) return [];
+
+      const siswaIds = siswaRows.map((s) => s.id);
+      const departemenIds = Array.from(new Set(siswaRows.map((s) => s.departemen_id).filter(Boolean))) as string[];
+
+      const [configResult, kelasResult] = await Promise.all([
+        departemenIds.length
+          ? (supabase as any)
+              .from("konfigurasi_pmb")
+              .select("departemen_id, jenis_pembayaran_id")
+              .in("departemen_id", departemenIds)
+          : Promise.resolve({ data: [], error: null }),
+        supabase
+          .from("kelas_siswa")
+          .select("siswa_id, kelas_id")
+          .in("siswa_id", siswaIds)
+          .eq("aktif", true),
+      ]);
+
+      if (configResult.error) throw configResult.error;
+      if (kelasResult.error) throw kelasResult.error;
+
+      const configByDepartemen = new Map<string, string>(
+        (configResult.data || []).map((c: any) => [c.departemen_id, c.jenis_pembayaran_id]),
+      );
+      const punyaKelas = new Set((kelasResult.data || []).map((k) => k.siswa_id));
+      const jenisPmbIds = Array.from(new Set(configByDepartemen.values()));
+
+      let pembayaranRows: Array<{ siswa_id: string | null; jenis_id: string | null; jurnal_id: string | null; tanggal_bayar: string | null }> = [];
+      if (jenisPmbIds.length) {
+        const { data: payments, error: paymentError } = await supabase
+          .from("pembayaran")
+          .select("siswa_id, jenis_id, jurnal_id, tanggal_bayar")
+          .in("siswa_id", siswaIds)
+          .in("jenis_id", jenisPmbIds);
+        if (paymentError) throw paymentError;
+        pembayaranRows = payments || [];
+      }
+
+      const siswaById = new Map(siswaRows.map((s) => [s.id, s]));
+      const pembayaranPmbBySiswa = new Map<string, { tanggal_bayar: string | null }>();
+      for (const payment of pembayaranRows) {
+        if (!payment.siswa_id || !payment.jenis_id || !payment.jurnal_id) continue;
+        const siswa = siswaById.get(payment.siswa_id);
+        if (!siswa?.departemen_id) continue;
+        if (configByDepartemen.get(siswa.departemen_id) !== payment.jenis_id) continue;
+        pembayaranPmbBySiswa.set(payment.siswa_id, { tanggal_bayar: payment.tanggal_bayar });
+      }
+
+      return siswaRows.map((s) => ({
+        ...s,
+        _pmbConfigured: !!(s.departemen_id && configByDepartemen.has(s.departemen_id)),
+        _pmbLunas: pembayaranPmbBySiswa.has(s.id),
+        _pmbTanggalBayar: pembayaranPmbBySiswa.get(s.id)?.tanggal_bayar || null,
+        _punyaKelas: punyaKelas.has(s.id),
+      }));
     },
   });
 
   const calonCount = calonList.filter((s: any) => s.status === "calon").length;
   const diterimaCount = calonList.filter((s: any) => s.status === "diterima").length;
   const nisKosongCount = calonList.filter((s: any) => s.status === "diterima" && !s.nis).length;
+  const belumSiapCount = calonList.filter(
+    (s: any) => s.status === "calon" && !getKesiapanPenerimaan(s as Record<string, unknown>).siap,
+  ).length;
 
   // ─── daftar ────────────────────────────────────────────────────────────────
   const handleDaftar = async () => {
@@ -170,29 +248,41 @@ export default function PMB() {
 
   // ─── terima ────────────────────────────────────────────────────────────────
   const handleTerima = async (row: Record<string, unknown>) => {
+    const kesiapan = getKesiapanPenerimaan(row);
+    if (!kesiapan.siap) {
+      toast.error("Calon siswa belum siap diterima", {
+        description: `Lengkapi terlebih dahulu: ${kesiapan.kekurangan.join(", ")}.`,
+      });
+      return;
+    }
+
     const id = row.id as string;
-    const departemenId = row.departemen_id as string | null;
-    const angkatanId = row.angkatan_id as string | null;
+    const departemenId = row.departemen_id as string;
+    const angkatanId = row.angkatan_id as string;
     const namaSiswa = row.nama as string;
 
     setNisLoadingId(id);
     try {
-      const { error: updErr } = await supabase.from("siswa").update({ status: "diterima" } as any).eq("id", id);
-      if (updErr) throw updErr;
-
-      if (!departemenId || !angkatanId) {
-        qc.invalidateQueries({ queryKey: ["siswa"] });
-        toast.warning(`${namaSiswa} diterima`, {
-          description: "NIS belum dibuat — lembaga atau angkatan belum diisi. Lengkapi data siswa, lalu klik Buat NIS.",
-          duration: 8000,
-        });
-        return;
+      // Buat NIS lebih dulu. Dengan urutan ini siswa tidak pernah berstatus
+      // "diterima" bila pembuatan NIS gagal. Jika NIS sudah ada (mis. retry),
+      // langkah ini dilewati agar nomor tidak tergenerate ulang.
+      if (!row.nis) {
+        const nisBerhasil = await generateNIS(id, departemenId, angkatanId, namaSiswa);
+        if (!nisBerhasil) return;
       }
 
-      await generateNIS(id, departemenId, angkatanId, namaSiswa);
-      qc.invalidateQueries({ queryKey: ["siswa"] });
-    } catch {
-      toast.error("Gagal menerima siswa");
+      const { error: updErr } = await supabase
+        .from("siswa")
+        .update({ status: "diterima" } as any)
+        .eq("id", id);
+      if (updErr) throw updErr;
+
+      await qc.invalidateQueries({ queryKey: ["siswa"] });
+      toast.success(`${namaSiswa} berhasil diterima`, {
+        description: "Verifikasi, pembayaran PMB, angkatan, kelas, dan NIS sudah lengkap.",
+      });
+    } catch (e: any) {
+      toast.error("Gagal menerima siswa", { description: e?.message || "Terjadi kesalahan teknis" });
     } finally {
       setNisLoadingId(null);
     }
@@ -221,7 +311,15 @@ export default function PMB() {
     }
   };
 
-  const handleAktifkan = async (id: string) => {
+  const handleAktifkan = async (row: Record<string, unknown>) => {
+    if (!row.nis) {
+      toast.error("Siswa belum siap diaktifkan", {
+        description: "Buat NIS terlebih dahulu sebelum mengaktifkan siswa.",
+      });
+      return;
+    }
+
+    const id = row.id as string;
     const { error } = await supabase.from("siswa").update({ status: "aktif" } as any).eq("id", id);
     if (error) {
       toast.error("Gagal mengaktifkan siswa: " + error.message);
@@ -274,6 +372,40 @@ export default function PMB() {
     { key: "departemen", label: "Lembaga", render: (v: any) => v?.nama || "-" },
     { key: "angkatan", label: "Angkatan", render: (v: any) => v?.nama || "-" },
     {
+      key: "_pmbLunas", label: "Pembayaran PMB",
+      render: (_, row) => {
+        if (!row._pmbConfigured) {
+          return <span className="text-xs text-warning">Belum diatur</span>;
+        }
+        if (row._pmbLunas) {
+          return (
+            <span className="inline-flex items-center gap-1 text-xs text-success" title={row._pmbTanggalBayar ? `Dibayar ${row._pmbTanggalBayar}` : "Pembayaran tercatat"}>
+              <CheckCircle2 className="h-3.5 w-3.5" /> Lunas
+            </span>
+          );
+        }
+        return <span className="text-xs text-destructive">Belum bayar</span>;
+      },
+    },
+    {
+      key: "_punyaKelas", label: "Kesiapan",
+      render: (_, row) => {
+        const kesiapan = getKesiapanPenerimaan(row);
+        return kesiapan.siap ? (
+          <span className="inline-flex items-center gap-1 text-xs text-success">
+            <CheckCircle2 className="h-3.5 w-3.5" /> Siap diterima
+          </span>
+        ) : (
+          <span
+            className="inline-flex items-center gap-1 text-xs text-warning cursor-help"
+            title={`Belum lengkap: ${kesiapan.kekurangan.join(", ")}`}
+          >
+            <AlertTriangle className="h-3.5 w-3.5" /> {kesiapan.kekurangan.length} belum lengkap
+          </span>
+        );
+      },
+    },
+    {
       key: "status", label: "Status",
       render: (v, row) => {
         const s = v as string;
@@ -301,6 +433,10 @@ export default function PMB() {
         const status = row.status as string;
         const loading = nisLoadingId === (row.id as string);
         const verified = row.terverifikasi as boolean;
+        const kesiapan = getKesiapanPenerimaan(row);
+        const alasanBelumSiap = kesiapan.kekurangan.length
+          ? `Lengkapi: ${kesiapan.kekurangan.join(", ")}`
+          : undefined;
         return (
           <div className="flex gap-1 flex-wrap">
             {/* Edit */}
@@ -324,11 +460,13 @@ export default function PMB() {
             )}
 
             {status === "calon" && (
-              <Button size="sm" variant="outline" disabled={loading}
-                onClick={(e) => { e.stopPropagation(); handleTerima(row); }}
-              >
-                {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Terima"}
-              </Button>
+              <span title={alasanBelumSiap || "Terima calon siswa"}>
+                <Button size="sm" variant="outline" disabled={loading || !kesiapan.siap}
+                  onClick={(e) => { e.stopPropagation(); handleTerima(row); }}
+                >
+                  {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Terima"}
+                </Button>
+              </span>
             )}
             {status === "diterima" && !row.nis && (
               <Button size="sm" variant="outline"
@@ -343,11 +481,13 @@ export default function PMB() {
               </Button>
             )}
             {status === "diterima" && (
-              <Button size="sm" disabled={loading}
-                onClick={(e) => { e.stopPropagation(); handleAktifkan(row.id as string); }}
-              >
-                Aktifkan
-              </Button>
+              <span title={!row.nis ? "Buat NIS terlebih dahulu" : "Aktifkan siswa"}>
+                <Button size="sm" disabled={loading || !row.nis}
+                  onClick={(e) => { e.stopPropagation(); handleAktifkan(row); }}
+                >
+                  Aktifkan
+                </Button>
+              </span>
             )}
           </div>
         );
@@ -497,6 +637,18 @@ export default function PMB() {
           <StatsCard title="NIS Belum Dibuat" value={nisKosongCount} icon={AlertTriangle} color="destructive" />
         )}
       </div>
+
+      {belumSiapCount > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 text-sm">
+          <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">{belumSiapCount} calon belum siap diterima</p>
+            <p className="text-muted-foreground">
+              Tombol Terima aktif setelah data diverifikasi, pembayaran PMB tercatat, angkatan dan kelas terisi, serta NPSN lembaga tersedia.
+            </p>
+          </div>
+        </div>
+      )}
 
       <DataTable
         columns={columns}
