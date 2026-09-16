@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { NISPreview } from "@/components/shared/NISPreview";
 import { useAngkatan, useDepartemen, useKelas, useTahunAjaran } from "@/hooks/useAkademikData";
 import { generateNISViaEdgeFunction } from "@/utils/nisGenerator";
-import { UserPlus, Users, UserCheck, Clock, AlertTriangle, RefreshCw, Pencil, CheckCircle2, Eye } from "lucide-react";
+import { UserPlus, Users, UserCheck, Clock, AlertTriangle, RefreshCw, Pencil, CheckCircle2, Eye, Filter } from "lucide-react";
 import { fetchAllPages } from "@/lib/fetchAll";
 import { toast } from "sonner";
 
@@ -44,6 +44,30 @@ function formatTanggal(value: unknown): string {
 }
 
 type KesiapanPenerimaan = { siap: boolean; kekurangan: string[] };
+
+type SpmbFilterState = {
+  departemen: string;
+  status: string;
+  jenisKelamin: string;
+  tes: string;
+  kelulusan: string;
+  daftarUlang: string;
+  biaya: string;
+  kesiapan: string;
+  verifikasi: string;
+};
+
+const DEFAULT_FILTERS: SpmbFilterState = {
+  departemen: "all",
+  status: "all",
+  jenisKelamin: "all",
+  tes: "all",
+  kelulusan: "all",
+  daftarUlang: "all",
+  biaya: "all",
+  kesiapan: "all",
+  verifikasi: "all",
+};
 
 function getKesiapanPenerimaan(row: Record<string, unknown>): KesiapanPenerimaan {
   if (row._readiness) return row._readiness as KesiapanPenerimaan;
@@ -83,12 +107,15 @@ export default function PMB() {
   const [nisLoadingId, setNisLoadingId] = useState<string | null>(null);
   const [milestoneLoadingId, setMilestoneLoadingId] = useState<string | null>(null);
   const [modePendaftaran, setModePendaftaran] = useState<"lengkap" | "cepat">("lengkap");
+  const [filters, setFilters] = useState<SpmbFilterState>(DEFAULT_FILTERS);
   const [formData, setFormData] = useState({
     nama: "", jenis_kelamin: "L", telepon: "", alamat: "",
     angkatan_id: "", departemen_id: "", kelas_id: "", tahun_ajaran_id: "",
   });
 
   const resetForm = () => setFormData({ nama: "", jenis_kelamin: "L", telepon: "", alamat: "", angkatan_id: "", departemen_id: "", kelas_id: "", tahun_ajaran_id: "" });
+  const setFilter = (key: keyof SpmbFilterState, value: string) => setFilters((current) => ({ ...current, [key]: value }));
+  const resetFilters = () => setFilters({ ...DEFAULT_FILTERS });
 
   const filteredKelas = kelasList.filter((k: any) => !formData.departemen_id || k.departemen_id === formData.departemen_id);
   const filteredAngkatan = angkatanList.filter((a: any) => !formData.departemen_id || a.departemen_id === formData.departemen_id);
@@ -116,6 +143,8 @@ export default function PMB() {
       const detailById = new Map<string, any>((details || []).map((d: any) => [d.siswa_id, d]));
       return siswaRows.map((s) => {
         const r = byId.get(s.id);
+        const detail = detailById.get(s.id);
+        const biayaSort = r?.gratis_pendaftaran ? "gratis" : !r?.configured ? "belum_diatur" : r?.lunas ? "lunas" : "belum_bayar";
         return {
           ...s,
           _readiness: r,
@@ -124,7 +153,16 @@ export default function PMB() {
           _pmbGratis: r?.gratis_pendaftaran,
           _pmbTanggalBayar: r?.tanggal_pembayaran,
           _punyaKelas: r?.punya_kelas,
-          _spmbDetail: detailById.get(s.id),
+          _spmbDetail: detail,
+          _lembagaNama: s.departemen?.nama || "",
+          _angkatanNama: s.angkatan?.nama || "",
+          _spmbAsrama: labelAsrama(detail?.status_asrama),
+          _spmbTanggalTes: detail?.spmb_tanggal_tes || null,
+          _spmbTanggalLulus: detail?.spmb_tanggal_lulus || null,
+          _spmbTanggalDaftarUlang: detail?.spmb_tanggal_daftar_ulang || null,
+          _biayaSort: biayaSort,
+          _kesiapanSort: r?.siap ? "siap" : "belum",
+          _verifikasiSort: s.terverifikasi ? "sudah" : "belum",
         };
       });
     },
@@ -134,6 +172,19 @@ export default function PMB() {
   const diterimaCount = calonList.filter((s: any) => s.status === "diterima").length;
   const nisKosongCount = calonList.filter((s: any) => s.status === "diterima" && !s.nis).length;
   const belumSiapCount = calonList.filter((s: any) => s.status === "calon" && !getKesiapanPenerimaan(s as Record<string, unknown>).siap).length;
+  const hasActiveFilters = Object.values(filters).some((value) => value !== "all");
+  const filteredCalonList = calonList.filter((s: any) => {
+    if (filters.departemen !== "all" && s.departemen_id !== filters.departemen) return false;
+    if (filters.status !== "all" && s.status !== filters.status) return false;
+    if (filters.jenisKelamin !== "all" && s.jenis_kelamin !== filters.jenisKelamin) return false;
+    if (filters.tes !== "all" && Boolean(s._spmbTanggalTes) !== (filters.tes === "sudah")) return false;
+    if (filters.kelulusan !== "all" && Boolean(s._spmbTanggalLulus) !== (filters.kelulusan === "sudah")) return false;
+    if (filters.daftarUlang !== "all" && Boolean(s._spmbTanggalDaftarUlang) !== (filters.daftarUlang === "sudah")) return false;
+    if (filters.biaya !== "all" && s._biayaSort !== filters.biaya) return false;
+    if (filters.kesiapan !== "all" && getKesiapanPenerimaan(s as Record<string, unknown>).siap !== (filters.kesiapan === "siap")) return false;
+    if (filters.verifikasi !== "all" && Boolean(s.terverifikasi) !== (filters.verifikasi === "sudah")) return false;
+    return true;
+  });
 
   const handleDaftar = async () => {
     if (!formData.nama) { toast.error("Nama wajib diisi"); return; }
@@ -255,7 +306,7 @@ export default function PMB() {
   const columns: DataTableColumn<Record<string, unknown>>[] = [
     { key: "nama", label: "Nama", sortable: true },
     {
-      key: "nis", label: "NIS",
+      key: "nis", label: "NIS", sortable: true,
       render: (v, row) => {
         if (v) return <span className="font-mono text-xs">{v as string}</span>;
         if (row.status === "diterima") {
@@ -265,17 +316,17 @@ export default function PMB() {
         return <span className="text-muted-foreground text-xs">-</span>;
       },
     },
-    { key: "jenis_kelamin", label: "JK", render: (v) => v === "L" ? "L" : "P" },
-    { key: "departemen", label: "Lembaga", render: (v: any) => v?.nama || "-" },
-    { key: "_spmbDetail", label: "Asrama", render: (v: any) => labelAsrama(v?.status_asrama) },
-    { key: "angkatan", label: "Angkatan", render: (v: any) => v?.nama || "-" },
-    { key: "created_at", label: "Tgl Pendaftaran", render: (v) => formatTanggal(v) },
-    { key: "_pmbTanggalBayar", label: "Tgl Bayar Pendaftaran", render: (v) => formatTanggal(v) },
-    { key: "_spmbDetail", label: "Tgl Tes", render: (v: any) => formatTanggal(v?.spmb_tanggal_tes) },
-    { key: "_spmbDetail", label: "Tgl Kelulusan", render: (v: any) => formatTanggal(v?.spmb_tanggal_lulus) },
-    { key: "_spmbDetail", label: "Tgl Daftar Ulang", render: (v: any) => formatTanggal(v?.spmb_tanggal_daftar_ulang) },
+    { key: "jenis_kelamin", label: "JK", sortable: true, render: (v) => v === "L" ? "L" : "P" },
+    { key: "_lembagaNama", label: "Lembaga", sortable: true, render: (v) => (v as string) || "-" },
+    { key: "_spmbAsrama", label: "Asrama", sortable: true, render: (v) => (v as string) || "-" },
+    { key: "_angkatanNama", label: "Angkatan", sortable: true, render: (v) => (v as string) || "-" },
+    { key: "created_at", label: "Tgl Pendaftaran", sortable: true, render: (v) => formatTanggal(v) },
+    { key: "_pmbTanggalBayar", label: "Tgl Bayar Pendaftaran", sortable: true, render: (v) => formatTanggal(v) },
+    { key: "_spmbTanggalTes", label: "Tgl Tes", sortable: true, render: (v) => formatTanggal(v) },
+    { key: "_spmbTanggalLulus", label: "Tgl Kelulusan", sortable: true, render: (v) => formatTanggal(v) },
+    { key: "_spmbTanggalDaftarUlang", label: "Tgl Daftar Ulang", sortable: true, render: (v) => formatTanggal(v) },
     {
-      key: "_pmbLunas", label: "Biaya Pendaftaran",
+      key: "_biayaSort", label: "Biaya Pendaftaran", sortable: true,
       render: (_, row) => {
         if (row._pmbGratis) return <span className="inline-flex items-center gap-1 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5" /> Gratis</span>;
         if (!row._pmbConfigured) return <span className="text-xs text-warning">Belum diatur</span>;
@@ -284,7 +335,7 @@ export default function PMB() {
       },
     },
     {
-      key: "_punyaKelas", label: "Kesiapan",
+      key: "_kesiapanSort", label: "Kesiapan", sortable: true,
       render: (_, row) => {
         const kesiapan = getKesiapanPenerimaan(row);
         return kesiapan.siap
@@ -293,7 +344,7 @@ export default function PMB() {
       },
     },
     {
-      key: "status", label: "Status",
+      key: "status", label: "Status", sortable: true,
       render: (v, row) => {
         const s = v as string;
         const colors: Record<string, string> = { calon: "bg-warning/15 text-warning border-warning/30", diterima: "bg-info/15 text-info border-info/30" };
@@ -383,10 +434,92 @@ export default function PMB() {
         </div>
       )}
 
+      <div className="rounded-xl border bg-card p-4 space-y-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">Filter Pendaftar</p>
+              <p className="text-xs text-muted-foreground">Menampilkan {filteredCalonList.length} dari {calonList.length} pendaftar</p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" disabled={!hasActiveFilters} onClick={resetFilters}>Reset Filter</Button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="space-y-1">
+            <Label className="text-xs">Lembaga</Label>
+            <Select value={filters.departemen} onValueChange={(v) => setFilter("departemen", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua lembaga</SelectItem>
+                {departemenList.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.nama}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Status</Label>
+            <Select value={filters.status} onValueChange={(v) => setFilter("status", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua status</SelectItem><SelectItem value="calon">Calon</SelectItem><SelectItem value="diterima">Diterima</SelectItem></SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Jenis Kelamin</Label>
+            <Select value={filters.jenisKelamin} onValueChange={(v) => setFilter("jenisKelamin", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="L">Laki-laki</SelectItem><SelectItem value="P">Perempuan</SelectItem></SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Tes</Label>
+            <Select value={filters.tes} onValueChange={(v) => setFilter("tes", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="sudah">Sudah tes</SelectItem><SelectItem value="belum">Belum tes</SelectItem></SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Kelulusan</Label>
+            <Select value={filters.kelulusan} onValueChange={(v) => setFilter("kelulusan", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="sudah">Sudah lulus</SelectItem><SelectItem value="belum">Belum lulus</SelectItem></SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Daftar Ulang</Label>
+            <Select value={filters.daftarUlang} onValueChange={(v) => setFilter("daftarUlang", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="sudah">Sudah daftar ulang</SelectItem><SelectItem value="belum">Belum daftar ulang</SelectItem></SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Biaya Pendaftaran</Label>
+            <Select value={filters.biaya} onValueChange={(v) => setFilter("biaya", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="gratis">Gratis</SelectItem><SelectItem value="lunas">Lunas</SelectItem><SelectItem value="belum_bayar">Belum bayar</SelectItem><SelectItem value="belum_diatur">Belum diatur</SelectItem></SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Kesiapan</Label>
+            <Select value={filters.kesiapan} onValueChange={(v) => setFilter("kesiapan", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="siap">Siap diterima</SelectItem><SelectItem value="belum">Belum lengkap</SelectItem></SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Verifikasi</Label>
+            <Select value={filters.verifikasi} onValueChange={(v) => setFilter("verifikasi", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="sudah">Sudah diverifikasi</SelectItem><SelectItem value="belum">Belum diverifikasi</SelectItem></SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
       <DataTable
         columns={columns}
-        data={calonList as Record<string, unknown>[]}
-        searchPlaceholder="Cari nama calon murid..."
+        data={filteredCalonList as Record<string, unknown>[]}
+        searchPlaceholder="Cari nama, NIS, lembaga, atau angkatan..."
         loading={isLoading}
         pageSize={20}
         onRowClick={(row) => navigate(`/akademik/siswa/${row.id}`)}
