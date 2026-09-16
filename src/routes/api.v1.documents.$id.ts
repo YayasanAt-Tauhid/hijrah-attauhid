@@ -1,0 +1,1 @@
+import {createFileRoute} from '@tanstack/react-router'; import {handleDocument} from '@/server/integrationApi'; export const Route=createFileRoute('/api/v1/documents/$id')({server:{handlers:{GET:({request,params})=>handleDocument(request,params.id)}}});
