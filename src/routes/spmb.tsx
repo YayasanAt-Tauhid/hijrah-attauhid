@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import SPMBDaftarOnline from "@/pages/portal/SPMBDaftarOnline";
+import SPMBDaftarOnlineV2 from "@/pages/portal/SPMBDaftarOnlineV2";
 
 export const Route = createFileRoute("/spmb")({
-  component: SPMBDaftarOnline,
+  component: SPMBDaftarOnlineV2,
 });
