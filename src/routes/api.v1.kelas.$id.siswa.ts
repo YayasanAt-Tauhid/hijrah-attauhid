@@ -1,0 +1,1 @@
+import {createFileRoute} from '@tanstack/react-router'; import {handleClassStudents} from '@/server/integrationApi'; export const Route=createFileRoute('/api/v1/kelas/$id/siswa')({server:{handlers:{GET:({request,params})=>handleClassStudents(request,params.id)}}});
