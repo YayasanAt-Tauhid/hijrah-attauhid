@@ -55,7 +55,8 @@ describe('Integration API v1 contract', () => {
   it('documents payment and safe bootstrap ordering', () => {
     expect(docs).toContain('pembayaran_pendaftaran')
     expect(openapi).toContain('pembayaran_pendaftaran')
-    expect(docs).toContain('Ambil checkpoint awal')
-    expect(docs).toContain('incremental dari checkpoint awal')
+    expect(docs).toContain('ambil checkpoint awal dari endpoint sync')
+    expect(docs).toContain('mulai incremental dari checkpoint tersebut')
+    expect(docs).toContain('Jangan mengambil checkpoint baru setelah snapshot')
   })
 })
