@@ -26,7 +26,7 @@ export async function authenticateIntegration(request:Request):Promise<Ctx|Respo
  if(!t){const r=await rate(admin,`invalid:${prefix}`,20,60);return err('unauthorized','Token integrasi tidak valid',401,requestId,r.allowed?{}:{retry_after:r.retry_after})}
  const {data:i}=await (admin.from('integration_apps') as any).select('id,name,active,scopes,department_ids,academic_year_ids,expires_at').eq('id',t.integration_id).maybeSingle();
  const now=Date.now(); if(!i||!i.active||t.revoked_at||(t.expires_at&&Date.parse(t.expires_at)<=now)||(i.expires_at&&Date.parse(i.expires_at)<=now))return err('unauthorized','Token kedaluwarsa, dicabut, atau integrasi nonaktif',401,requestId);
- const r=await rate(admin,`integration:${i.id}`,300,60);if(!r.allowed)return err('rate_limited','Batas permintaan terlampaui',429,ctx.requestId,{retry_after:r.retry_after});
+ const r=await rate(admin,`integration:${i.id}`,300,60);if(!r.allowed)return err('rate_limited','Batas permintaan terlampaui',429,requestId,{retry_after:r.retry_after});
  await Promise.all([(admin.from('integration_tokens') as any).update({last_used_at:new Date().toISOString()}).eq('id',t.id),(admin.from('integration_apps') as any).update({last_used_at:new Date().toISOString()}).eq('id',i.id)]);
  return {integration:i,token:t,admin,requestId,started};
 }
