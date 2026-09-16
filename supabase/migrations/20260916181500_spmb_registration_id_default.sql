@@ -1,0 +1,4 @@
+create or replace function public.ensure_spmb_pendaftaran_id() returns trigger language plpgsql set search_path=public as $$ begin if new.pendaftaran_id is null and (new.pmb_payment_token is not null or new.jenis_pendaftaran is not null) then new.pendaftaran_id:=gen_random_uuid(); end if; return new; end $$;
+drop trigger if exists trg_ensure_spmb_pendaftaran_id on public.siswa_detail;
+create trigger trg_ensure_spmb_pendaftaran_id before insert on public.siswa_detail for each row execute function public.ensure_spmb_pendaftaran_id();
+revoke all on function public.ensure_spmb_pendaftaran_id() from public,anon,authenticated;
