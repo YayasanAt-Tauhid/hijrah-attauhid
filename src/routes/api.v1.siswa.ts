@@ -1,0 +1,1 @@
+import {createFileRoute} from '@tanstack/react-router'; import {handleList} from '@/server/integrationApi'; export const Route=createFileRoute('/api/v1/siswa')({server:{handlers:{GET:({request})=>handleList(request,'siswa')}}});
