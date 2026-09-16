@@ -218,6 +218,7 @@ const menuItems: MenuItem[] = [
         items: [
           { title: "Identitas Sekolah", url: "/pengaturan/sekolah" },
           { title: "Notifikasi Gateway", url: "/pengaturan/notifikasi" },
+          { title: "Integrasi API", url: "/pengaturan/integrasi-api" },
         ],
       },
       {
