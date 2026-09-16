@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
-const api = readFileSync(new URL('./integrationApi.ts', import.meta.url), 'utf8')
-const docs = readFileSync(new URL('../../docs/integration-api.md', import.meta.url), 'utf8')
-const openapi = readFileSync(new URL('../../docs/openapi-integration-v1.yaml', import.meta.url), 'utf8')
-const postman = readFileSync(new URL('../../docs/postman/Hijrah-Integration-v1.postman_collection.json', import.meta.url), 'utf8')
+const readRepoFile = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
+const api = readRepoFile('src/server/integrationApi.ts')
+const docs = readRepoFile('docs/integration-api.md')
+const openapi = readRepoFile('docs/openapi-integration-v1.yaml')
+const postman = readRepoFile('docs/postman/Hijrah-Integration-v1.postman_collection.json')
 
 describe('Integration API v1 contract', () => {
   it('keeps bearer auth, server-side token hashing and rate limiting', () => {
     expect(api).toContain("request.headers.get('authorization')")
-    expect(api).toContain("await sha256(token)")
-    expect(api).toContain("integration_rate_limit_hit")
+    expect(api).toContain('await sha256(token)')
+    expect(api).toContain('integration_rate_limit_hit')
     expect(api).toContain("'Retry-After':String(r.retry_after)")
   })
 
@@ -18,19 +20,19 @@ describe('Integration API v1 contract', () => {
     expect(api).toContain("crypto.subtle.sign('HMAC'")
     expect(api).toContain('scopeFingerprint(ctx)')
     expect(api).toContain('filterFingerprint(u)')
-    expect(api).toContain("x.scope!==scopeFingerprint(ctx)")
+    expect(api).toContain('x.scope!==scopeFingerprint(ctx)')
     expect(api).toContain('x.filters!==filters')
   })
 
   it('keeps registration and document identities based on pendaftaran_id', () => {
-    expect(api).toContain("id:d.pendaftaran_id")
+    expect(api).toContain('id:d.pendaftaran_id')
     expect(api).toContain('docs(d.pendaftaran_id,d)')
     expect(api).toContain(".eq('pendaftaran_id',id)")
     expect(api).toContain('download_path:`/api/v1/documents/${pid}.${kind}`')
   })
 
   it('serializes registration payment without exposing provider secrets', () => {
-    expect(api).toContain("integration_registration_payment_status")
+    expect(api).toContain('integration_registration_payment_status')
     expect(api).toContain('pembayaran_pendaftaran:await payment(ctx,s)')
     expect(api).not.toContain('snap_token:')
     expect(api).not.toContain('pmb_payment_token:')
