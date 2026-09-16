@@ -28,8 +28,11 @@ type PmbDocuments = Record<PmbDocumentKind, File | null>;
 const STORAGE_KEY = "hat_pmb_registration_token";
 const PMB_DOCUMENT_BUCKET = "pmb-dokumen";
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024;
+const TARGET_TAHUN_AJARAN = "Tahun Ajaran 2027-2028";
+const TARGET_ANGKATAN = "Angkatan 2027";
+const PROMO_START_AT = Date.parse("2026-09-20T17:00:00.000Z");
+const PAYMENT_VISIBLE_FROM = Date.parse("2026-10-23T17:00:00.000Z");
 
-const KATEGORI_OPTIONS = ["MURID BARU", "MURID PINDAHAN"];
 const TRANSPORTASI_OPTIONS = ["Mobil Pribadi", "Sepeda Motor", "Mobil/Bus Antar Jemput", "Sepeda", "Jalan Kaki", "Lainnya"];
 const PENDIDIKAN_OPTIONS = [
   ["SD", "SD / Sederajat"], ["SMP", "SMP / Sederajat"], ["SMA", "SMA / Sederajat"],
@@ -49,7 +52,7 @@ const HAFALAN_OPTIONS = [
 const initialForm = {
   nama: "", jenis_kelamin: "", tempat_lahir: "", tanggal_lahir: "", alamat: "", telepon: "",
   departemen_id: "", angkatan_id: "", tahun_ajaran_id: "", jenis_pendaftaran: "baru", kelas_terakhir: "", alasan_pindah: "",
-  nik: "", no_kk: "", kategori: "", status_asrama: "", anak_ke: "", jumlah_bersaudara: "", tinggi_badan_cm: "", berat_badan_kg: "",
+  nik: "", no_kk: "", kategori: "MURID BARU", status_asrama: "", anak_ke: "", jumlah_bersaudara: "", tinggi_badan_cm: "", berat_badan_kg: "",
   lingkar_kepala_cm: "", penyakit_pernah_diderita: "", jarak_rumah_km: "", waktu_perjalanan_menit: "", transportasi: "",
   nama_ayah: "", nik_ayah: "", tempat_lahir_ayah: "", tanggal_lahir_ayah: "", pendidikan_ayah: "", pekerjaan_ayah: "", penghasilan_ayah: "", telepon_ayah: "", alamat_ayah: "",
   nama_ibu: "", nik_ibu: "", tempat_lahir_ibu: "", tanggal_lahir_ibu: "", pendidikan_ibu: "", pekerjaan_ibu: "", penghasilan_ibu: "", telepon_ibu: "", alamat_ibu: "",
@@ -79,12 +82,7 @@ function perluPilihanAsrama(dept?: Departemen): boolean {
   return ["SMP", "SMA", "MTA"].includes(kode) || /(^|\s)(SMP|SMA|MTA)(\s|$)/.test(nama);
 }
 
-function OptionSelect({
-  value,
-  placeholder,
-  options,
-  onValueChange,
-}: {
+function OptionSelect({ value, placeholder, options, onValueChange }: {
   value: string;
   placeholder: string;
   options: readonly (string | readonly [string, string])[];
@@ -159,13 +157,24 @@ export default function SPMBDaftarOnline() {
 
   useEffect(() => {
     pmbOptions().then((d) => {
+      const targetYears = (d.tahun_ajaran || []).filter((t) => t.nama === TARGET_TAHUN_AJARAN);
+      const targetAngkatan = (d.angkatan || []).filter((a) => a.nama === TARGET_ANGKATAN);
       setDepartemenList(d.departemen || []);
-      setAllAngkatan(d.angkatan || []);
-      setTahunAjaranList(d.tahun_ajaran || []);
-      const aktif = (d.tahun_ajaran || []).find((t) => t.aktif);
-      if (aktif) setForm((f) => ({ ...f, tahun_ajaran_id: f.tahun_ajaran_id || aktif.id }));
+      setAllAngkatan(targetAngkatan);
+      setTahunAjaranList(targetYears);
+      if (targetYears[0]) {
+        setForm((f) => ({ ...f, tahun_ajaran_id: targetYears[0].id, kategori: "MURID BARU", jenis_pendaftaran: "baru" }));
+      }
     }).catch(() => toast.error("Gagal memuat pilihan SPMB"));
   }, []);
+
+  useEffect(() => {
+    if (!form.departemen_id) return;
+    const angkatan2027 = allAngkatan.find((a) => a.departemen_id === form.departemen_id);
+    if (angkatan2027 && form.angkatan_id !== angkatan2027.id) {
+      setForm((f) => ({ ...f, angkatan_id: angkatan2027.id }));
+    }
+  }, [allAngkatan, form.departemen_id, form.angkatan_id]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -208,10 +217,7 @@ export default function SPMBDaftarOnline() {
 
   const selectedDept = useMemo(() => departemenList.find((d) => d.id === form.departemen_id), [departemenList, form.departemen_id]);
   const wajibAsrama = useMemo(() => perluPilihanAsrama(selectedDept), [selectedDept]);
-  const angkatanList = useMemo(
-    () => allAngkatan.filter((a) => !form.departemen_id || a.departemen_id === form.departemen_id),
-    [allAngkatan, form.departemen_id],
-  );
+  const angkatanList = useMemo(() => allAngkatan.filter((a) => !form.departemen_id || a.departemen_id === form.departemen_id), [allAngkatan, form.departemen_id]);
   const set = (key: keyof typeof initialForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -235,9 +241,8 @@ export default function SPMBDaftarOnline() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const requiredValues = [
-      form.departemen_id, form.tahun_ajaran_id, form.nik, form.no_kk, form.kategori, form.nama,
+      form.departemen_id, form.tahun_ajaran_id, form.angkatan_id, form.nik, form.no_kk, form.kategori, form.nama,
       form.jenis_kelamin, form.tempat_lahir, form.tanggal_lahir, form.anak_ke, form.jumlah_bersaudara,
-      form.tinggi_badan_cm, form.berat_badan_kg, form.lingkar_kepala_cm,
       form.jarak_rumah_km, form.waktu_perjalanan_menit, form.transportasi,
       form.kemampuan_iqro, form.membaca_latin, form.menulis_latin, form.hafalan_quran,
     ];
@@ -284,6 +289,7 @@ export default function SPMBDaftarOnline() {
   async function mulaiBayar() {
     const token = registration?.payment_token || statusToken;
     if (!token) return;
+    if (Date.now() < PAYMENT_VISIBLE_FROM) return;
     setCheckoutLoading(true);
     try {
       const r = await pmbCreatePayment({ data: { payment_token: token, siswa_id: registration?.siswa_id || registrationStatus?.siswa_id } });
@@ -301,7 +307,8 @@ export default function SPMBDaftarOnline() {
   function clearRegistration() {
     window.localStorage.removeItem(STORAGE_KEY);
     setRegistration(null); setStatusToken(null); setRegistrationStatus(null); setPaymentReturn(null); setPayment(null);
-    setForm({ ...initialForm }); setDocuments(emptyDocuments());
+    setForm({ ...initialForm, tahun_ajaran_id: tahunAjaranList[0]?.id || "" });
+    setDocuments(emptyDocuments());
     window.history.replaceState({}, "", "/spmb");
   }
 
@@ -310,13 +317,16 @@ export default function SPMBDaftarOnline() {
   }
 
   if (registrationStatus || registration) {
+    const now = Date.now();
+    const paymentVisible = now >= PAYMENT_VISIBLE_FROM;
+    const promoActive = now >= PROMO_START_AT && now < PAYMENT_VISIBLE_FROM;
     const status = registrationStatus?.payment_status || "unpaid";
     const isPaid = status === "paid";
     const returnedFinishPending = paymentReturn === "finish" && status === "pending";
     const isProcessing = status === "processing" || returnedFinishPending;
     const isPending = status === "pending" && !returnedFinishPending;
     const isFailed = status === "failed" || status === "expired";
-    const canPay = registrationStatus ? registrationStatus.can_pay : true;
+    const canPay = paymentVisible && (registrationStatus ? registrationStatus.can_pay : true);
     const totalAmount = registrationStatus?.total_amount || payment?.total_amount || null;
     const nama = registrationStatus?.nama || form.nama;
 
@@ -324,32 +334,39 @@ export default function SPMBDaftarOnline() {
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 p-4">
         <Card className="w-full max-w-md border-emerald-200 shadow-lg">
           <CardContent className="space-y-5 pt-8 pb-8 text-center">
-            {isPaid ? <CheckCircle2 className="mx-auto h-16 w-16 text-emerald-600" /> : isFailed ? <AlertCircle className="mx-auto h-16 w-16 text-red-600" /> : <Clock3 className="mx-auto h-16 w-16 text-amber-600" />}
+            {!paymentVisible ? <CheckCircle2 className="mx-auto h-16 w-16 text-emerald-600" /> : isPaid ? <CheckCircle2 className="mx-auto h-16 w-16 text-emerald-600" /> : isFailed ? <AlertCircle className="mx-auto h-16 w-16 text-red-600" /> : <Clock3 className="mx-auto h-16 w-16 text-amber-600" />}
             <div>
-              <h2 className="text-xl font-bold text-emerald-800">{isPaid ? "Pembayaran Berhasil" : isProcessing ? "Pembayaran Sedang Dikonfirmasi" : isPending ? "Menunggu Pembayaran" : isFailed ? "Pembayaran Belum Berhasil" : "Pendaftaran SPMB Berhasil"}</h2>
+              <h2 className="text-xl font-bold text-emerald-800">{!paymentVisible ? "Pendaftaran Penerimaan Murid Baru Berhasil" : isPaid ? "Pembayaran Berhasil" : isProcessing ? "Pembayaran Sedang Dikonfirmasi" : isPending ? "Menunggu Pembayaran" : isFailed ? "Pembayaran Belum Berhasil" : "Pendaftaran Penerimaan Murid Baru Berhasil"}</h2>
               <p className="mt-2 text-sm text-muted-foreground">Data calon murid <strong>{nama}</strong> sudah tersimpan.</p>
             </div>
+
+            {!paymentVisible && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-left text-sm text-emerald-900">
+                {promoActive
+                  ? "Selamat! Anda mendapatkan gratis biaya pendaftaran sebagai apresiasi bagi pendaftar Gelombang Pertama (21 September–23 Oktober 2026). Tim kami akan menghubungi Anda untuk menginformasikan jadwal seleksi selanjutnya."
+                  : "Pendaftaran berhasil. Program gratis biaya pendaftaran Gelombang Pertama berlangsung pada 21 September–23 Oktober 2026. Tim kami akan menghubungi Anda untuk menginformasikan jadwal seleksi selanjutnya."}
+              </div>
+            )}
+
             {registrationStatus && (
               <div className="space-y-2 rounded-lg border bg-white/70 p-4 text-left text-sm">
                 <div className="flex justify-between gap-4"><span className="text-muted-foreground">Calon murid</span><strong>{registrationStatus.nama}</strong></div>
                 <div className="flex justify-between gap-4"><span className="text-muted-foreground">Lembaga</span><strong>{registrationStatus.departemen_nama || "-"}</strong></div>
-                {totalAmount !== null && <div className="flex justify-between gap-4"><span className="text-muted-foreground">Nominal</span><strong>Rp {Number(totalAmount).toLocaleString("id-ID")}</strong></div>}
+                {paymentVisible && totalAmount !== null && <div className="flex justify-between gap-4"><span className="text-muted-foreground">Biaya pendaftaran</span><strong>Rp {Number(totalAmount).toLocaleString("id-ID")}</strong></div>}
                 <div className="flex justify-between gap-4"><span className="text-muted-foreground">Status pendaftaran</span><strong>{labelStatusPendaftaran(registrationStatus.status_pendaftaran)}</strong></div>
-                <div className="flex justify-between gap-4"><span className="text-muted-foreground">Status pembayaran</span><strong>{isPaid ? "Lunas" : isProcessing ? "Sedang dikonfirmasi" : isPending ? "Pending" : isFailed ? "Gagal / kedaluwarsa" : "Belum dibayar"}</strong></div>
+                {paymentVisible && <div className="flex justify-between gap-4"><span className="text-muted-foreground">Status pembayaran</span><strong>{isPaid ? "Lunas" : isProcessing ? "Sedang dikonfirmasi" : isPending ? "Pending" : isFailed ? "Gagal / kedaluwarsa" : "Belum dibayar"}</strong></div>}
               </div>
             )}
             {canPay && !isPaid && !isProcessing && (
-              <Button onClick={mulaiBayar} disabled={checkoutLoading} className="w-full bg-emerald-600 hover:bg-emerald-700"><CreditCard className="mr-2 h-4 w-4" />{checkoutLoading ? "Menyiapkan pembayaran..." : isPending ? "Lanjutkan Pembayaran" : isFailed ? "Coba Bayar Lagi" : "Bayar Uang Pendaftaran"}</Button>
+              <Button onClick={mulaiBayar} disabled={checkoutLoading} className="w-full bg-emerald-600 hover:bg-emerald-700"><CreditCard className="mr-2 h-4 w-4" />{checkoutLoading ? "Menyiapkan pembayaran..." : isPending ? "Lanjutkan Pembayaran" : isFailed ? "Coba Bayar Lagi" : "Bayar Biaya Pendaftaran"}</Button>
             )}
-            {(registrationStatus || statusToken) && <Button variant="outline" className="w-full" onClick={() => refreshStatus()} disabled={statusLoading}><RefreshCw className={`mr-2 h-4 w-4 ${statusLoading ? "animate-spin" : ""}`} />Perbarui Status</Button>}
-            {isPaid && <Button variant="outline" className="w-full" onClick={clearRegistration}>Daftarkan Murid Lain</Button>}
+            {paymentVisible && (registrationStatus || statusToken) && <Button variant="outline" className="w-full" onClick={() => refreshStatus()} disabled={statusLoading}><RefreshCw className={`mr-2 h-4 w-4 ${statusLoading ? "animate-spin" : ""}`} />Perbarui Status</Button>}
+            {(!paymentVisible || isPaid) && <Button variant="outline" className="w-full" onClick={clearRegistration}>Daftarkan Murid Lain</Button>}
           </CardContent>
         </Card>
       </div>
     );
   }
-
-  const showPindahan = form.jenis_pendaftaran === "pindahan";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 p-4 py-8">
@@ -367,12 +384,12 @@ export default function SPMBDaftarOnline() {
               <FormSection title="Data Diri Murid" description="Informasi pendaftaran dan identitas calon murid">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div><Label>Lembaga/Sekolah *</Label><Select value={form.departemen_id} onValueChange={(v) => setForm((f) => ({ ...f, departemen_id: v, angkatan_id: "", status_asrama: "" }))}><SelectTrigger><SelectValue placeholder="Pilih lembaga" /></SelectTrigger><SelectContent>{departemenList.map((d) => <SelectItem key={d.id} value={d.id}>{d.nama}</SelectItem>)}</SelectContent></Select></div>
-                  <div><Label>Periode Tahun Ajaran *</Label><Select value={form.tahun_ajaran_id} onValueChange={(v) => setForm((f) => ({ ...f, tahun_ajaran_id: v }))}><SelectTrigger><SelectValue placeholder="Pilih tahun ajaran" /></SelectTrigger><SelectContent>{tahunAjaranList.map((t) => <SelectItem key={t.id} value={t.id}>{t.nama}{t.aktif ? " (Aktif)" : ""}</SelectItem>)}</SelectContent></Select></div>
-                  <div><Label>Angkatan</Label><Select disabled={!form.departemen_id} value={form.angkatan_id} onValueChange={(v) => setForm((f) => ({ ...f, angkatan_id: v }))}><SelectTrigger><SelectValue placeholder="Pilih angkatan" /></SelectTrigger><SelectContent>{angkatanList.map((a) => <SelectItem key={a.id} value={a.id}>{a.nama}</SelectItem>)}</SelectContent></Select></div>
-                  <div><Label>Kategori *</Label><OptionSelect value={form.kategori} placeholder="Pilih kategori" options={KATEGORI_OPTIONS} onValueChange={(v) => setForm((f) => ({ ...f, kategori: v, jenis_pendaftaran: v === "MURID PINDAHAN" ? "pindahan" : "baru" }))} /></div>
+                  <div><Label>Periode Tahun Ajaran *</Label><Select disabled value={form.tahun_ajaran_id}><SelectTrigger><SelectValue placeholder="2027-2028" /></SelectTrigger><SelectContent>{tahunAjaranList.map((t) => <SelectItem key={t.id} value={t.id}>{t.nama.replace(/^Tahun Ajaran\s+/i, "")}</SelectItem>)}</SelectContent></Select></div>
+                  <div><Label>Angkatan *</Label><Select disabled={!form.departemen_id} value={form.angkatan_id}><SelectTrigger><SelectValue placeholder={form.departemen_id ? "2027" : "Pilih lembaga terlebih dahulu"} /></SelectTrigger><SelectContent>{angkatanList.map((a) => <SelectItem key={a.id} value={a.id}>{a.nama.replace(/^Angkatan\s+/i, "")}</SelectItem>)}</SelectContent></Select></div>
+                  <div><Label>Kategori *</Label><Input value="MURID" disabled /></div>
                   {wajibAsrama && <div><Label>Asrama / Non Asrama *</Label><OptionSelect value={form.status_asrama} placeholder="Pilih status" options={[["asrama", "ASRAMA"], ["non_asrama", "NON ASRAMA"]]} onValueChange={(v) => setForm((f) => ({ ...f, status_asrama: v }))} /></div>}
                   <div><Label>No. HP Pendaftar</Label><Input value={form.telepon} onChange={set("telepon")} inputMode="tel" placeholder="08xxxxxxxxxx" /></div>
-                  <div><Label>NIK *</Label><Input value={form.nik} onChange={set("nik")} inputMode="numeric" minLength={10} maxLength={18} /></div>
+                  <div><Label>NIK Calon Siswa *</Label><Input value={form.nik} onChange={set("nik")} inputMode="numeric" minLength={10} maxLength={18} /></div>
                   <div><Label>No. KK *</Label><Input value={form.no_kk} onChange={set("no_kk")} inputMode="numeric" minLength={10} maxLength={20} /></div>
                   <div className="md:col-span-2"><Label>Nama Lengkap *</Label><Input value={form.nama} onChange={set("nama")} /></div>
                   <div><Label>Jenis Kelamin *</Label><OptionSelect value={form.jenis_kelamin} placeholder="Pilih jenis kelamin" options={[["L", "LAKI-LAKI"], ["P", "PEREMPUAN"]]} onValueChange={(v) => setForm((f) => ({ ...f, jenis_kelamin: v }))} /></div>
@@ -380,11 +397,6 @@ export default function SPMBDaftarOnline() {
                   <div><Label>Tanggal Lahir *</Label><Input type="date" value={form.tanggal_lahir} onChange={set("tanggal_lahir")} /></div>
                   <div><Label>Anak ke *</Label><Input type="number" min="1" max="99" value={form.anak_ke} onChange={set("anak_ke")} /></div>
                   <div><Label>Dari Bersaudara *</Label><Input type="number" min="1" max="99" value={form.jumlah_bersaudara} onChange={set("jumlah_bersaudara")} /></div>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div><Label>Tinggi Badan (cm) *</Label><Input type="number" min="0" value={form.tinggi_badan_cm} onChange={set("tinggi_badan_cm")} /></div>
-                  <div><Label>Berat Badan (kg) *</Label><Input type="number" min="0" value={form.berat_badan_kg} onChange={set("berat_badan_kg")} /></div>
-                  <div><Label>Lingkar Kepala (cm) *</Label><Input type="number" min="0" value={form.lingkar_kepala_cm} onChange={set("lingkar_kepala_cm")} /></div>
                 </div>
                 <div><Label>Penyakit yang Pernah Diderita</Label><Input value={form.penyakit_pernah_diderita} onChange={set("penyakit_pernah_diderita")} placeholder="Kosongkan jika tidak ada" /></div>
                 <div className="grid gap-4 md:grid-cols-3">
@@ -431,7 +443,6 @@ export default function SPMBDaftarOnline() {
                   <div><Label>Kecamatan</Label><Input value={form.kecamatan_sekolah_asal} onChange={set("kecamatan_sekolah_asal")} /></div>
                   <div><Label>Desa/Kelurahan</Label><Input value={form.kelurahan_sekolah_asal} onChange={set("kelurahan_sekolah_asal")} /></div>
                 </div>
-                {showPindahan && <div className="grid gap-4 md:grid-cols-2"><div><Label>Kelas Terakhir</Label><Input value={form.kelas_terakhir} onChange={set("kelas_terakhir")} /></div><div><Label>Alasan Pindah</Label><Textarea value={form.alasan_pindah} onChange={set("alasan_pindah")} /></div></div>}
               </FormSection>
 
               <FormSection title="Data Kemampuan Dasar Murid" description="Pilih sesuai kemampuan calon murid saat ini">
