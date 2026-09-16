@@ -30,7 +30,6 @@ const PMB_DOCUMENT_BUCKET = "pmb-dokumen";
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024;
 
 const KATEGORI_OPTIONS = ["MURID BARU", "MURID PINDAHAN"];
-const UKURAN_BAJU_OPTIONS = ["S", "M", "L", "XL", "XXL", "X3L", "X4L", "X5L"];
 const TRANSPORTASI_OPTIONS = ["Mobil Pribadi", "Sepeda Motor", "Mobil/Bus Antar Jemput", "Sepeda", "Jalan Kaki", "Lainnya"];
 const PENDIDIKAN_OPTIONS = [
   ["SD", "SD / Sederajat"], ["SMP", "SMP / Sederajat"], ["SMA", "SMA / Sederajat"],
@@ -51,7 +50,7 @@ const initialForm = {
   nama: "", jenis_kelamin: "", tempat_lahir: "", tanggal_lahir: "", alamat: "", telepon: "",
   departemen_id: "", angkatan_id: "", tahun_ajaran_id: "", jenis_pendaftaran: "baru", kelas_terakhir: "", alasan_pindah: "",
   nik: "", no_kk: "", kategori: "", status_asrama: "", anak_ke: "", jumlah_bersaudara: "", tinggi_badan_cm: "", berat_badan_kg: "",
-  lingkar_kepala_cm: "", ukuran_baju: "", penyakit_pernah_diderita: "", jarak_rumah_km: "", waktu_perjalanan_menit: "", transportasi: "",
+  lingkar_kepala_cm: "", penyakit_pernah_diderita: "", jarak_rumah_km: "", waktu_perjalanan_menit: "", transportasi: "",
   nama_ayah: "", nik_ayah: "", tempat_lahir_ayah: "", tanggal_lahir_ayah: "", pendidikan_ayah: "", pekerjaan_ayah: "", penghasilan_ayah: "", telepon_ayah: "", alamat_ayah: "",
   nama_ibu: "", nik_ibu: "", tempat_lahir_ibu: "", tanggal_lahir_ibu: "", pendidikan_ibu: "", pekerjaan_ibu: "", penghasilan_ibu: "", telepon_ibu: "", alamat_ibu: "",
   asal_sekolah: "", alamat_sekolah_asal: "", kabupaten_sekolah_asal: "", kecamatan_sekolah_asal: "", kelurahan_sekolah_asal: "",
@@ -238,7 +237,7 @@ export default function SPMBDaftarOnline() {
     const requiredValues = [
       form.departemen_id, form.tahun_ajaran_id, form.nik, form.no_kk, form.kategori, form.nama,
       form.jenis_kelamin, form.tempat_lahir, form.tanggal_lahir, form.anak_ke, form.jumlah_bersaudara,
-      form.tinggi_badan_cm, form.berat_badan_kg, form.lingkar_kepala_cm, form.ukuran_baju,
+      form.tinggi_badan_cm, form.berat_badan_kg, form.lingkar_kepala_cm,
       form.jarak_rumah_km, form.waktu_perjalanan_menit, form.transportasi,
       form.kemampuan_iqro, form.membaca_latin, form.menulis_latin, form.hafalan_quran,
     ];
@@ -382,11 +381,10 @@ export default function SPMBDaftarOnline() {
                   <div><Label>Anak ke *</Label><Input type="number" min="1" max="99" value={form.anak_ke} onChange={set("anak_ke")} /></div>
                   <div><Label>Dari Bersaudara *</Label><Input type="number" min="1" max="99" value={form.jumlah_bersaudara} onChange={set("jumlah_bersaudara")} /></div>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-4 sm:grid-cols-3">
                   <div><Label>Tinggi Badan (cm) *</Label><Input type="number" min="0" value={form.tinggi_badan_cm} onChange={set("tinggi_badan_cm")} /></div>
                   <div><Label>Berat Badan (kg) *</Label><Input type="number" min="0" value={form.berat_badan_kg} onChange={set("berat_badan_kg")} /></div>
                   <div><Label>Lingkar Kepala (cm) *</Label><Input type="number" min="0" value={form.lingkar_kepala_cm} onChange={set("lingkar_kepala_cm")} /></div>
-                  <div><Label>Ukuran Baju *</Label><OptionSelect value={form.ukuran_baju} placeholder="Pilih ukuran" options={UKURAN_BAJU_OPTIONS} onValueChange={(v) => setForm((f) => ({ ...f, ukuran_baju: v }))} /></div>
                 </div>
                 <div><Label>Penyakit yang Pernah Diderita</Label><Input value={form.penyakit_pernah_diderita} onChange={set("penyakit_pernah_diderita")} placeholder="Kosongkan jika tidak ada" /></div>
                 <div className="grid gap-4 md:grid-cols-3">
