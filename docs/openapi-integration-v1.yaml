@@ -1,0 +1,130 @@
+openapi: 3.1.0
+info:
+  title: Hijrah At-Tauhid Integration API
+  version: 1.0.0
+  description: Read-only backend API for SPMB, students, classes and incremental synchronization.
+servers:
+  - url: https://YOUR_VERIFIED_HIJRAH_ORIGIN
+    description: Replace with the verified Cloudflare production origin.
+security: [{ bearerAuth: [] }]
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: opaque }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code,message,request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string, format: uuid}
+    Pagination:
+      type: object
+      properties:
+        limit: {type: integer, maximum: 200}
+        has_more: {type: boolean}
+        next_cursor: {type: [string,'null']}
+    Registration:
+      type: object
+      required: [id,status,identitas]
+      properties:
+        id: {type: string, format: uuid, description: Stable registration ID; not the student ID.}
+        siswa_id: {type: [string,'null'], format: uuid}
+        status: {type: string}
+        tanggal_pendaftaran: {type: [string,'null'], format: date-time}
+        unit: {type: object, properties: {id: {type: [string,'null'], format: uuid}}}
+        tahun_ajaran: {type: object, properties: {id: {type: [string,'null'], format: uuid}}}
+        angkatan: {type: object, properties: {id: {type: [string,'null'], format: uuid}}}
+        identitas: {type: object, properties: {nama: {type: string}, jenis_kelamin: {type: [string,'null']}}}
+        jenis_pendaftaran: {type: [string,'null']}
+        kategori: {type: [string,'null']}
+        status_asrama: {type: [string,'null']}
+        tanggal_tes: {type: [string,'null'], format: date-time}
+        tanggal_kelulusan: {type: [string,'null'], format: date-time}
+        tanggal_daftar_ulang: {type: [string,'null'], format: date-time}
+        verifikasi: {type: object}
+        data_sensitif: {type: object, description: Omitted without pendaftaran:sensitive:read}
+        dokumen: {type: array, description: Omitted without pendaftaran:documents:read, items: {type: object}}
+    SyncPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string, format: uuid}
+              change: {type: string, enum: [upsert,delete,scope_exit]}
+              version: {type: integer}
+              changed_at: {type: string, format: date-time}
+              data: {}
+        sync:
+          type: object
+          properties:
+            checkpoint: {type: integer}
+            checkpoint_safe: {type: boolean}
+            next_cursor: {type: [string,'null']}
+            has_more: {type: boolean}
+            retention_days: {type: integer, const: 90}
+  parameters:
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 100}}
+    Cursor: {name: cursor, in: query, schema: {type: string}, description: Opaque cursor bound to integration and endpoint.}
+  responses:
+    Unauthorized: {description: Missing/invalid/expired/revoked token or inactive integration, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Forbidden: {description: Missing scope, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    RateLimited: {description: Rate limit exceeded, headers: {Retry-After: {schema: {type: integer}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+paths:
+  /api/v1/pendaftaran:
+    get:
+      summary: List registrations
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}, {name: tahun_ajaran_id, in: query, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: OK}, '401': {$ref: '#/components/responses/Unauthorized'}, '403': {$ref: '#/components/responses/Forbidden'}, '429': {$ref: '#/components/responses/RateLimited'}}
+  /api/v1/pendaftaran/{id}:
+    get:
+      summary: Registration detail
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: OK, content: {application/json: {schema: {type: object, properties: {data: {$ref: '#/components/schemas/Registration'}}}}}}, '404': {description: Not found or outside scope}}
+  /api/v1/siswa:
+    get:
+      summary: List accepted/active/non-candidate students
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}, {name: departemen_id, in: query, schema: {type: string, format: uuid}}, {name: status, in: query, schema: {type: string}}]
+      responses: {'200': {description: OK}, '401': {$ref: '#/components/responses/Unauthorized'}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /api/v1/siswa/{id}:
+    get:
+      summary: Student detail and active class relations
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: OK}, '404': {description: Not found or outside scope}}
+  /api/v1/kelas:
+    get:
+      summary: List classes
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}, {name: departemen_id, in: query, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: OK}}
+  /api/v1/kelas/{id}/siswa:
+    get:
+      summary: Active students in a class
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: OK}}
+  /api/v1/sync/pendaftaran:
+    get:
+      summary: Incremental registration/document changes
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}, {name: checkpoint, in: query, schema: {type: integer}}]
+      responses: {'200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/SyncPage'}}}}, '410': {description: Checkpoint expired}}
+  /api/v1/sync/siswa:
+    get:
+      summary: Incremental student changes
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}, {name: checkpoint, in: query, schema: {type: integer}}]
+      responses: {'200': {description: OK}, '410': {description: Checkpoint expired}}
+  /api/v1/sync/kelas:
+    get:
+      summary: Incremental class/membership changes
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}, {name: checkpoint, in: query, schema: {type: integer}}]
+      responses: {'200': {description: OK}, '410': {description: Checkpoint expired}}
+  /api/v1/documents/{id}:
+    get:
+      summary: Issue a short-lived signed document URL
+      parameters: [{name: id, in: path, required: true, schema: {type: string}, example: 00000000-0000-4000-8000-000000000001.kk}]
+      responses: {'200': {description: Signed URL valid for 60 seconds}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {description: Not found or outside scope}}
