@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: Read-only API for SPMB registrations, students, classes, documents, and incremental synchronization.
 servers:
-  - url: https://hijrah-attauhid-prod.yayasan-attauhid-1.workers.dev
+  - url: https://app.hijrah-attauhid.or.id
 security: [{ bearerAuth: [] }]
 components:
   securitySchemes:
