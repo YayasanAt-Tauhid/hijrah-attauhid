@@ -48,7 +48,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   deploy:
@@ -57,6 +57,50 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Apply SPMB education unit scope
+        if: github.ref_name == 'main'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/pages/akademik/PMB.tsx')
+          source = path.read_text()
+
+          anchor = '  const resetFilters = () => setFilters({ ...DEFAULT_FILTERS });\n\n'
+          insert = '''  const spmbDepartemenOrder = ["TK", "SD", "SMP", "SMA", "MTA"];
+          const spmbDepartemenList = spmbDepartemenOrder
+            .map((kode) => departemenList.find((d: any) => String(d.kode || "").trim().toUpperCase() === kode))
+            .filter(Boolean) as any[];
+          const labelDepartemenSpmb = (d: any) => {
+            const kode = String(d?.kode || "").trim().toUpperCase();
+            return kode === "MTA" ? "MT" : kode;
+          };
+
+          '''
+          if 'const spmbDepartemenOrder = ["TK", "SD", "SMP", "SMA", "MTA"]' not in source:
+              source = source.replace(anchor, anchor + insert, 1)
+
+          source = source.replace(
+              '<SelectContent>{departemenList.map((d) => <SelectItem key={d.id} value={d.id}>{d.nama}</SelectItem>)}</SelectContent>',
+              '<SelectContent>{spmbDepartemenList.map((d: any) => <SelectItem key={d.id} value={d.id}>{labelDepartemenSpmb(d)}</SelectItem>)}</SelectContent>',
+              1,
+          )
+          source = source.replace(
+              '{departemenList.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.nama}</SelectItem>)}',
+              '{spmbDepartemenList.map((d: any) => <SelectItem key={d.id} value={d.id}>{labelDepartemenSpmb(d)}</SelectItem>)}',
+              1,
+          )
+
+          path.write_text(source)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/akademik/PMB.tsx
+          if ! git diff --cached --quiet; then
+            git commit -m "fix(spmb): limit education unit choices"
+            git push
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@v4
