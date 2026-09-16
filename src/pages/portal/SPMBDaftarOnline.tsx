@@ -82,6 +82,18 @@ function perluPilihanAsrama(dept?: Departemen): boolean {
   return ["SMP", "SMA", "MTA"].includes(kode) || /(^|\s)(SMP|SMA|MTA)(\s|$)/.test(nama);
 }
 
+function namaLembagaPromo(dept?: Departemen, fallback?: string | null): string {
+  const kode = (dept?.kode || dept?.nama || fallback || "").trim().toUpperCase();
+  const namaPerJenjang: Record<string, string> = {
+    TK: "TKITA At-Tauhid",
+    SD: "SDITA At-Tauhid",
+    SMP: "SMPITA At-Tauhid",
+    SMA: "SMAITA At-Tauhid",
+    MTA: "MTA At-Tauhid",
+  };
+  return namaPerJenjang[kode] || fallback || dept?.nama || "At-Tauhid";
+}
+
 function OptionSelect({ value, placeholder, options, onValueChange }: {
   value: string;
   placeholder: string;
@@ -329,6 +341,7 @@ export default function SPMBDaftarOnline() {
     const canPay = paymentVisible && (registrationStatus ? registrationStatus.can_pay : true);
     const totalAmount = registrationStatus?.total_amount || payment?.total_amount || null;
     const nama = registrationStatus?.nama || form.nama;
+    const lembagaPromo = namaLembagaPromo(selectedDept, registrationStatus?.departemen_nama);
 
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 p-4">
@@ -342,9 +355,23 @@ export default function SPMBDaftarOnline() {
 
             {!paymentVisible && (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-left text-sm text-emerald-900">
-                {promoActive
-                  ? "Selamat! Anda mendapatkan gratis biaya pendaftaran sebagai apresiasi bagi pendaftar Gelombang Pertama (21 September–23 Oktober 2026). Tim kami akan menghubungi Anda untuk menginformasikan jadwal seleksi selanjutnya."
-                  : "Pendaftaran berhasil. Program gratis biaya pendaftaran Gelombang Pertama berlangsung pada 21 September–23 Oktober 2026. Tim kami akan menghubungi Anda untuk menginformasikan jadwal seleksi selanjutnya."}
+                {promoActive ? (
+                  <div className="space-y-3">
+                    <p className="text-base font-bold">🎉 Selamat!</p>
+                    <p>Anda mendapatkan <strong>gratis biaya pendaftaran</strong> sebagai apresiasi bagi pendaftar <strong>Gelombang Pertama</strong>.</p>
+                    <p className="font-medium">📅 21 September–23 Oktober 2026.</p>
+                    <p>Tim kami akan menghubungi Anda untuk menginformasikan jadwal seleksi selanjutnya.</p>
+                    <p>Terima kasih telah memilih <strong>{lembagaPromo}</strong>.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="font-medium">Pendaftaran berhasil.</p>
+                    <p>Program <strong>gratis biaya pendaftaran Gelombang Pertama</strong> berlangsung pada:</p>
+                    <p className="font-medium">📅 21 September–23 Oktober 2026.</p>
+                    <p>Tim kami akan menghubungi Anda untuk menginformasikan jadwal seleksi selanjutnya.</p>
+                    <p>Terima kasih telah memilih <strong>{lembagaPromo}</strong>.</p>
+                  </div>
+                )}
               </div>
             )}
 
