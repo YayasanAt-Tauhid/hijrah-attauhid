@@ -117,6 +117,15 @@ export default function PMB() {
   const setFilter = (key: keyof SpmbFilterState, value: string) => setFilters((current) => ({ ...current, [key]: value }));
   const resetFilters = () => setFilters({ ...DEFAULT_FILTERS });
 
+  const spmbDepartemenOrder = ["TK", "SD", "SMP", "SMA", "MTA"];
+const spmbDepartemenList = spmbDepartemenOrder
+  .map((kode) => departemenList.find((d: any) => String(d.kode || "").trim().toUpperCase() === kode))
+  .filter(Boolean) as any[];
+const labelDepartemenSpmb = (d: any) => {
+  const kode = String(d?.kode || "").trim().toUpperCase();
+  return kode === "MTA" ? "MT" : kode;
+};
+
   const filteredKelas = kelasList.filter((k: any) => !formData.departemen_id || k.departemen_id === formData.departemen_id);
   const filteredAngkatan = angkatanList.filter((a: any) => !formData.departemen_id || a.departemen_id === formData.departemen_id);
   const selectedDept = departemenList.find((d: any) => d.id === formData.departemen_id);
@@ -404,7 +413,7 @@ export default function PMB() {
                 <Label>Lembaga/Sekolah *</Label>
                 <Select value={formData.departemen_id} onValueChange={(v) => setFormData({ ...formData, departemen_id: v, kelas_id: "", angkatan_id: "" })}>
                   <SelectTrigger><SelectValue placeholder="Pilih lembaga" /></SelectTrigger>
-                  <SelectContent>{departemenList.map((d) => <SelectItem key={d.id} value={d.id}>{d.nama}</SelectItem>)}</SelectContent>
+                  <SelectContent>{spmbDepartemenList.map((d: any) => <SelectItem key={d.id} value={d.id}>{labelDepartemenSpmb(d)}</SelectItem>)}</SelectContent>
                 </Select>
                 {selectedDept && !selectedDept.npsn && <p className="text-xs text-warning flex items-center gap-1.5 mt-1"><AlertTriangle className="h-3.5 w-3.5 shrink-0" />Lembaga ini belum memiliki NPSN — NIS tidak bisa dibuat otomatis.</p>}
               </div>
@@ -453,7 +462,7 @@ export default function PMB() {
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Semua lembaga</SelectItem>
-                {departemenList.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.nama}</SelectItem>)}
+                {spmbDepartemenList.map((d: any) => <SelectItem key={d.id} value={d.id}>{labelDepartemenSpmb(d)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
