@@ -5,7 +5,7 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    {"key":"baseUrl","value":"https://hijrah-attauhid-prod.yayasan-attauhid-1.workers.dev"},
+    {"key":"baseUrl","value":"https://app.hijrah-attauhid.or.id"},
     {"key":"token","value":"REPLACE_WITH_BACKEND_TOKEN","type":"secret"},
     {"key":"pendaftaranId","value":"00000000-0000-4000-8000-000000000001"},
     {"key":"siswaId","value":"00000000-0000-4000-8000-000000000001"},
