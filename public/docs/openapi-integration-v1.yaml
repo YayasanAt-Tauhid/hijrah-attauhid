@@ -1,0 +1,82 @@
+openapi: 3.1.0
+info:
+  title: Hijrah At-Tauhid Integration API
+  version: 1.0.0
+  description: Read-only API for SPMB registrations, students, classes, documents, and incremental synchronization.
+servers:
+  - url: https://hijrah-attauhid-prod.yayasan-attauhid-1.workers.dev
+security: [{ bearerAuth: [] }]
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: opaque }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: object, properties: { code: {type: string}, message: {type: string}, request_id: {type: string, format: uuid}, retry_after: {type: integer} } }
+    Payment:
+      type: object
+      properties:
+        status: {type: string}
+        tanggal_bayar: {type: [string, 'null'], format: date-time}
+        jumlah: {type: [number, 'null']}
+        gratis_gelombang_pertama: {type: boolean}
+    Registration:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        siswa_id: {type: [string, 'null'], format: uuid}
+        status: {type: string}
+        tanggal_pendaftaran: {type: [string, 'null'], format: date-time}
+        pembayaran_pendaftaran: {$ref: '#/components/schemas/Payment'}
+        data_sensitif: {type: object}
+        dokumen: {type: array, items: {type: object}}
+    SyncPage:
+      type: object
+      properties:
+        data: {type: array, items: {type: object}}
+        sync: {type: object, properties: {checkpoint: {type: integer}, checkpoint_safe: {type: boolean}, next_cursor: {type: [string, 'null']}, has_more: {type: boolean}, retention_days: {type: integer}}}
+  parameters:
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 100}}
+    Cursor: {name: cursor, in: query, schema: {type: string}, description: Opaque signed cursor bound to integration permissions and filters.}
+paths:
+  /api/v1/pendaftaran:
+    get:
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}]
+      responses: {'200': {description: OK}}
+  /api/v1/pendaftaran/{id}:
+    get:
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: OK}}
+  /api/v1/siswa:
+    get:
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}]
+      responses: {'200': {description: OK}}
+  /api/v1/siswa/{id}:
+    get:
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: OK}}
+  /api/v1/kelas:
+    get:
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}]
+      responses: {'200': {description: OK}}
+  /api/v1/kelas/{id}/siswa:
+    get:
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: OK}}
+  /api/v1/sync/pendaftaran:
+    get:
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}, {name: checkpoint, in: query, schema: {type: integer}}]
+      responses: {'200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/SyncPage'}}}}, '410': {description: Checkpoint expired}}
+  /api/v1/sync/siswa:
+    get:
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}, {name: checkpoint, in: query, schema: {type: integer}}]
+      responses: {'200': {description: OK}, '410': {description: Checkpoint expired}}
+  /api/v1/sync/kelas:
+    get:
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}, {name: checkpoint, in: query, schema: {type: integer}}]
+      responses: {'200': {description: OK}, '410': {description: Checkpoint expired}}
+  /api/v1/documents/{id}:
+    get:
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: Signed URL valid for 60 seconds}}
