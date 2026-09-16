@@ -1,0 +1,1 @@
+import {createFileRoute} from '@tanstack/react-router'; import IntegrasiApi from '@/pages/IntegrasiApi'; export const Route=createFileRoute('/_protected/_app/pengaturan/integrasi-api')({component:IntegrasiApi});
