@@ -7,11 +7,13 @@ function EditSiswaPage() {
   const { id } = Route.useParams();
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // Native inputs bubble through the wrapper. Radix Select options are rendered in
-  // a portal, so listen for option clicks as well. This intentionally stays dirty
-  // after a failed save; a successful edit currently navigates back to detail.
+  // Track only genuine user interaction. Radix Select uses a hidden native select
+  // and dispatches programmatic change events while the edit form is hydrated;
+  // those events have isTrusted=false and must not disable the verification panel.
+  // Actual option clicks are rendered in a portal, so they are tracked separately.
   useEffect(() => {
     const markPortalSelectDirty = (event: MouseEvent) => {
+      if (!event.isTrusted) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest?.('[role="option"]')) setHasUnsavedChanges(true);
     };
@@ -19,11 +21,15 @@ function EditSiswaPage() {
     return () => document.removeEventListener("click", markPortalSelectDirty, true);
   }, []);
 
+  const markNativeFieldDirty = (event: React.SyntheticEvent) => {
+    if (event.nativeEvent.isTrusted) setHasUnsavedChanges(true);
+  };
+
   return (
     <div className="space-y-6">
       <div
-        onInputCapture={() => setHasUnsavedChanges(true)}
-        onChangeCapture={() => setHasUnsavedChanges(true)}
+        onInputCapture={markNativeFieldDirty}
+        onChangeCapture={markNativeFieldDirty}
       >
         <FormSiswa />
       </div>
