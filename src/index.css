@@ -115,6 +115,78 @@
   }
 }
 
+/*
+ * Modal pendaftaran admin SPMB memiliki header dan footer tetap, sedangkan
+ * fieldset di tengah menjadi satu-satunya area scroll. Fieldset punya perilaku
+ * sizing khusus di beberapa browser sehingga max-height pada form saja tidak
+ * selalu menghasilkan scroll. Selector dibatasi ke #spmb-nik agar dialog lain
+ * tidak ikut berubah.
+ */
+@layer components {
+  [role="dialog"]:has(> form #spmb-nik) {
+    display: flex;
+    height: min(92dvh, 56rem);
+    max-height: 92dvh;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  [role="dialog"] > form:has(#spmb-nik) {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  [role="dialog"] > form:has(#spmb-nik) > fieldset {
+    min-height: 0;
+    flex: 1 1 0%;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+    padding-bottom: 5rem;
+  }
+
+  [role="dialog"] > form:has(#spmb-nik) > div:first-child,
+  [role="dialog"] > form:has(#spmb-nik) > div:last-child {
+    flex: 0 0 auto;
+  }
+
+  [role="dialog"] > form:has(#spmb-nik) > div:last-child {
+    position: relative;
+    z-index: 10;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  @media (max-width: 640px) {
+    [role="dialog"]:has(> form #spmb-nik) {
+      width: calc(100vw - 1rem);
+      max-width: calc(100vw - 1rem);
+      height: calc(100dvh - 1rem);
+      max-height: calc(100dvh - 1rem);
+    }
+
+    [role="dialog"] > form:has(#spmb-nik) > div:first-child {
+      padding: 1rem 2.5rem 0.75rem 1rem;
+    }
+
+    [role="dialog"] > form:has(#spmb-nik) > fieldset {
+      padding-left: 1rem;
+      padding-right: 1rem;
+      padding-bottom: 6rem;
+    }
+
+    [role="dialog"] > form:has(#spmb-nik) > div:last-child {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+  }
+}
+
 @page {
   size: A4 portrait;
   margin: 15mm 18mm;
