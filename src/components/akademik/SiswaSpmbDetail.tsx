@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Check, CheckCircle2, FileText, Loader2, ShieldCheck } from "lucide-react";
@@ -44,12 +44,7 @@ function formatRupiah(value: unknown): string {
   return `Rp ${number.toLocaleString("id-ID")}`;
 }
 
-function ChecklistButton({
-  checked,
-  disabled,
-  busy,
-  onClick,
-}: {
+function ChecklistButton({ checked, disabled, busy, onClick }: {
   checked: boolean;
   disabled?: boolean;
   busy: boolean;
@@ -70,14 +65,7 @@ function ChecklistButton({
   );
 }
 
-function InfoRow({
-  fieldKey,
-  label,
-  value,
-  checked,
-  busy,
-  onToggle,
-}: {
+function InfoRow({ fieldKey, label, value, checked, busy, onToggle }: {
   fieldKey: string;
   label: string;
   value: unknown;
@@ -89,12 +77,7 @@ function InfoRow({
     <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-b py-2 last:border-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] sm:gap-3">
       <span className="text-sm text-muted-foreground">{label}</span>
       <span className="min-w-0 text-sm sm:col-auto">{display(value)}</span>
-      <ChecklistButton
-        checked={checked}
-        disabled={!hasValue(value)}
-        busy={busy}
-        onClick={() => onToggle(fieldKey, !checked)}
-      />
+      <ChecklistButton checked={checked} disabled={!hasValue(value)} busy={busy} onClick={() => onToggle(fieldKey, !checked)} />
     </div>
   );
 }
@@ -108,14 +91,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function DocumentButton({
-  fieldKey,
-  label,
-  path,
-  checked,
-  verifyBusy,
-  onToggle,
-}: {
+function DocumentButton({ fieldKey, label, path, checked, verifyBusy, onToggle }: {
   fieldKey: string;
   label: string;
   path: string | null | undefined;
@@ -132,9 +108,7 @@ function DocumentButton({
       const { url } = await spmbGetDocumentUrl({ data: { path } });
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (error: any) {
-      toast.error("Dokumen tidak dapat dibuka", {
-        description: error?.message || "Terjadi kesalahan saat membuat tautan dokumen.",
-      });
+      toast.error("Dokumen tidak dapat dibuka", { description: error?.message || "Terjadi kesalahan saat membuat tautan dokumen." });
     } finally {
       setLoading(false);
     }
@@ -151,41 +125,37 @@ function DocumentButton({
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
           Buka
         </Button>
-        <ChecklistButton
-          checked={checked}
-          disabled={!path}
-          busy={verifyBusy}
-          onClick={() => onToggle(fieldKey, !checked)}
-        />
+        <ChecklistButton checked={checked} disabled={!path} busy={verifyBusy} onClick={() => onToggle(fieldKey, !checked)} />
       </div>
     </div>
   );
 }
 
-export function SiswaSpmbDetail({
-  detail,
-  siswaId,
-  verified,
-}: {
-  detail: Detail | null | undefined;
-  siswaId: string;
-  verified: boolean;
-}) {
+export function SiswaSpmbDetail({ detail }: { detail: Detail | null | undefined }) {
   const { data: tahunAjaranList = [] } = useTahunAjaran();
   const qc = useQueryClient();
   const [busyField, setBusyField] = useState<string | null>(null);
   const [verifyingAll, setVerifyingAll] = useState(false);
+  const siswaId = detail?.siswa_id as string | undefined;
+  const { data: verificationStatus } = useQuery({
+    queryKey: ["siswa_spmb_verification", siswaId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("siswa").select("terverifikasi").eq("id", siswaId!).single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!siswaId,
+  });
 
-  if (!detail) {
+  if (!detail || !siswaId) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          Belum ada data detail SPMB untuk siswa ini.
-        </CardContent>
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">Belum ada data detail SPMB untuk siswa ini.</CardContent>
       </Card>
     );
   }
 
+  const verified = !!verificationStatus?.terverifikasi;
   const verificationMap = detail.spmb_verifikasi_fields && typeof detail.spmb_verifikasi_fields === "object"
     ? detail.spmb_verifikasi_fields as Record<string, boolean>
     : {};
@@ -194,6 +164,7 @@ export function SiswaSpmbDetail({
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["siswa_detail", siswaId] }),
       qc.invalidateQueries({ queryKey: ["siswa", siswaId] }),
+      qc.invalidateQueries({ queryKey: ["siswa_spmb_verification", siswaId] }),
       qc.invalidateQueries({ queryKey: ["siswa", "calon"] }),
     ]);
   };
@@ -230,22 +201,11 @@ export function SiswaSpmbDetail({
   };
 
   const row = (fieldKey: string, label: string, value: unknown) => (
-    <InfoRow
-      fieldKey={fieldKey}
-      label={label}
-      value={value}
-      checked={verificationMap[fieldKey] === true}
-      busy={busyField === fieldKey}
-      onToggle={toggleVerification}
-    />
+    <InfoRow fieldKey={fieldKey} label={label} value={value} checked={verificationMap[fieldKey] === true} busy={busyField === fieldKey} onToggle={toggleVerification} />
   );
 
   const tahunAjaran = tahunAjaranList.find((item: any) => item.id === detail.tahun_ajaran_id)?.nama;
-  const statusAsrama = detail.status_asrama === "asrama"
-    ? "Asrama"
-    : detail.status_asrama === "non_asrama"
-      ? "Non Asrama"
-      : "-";
+  const statusAsrama = detail.status_asrama === "asrama" ? "Asrama" : detail.status_asrama === "non_asrama" ? "Non Asrama" : "-";
 
   return (
     <div className="space-y-4">
