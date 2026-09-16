@@ -1,0 +1,1 @@
+import {createFileRoute} from '@tanstack/react-router'; import {handleSync} from '@/server/integrationApi'; export const Route=createFileRoute('/api/v1/sync/pendaftaran')({server:{handlers:{GET:({request})=>handleSync(request,'pendaftaran')}}});
