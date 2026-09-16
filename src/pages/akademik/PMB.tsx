@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { NISPreview } from "@/components/shared/NISPreview";
 import { useAngkatan, useDepartemen, useKelas, useTahunAjaran } from "@/hooks/useAkademikData";
 import { generateNISViaEdgeFunction } from "@/utils/nisGenerator";
-import { UserPlus, Users, UserCheck, Clock, AlertTriangle, RefreshCw, Pencil, ShieldCheck, CheckCircle2, Eye } from "lucide-react";
+import { UserPlus, Users, UserCheck, Clock, AlertTriangle, RefreshCw, Pencil, CheckCircle2, Eye } from "lucide-react";
 import { fetchAllPages } from "@/lib/fetchAll";
 import { toast } from "sonner";
 
@@ -31,6 +31,18 @@ function departemenPerluAsrama(dept: any): boolean {
   return ["SMP", "SMA", "MTA"].includes(kode) || /(^|\s)(SMP|SMA|MTA)(\s|$)/.test(nama);
 }
 
+function formatTanggal(value: unknown): string {
+  if (!value) return "-";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Jakarta",
+  }).format(date);
+}
+
 type KesiapanPenerimaan = { siap: boolean; kekurangan: string[] };
 
 function getKesiapanPenerimaan(row: Record<string, unknown>): KesiapanPenerimaan {
@@ -40,8 +52,8 @@ function getKesiapanPenerimaan(row: Record<string, unknown>): KesiapanPenerimaan
   const detail = row._spmbDetail as Record<string, any> | null;
 
   if (!row.terverifikasi) kekurangan.push("verifikasi data");
-  if (!row._pmbConfigured) kekurangan.push("konfigurasi pembayaran SPMB");
-  else if (!row._pmbLunas) kekurangan.push("pembayaran SPMB");
+  if (!row._pmbConfigured && !row._pmbGratis) kekurangan.push("konfigurasi pembayaran SPMB");
+  else if (!row._pmbLunas && !row._pmbGratis) kekurangan.push("pembayaran SPMB");
   if (!row.departemen_id) kekurangan.push("lembaga");
   if (!row.angkatan_id) kekurangan.push("angkatan");
   if (!row._punyaKelas) kekurangan.push("kelas");
@@ -69,6 +81,7 @@ export default function PMB() {
   const [isSaving, setIsSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [nisLoadingId, setNisLoadingId] = useState<string | null>(null);
+  const [milestoneLoadingId, setMilestoneLoadingId] = useState<string | null>(null);
   const [modePendaftaran, setModePendaftaran] = useState<"lengkap" | "cepat">("lengkap");
   const [formData, setFormData] = useState({
     nama: "", jenis_kelamin: "L", telepon: "", alamat: "",
@@ -97,13 +110,22 @@ export default function PMB() {
       if (error) throw error;
       const byId = new Map<string, any>((readinessRows || []).map((r: any) => [r.siswa_id, r.readiness]));
       const { data: details, error: detailError } = await (supabase as any).from("siswa_detail")
-        .select("siswa_id, status_asrama").in("siswa_id", siswaIds);
+        .select("siswa_id, status_asrama, dokumen_kk_path, dokumen_akta_path, spmb_tanggal_tes, spmb_tanggal_lulus, spmb_tanggal_daftar_ulang")
+        .in("siswa_id", siswaIds);
       if (detailError) throw detailError;
       const detailById = new Map<string, any>((details || []).map((d: any) => [d.siswa_id, d]));
       return siswaRows.map((s) => {
         const r = byId.get(s.id);
-        return { ...s, _readiness: r, _pmbConfigured: r?.configured, _pmbLunas: r?.lunas,
-          _punyaKelas: r?.punya_kelas, _spmbDetail: detailById.get(s.id) };
+        return {
+          ...s,
+          _readiness: r,
+          _pmbConfigured: r?.configured,
+          _pmbLunas: r?.lunas,
+          _pmbGratis: r?.gratis_pendaftaran,
+          _pmbTanggalBayar: r?.tanggal_pembayaran,
+          _punyaKelas: r?.punya_kelas,
+          _spmbDetail: detailById.get(s.id),
+        };
       });
     },
   });
@@ -176,7 +198,7 @@ export default function PMB() {
       const { error: updErr } = await supabase.from("siswa").update({ status: "diterima" } as any).eq("id", id);
       if (updErr) throw updErr;
       await qc.invalidateQueries({ queryKey: ["siswa"] });
-      toast.success(`${namaSiswa} berhasil diterima`, { description: "Verifikasi, dokumen, pembayaran SPMB, angkatan, kelas, dan NIS sudah lengkap." });
+      toast.success(`${namaSiswa} berhasil diterima`, { description: "Verifikasi, dokumen, biaya pendaftaran, angkatan, kelas, dan NIS sudah lengkap." });
     } catch (e: any) {
       toast.error("Gagal menerima murid", { description: e?.message || "Terjadi kesalahan teknis" });
     } finally {
@@ -212,16 +234,22 @@ export default function PMB() {
     toast.success("Murid diaktifkan");
   };
 
-  const handleVerifikasi = async (row: Record<string, unknown>) => {
-    const kesiapan = getKesiapanPenerimaan(row);
-    const kekuranganSelainVerifikasi = kesiapan.kekurangan.filter((v) => v !== "verifikasi data");
-    if (kekuranganSelainVerifikasi.length) {
-      toast.warning("Data belum lengkap untuk penerimaan", { description: `Masih perlu: ${kekuranganSelainVerifikasi.join(", ")}. Verifikasi tetap dapat dilakukan setelah pemeriksaan.` });
+  const handleMilestone = async (row: Record<string, unknown>, action: "tes" | "lulus" | "daftar_ulang", label: string) => {
+    const loadingKey = `${row.id}:${action}`;
+    setMilestoneLoadingId(loadingKey);
+    try {
+      const { error } = await (supabase as any).rpc("spmb_mark_milestone", {
+        p_siswa_id: row.id,
+        p_action: action,
+      });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["siswa", "calon"] });
+      toast.success(`${label} berhasil dicatat`, { description: row.nama as string });
+    } catch (error: any) {
+      toast.error(`Gagal mencatat ${label.toLowerCase()}`, { description: error?.message || "Terjadi kesalahan teknis" });
+    } finally {
+      setMilestoneLoadingId(null);
     }
-    const { error } = await supabase.from("siswa").update({ terverifikasi: true } as any).eq("id", row.id as string);
-    if (error) { toast.error("Gagal memverifikasi: " + error.message); return; }
-    qc.invalidateQueries({ queryKey: ["siswa"] });
-    toast.success(`${row.nama} berhasil diverifikasi`);
   };
 
   const columns: DataTableColumn<Record<string, unknown>>[] = [
@@ -241,11 +269,17 @@ export default function PMB() {
     { key: "departemen", label: "Lembaga", render: (v: any) => v?.nama || "-" },
     { key: "_spmbDetail", label: "Asrama", render: (v: any) => labelAsrama(v?.status_asrama) },
     { key: "angkatan", label: "Angkatan", render: (v: any) => v?.nama || "-" },
+    { key: "created_at", label: "Tgl Pendaftaran", render: (v) => formatTanggal(v) },
+    { key: "_pmbTanggalBayar", label: "Tgl Bayar Pendaftaran", render: (v) => formatTanggal(v) },
+    { key: "_spmbDetail", label: "Tgl Tes", render: (v: any) => formatTanggal(v?.spmb_tanggal_tes) },
+    { key: "_spmbDetail", label: "Tgl Kelulusan", render: (v: any) => formatTanggal(v?.spmb_tanggal_lulus) },
+    { key: "_spmbDetail", label: "Tgl Daftar Ulang", render: (v: any) => formatTanggal(v?.spmb_tanggal_daftar_ulang) },
     {
-      key: "_pmbLunas", label: "Pembayaran SPMB",
+      key: "_pmbLunas", label: "Biaya Pendaftaran",
       render: (_, row) => {
+        if (row._pmbGratis) return <span className="inline-flex items-center gap-1 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5" /> Gratis</span>;
         if (!row._pmbConfigured) return <span className="text-xs text-warning">Belum diatur</span>;
-        if (row._pmbLunas) return <span className="inline-flex items-center gap-1 text-xs text-success" title={row._pmbTanggalBayar ? `Dibayar ${row._pmbTanggalBayar}` : "Pembayaran tercatat"}><CheckCircle2 className="h-3.5 w-3.5" /> Lunas</span>;
+        if (row._pmbLunas) return <span className="inline-flex items-center gap-1 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5" /> Lunas</span>;
         return <span className="text-xs text-destructive">Belum bayar</span>;
       },
     },
@@ -263,21 +297,26 @@ export default function PMB() {
       render: (v, row) => {
         const s = v as string;
         const colors: Record<string, string> = { calon: "bg-warning/15 text-warning border-warning/30", diterima: "bg-info/15 text-info border-info/30" };
-        return <div className="flex items-center gap-1.5"><span className={`px-2 py-0.5 rounded-full text-xs border ${colors[s] || ""}`}>{s}</span>{row.terverifikasi && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border bg-success/15 text-success border-success/30" title="Sudah diverifikasi"><CheckCircle2 className="h-3 w-3" />Verified</span>}</div>;
+        return <div className="flex items-center gap-1.5"><span className={`px-2 py-0.5 rounded-full text-xs border ${colors[s] || ""}`}>{s}</span>{row.terverifikasi && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border bg-success/15 text-success border-success/30" title="Sudah diverifikasi pada Data SPMB"><CheckCircle2 className="h-3 w-3" />Verified</span>}</div>;
       },
     },
     {
-      key: "id", label: "Aksi", className: "w-64",
+      key: "id", label: "Aksi", className: "w-80",
       render: (_, row) => {
         const status = row.status as string;
         const loading = nisLoadingId === (row.id as string);
-        const verified = row.terverifikasi as boolean;
         const kesiapan = getKesiapanPenerimaan(row);
+        const detail = row._spmbDetail as Record<string, any> | undefined;
+        const tesLoading = milestoneLoadingId === `${row.id}:tes`;
+        const lulusLoading = milestoneLoadingId === `${row.id}:lulus`;
+        const daftarUlangLoading = milestoneLoadingId === `${row.id}:daftar_ulang`;
         return (
           <div className="flex gap-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
-            <Button size="sm" variant="outline" onClick={() => navigate(`/akademik/siswa/${row.id}`)} title="Lihat biodata & dokumen SPMB"><Eye className="h-3 w-3" /></Button>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/akademik/siswa/${row.id}`)} title="Lihat biodata, checklist verifikasi & dokumen SPMB"><Eye className="h-3 w-3" /></Button>
             <Button size="sm" variant="outline" onClick={() => navigate(`/akademik/siswa/${row.id}/edit`)} title="Edit data lengkap"><Pencil className="h-3 w-3" /></Button>
-            {!verified && <Button size="sm" variant="outline" className="border-success/50 text-success hover:bg-success/10" onClick={() => handleVerifikasi(row)} title="Verifikasi data"><ShieldCheck className="h-3 w-3 mr-1" />Verifikasi</Button>}
+            {!detail?.spmb_tanggal_tes && <Button size="sm" variant="outline" disabled={tesLoading} onClick={() => handleMilestone(row, "tes", "Sudah Tes")}>{tesLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Sudah Tes"}</Button>}
+            {detail?.spmb_tanggal_tes && !detail?.spmb_tanggal_lulus && <Button size="sm" variant="outline" disabled={lulusLoading} onClick={() => handleMilestone(row, "lulus", "Kelulusan")}>{lulusLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Lulus"}</Button>}
+            {detail?.spmb_tanggal_lulus && !detail?.spmb_tanggal_daftar_ulang && <Button size="sm" variant="outline" disabled={daftarUlangLoading} onClick={() => handleMilestone(row, "daftar_ulang", "Daftar Ulang")}>{daftarUlangLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Daftar Ulang"}</Button>}
             {status === "calon" && <span title={kesiapan.kekurangan.length ? `Lengkapi: ${kesiapan.kekurangan.join(", ")}` : "Terima calon murid"}><Button size="sm" variant="outline" disabled={loading || !kesiapan.siap} onClick={() => handleTerima(row)}>{loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Terima"}</Button></span>}
             {status === "diterima" && !row.nis && <Button size="sm" variant="outline" className="border-warning/50 text-warning hover:bg-warning/10" disabled={loading} onClick={() => handleBuatNIS(row)}>{loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <><RefreshCw className="h-3 w-3 mr-1" />Buat NIS</>}</Button>}
             {status === "diterima" && <span title={!row.nis ? "Buat NIS terlebih dahulu" : "Aktifkan murid"}><Button size="sm" disabled={loading || !row.nis} onClick={() => handleAktifkan(row)}>Aktifkan</Button></span>}
@@ -292,7 +331,7 @@ export default function PMB() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Sistem Penerimaan Murid Baru (SPMB)</h1>
-          <p className="text-sm text-muted-foreground">Verifikasi biodata, dokumen, pembayaran, dan penerimaan murid baru</p>
+          <p className="text-sm text-muted-foreground">Pantau pendaftaran, seleksi, kelulusan, daftar ulang, dan penerimaan murid baru</p>
         </div>
 
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
@@ -340,7 +379,7 @@ export default function PMB() {
       {belumSiapCount > 0 && (
         <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 text-sm">
           <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
-          <div><p className="font-medium">{belumSiapCount} calon belum siap diterima</p><p className="text-muted-foreground">Tombol Terima aktif setelah data diverifikasi, dokumen wajib tersedia, pembayaran SPMB tercatat, angkatan dan kelas terisi, serta NPSN lembaga tersedia.</p></div>
+          <div><p className="font-medium">{belumSiapCount} calon belum siap diterima</p><p className="text-muted-foreground">Verifikasi data dilakukan dari tab Data SPMB pada detail siswa. Tombol Terima aktif setelah verifikasi, dokumen wajib tersedia, biaya pendaftaran lunas atau gratis, angkatan dan kelas terisi, serta NPSN lembaga tersedia.</p></div>
         </div>
       )}
 
