@@ -2,7 +2,7 @@
 
 Dokumentasi integrasi backend Hijrah → aplikasi penerima.
 
-**Base URL produksi:** `https://hijrah-attauhid-prod.yayasan-attauhid-1.workers.dev/api/v1`
+**Base URL produksi:** `https://app.hijrah-attauhid.or.id/api/v1`
 
 Gunakan `Authorization: Bearer <token_integrasi>`. Token hanya untuk backend dan tidak boleh ditanam di browser/APK/source control. Token dibuat dan dikelola melalui **Pengaturan → Integrasi API**.
 
