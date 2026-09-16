@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-const BASE_URL = "https://hijrah-attauhid-prod.yayasan-attauhid-1.workers.dev/api/v1";
+const BASE_URL = "https://app.hijrah-attauhid.or.id/api/v1";
 
 function IntegrationApiDocs() {
   return (
