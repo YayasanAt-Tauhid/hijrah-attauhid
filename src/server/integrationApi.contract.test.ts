@@ -9,6 +9,12 @@ const openapi = readRepoFile('docs/openapi-integration-v1.yaml')
 const postman = readRepoFile('docs/postman/Hijrah-Integration-v1.postman_collection.json')
 
 describe('Integration API v1 contract', () => {
+  it('limits third-party milestone writes to tes and lulus', () => {
+    const milestone = readRepoFile('src/server/integrationApiMilestone.ts')
+    expect(milestone).toContain("!['tes', 'lulus'].includes(action)")
+    expect(milestone).not.toContain("!['tes', 'lulus', 'daftar_ulang'].includes(action)")
+  })
+
   it('keeps bearer auth, server-side token hashing and rate limiting', () => {
     expect(api).toContain("request.headers.get('authorization')")
     expect(api).toContain('await sha256(token)')

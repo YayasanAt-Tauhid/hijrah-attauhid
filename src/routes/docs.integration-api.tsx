@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 const BASE_URL = "https://app.hijrah-attauhid.or.id/api/v1";
-const milestoneActions = ["tes", "lulus", "daftar_ulang"] as const;
+const milestoneActions = ["tes", "lulus"] as const;
 
 function IntegrationApiDocs() {
   return (
@@ -39,7 +39,7 @@ function IntegrationApiDocs() {
                   <tr><td className="px-4 py-3 font-mono">pendaftaran:documents:read</td><td className="px-4 py-3">Metadata dan signed URL dokumen privat</td></tr>
                   <tr><td className="px-4 py-3 font-mono">siswa:read</td><td className="px-4 py-3">Data siswa dan relasi kelas</td></tr>
                   <tr><td className="px-4 py-3 font-mono">kelas:read</td><td className="px-4 py-3">Data kelas</td></tr>
-                  <tr className="bg-amber-50"><td className="px-4 py-3 font-mono">pendaftaran:milestone:update</td><td className="px-4 py-3 font-semibold">Update Status SPMB (Tes, Lulus, Daftar Ulang)</td></tr>
+                  <tr className="bg-amber-50"><td className="px-4 py-3 font-mono">pendaftaran:milestone:update</td><td className="px-4 py-3 font-semibold">Update Status SPMB (Tes dan Lulus)</td></tr>
                 </tbody>
               </table>
             </div>
@@ -55,7 +55,7 @@ Content-Type: application/json
 
 {"action":"tes"}`}</pre>
             <div className="mt-4 grid gap-2 sm:grid-cols-3">{milestoneActions.map(action => <code key={action} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm">action: {action}</code>)}</div>
-            <p className="mt-3 text-sm text-blue-900">Lulus wajib setelah Tes, Daftar Ulang wajib setelah Lulus, dan request ulang action yang sama idempotent. Payload hanya boleh berisi <code className="rounded bg-white px-1">action</code>; biodata, NIK, orang tua, pembayaran, dan kelas tidak dapat diubah.</p>
+            <p className="mt-3 text-sm text-blue-900">Lulus wajib setelah Tes, dan request ulang action yang sama idempotent. Payload hanya boleh berisi <code className="rounded bg-white px-1">action</code>; biodata, NIK, orang tua, pembayaran, dan kelas tidak dapat diubah.</p>
           </section>
 
           <section className="mt-9">

@@ -25,8 +25,8 @@ export async function handleMilestoneUpdate(request: Request, pendaftaranId: str
     return fail('invalid_body', 'Payload hanya boleh berisi action', 400)
   }
   const action = (body as { action: unknown }).action
-  if (typeof action !== 'string' || !['tes', 'lulus', 'daftar_ulang'].includes(action)) {
-    return fail('invalid_action', 'Action harus tes, lulus, atau daftar_ulang', 400)
+  if (typeof action !== 'string' || !['tes', 'lulus'].includes(action)) {
+    return fail('invalid_action', 'Action harus tes atau lulus', 400)
   }
 
   try {

@@ -213,28 +213,6 @@
               }
             }
           }
-        },
-        {
-          "name": "daftar_ulang",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{baseUrl}}/api/v1/pendaftaran/{{pendaftaranId}}/milestone",
-            "body": {
-              "mode": "raw",
-              "raw": "{\"action\": \"daftar_ulang\"}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
         }
       ]
     }

@@ -62,7 +62,7 @@ describe('SPMB milestone write authorization and workflow', () => {
     expect((await handleMilestoneUpdate(request(), pid)).status).toBe(404)
     expect(mutations()).toHaveLength(0)
   })
-  it.each(['tes', 'lulus', 'daftar_ulang'])('delegates %s to the existing workflow and records audit', async (action) => {
+  it.each(['tes', 'lulus'])('delegates %s to the existing workflow and records audit', async (action) => {
     const res = await handleMilestoneUpdate(request({ action }), pid)
     expect(res.status).toBe(200)
     expect(mutations()).toEqual([['spmb_mark_milestone', { p_siswa_id: sid, p_action: action }]])
@@ -71,7 +71,7 @@ describe('SPMB milestone write authorization and workflow', () => {
     expect(audits[1].metadata).toMatchObject({ token_id: token.id, pendaftaran_id: pid, milestone: action, marked_at: markedAt })
     expect(res.headers.get('X-Request-ID')).toBeTruthy()
   })
-  it.each(['lulus', 'daftar_ulang'])('propagates workflow rejection for premature %s', async (action) => {
+  it.each(['lulus'])('propagates workflow rejection for premature %s', async (action) => {
     workflowError = { code: 'P0001', message: 'Prasyarat belum terpenuhi' }
     const res = await handleMilestoneUpdate(request({ action }), pid)
     expect(res.status).toBe(400)
@@ -83,7 +83,7 @@ describe('SPMB milestone write authorization and workflow', () => {
     const repeated = await (await handleMilestoneUpdate(request(), pid)).json()
     expect(repeated.data).toEqual(first.data)
   })
-  it.each([null, [], {}, { action: 'hapus' }, { action: 'tes', nik: '123' }, { action: 'tes', kelas_id: sid }])('rejects invalid or expanded payload %j', async (body) => {
+  it.each([null, [], {}, { action: 'daftar_ulang' }, { action: 'hapus' }, { action: 'tes', nik: '123' }, { action: 'tes', kelas_id: sid }])('rejects invalid or expanded payload %j', async (body) => {
     expect((await handleMilestoneUpdate(request(body), pid)).status).toBe(400)
     expect(mutations()).toHaveLength(0)
   })

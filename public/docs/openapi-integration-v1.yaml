@@ -183,7 +183,7 @@ paths:
 
   /api/v1/pendaftaran/{id}/milestone:
     post:
-      summary: Update Status SPMB (Tes, Lulus, Daftar Ulang)
+      summary: Update Status SPMB (Tes dan Lulus)
       description: Requires pendaftaran:milestone:update. Unit/year restrictions apply. Uses the existing SPMB workflow; repeated actions return the original timestamp. No student biodata, payments, or class writes.
       parameters:
         - in: path
@@ -200,7 +200,7 @@ paths:
               additionalProperties: false
               required: [action]
               properties:
-                action: { type: string, enum: [tes, lulus, daftar_ulang] }
+                action: { type: string, enum: [tes, lulus] }
       responses:
         '200':
           description: Milestone marked or already marked (idempotent)
@@ -216,7 +216,7 @@ paths:
                     required: [pendaftaran_id, action, marked_at]
                     properties:
                       pendaftaran_id: { type: string, format: uuid }
-                      action: { type: string, enum: [tes, lulus, daftar_ulang] }
+                      action: { type: string, enum: [tes, lulus] }
                       marked_at: { type: string, format: date-time }
         '400':
           description: Invalid payload or unmet workflow prerequisite
