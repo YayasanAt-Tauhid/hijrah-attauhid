@@ -95,6 +95,41 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       paymentDateBookYearId: periodeBuku?.id ?? null,
     });
 
+    // `pembayaran.tahun_ajaran_id` menunjuk Tahun Buku saat uang diterima,
+    // sedangkan tagihan yang dipilih bisa berasal dari Tahun Buku sebelumnya.
+    // Ambil tagihan berdasarkan ID terlebih dahulu agar tarif dan akun piutang
+    // tetap memakai periode asal tagihan.
+    let tagihanTerpilih: {
+      id: string;
+      status: string | null;
+      tahun_ajaran_id: string | null;
+      siswa_id: string;
+      jenis_id: string;
+      bulan: number | null;
+    } | null = null;
+    if (tagihan_id) {
+      const { data: tagihanData, error: tagihanError } = await admin
+        .from("tagihan")
+        .select("id, status, tahun_ajaran_id, siswa_id, jenis_id, bulan")
+        .eq("id", tagihan_id)
+        .maybeSingle();
+      if (tagihanError) throw new Error("Gagal mengambil tagihan: " + tagihanError.message);
+      if (!tagihanData) throw new Error("Tagihan tidak ditemukan");
+      if (
+        tagihanData.siswa_id !== siswa_id ||
+        tagihanData.jenis_id !== jenis_id ||
+        tagihanData.bulan !== bulanNormalized
+      ) {
+        throw new Error("Tagihan tidak sesuai dengan siswa, jenis, atau bulan pembayaran");
+      }
+      if (!["belum_bayar", "terjadwal"].includes(tagihanData.status ?? "")) {
+        throw new Error("Tagihan ini sudah lunas atau tidak dapat dibayar");
+      }
+      tagihanTerpilih = tagihanData;
+    }
+    const tahunBukuTagihanId =
+      tagihanTerpilih?.tahun_ajaran_id || tahunAjaranEfektifId;
+
     const { data: siswaRow } = await admin
       .from("siswa")
       .select("nama")
@@ -115,7 +150,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         p_jenis_id: jenis_id,
         p_siswa_id: siswa_id,
         p_kelas_id: kelasRow?.kelas_id ?? null,
-        p_tahun_ajaran_id: tahunAjaranEfektifId,
+        p_tahun_ajaran_id: tahunBukuTagihanId,
       }
     );
     if (tarifErr) throw new Error("Gagal mengambil tarif: " + tarifErr.message);
@@ -138,7 +173,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         .select("jumlah")
         .eq("siswa_id", siswa_id)
         .eq("jenis_id", jenis_id)
-        .eq("tahun_ajaran_id", tahunAjaranEfektifId);
+        .eq("tahun_ajaran_id", tahunBukuTagihanId);
       const totalSudahBayar = (existingPay || []).reduce(
         (s, r) => s + Number(r.jumlah || 0),
         0
@@ -153,7 +188,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         .eq("siswa_id", siswa_id)
         .eq("jenis_id", jenis_id)
         .eq("bulan", bulanNormalized)
-        .eq("tahun_ajaran_id", tahunAjaranEfektifId)
+        .eq("tahun_ajaran_id", tahunBukuTagihanId)
         .maybeSingle();
       if (dupCheck)
         throw new Error(`Pembayaran bulan ${bulan} untuk jenis ini sudah ada`);
@@ -184,21 +219,22 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     // liabilitas. Untuk jenis yang perlu_dimuka=false (mis. biaya pendaftaran),
     // pembayaran langsung diakui sebagai pendapatan dan tidak boleh mengkredit
     // Piutang yang belum pernah dibentuk.
-    let tagihanQuery = admin
-      .from("tagihan")
-      .select("id, status")
-      .eq("siswa_id", siswa_id)
-      .eq("jenis_id", jenis_id)
-      .eq("tahun_ajaran_id", tahunAjaranEfektifId)
-      .in("status", ["belum_bayar", "terjadwal"]);
-    tagihanQuery =
-      bulanNormalized == null
-        ? tagihanQuery.is("bulan", null)
-        : tagihanQuery.eq("bulan", bulanNormalized);
-    if (tagihan_id) tagihanQuery = tagihanQuery.eq("id", tagihan_id);
-
-    const { data: tagihanRows } = await tagihanQuery.limit(1);
-    const tagihanFound = tagihanRows?.[0];
+    let tagihanFound = tagihanTerpilih;
+    if (!tagihanFound) {
+      let tagihanQuery = admin
+        .from("tagihan")
+        .select("id, status, tahun_ajaran_id, siswa_id, jenis_id, bulan")
+        .eq("siswa_id", siswa_id)
+        .eq("jenis_id", jenis_id)
+        .eq("tahun_ajaran_id", tahunAjaranEfektifId)
+        .in("status", ["belum_bayar", "terjadwal"]);
+      tagihanQuery =
+        bulanNormalized == null
+          ? tagihanQuery.is("bulan", null)
+          : tagihanQuery.eq("bulan", bulanNormalized);
+      const { data: tagihanRows } = await tagihanQuery.limit(1);
+      tagihanFound = tagihanRows?.[0] ?? null;
+    }
     const belumJatuhTempo = tagihanFound?.status === "terjadwal";
     const tagihanSudahDiakuiPiutang = tagihanFound?.status === "belum_bayar";
     const pakaiDimuka =
@@ -208,7 +244,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     // yang tidak mengirim tagihan_id sama sekali). Tanpa fallback ini,
     // piutang yang sudah dibukukan saat jatuh tempo tidak pernah dilunasi di
     // jurnal -- kredit jatuh ke Pendapatan lagi (dobel).
-    const tagihanEfektifId = tagihan_id ?? tagihanFound?.id ?? null;
+    const tagihanEfektifId = tagihanFound?.id ?? null;
 
     let kreditAkunId: string | null;
     let kreditLabel: string;
