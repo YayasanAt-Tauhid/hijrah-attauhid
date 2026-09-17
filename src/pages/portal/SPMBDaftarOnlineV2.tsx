@@ -481,7 +481,7 @@ export default function SPMBDaftarOnlineV2() {
               <div className="space-y-2 rounded-lg border bg-white/70 p-4 text-left text-sm">
                 <div className="flex justify-between gap-4"><span className="text-muted-foreground">Calon murid</span><strong>{registrationStatus.nama}</strong></div>
                 <div className="flex justify-between gap-4"><span className="text-muted-foreground">Lembaga</span><strong>{registrationStatus.departemen_nama || "-"}</strong></div>
-                <div className="flex justify-between gap-4"><span className="text-muted-foreground">Biaya Pendaftaran</span><strong>{promoFree ? "Gratis" : paymentVisible && totalAmount !== null ? `Rp ${Number(totalAmount).toLocaleString("id-ID")}` : "Belum ditampilkan"}</strong></div>
+                <div className="flex justify-between gap-4"><span className="text-muted-foreground">Biaya Pendaftaran</span><strong>{promoFree ? "Gratis" : totalAmount !== null ? `Rp ${Number(totalAmount).toLocaleString("id-ID")}` : "Belum diatur"}</strong></div>
                 <div className="flex justify-between gap-4"><span className="text-muted-foreground">Status pendaftaran</span><strong>{labelStatusPendaftaran(registrationStatus.status_pendaftaran)}</strong></div>
                 {paymentVisible && !promoFree && <div className="flex justify-between gap-4"><span className="text-muted-foreground">Status pembayaran</span><strong>{isPaid ? "Lunas" : isProcessing ? "Sedang dikonfirmasi" : isPending ? "Pending" : isFailed ? "Gagal / kedaluwarsa" : "Belum dibayar"}</strong></div>}
               </div>
