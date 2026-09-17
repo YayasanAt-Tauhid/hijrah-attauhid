@@ -75,6 +75,16 @@ jobs:
       - name: Test
         run: npm test
 
+      # Rekonsiliasi satu kali untuk pembayaran SPMB lama yang sempat memakai
+      # tahun ajaran aktif global. Langkah ini dihapus setelah data produksi
+      # terverifikasi; script bersifat idempoten dan hanya menyentuh pembayaran
+      # jenis SPMB milik calon murid dengan tahun yang tidak cocok.
+      - name: Reconcile SPMB payment academic years
+        env:
+          SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/reconcile-spmb-payment-academic-year.mjs
+
       - name: Build (Cloudflare Workers)
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}

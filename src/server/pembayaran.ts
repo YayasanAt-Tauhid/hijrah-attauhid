@@ -7,6 +7,7 @@
  *   - batalkan_pembayaran_atomik
  */
 import { createServerFn } from "@tanstack/react-start";
+import { resolvePaymentAcademicYear } from "@/lib/paymentAcademicYear";
 import { resolvePaymentTariff } from "@/lib/paymentTariff";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
@@ -90,9 +91,41 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
 
     const { data: siswaRow } = await admin
       .from("siswa")
-      .select("nama")
+      .select("nama, status, departemen_id")
       .eq("id", siswa_id)
       .maybeSingle();
+
+    let spmbRegistrationYearId: string | null = null;
+    let isSpmbPayment = false;
+    if (siswaRow?.status === "calon" && siswaRow.departemen_id) {
+      const { data: spmbConfig } = await admin
+        .from("konfigurasi_pmb")
+        .select("jenis_pembayaran_id")
+        .eq("departemen_id", siswaRow.departemen_id)
+        .maybeSingle();
+      isSpmbPayment = spmbConfig?.jenis_pembayaran_id === jenis_id;
+
+      if (isSpmbPayment) {
+        const { data: siswaDetail, error: siswaDetailError } = await admin
+          .from("siswa_detail")
+          .select("tahun_ajaran_id")
+          .eq("siswa_id", siswa_id)
+          .maybeSingle();
+        if (siswaDetailError) {
+          throw new Error(
+            "Gagal mengambil tahun ajaran pendaftaran SPMB: " +
+              siswaDetailError.message
+          );
+        }
+        spmbRegistrationYearId = siswaDetail?.tahun_ajaran_id ?? null;
+      }
+    }
+
+    const tahunAjaranEfektifId = resolvePaymentAcademicYear({
+      requestedYearId: tahun_ajaran_id,
+      spmbRegistrationYearId,
+      isSpmbPayment,
+    });
 
     // Ambil tarif dari DB — JANGAN pakai nominal dari frontend
     const { data: kelasRow } = await admin
@@ -108,7 +141,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         p_jenis_id: jenis_id,
         p_siswa_id: siswa_id,
         p_kelas_id: kelasRow?.kelas_id ?? null,
-        p_tahun_ajaran_id: tahun_ajaran_id,
+        p_tahun_ajaran_id: tahunAjaranEfektifId,
       }
     );
     if (tarifErr) throw new Error("Gagal mengambil tarif: " + tarifErr.message);
@@ -131,7 +164,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         .select("jumlah")
         .eq("siswa_id", siswa_id)
         .eq("jenis_id", jenis_id)
-        .eq("tahun_ajaran_id", tahun_ajaran_id);
+        .eq("tahun_ajaran_id", tahunAjaranEfektifId);
       const totalSudahBayar = (existingPay || []).reduce(
         (s, r) => s + Number(r.jumlah || 0),
         0
@@ -146,7 +179,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         .eq("siswa_id", siswa_id)
         .eq("jenis_id", jenis_id)
         .eq("bulan", bulanNormalized)
-        .eq("tahun_ajaran_id", tahun_ajaran_id)
+        .eq("tahun_ajaran_id", tahunAjaranEfektifId)
         .maybeSingle();
       if (dupCheck)
         throw new Error(`Pembayaran bulan ${bulan} untuk jenis ini sudah ada`);
@@ -182,7 +215,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       .select("id, status")
       .eq("siswa_id", siswa_id)
       .eq("jenis_id", jenis_id)
-      .eq("tahun_ajaran_id", tahun_ajaran_id)
+      .eq("tahun_ajaran_id", tahunAjaranEfektifId)
       .in("status", ["belum_bayar", "terjadwal"]);
     tagihanQuery =
       bulanNormalized == null
@@ -248,7 +281,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         p_tanggal_bayar: tanggal_bayar,
         p_keterangan: keteranganFinal,
         p_departemen_id: departemen_id ?? null,
-        p_tahun_ajaran_id: tahun_ajaran_id,
+        p_tahun_ajaran_id: tahunAjaranEfektifId,
         p_is_bayar_dimuka: pakaiDimuka,
         p_tagihan_id: tagihanEfektifId,
         p_kas_akun_id: kasAkunId,
