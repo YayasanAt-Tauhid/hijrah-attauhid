@@ -4,6 +4,7 @@ interface SpmbFieldVerificationProps {
   fieldKey: string;
   checked: boolean;
   disabled?: boolean;
+  label?: string;
   onCheckedChange: (fieldKey: string, checked: boolean) => void;
 }
 
@@ -11,6 +12,7 @@ export function SpmbFieldVerification({
   fieldKey,
   checked,
   disabled = false,
+  label = "Sudah diperiksa",
   onCheckedChange,
 }: SpmbFieldVerificationProps) {
   const id = `spmb-field-verification-${fieldKey}`;
@@ -24,7 +26,7 @@ export function SpmbFieldVerification({
         onCheckedChange={(value) => onCheckedChange(fieldKey, value === true)}
       />
       <label htmlFor={id} className="cursor-pointer select-none">
-        Sudah diperiksa
+        {label}
       </label>
     </div>
   );
