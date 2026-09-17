@@ -31,7 +31,7 @@ function EditSiswaPage() {
         onInputCapture={markNativeFieldDirty}
         onChangeCapture={markNativeFieldDirty}
       >
-        <FormSiswa />
+        <FormSiswa onSaved={() => setHasUnsavedChanges(false)} />
       </div>
       <SpmbVerificationPanel siswaId={id} isDirty={hasUnsavedChanges} />
     </div>
