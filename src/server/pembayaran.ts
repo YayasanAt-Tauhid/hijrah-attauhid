@@ -7,7 +7,7 @@
  *   - batalkan_pembayaran_atomik
  */
 import { createServerFn } from "@tanstack/react-start";
-import { resolvePaymentAcademicYear } from "@/lib/paymentAcademicYear";
+import { resolvePaymentBookYear } from "@/lib/paymentBookYear";
 import { resolvePaymentTariff } from "@/lib/paymentTariff";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
@@ -70,6 +70,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       .lte("tanggal_mulai", tanggal_bayar)
       .gte("tanggal_selesai", tanggal_bayar)
       .limit(1);
+    const periodeBuku = periodeData?.[0] ?? null;
     const periodeLocked = (periodeData || []).find((p) => p.ditutup === true);
     if (periodeLocked) {
       throw new Error(
@@ -89,43 +90,16 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     const bulanNormalized: number | null =
       isSekali || bulan === 0 ? null : bulan;
 
+    const tahunAjaranEfektifId = resolvePaymentBookYear({
+      requestedBookYearId: tahun_ajaran_id,
+      paymentDateBookYearId: periodeBuku?.id ?? null,
+    });
+
     const { data: siswaRow } = await admin
       .from("siswa")
-      .select("nama, status, departemen_id")
+      .select("nama")
       .eq("id", siswa_id)
       .maybeSingle();
-
-    let spmbRegistrationYearId: string | null = null;
-    let isSpmbPayment = false;
-    if (siswaRow?.status === "calon" && siswaRow.departemen_id) {
-      const { data: spmbConfig } = await admin
-        .from("konfigurasi_pmb")
-        .select("jenis_pembayaran_id")
-        .eq("departemen_id", siswaRow.departemen_id)
-        .maybeSingle();
-      isSpmbPayment = spmbConfig?.jenis_pembayaran_id === jenis_id;
-
-      if (isSpmbPayment) {
-        const { data: siswaDetail, error: siswaDetailError } = await admin
-          .from("siswa_detail")
-          .select("tahun_ajaran_id")
-          .eq("siswa_id", siswa_id)
-          .maybeSingle();
-        if (siswaDetailError) {
-          throw new Error(
-            "Gagal mengambil tahun ajaran pendaftaran SPMB: " +
-              siswaDetailError.message
-          );
-        }
-        spmbRegistrationYearId = siswaDetail?.tahun_ajaran_id ?? null;
-      }
-    }
-
-    const tahunAjaranEfektifId = resolvePaymentAcademicYear({
-      requestedYearId: tahun_ajaran_id,
-      spmbRegistrationYearId,
-      isSpmbPayment,
-    });
 
     // Ambil tarif dari DB — JANGAN pakai nominal dari frontend
     const { data: kelasRow } = await admin
