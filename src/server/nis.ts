@@ -4,6 +4,7 @@
  * Generate & simpan NIS unik untuk siswa. Hanya admin / kepala_sekolah.
  */
 import { createServerFn } from "@tanstack/react-start";
+import { getKodeRombel } from "@/lib/nisRombel";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
 
@@ -12,12 +13,6 @@ export interface GenerateNisInput {
   departemen_id: string;
   angkatan_id: string;
   kelas_id: string;
-}
-
-function extractRombelCode(namaKelas: string): number | null {
-  const lastChar = namaKelas.trim().slice(-1).toUpperCase();
-  const code = lastChar.charCodeAt(0) - 64; // A=1, B=2, ...
-  return code >= 1 && code <= 26 ? code : null;
 }
 
 export const generateNis = createServerFn({ method: "POST" })
@@ -65,8 +60,12 @@ export const generateNis = createServerFn({ method: "POST" })
       .eq("id", kelas_id)
       .single();
     if (!kelas) throw new Error("Kelas tidak ditemukan");
-    const rombelCode = extractRombelCode(kelas.nama);
-    if (rombelCode === null) throw new Error("Format nama kelas tidak valid");
+    const rombelCode = getKodeRombel(kelas.nama);
+    if (rombelCode === null) {
+      throw new Error(
+        "Format nama kelas tidak valid; gunakan akhiran huruf A-Z atau angka 1-9"
+      );
+    }
     const kodeRombel = String(rombelCode);
 
     // 4. Cari nomor urut berikutnya. Pola: {npsn4}{3 digit urut}{kodeRombel}{tahun2}

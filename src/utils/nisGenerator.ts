@@ -1,20 +1,13 @@
 import { generateNis } from "@/server/nis";
+import { getKodeRombel } from "@/lib/nisRombel";
+
+export { getKodeRombel } from "@/lib/nisRombel";
 
 export interface NISComponents {
   npsn4: string;
   nomorUrut: string;
   kodeRombel: string;
   tahun2: string;
-}
-
-/**
- * Ekstrak kode rombel dari huruf terakhir nama kelas.
- * "1A" → 1, "2B" → 2, dst.
- */
-export function getKodeRombel(namaKelas: string): number | null {
-  const lastChar = namaKelas.trim().slice(-1).toUpperCase();
-  const code = lastChar.charCodeAt(0) - 64;
-  return code >= 1 && code <= 26 ? code : null;
 }
 
 /**
