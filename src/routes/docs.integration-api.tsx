@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 const BASE_URL = "https://app.hijrah-attauhid.or.id/api/v1";
+const milestoneActions = ["tes", "lulus", "daftar_ulang"] as const;
 
 function IntegrationApiDocs() {
   return (
@@ -11,7 +12,7 @@ function IntegrationApiDocs() {
             <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-blue-700">Hijrah At-Tauhid</p>
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Integration API v1</h1>
             <p className="mt-4 max-w-3xl text-slate-600">
-              Dokumentasi resmi API read-only untuk sinkronisasi data Hijrah At-Tauhid ke backend aplikasi pihak ketiga.
+              Dokumentasi resmi API baca dan update terbatas status SPMB untuk backend aplikasi pihak ketiga.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <a className="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800" href="/docs/openapi-integration-v1.yaml" target="_blank" rel="noreferrer">Buka OpenAPI</a>
@@ -38,16 +39,29 @@ function IntegrationApiDocs() {
                   <tr><td className="px-4 py-3 font-mono">pendaftaran:documents:read</td><td className="px-4 py-3">Metadata dan signed URL dokumen privat</td></tr>
                   <tr><td className="px-4 py-3 font-mono">siswa:read</td><td className="px-4 py-3">Data siswa dan relasi kelas</td></tr>
                   <tr><td className="px-4 py-3 font-mono">kelas:read</td><td className="px-4 py-3">Data kelas</td></tr>
+                  <tr className="bg-amber-50"><td className="px-4 py-3 font-mono">pendaftaran:milestone:update</td><td className="px-4 py-3 font-semibold">Update Status SPMB (Tes, Lulus, Daftar Ulang)</td></tr>
                 </tbody>
               </table>
             </div>
             <p className="mt-3 text-sm text-slate-500">Pembatasan unit/departemen dan tahun ajaran diterapkan server-side sesuai konfigurasi token.</p>
           </section>
 
+          <section className="mt-9 rounded-xl border border-blue-200 bg-blue-50 p-5">
+            <h2 className="text-xl font-bold text-blue-950">Update Status SPMB</h2>
+            <p className="mt-2 text-sm text-blue-900">Token harus memiliki scope <code className="rounded bg-white px-1.5 py-0.5">pendaftaran:milestone:update</code>. Scope ini hanya dapat mengubah milestone SPMB melalui workflow yang sudah ada.</p>
+            <div className="mt-4 rounded-xl bg-slate-950 p-4 text-sm text-slate-100 overflow-x-auto"><code>POST {BASE_URL}/pendaftaran/{'{id}'}/milestone</code></div>
+            <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-900 p-4 text-sm text-slate-100">{`Authorization: Bearer TOKEN
+Content-Type: application/json
+
+{"action":"tes"}`}</pre>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">{milestoneActions.map(action => <code key={action} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm">action: {action}</code>)}</div>
+            <p className="mt-3 text-sm text-blue-900">Lulus wajib setelah Tes, Daftar Ulang wajib setelah Lulus, dan request ulang action yang sama idempotent. Payload hanya boleh berisi <code className="rounded bg-white px-1">action</code>; biodata, NIK, orang tua, pembayaran, dan kelas tidak dapat diubah.</p>
+          </section>
+
           <section className="mt-9">
             <h2 className="text-xl font-bold">Endpoint utama</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {["GET /pendaftaran", "GET /pendaftaran/{pendaftaran_id}", "GET /siswa", "GET /siswa/{siswa_id}", "GET /kelas", "GET /kelas/{kelas_id}/siswa", "GET /sync/pendaftaran", "GET /sync/siswa", "GET /sync/kelas", "GET /documents/{pendaftaran_id}.{jenis}"].map((endpoint) => <code key={endpoint} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">{endpoint}</code>)}
+              {["POST /pendaftaran/{id}/milestone", "GET /pendaftaran", "GET /pendaftaran/{pendaftaran_id}", "GET /siswa", "GET /siswa/{siswa_id}", "GET /kelas", "GET /kelas/{kelas_id}/siswa", "GET /sync/pendaftaran", "GET /sync/siswa", "GET /sync/kelas", "GET /documents/{pendaftaran_id}.{jenis}"].map((endpoint) => <code key={endpoint} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">{endpoint}</code>)}
             </div>
           </section>
 
@@ -62,7 +76,7 @@ function IntegrationApiDocs() {
             <p className="mt-3 text-slate-600">Dokumen privat diakses melalui endpoint dokumen dan menghasilkan signed URL sementara. Untuk sinkronisasi berkelanjutan gunakan endpoint <code className="rounded bg-slate-100 px-1">/sync/*</code> dan simpan checkpoint terakhir di backend penerima.</p>
           </section>
 
-          <footer className="mt-10 border-t border-slate-200 pt-6 text-sm text-slate-500">Integration API v1 · Read-only · Backend-to-backend</footer>
+          <footer className="mt-10 border-t border-slate-200 pt-6 text-sm text-slate-500">Integration API v1 · Read + scoped SPMB milestone write · Backend-to-backend</footer>
         </div>
       </div>
     </main>
