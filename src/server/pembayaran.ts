@@ -7,6 +7,7 @@
  *   - batalkan_pembayaran_atomik
  */
 import { createServerFn } from "@tanstack/react-start";
+import { resolvePaymentTariff } from "@/lib/paymentTariff";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
 
@@ -77,7 +78,9 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
 
     const { data: jenis, error: jenisErr } = await admin
       .from("jenis_pembayaran")
-      .select("id, nama, tipe, akun_pendapatan_id, akun_dimuka_id, perlu_dimuka")
+      .select(
+        "id, nama, nominal, tipe, akun_pendapatan_id, akun_dimuka_id, perlu_dimuka"
+      )
       .eq("id", jenis_id)
       .single();
     if (jenisErr || !jenis) throw new Error("Jenis pembayaran tidak ditemukan");
@@ -110,8 +113,14 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     );
     if (tarifErr) throw new Error("Gagal mengambil tarif: " + tarifErr.message);
 
-    const jumlahValid = Number(tarifNominalRaw);
-    if (!jumlahValid || jumlahValid <= 0) {
+    // Tarif khusus tetap paling tinggi prioritasnya. Jika tidak ada, gunakan
+    // nominal default jenis pembayaran (mis. biaya pendaftaran SPMB).
+    // Nilai dari frontend sengaja tidak dipakai sebagai sumber nominal.
+    const jumlahValid = resolvePaymentTariff(
+      tarifNominalRaw,
+      jenis.nominal
+    );
+    if (jumlahValid <= 0) {
       throw new Error("Tarif pembayaran belum dikonfigurasi untuk siswa ini");
     }
 
