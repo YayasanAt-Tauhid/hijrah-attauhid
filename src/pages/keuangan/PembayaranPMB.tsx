@@ -60,6 +60,26 @@ export default function PembayaranPMB() {
   });
 
   const {
+    data: spmbReadiness,
+    isLoading: spmbReadinessLoading,
+  } = useQuery({
+    queryKey: ["spmb_payment_readiness", selectedSiswa?.id],
+    enabled: !!selectedSiswa?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("spmb_readiness", {
+        p_siswa_id: selectedSiswa.id,
+      });
+      if (error) throw error;
+      return data as {
+        gratis_pendaftaran?: boolean;
+        nominal?: number | null;
+        dibayar?: number | null;
+      } | null;
+    },
+  });
+  const gratisPromo = spmbReadiness?.gratis_pendaftaran === true;
+
+  const {
     data: paymentBookYear,
     isLoading: paymentBookYearLoading,
     error: paymentBookYearError,
@@ -144,6 +164,10 @@ export default function PembayaranPMB() {
 
   const handleSubmit = async () => {
     if (!selectedSiswa || !jenisId || !jumlah) return;
+    if (gratisPromo) {
+      toast.info("Calon murid ini mendapatkan gratis biaya pendaftaran. Tidak perlu input pembayaran.");
+      return;
+    }
     if (!pmbConfig || jenisId !== pmbConfig.jenis_pembayaran_id) {
       toast.error("Jenis pembayaran tidak sesuai konfigurasi SPMB lembaga ini");
       return;
@@ -230,6 +254,18 @@ export default function PembayaranPMB() {
             <Card>
               <CardHeader><CardTitle>Input Pembayaran SPMB</CardTitle></CardHeader>
               <CardContent className="space-y-4">
+                {gratisPromo && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                    <p className="font-semibold">Gratis biaya pendaftaran — Promo SPMB Gelombang Pertama</p>
+                    <p className="mt-1">
+                      Tarif bruto {formatRupiah(Number(spmbReadiness?.nominal || 0))} dipotong 100%, sehingga total yang harus dibayar Rp0.
+                      Potongan dicatat otomatis ke pembukuan; tidak perlu membuat transaksi pembayaran.
+                    </p>
+                  </div>
+                )}
+                {spmbReadinessLoading && (
+                  <p className="text-sm text-muted-foreground">Memeriksa status promo SPMB...</p>
+                )}
                 {spmbRegistrationError && (
                   <p className="text-sm text-destructive">Tahun ajaran pendaftaran gagal dimuat. Muat ulang halaman lalu coba kembali.</p>
                 )}
@@ -248,7 +284,7 @@ export default function PembayaranPMB() {
                     setJenisId(v);
                     const j = pmbJenisList.find((x: any) => x.id === v) as any;
                     if (j?.nominal) setJumlah(String(j.nominal));
-                  }} disabled={!pmbConfig}>
+                  }} disabled={!pmbConfig || gratisPromo}>
                     <SelectTrigger><SelectValue placeholder={pmbConfig ? "Pilih jenis" : "Konfigurasi SPMB belum tersedia"} /></SelectTrigger>
                     <SelectContent>
                       {pmbJenisList.map((j: any) => (
@@ -259,21 +295,21 @@ export default function PembayaranPMB() {
                 </div>
                 <div>
                   <Label>Jumlah (Rp)</Label>
-                  <Input type="number" value={jumlah} onChange={(e) => setJumlah(e.target.value)} placeholder="0" />
+                  <Input type="number" value={jumlah} onChange={(e) => setJumlah(e.target.value)} placeholder="0" disabled={gratisPromo} />
                   <p className="text-xs text-muted-foreground mt-1">Nominal final divalidasi ulang dari tarif di server sebelum jurnal dibuat.</p>
                 </div>
                 <div>
                   <Label>Tanggal Bayar</Label>
-                  <Input type="date" value={tanggalBayar} onChange={(e) => setTanggalBayar(e.target.value)} />
+                  <Input type="date" value={tanggalBayar} onChange={(e) => setTanggalBayar(e.target.value)} disabled={gratisPromo} />
                   <p className="text-xs text-muted-foreground mt-1">
                     Tahun buku: {paymentBookYearLoading ? "Memuat..." : paymentBookYear?.nama || "Belum dikonfigurasi"}
                   </p>
                 </div>
                 <div>
                   <Label>Keterangan</Label>
-                  <Textarea value={keterangan} onChange={(e) => setKeterangan(e.target.value)} placeholder="Pembayaran SPMB" />
+                  <Textarea value={keterangan} onChange={(e) => setKeterangan(e.target.value)} placeholder="Pembayaran SPMB" disabled={gratisPromo} />
                 </div>
-                <Button onClick={handleSubmit} disabled={!jenisId || !jumlah || !spmbRegistration?.tahun_ajaran_id || !paymentBookYear?.id || createMutation.isPending} className="w-full">
+                <Button onClick={handleSubmit} disabled={gratisPromo || !jenisId || !jumlah || !spmbRegistration?.tahun_ajaran_id || !paymentBookYear?.id || createMutation.isPending} className="w-full">
                   {createMutation.isPending ? "Menyimpan..." : "Simpan Pembayaran & Jurnal"}
                 </Button>
               </CardContent>

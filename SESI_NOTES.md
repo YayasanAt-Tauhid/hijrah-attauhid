@@ -6,6 +6,14 @@
 
 ## Info Penting
 
+## Pembaruan 17 September 2026 — Target Main & Promo SPMB
+
+- Instruksi user terbaru: branch `main` memakai Supabase **`cmvzcpeiuompqgdvflky` saja** untuk pekerjaan aktif; pemetaan lama di arsip tidak boleh dipakai untuk memilih target remote.
+- Promo SPMB Gelombang Pertama 2027/2028 sedang dibukukan sebagai potongan 100% (bukan pembayaran Rp0): bruto tetap tercatat, potongan memakai akun kontra-pendapatan khusus SPMB, netto Rp0, tanpa kas masuk.
+- Audit 17 Sep menemukan drift: migrasi `20260807020000_nama_siswa_di_jpi_generate_tagihan.sql` tanpa sengaja menimpa `generate_tagihan_batch` diskon-aware dengan versi lama. Perbaikan baru memulihkan dukungan bruto/diskon/netto sekaligus mempertahankan nama siswa di keterangan jurnal.
+- VPS At-Tauhid dipakai sebagai workspace chat di `/home/attauhid/projects/hijrah-attauhid-main-chat`; repo staging lama/dirty tidak dipakai.
+
+
 ### Infrastruktur
 - **Pemetaan project Supabase (dikonfirmasi user 30 Juli 2026, sudah ditulis di CLAUDE.md § "Project Supabase: production vs staging" — cek di sana dulu sebelum baca poin-poin lama di bawah):**
   - `production` (branch `main`) → `oquzygbekjpbmafuqiot` (Hijrah At-Tauhid V4)

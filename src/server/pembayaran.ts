@@ -136,6 +136,31 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       .eq("id", siswa_id)
       .maybeSingle();
 
+    // Tagihan netto Rp0 yang sudah berstatus lunas berarti kewajibannya
+    // diselesaikan lewat potongan/promo, bukan lewat kas masuk. Blokir jalur
+    // pembayaran generik supaya tidak pernah menagih ulang beasiswa/promo 100%.
+    const { data: settledByDiscount, error: settledByDiscountError } = await admin
+      .from("tagihan")
+      .select("id")
+      .eq("siswa_id", siswa_id)
+      .eq("jenis_id", jenis_id)
+      .eq("tahun_ajaran_id", tahunBukuTagihanId)
+      .eq("status", "lunas")
+      .eq("nominal", 0)
+      .gt("nominal_diskon", 0)
+      .limit(1)
+      .maybeSingle();
+    if (settledByDiscountError) {
+      throw new Error(
+        "Gagal memeriksa penyelesaian tagihan: " + settledByDiscountError.message
+      );
+    }
+    if (settledByDiscount) {
+      throw new Error(
+        "Tagihan ini sudah diselesaikan melalui potongan/promo 100%. Tidak perlu membuat pembayaran."
+      );
+    }
+
     // Ambil tarif dari DB — JANGAN pakai nominal dari frontend
     const { data: kelasRow } = await admin
       .from("kelas_siswa")

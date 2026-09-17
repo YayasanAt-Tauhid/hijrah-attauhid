@@ -29,6 +29,7 @@ export type KategoriDiskon =
   | "keringanan"
   | "kakak_adik"
   | "bantuan"
+  | "promo"
   | "lainnya";
 
 export type StatusDiskon = "diajukan" | "disetujui" | "ditolak" | "dibatalkan";
@@ -38,6 +39,7 @@ export const LABEL_KATEGORI: Record<KategoriDiskon, string> = {
   keringanan: "Keringanan",
   kakak_adik: "Kakak-Adik",
   bantuan: "Bantuan",
+  promo: "Promo",
   lainnya: "Lainnya",
 };
 

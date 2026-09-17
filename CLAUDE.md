@@ -46,20 +46,22 @@ Cara mengatur model:
 }
 ```
 
-## Project Supabase: production vs staging
+## Project Supabase: target aktif
 
-Deploy (`.github/workflows/deploy.yml`) sudah pakai **GitHub Environments** untuk memisahkan production dan staging — tiap environment (Settings → Environments di GitHub) punya variabel `VITE_SUPABASE_URL` sendiri:
+> **Pembaruan 17 September 2026 (instruksi user terbaru):** pekerjaan pada branch `main`
+> menggunakan Supabase **`cmvzcpeiuompqgdvflky`**. Instruksi ini menggantikan
+> pemetaan lama V4/V5 di catatan historis.
 
-| Branch | GitHub Environment | Supabase project ID | Nama project |
-|---|---|---|---|
-| `main` | `production` | `oquzygbekjpbmafuqiot` | Hijrah At-Tauhid V4 |
-| `staging` | `staging` | `cmvzcpeiuompqgdvflky` | Hijrah At-Tauhid - V5 |
-
-(Dikonfirmasi user 30 Juli 2026, menggantikan kebingungan project lama di `SESI_NOTES.md`.)
-
-**Penting untuk Claude:** MCP GitHub session ini **tidak bisa** membaca variabel/secret GitHub Environment lewat API (endpoint `/environments` diblokir proxy — `Access to this GitHub API path is not permitted`). Jadi tabel di atas adalah **satu-satunya sumber kebenaran** yang bisa diandalkan sesi ini untuk memetakan project Supabase mana yang mana — jangan andalkan `.env.example` atau `supabase/config.toml` (sudah lama tidak sinkron, lihat riwayatnya di `SESI_NOTES.md`) dan jangan menebak.
-
-Kalau ragu project mana yang jadi acuan untuk suatu perubahan (migrasi, debug data live, dll.), **selalu tanya ke user dulu** sebelum menerapkan apa pun lewat MCP Supabase, dan kalau tabel di atas ternyata sudah berubah, update tabel ini juga.
+- Branch yang sedang dikerjakan: `main`.
+- Supabase yang boleh diubah untuk pekerjaan `main` saat ini: **`cmvzcpeiuompqgdvflky` saja**.
+- `supabase/config.toml`, `.env.example`, dan catatan lama dapat tertinggal; jangan menjadikannya
+  sumber kebenaran untuk memilih project remote.
+- Jangan menjalankan `supabase db push` secara buta. Banyak migrasi historis diterapkan manual
+  dan ledger remote dapat berbeda dari nama file repo.
+- Deployment Cloudflare mengambil URL/key dari GitHub Environment; sebelum tindakan DB manual,
+  gunakan project ref yang dikonfirmasi di atas secara eksplisit.
+- Target branch/project lain (termasuk `staging`) harus diverifikasi lagi sebelum diubah; jangan
+  menebak dari pemetaan lama.
 
 ## Kontinuitas Antar Sesi
 

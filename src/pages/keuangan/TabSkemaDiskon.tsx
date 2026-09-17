@@ -48,6 +48,7 @@ const KATEGORI_OPTIONS: KategoriDiskon[] = [
   "keringanan",
   "kakak_adik",
   "bantuan",
+  "promo",
   "lainnya",
 ];
 
