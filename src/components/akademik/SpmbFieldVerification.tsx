@@ -4,7 +4,7 @@ interface SpmbFieldVerificationProps {
   fieldKey: string;
   checked: boolean;
   disabled?: boolean;
-  onCheckedChange: (checked: boolean) => void;
+  onCheckedChange: (fieldKey: string, checked: boolean) => void;
 }
 
 export function SpmbFieldVerification({
@@ -21,7 +21,7 @@ export function SpmbFieldVerification({
         id={id}
         checked={checked}
         disabled={disabled}
-        onCheckedChange={(value) => onCheckedChange(value === true)}
+        onCheckedChange={(value) => onCheckedChange(fieldKey, value === true)}
       />
       <label htmlFor={id} className="cursor-pointer select-none">
         Sudah diperiksa
