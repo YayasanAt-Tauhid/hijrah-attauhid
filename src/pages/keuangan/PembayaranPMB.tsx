@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { supabase } from "@/integrations/supabase/client";
-import { useLembaga, useJenisPembayaran, usePembayaranBySiswa, useTahunAjaranAktif, formatRupiah } from "@/hooks/useKeuangan";
+import { useLembaga, useJenisPembayaran, usePembayaranBySiswa, formatRupiah } from "@/hooks/useKeuangan";
 import { prosesPembayaran } from "@/server/pembayaran";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -27,13 +27,42 @@ export default function PembayaranPMB() {
 
   const { data: lembagaList } = useLembaga();
   const { data: jenisList = [] } = useJenisPembayaran(departemenId || undefined);
-  const { data: tahunAktif } = useTahunAjaranAktif();
   const { data: riwayat, isLoading: loadRiwayat } = usePembayaranBySiswa(selectedSiswa?.id);
+
+  const {
+    data: spmbRegistration,
+    isLoading: spmbRegistrationLoading,
+    error: spmbRegistrationError,
+  } = useQuery({
+    queryKey: ["spmb_payment_registration_year", selectedSiswa?.id],
+    enabled: !!selectedSiswa?.id,
+    queryFn: async () => {
+      const { data: detail, error: detailError } = await supabase
+        .from("siswa_detail")
+        .select("tahun_ajaran_id")
+        .eq("siswa_id", selectedSiswa.id)
+        .maybeSingle();
+      if (detailError) throw detailError;
+      if (!detail?.tahun_ajaran_id) return null;
+
+      const { data: tahunAjaran, error: tahunError } = await supabase
+        .from("tahun_ajaran")
+        .select("id, nama")
+        .eq("id", detail.tahun_ajaran_id)
+        .maybeSingle();
+      if (tahunError) throw tahunError;
+
+      return {
+        tahun_ajaran_id: detail.tahun_ajaran_id,
+        tahun_ajaran_nama: tahunAjaran?.nama || null,
+      };
+    },
+  });
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedSiswa || !jenisId || !jumlah || !tahunAktif?.id) {
-        throw new Error("Data pembayaran atau tahun ajaran aktif belum lengkap");
+      if (!selectedSiswa || !jenisId || !jumlah || !spmbRegistration?.tahun_ajaran_id) {
+        throw new Error("Data pembayaran atau tahun ajaran pendaftaran SPMB belum lengkap");
       }
       return await prosesPembayaran({
         data: {
@@ -44,7 +73,7 @@ export default function PembayaranPMB() {
           tanggal_bayar: tanggalBayar,
           keterangan: keterangan || "Pembayaran SPMB",
           departemen_id: departemenId || undefined,
-          tahun_ajaran_id: tahunAktif.id,
+          tahun_ajaran_id: spmbRegistration.tahun_ajaran_id,
           is_bayar_dimuka: false,
         },
       });
@@ -167,6 +196,11 @@ export default function PembayaranPMB() {
                 <div>
                   <h3 className="font-semibold text-lg">{selectedSiswa.nama}</h3>
                   <p className="text-sm text-muted-foreground">Status: Calon Murid</p>
+                  <p className="text-sm text-muted-foreground">
+                    Tahun ajaran: {spmbRegistrationLoading
+                      ? "Memuat..."
+                      : spmbRegistration?.tahun_ajaran_nama || "Belum dikonfigurasi"}
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -176,6 +210,12 @@ export default function PembayaranPMB() {
             <Card>
               <CardHeader><CardTitle>Input Pembayaran SPMB</CardTitle></CardHeader>
               <CardContent className="space-y-4">
+                {spmbRegistrationError && (
+                  <p className="text-sm text-destructive">Tahun ajaran pendaftaran gagal dimuat. Muat ulang halaman lalu coba kembali.</p>
+                )}
+                {!spmbRegistrationLoading && !spmbRegistration?.tahun_ajaran_id && (
+                  <p className="text-sm text-destructive">Tahun ajaran pendaftaran SPMB siswa ini belum dikonfigurasi.</p>
+                )}
                 <div>
                   <Label>Jenis Pembayaran</Label>
                   <Select value={jenisId} onValueChange={(v) => {
@@ -204,7 +244,7 @@ export default function PembayaranPMB() {
                   <Label>Keterangan</Label>
                   <Textarea value={keterangan} onChange={(e) => setKeterangan(e.target.value)} placeholder="Pembayaran SPMB" />
                 </div>
-                <Button onClick={handleSubmit} disabled={!jenisId || !jumlah || !tahunAktif?.id || createMutation.isPending} className="w-full">
+                <Button onClick={handleSubmit} disabled={!jenisId || !jumlah || !spmbRegistration?.tahun_ajaran_id || createMutation.isPending} className="w-full">
                   {createMutation.isPending ? "Menyimpan..." : "Simpan Pembayaran & Jurnal"}
                 </Button>
               </CardContent>
