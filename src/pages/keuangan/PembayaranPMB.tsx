@@ -59,10 +59,30 @@ export default function PembayaranPMB() {
     },
   });
 
+  const {
+    data: paymentBookYear,
+    isLoading: paymentBookYearLoading,
+    error: paymentBookYearError,
+  } = useQuery({
+    queryKey: ["spmb_payment_book_year", tanggalBayar],
+    enabled: !!tanggalBayar,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tahun_buku")
+        .select("id, nama")
+        .lte("tanggal_mulai", tanggalBayar)
+        .gte("tanggal_selesai", tanggalBayar)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const createMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedSiswa || !jenisId || !jumlah || !spmbRegistration?.tahun_ajaran_id) {
-        throw new Error("Data pembayaran atau tahun ajaran pendaftaran SPMB belum lengkap");
+      if (!selectedSiswa || !jenisId || !jumlah || !paymentBookYear?.id) {
+        throw new Error("Data pembayaran atau tahun buku tanggal bayar belum lengkap");
       }
       return await prosesPembayaran({
         data: {
@@ -73,7 +93,7 @@ export default function PembayaranPMB() {
           tanggal_bayar: tanggalBayar,
           keterangan: keterangan || "Pembayaran SPMB",
           departemen_id: departemenId || undefined,
-          tahun_ajaran_id: spmbRegistration.tahun_ajaran_id,
+          tahun_ajaran_id: paymentBookYear.id,
           is_bayar_dimuka: false,
         },
       });
@@ -213,8 +233,14 @@ export default function PembayaranPMB() {
                 {spmbRegistrationError && (
                   <p className="text-sm text-destructive">Tahun ajaran pendaftaran gagal dimuat. Muat ulang halaman lalu coba kembali.</p>
                 )}
+                {paymentBookYearError && (
+                  <p className="text-sm text-destructive">Tahun buku untuk tanggal bayar gagal dimuat. Muat ulang halaman lalu coba kembali.</p>
+                )}
                 {!spmbRegistrationLoading && !spmbRegistration?.tahun_ajaran_id && (
                   <p className="text-sm text-destructive">Tahun ajaran pendaftaran SPMB siswa ini belum dikonfigurasi.</p>
+                )}
+                {!paymentBookYearLoading && tanggalBayar && !paymentBookYear?.id && (
+                  <p className="text-sm text-destructive">Tahun buku untuk tanggal bayar belum dikonfigurasi.</p>
                 )}
                 <div>
                   <Label>Jenis Pembayaran</Label>
@@ -239,12 +265,15 @@ export default function PembayaranPMB() {
                 <div>
                   <Label>Tanggal Bayar</Label>
                   <Input type="date" value={tanggalBayar} onChange={(e) => setTanggalBayar(e.target.value)} />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Tahun buku: {paymentBookYearLoading ? "Memuat..." : paymentBookYear?.nama || "Belum dikonfigurasi"}
+                  </p>
                 </div>
                 <div>
                   <Label>Keterangan</Label>
                   <Textarea value={keterangan} onChange={(e) => setKeterangan(e.target.value)} placeholder="Pembayaran SPMB" />
                 </div>
-                <Button onClick={handleSubmit} disabled={!jenisId || !jumlah || !spmbRegistration?.tahun_ajaran_id || createMutation.isPending} className="w-full">
+                <Button onClick={handleSubmit} disabled={!jenisId || !jumlah || !spmbRegistration?.tahun_ajaran_id || !paymentBookYear?.id || createMutation.isPending} className="w-full">
                   {createMutation.isPending ? "Menyimpan..." : "Simpan Pembayaran & Jurnal"}
                 </Button>
               </CardContent>
