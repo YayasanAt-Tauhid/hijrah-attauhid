@@ -32,17 +32,24 @@ export function useTagihanList(filters?: {
   });
 }
 
-export function useTagihanBySiswa(siswaId?: string, jenisId?: string, bulan?: number) {
+export function useTagihanBySiswa(
+  siswaId?: string,
+  jenisId?: string,
+  bulan?: number,
+  tahunBukuId?: string,
+) {
   return useQuery({
-    queryKey: ["tagihan", "siswa", siswaId, jenisId, bulan],
+    queryKey: ["tagihan", "siswa", siswaId, jenisId, bulan, tahunBukuId],
     enabled: !!siswaId && !!jenisId,
     queryFn: async () => {
       let q = supabase
         .from("tagihan")
-        .select("id, nominal, status, jurnal_piutang_id")
+        .select("id, nominal, status, jurnal_piutang_id, tahun_ajaran_id")
         .eq("siswa_id", siswaId!)
         .eq("jenis_id", jenisId!)
         .eq("status", "belum_bayar");
+
+      if (tahunBukuId) q = q.eq("tahun_ajaran_id", tahunBukuId);
 
       if (bulan != null) {
         q = q.eq("bulan", bulan);

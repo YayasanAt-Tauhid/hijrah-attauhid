@@ -175,16 +175,19 @@ export default function InputPembayaran() {
   const selectedJenis = jenisList.find(j => j.id === form.jenisId) ?? null;
   const isSekali      = selectedJenis ? isTipeSekali(selectedJenis.tipe) : false;
 
+  const { data: existingTagihan } = useTagihanBySiswa(
+    selectedSiswa?.id, form.jenisId || undefined, isSekali ? undefined : form.bulan,
+    effectiveTahunAjaranId,
+  );
+
+  const tarifTahunBukuId = existingTagihan?.tahun_ajaran_id || effectiveTahunAjaranId;
+
   const { data: tarifNominal, isLoading: loadingTarif } = useTarifSiswa(
     form.jenisId || undefined,
     selectedSiswa?.id,
     siswaKelasId,
-    effectiveTahunAjaranId,
+    tarifTahunBukuId,
     (selectedSiswa as any)?.angkatan_id ?? undefined,
-  );
-
-  const { data: existingTagihan } = useTagihanBySiswa(
-    selectedSiswa?.id, form.jenisId || undefined, isSekali ? undefined : form.bulan,
   );
 
   // Bulan yang sudah dibayar (dari tabel pembayaran)
