@@ -1,7 +1,7 @@
 export const SPMB_TARGET_ACADEMIC_YEAR = "Tahun Ajaran 2027-2028";
 export const SPMB_TARGET_COHORT = "Angkatan 2027";
 export const SPMB_CATEGORY_VALUE = "MURID BARU";
-export const SPMB_CATEGORY_LABEL = "Murid";
+export const SPMB_CATEGORY_LABEL = "Murid Baru";
 
 // 21 Sep 2026 00:00 WIB = 20 Sep 2026 17:00 UTC.
 export const SPMB_FIRST_WAVE_START_AT = Date.parse("2026-09-20T17:00:00.000Z");
