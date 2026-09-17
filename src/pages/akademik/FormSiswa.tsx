@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "@/lib/router-compat";
 import { useForm, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,6 +18,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { FileUpload } from "@/components/shared/FileUpload";
 import { FormSection } from "@/components/shared/FormSection";
 import { SpmbDocumentUpload } from "@/components/akademik/SpmbDocumentUpload";
+import { SpmbFieldVerification } from "@/components/akademik/SpmbFieldVerification";
+import { fetchSpmbVerificationState, saveSpmbVerificationFields, spmbVerificationQueryKey, useSpmbVerificationState } from "@/hooks/useSpmbVerification";
 import { ArrowLeft, Save, Wand2, Pencil, Loader2 } from "lucide-react";
 
 const optionalString = z.string().optional();
@@ -136,20 +138,34 @@ function perluPilihanAsrama(dept?: { kode?: string | null; nama?: string | null 
   return ["SMP", "SMA", "MTA"].includes(kode) || /(^|\s)(SMP|SMA|MTA)(\s|$)/.test(nama);
 }
 
-function TextField({ form, name, label, type = "text", placeholder, inputMode }: {
+function TextField({ form, name, label, type = "text", placeholder, inputMode, onValueChange, after }: {
   form: UseFormReturn<SiswaForm>;
   name: keyof SiswaForm;
   label: string;
   type?: string;
   placeholder?: string;
   inputMode?: "none" | "text" | "tel" | "url" | "email" | "numeric" | "decimal" | "search";
+  onValueChange?: (value: string) => void;
+  after?: ReactNode;
 }) {
   return (
     <FormField control={form.control} name={name as any} render={({ field }) => (
       <FormItem>
         <FormLabel>{label}</FormLabel>
-        <FormControl><Input type={type} placeholder={placeholder} inputMode={inputMode} {...field} /></FormControl>
+        <FormControl>
+          <Input
+            type={type}
+            placeholder={placeholder}
+            inputMode={inputMode}
+            {...field}
+            onChange={(event) => {
+              field.onChange(event);
+              onValueChange?.(event.target.value);
+            }}
+          />
+        </FormControl>
         <FormMessage />
+        {after}
       </FormItem>
     )} />
   );
@@ -167,22 +183,31 @@ function TextAreaField({ form, name, label, placeholder }: { form: UseFormReturn
   );
 }
 
-function SelectField({ form, name, label, options, placeholder = "Pilih" }: { form: UseFormReturn<SiswaForm>; name: keyof SiswaForm; label: string; options: Choice[]; placeholder?: string }) {
+function SelectField({ form, name, label, options, placeholder = "Pilih", onValueChange, after }: {
+  form: UseFormReturn<SiswaForm>;
+  name: keyof SiswaForm;
+  label: string;
+  options: Choice[];
+  placeholder?: string;
+  onValueChange?: (value: string) => void;
+  after?: ReactNode;
+}) {
   return (
     <FormField control={form.control} name={name as any} render={({ field }) => (
       <FormItem>
         <FormLabel>{label}</FormLabel>
-        <Select onValueChange={field.onChange} value={field.value || ""}>
+        <Select onValueChange={(value) => { field.onChange(value); onValueChange?.(value); }} value={field.value || ""}>
           <FormControl><SelectTrigger><SelectValue placeholder={placeholder} /></SelectTrigger></FormControl>
           <SelectContent>{options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
         </Select>
         <FormMessage />
+        {after}
       </FormItem>
     )} />
   );
 }
 
-export default function FormSiswa() {
+export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
   const { id } = useParams();
   const isEdit = !!id;
   const navigate = useNavigate();
@@ -200,6 +225,10 @@ export default function FormSiswa() {
   const [nisMode, setNisMode] = useState<"otomatis" | "manual" | "ketik">(isEdit ? "manual" : "otomatis");
   const [savedSiswaId, setSavedSiswaId] = useState<string | null>(null);
   const [isGeneratingNis, setIsGeneratingNis] = useState(false);
+  const [verificationDraft, setVerificationDraft] = useState<Record<string, boolean>>({});
+  const [verificationSaving, setVerificationSaving] = useState(false);
+  const verificationQuery = useSpmbVerificationState(isEdit ? id! : "");
+  const verificationState = verificationQuery.data;
 
   const form = useForm<SiswaForm>({
     resolver: zodResolver(siswaSchema),
@@ -216,6 +245,34 @@ export default function FormSiswa() {
   const selectedDept = departemenList.find((d: any) => d.id === watchDept) as any;
   const wajibAsrama = perluPilihanAsrama(selectedDept);
   const nisParamsComplete = !!(watchDept && watchAngkatan && watchKelas);
+
+  useEffect(() => {
+    if (!isEdit || !verificationState?.can_verify) return;
+    setVerificationDraft(verificationState.checklist || {});
+  }, [isEdit, verificationState?.version, verificationState?.can_verify]);
+
+  const setVerificationChecked = (fieldKey: string, checked: boolean) => {
+    setVerificationDraft((current) => ({ ...current, [fieldKey]: checked }));
+  };
+
+  const resetVerification = (fieldKey: string) => {
+    if (!isEdit || !verificationState?.can_verify) return;
+    setVerificationDraft((current) => current[fieldKey] === true ? { ...current, [fieldKey]: false } : current);
+  };
+
+  const verificationControl = (fieldKey: string) => {
+    if (!isEdit || !verificationState?.can_verify) return null;
+    const requirement = verificationState.requirements.find((item) => item.key === fieldKey && item.required);
+    if (!requirement) return null;
+    return (
+      <SpmbFieldVerification
+        fieldKey={fieldKey}
+        checked={verificationDraft[fieldKey] === true}
+        disabled={verificationSaving || updateSiswa.isPending}
+        onCheckedChange={setVerificationChecked}
+      />
+    );
+  };
 
   useEffect(() => {
     if (departemenList.length && !wajibAsrama && form.getValues("status_asrama")) form.setValue("status_asrama", "");
@@ -276,6 +333,25 @@ export default function FormSiswa() {
     }
   };
 
+  const commitVerificationDraft = async () => {
+    if (!isEdit || !id || !verificationState?.can_verify) return;
+    setVerificationSaving(true);
+    try {
+      const latest = await fetchSpmbVerificationState(id);
+      const draft = Object.keys(verificationDraft).length ? verificationDraft : (verificationState.checklist || {});
+      const changes = Object.fromEntries(
+        latest.requirements
+          .filter((item) => item.required)
+          .map((item) => [item.key, draft[item.key] === true]),
+      );
+      const saved = await saveSpmbVerificationFields(id, changes, latest.version);
+      setVerificationDraft(saved.checklist || {});
+      queryClient.setQueryData(spmbVerificationQueryKey(id), saved);
+    } finally {
+      setVerificationSaving(false);
+    }
+  };
+
   const onSubmit = async (values: SiswaForm) => {
     if (uploadsBusy > 0) { toast.error("Tunggu upload dokumen selesai"); return; }
     if (values.kelas_id && !values.tahun_ajaran_id) { toast.error("Tahun ajaran wajib diisi untuk kelas"); return; }
@@ -328,12 +404,29 @@ export default function FormSiswa() {
       if (nisMode === "otomatis" && nisParamsComplete) {
         try {
           const nis = await invokeGenerateNis(id!, watchDept!, watchAngkatan!, watchKelas!);
-          toast.success("Siswa disimpan. NIS: " + nis);
+          form.setValue("nis", nis);
         } catch (err: any) {
-          toast.warning("Siswa disimpan, tapi NIS gagal dibuat: " + (err.message || ""));
+          toast.warning("Data tersimpan, tetapi NIS gagal dibuat: " + (err.message || ""));
         }
       }
-      navigate(`/akademik/siswa/${id}`);
+      try {
+        await commitVerificationDraft();
+      } catch (err: any) {
+        form.reset(values);
+        await queryClient.invalidateQueries({ queryKey: spmbVerificationQueryKey(id!) });
+        toast.error("Data siswa tersimpan, tetapi checklist belum tersimpan", {
+          description: err?.message || "Periksa kembali checklist lalu tekan Simpan Perubahan lagi.",
+        });
+        return;
+      }
+      form.reset({ ...values, nis: form.getValues("nis") });
+      onSaved?.();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["siswa", id!] }),
+        queryClient.invalidateQueries({ queryKey: ["siswa_detail", id!] }),
+        queryClient.invalidateQueries({ queryKey: ["siswa", "calon"] }),
+      ]);
+      toast.success("Perubahan data dan checklist pemeriksaan berhasil disimpan");
       return;
     }
 
@@ -390,7 +483,12 @@ export default function FormSiswa() {
                   <FormSection title="Identitas">
                     <div className="grid gap-4 sm:grid-cols-2">
                       <FormField control={form.control} name="nama" render={({ field }) => (
-                        <FormItem><FormLabel>Nama Lengkap *</FormLabel><FormControl><Input placeholder="Nama lengkap siswa" {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem>
+                          <FormLabel>Nama Lengkap *</FormLabel>
+                          <FormControl><Input placeholder="Nama lengkap siswa" {...field} onChange={(event) => { field.onChange(event); resetVerification("nama"); }} /></FormControl>
+                          <FormMessage />
+                          {verificationControl("nama")}
+                        </FormItem>
                       )} />
                       <div className="space-y-2">
                         <div className="flex items-center gap-1 flex-wrap">
@@ -410,10 +508,10 @@ export default function FormSiswa() {
                           </Button>
                         )}
                       </div>
-                      <SelectField form={form} name="jenis_kelamin" label="Jenis Kelamin *" options={jenisKelaminOptions} />
+                      <SelectField form={form} name="jenis_kelamin" label="Jenis Kelamin *" options={jenisKelaminOptions} onValueChange={() => resetVerification("jenis_kelamin")} after={verificationControl("jenis_kelamin")} />
                       <SelectField form={form} name="agama" label="Agama" options={agamaOptions} />
-                      <TextField form={form} name="tempat_lahir" label="Tempat Lahir" />
-                      <TextField form={form} name="tanggal_lahir" label="Tanggal Lahir" type="date" />
+                      <TextField form={form} name="tempat_lahir" label="Tempat Lahir" onValueChange={() => resetVerification("tempat_lahir")} after={verificationControl("tempat_lahir")} />
+                      <TextField form={form} name="tanggal_lahir" label="Tanggal Lahir" type="date" onValueChange={() => resetVerification("tanggal_lahir")} after={verificationControl("tanggal_lahir")} />
                       <TextField form={form} name="telepon" label="No. HP Siswa / Pendaftar" inputMode="tel" />
                       <TextField form={form} name="email" label="Email" type="email" />
                     </div>
@@ -429,10 +527,10 @@ export default function FormSiswa() {
                   <FormSection title="Data Akademik">
                     <div className="grid gap-4 sm:grid-cols-2">
                       <FormField control={form.control} name="departemen_id" render={({ field }) => (
-                        <FormItem><FormLabel>Lembaga / Departemen</FormLabel><Select onValueChange={(v) => { field.onChange(v); form.setValue("tingkat_id", ""); form.setValue("kelas_id", ""); form.setValue("angkatan_id", ""); }} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Pilih lembaga" /></SelectTrigger></FormControl><SelectContent>{departemenList.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.nama}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Lembaga / Departemen</FormLabel><Select onValueChange={(v) => { field.onChange(v); form.setValue("tingkat_id", ""); form.setValue("kelas_id", ""); form.setValue("angkatan_id", ""); resetVerification("departemen_id"); resetVerification("angkatan_id"); }} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Pilih lembaga" /></SelectTrigger></FormControl><SelectContent>{departemenList.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.nama}</SelectItem>)}</SelectContent></Select><FormMessage />{verificationControl("departemen_id")}</FormItem>
                       )} />
                       <FormField control={form.control} name="angkatan_id" render={({ field }) => (
-                        <FormItem><FormLabel>Angkatan</FormLabel><Select onValueChange={field.onChange} value={field.value || ""} disabled={!watchDept}><FormControl><SelectTrigger><SelectValue placeholder="Pilih angkatan" /></SelectTrigger></FormControl><SelectContent>{angkatanList.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.nama}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Angkatan</FormLabel><Select onValueChange={(value) => { field.onChange(value); resetVerification("angkatan_id"); }} value={field.value || ""} disabled={!watchDept}><FormControl><SelectTrigger><SelectValue placeholder="Pilih angkatan" /></SelectTrigger></FormControl><SelectContent>{angkatanList.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.nama}</SelectItem>)}</SelectContent></Select><FormMessage />{verificationControl("angkatan_id")}</FormItem>
                       )} />
                       <FormField control={form.control} name="tingkat_id" render={({ field }) => (
                         <FormItem><FormLabel>Tingkat</FormLabel><Select onValueChange={(v) => { field.onChange(v); form.setValue("kelas_id", ""); }} value={field.value || ""} disabled={!watchDept}><FormControl><SelectTrigger><SelectValue placeholder="Pilih tingkat" /></SelectTrigger></FormControl><SelectContent>{tingkatList.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.nama}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
@@ -453,9 +551,28 @@ export default function FormSiswa() {
             <TabsContent value="spmb">
               <Card className="mb-4"><CardContent className="pt-6 space-y-4">
                 <p className="font-medium">Dokumen SPMB</p>
+                {isEdit && verificationState?.can_verify && (
+                  <p className="text-sm text-muted-foreground">Centang “Sudah diperiksa” setelah memeriksa nilai atau dokumen. Checklist disimpan bersama tombol Simpan Perubahan.</p>
+                )}
                 {([ ["kk", "Kartu Keluarga (wajib)"], ["akta", "Akta Kelahiran (wajib)"], ["rapor", "Rapor"], ["ijazah", "Ijazah/SKHUN (bila sudah ada)"] ] as const).map(([kind, label]) => {
                   const name = `dokumen_${kind}_path` as keyof SiswaForm;
-                  return <SpmbDocumentUpload key={kind} kind={kind} label={label} value={form.watch(name)} onChange={(path) => form.setValue(name, path, { shouldDirty: true })} onBusy={(busy) => setUploadsBusy((n) => n + (busy ? 1 : -1))} />;
+                  const verificationKey = String(name);
+                  const requiredDocument = kind === "kk" || kind === "akta";
+                  return (
+                    <div key={kind} className="space-y-2">
+                      <SpmbDocumentUpload
+                        kind={kind}
+                        label={label}
+                        value={form.watch(name)}
+                        onChange={(path) => {
+                          form.setValue(name, path, { shouldDirty: true });
+                          if (requiredDocument) resetVerification(verificationKey);
+                        }}
+                        onBusy={(busy) => setUploadsBusy((n) => n + (busy ? 1 : -1))}
+                      />
+                      {requiredDocument && verificationControl(verificationKey)}
+                    </div>
+                  );
                 })}
               </CardContent></Card>
               <Card>
@@ -463,22 +580,22 @@ export default function FormSiswa() {
                   <FormSection title="Data Pendaftaran SPMB">
                     <div className="grid gap-4 sm:grid-cols-2">
                       <FormField control={form.control} name="spmb_tahun_ajaran_id" render={({ field }) => (
-                        <FormItem><FormLabel>Periode Tahun Ajaran SPMB</FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Pilih periode" /></SelectTrigger></FormControl><SelectContent>{tahunAjaranList.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.nama} {t.aktif ? "(Aktif)" : ""}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Periode Tahun Ajaran SPMB</FormLabel><Select onValueChange={(value) => { field.onChange(value); resetVerification("tahun_ajaran_id"); }} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Pilih periode" /></SelectTrigger></FormControl><SelectContent>{tahunAjaranList.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.nama} {t.aktif ? "(Aktif)" : ""}</SelectItem>)}</SelectContent></Select><FormMessage />{verificationControl("tahun_ajaran_id")}</FormItem>
                       )} />
                       <SelectField form={form} name="jenis_pendaftaran" label="Jenis Pendaftaran" options={jenisPendaftaranOptions} />
-                      <TextField form={form} name="nik" label="NIK" inputMode="numeric" />
-                      <TextField form={form} name="no_kk" label="No. KK" inputMode="numeric" />
-                      <SelectField form={form} name="kategori" label="Kategori" options={kategoriOptions} />
-                      {wajibAsrama && <SelectField form={form} name="status_asrama" label="Asrama / Non Asrama *" options={asramaOptions} />}
-                      <TextField form={form} name="anak_ke" label="Anak ke" type="number" />
-                      <TextField form={form} name="jumlah_bersaudara" label="Dari Bersaudara" type="number" />
+                      <TextField form={form} name="nik" label="NIK" inputMode="numeric" onValueChange={() => resetVerification("nik")} after={verificationControl("nik")} />
+                      <TextField form={form} name="no_kk" label="No. KK" inputMode="numeric" onValueChange={() => resetVerification("no_kk")} after={verificationControl("no_kk")} />
+                      <SelectField form={form} name="kategori" label="Kategori" options={kategoriOptions} onValueChange={() => resetVerification("kategori")} after={verificationControl("kategori")} />
+                      {wajibAsrama && <SelectField form={form} name="status_asrama" label="Asrama / Non Asrama *" options={asramaOptions} onValueChange={() => resetVerification("status_asrama")} after={verificationControl("status_asrama")} />}
+                      <TextField form={form} name="anak_ke" label="Anak ke" type="number" onValueChange={() => resetVerification("anak_ke")} after={verificationControl("anak_ke")} />
+                      <TextField form={form} name="jumlah_bersaudara" label="Dari Bersaudara" type="number" onValueChange={() => resetVerification("jumlah_bersaudara")} after={verificationControl("jumlah_bersaudara")} />
                       <TextField form={form} name="tinggi_badan_cm" label="Tinggi Badan (cm)" type="number" />
                       <TextField form={form} name="berat_badan_kg" label="Berat Badan (kg)" type="number" />
                       <TextField form={form} name="lingkar_kepala_cm" label="Lingkar Kepala (cm)" type="number" />
                       <SelectField form={form} name="ukuran_baju" label="Ukuran Baju" options={ukuranBajuOptions} />
-                      <TextField form={form} name="jarak_rumah_km" label="Jarak Rumah ke Sekolah (km)" type="number" />
-                      <TextField form={form} name="waktu_perjalanan_menit" label="Waktu Perjalanan (menit)" type="number" />
-                      <SelectField form={form} name="transportasi" label="Transportasi" options={transportasiOptions} />
+                      <TextField form={form} name="jarak_rumah_km" label="Jarak Rumah ke Sekolah (km)" type="number" onValueChange={() => resetVerification("jarak_rumah_km")} after={verificationControl("jarak_rumah_km")} />
+                      <TextField form={form} name="waktu_perjalanan_menit" label="Waktu Perjalanan (menit)" type="number" onValueChange={() => resetVerification("waktu_perjalanan_menit")} after={verificationControl("waktu_perjalanan_menit")} />
+                      <SelectField form={form} name="transportasi" label="Transportasi" options={transportasiOptions} onValueChange={() => resetVerification("transportasi")} after={verificationControl("transportasi")} />
                     </div>
                     <TextAreaField form={form} name="penyakit_pernah_diderita" label="Penyakit yang Pernah Diderita" placeholder="Kosongkan jika tidak ada" />
                   </FormSection>
@@ -541,10 +658,10 @@ export default function FormSiswa() {
                   </FormSection>
                   <FormSection title="Kemampuan Dasar Siswa">
                     <div className="grid gap-4 sm:grid-cols-2">
-                      <SelectField form={form} name="kemampuan_iqro" label="Kemampuan Dasar (Iqro)" options={iqroOptions} />
-                      <SelectField form={form} name="membaca_latin" label="Membaca Latin" options={latinOptions} />
-                      <SelectField form={form} name="menulis_latin" label="Menulis Latin" options={latinOptions} />
-                      <SelectField form={form} name="hafalan_quran" label="Hafalan Qur'an" options={hafalanOptions} />
+                      <SelectField form={form} name="kemampuan_iqro" label="Kemampuan Dasar (Iqro)" options={iqroOptions} onValueChange={() => resetVerification("kemampuan_iqro")} after={verificationControl("kemampuan_iqro")} />
+                      <SelectField form={form} name="membaca_latin" label="Membaca Latin" options={latinOptions} onValueChange={() => resetVerification("membaca_latin")} after={verificationControl("membaca_latin")} />
+                      <SelectField form={form} name="menulis_latin" label="Menulis Latin" options={latinOptions} onValueChange={() => resetVerification("menulis_latin")} after={verificationControl("menulis_latin")} />
+                      <SelectField form={form} name="hafalan_quran" label="Hafalan Qur'an" options={hafalanOptions} onValueChange={() => resetVerification("hafalan_quran")} after={verificationControl("hafalan_quran")} />
                     </div>
                   </FormSection>
                 </CardContent>
@@ -554,8 +671,8 @@ export default function FormSiswa() {
 
           <div className="sticky bottom-0 bg-background border-t py-4 mt-6 flex justify-end gap-3">
             <Button type="button" variant="outline" onClick={() => navigate(-1)}>Batal</Button>
-            <Button type="submit" disabled={uploadsBusy > 0 || createSiswa.isPending || updateSiswa.isPending || isGeneratingNis}>
-              <Save className="h-4 w-4 mr-2" />{isEdit ? "Simpan Perubahan" : "Simpan Siswa"}
+            <Button type="submit" disabled={uploadsBusy > 0 || createSiswa.isPending || updateSiswa.isPending || isGeneratingNis || verificationSaving}>
+              {verificationSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}{isEdit ? "Simpan Perubahan" : "Simpan Siswa"}
             </Button>
           </div>
         </form>
