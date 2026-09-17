@@ -1,10 +1,12 @@
 # API Integrasi Hijrah v1
 
-API read-only untuk sinkronisasi **Hijrah → backend aplikasi penerima**. Kontrak eksternal berada pada TanStack Start server routes; pihak ketiga tidak memerlukan akses Supabase.
+API baca untuk sinkronisasi **Hijrah → backend aplikasi penerima**. Kontrak eksternal berada pada TanStack Start server routes; pihak ketiga tidak memerlukan akses Supabase. Hak write opsional terbatas pada milestone SPMB.
 
 ## Base URL produksi
 
-`https://hijrah-attauhid-prod.yayasan-attauhid-1.workers.dev/api/v1`
+`https://app.hijrah-attauhid.or.id`
+
+Prefix endpoint: `/api/v1`.
 
 Gunakan header berikut pada setiap request:
 
@@ -22,6 +24,7 @@ Token hanya boleh disimpan di backend penerima, bukan browser/APK, URL, analytic
 | `pendaftaran:read` | data dasar pendaftaran, proses SPMB, status pembayaran pendaftaran |
 | `pendaftaran:sensitive:read` | NIK/KK, kontak/alamat, orang tua, kesehatan/fisik, sekolah asal, kemampuan |
 | `pendaftaran:documents:read` | metadata dokumen dan signed URL 60 detik |
+| `pendaftaran:milestone:update` | Update Status SPMB (Tes, Lulus, Daftar Ulang) |
 | `siswa:read` | siswa non-calon dan relasi kelas |
 | `kelas:read` | kelas; anggota kelas juga membutuhkan `siswa:read` |
 
@@ -36,6 +39,50 @@ Token hanya boleh disimpan di backend penerima, bukan browser/APK, URL, analytic
 - `GET /documents/{pendaftaran_id}.{jenis}` dengan `jenis`: `kk`, `akta`, `rapor`, `ijazah`
 
 List menggunakan `limit` default 100, maksimum 200, dan `cursor` opaque. Filter yang relevan meliputi `departemen_id`, `tahun_ajaran_id`, `status`, dan relasi kelas sesuai endpoint. UUID harus valid. Timestamp menggunakan ISO-8601. Nilai database yang kosong dikirim `null`; blok sensitif/dokumen yang tidak diizinkan tidak dikirim sama sekali.
+
+## Write milestone SPMB
+
+Admin memilih **Update Status SPMB (Tes, Lulus, Daftar Ulang)** di **Pengaturan → Integrasi API**, saat membuat token atau mengubah izin integrasi. Token read-only tetap tidak memiliki akses write. Scope write tidak otomatis memberikan izin baca atau data sensitif.
+
+```http
+POST /api/v1/pendaftaran/{id}/milestone
+Authorization: Bearer TOKEN
+Content-Type: application/json
+
+{"action":"tes"}
+```
+
+Gunakan `id` dari respons API pendaftaran, bukan ID siswa. Payload hanya menerima satu field `action`: `tes`, `lulus`, atau `daftar_ulang`. Biodata, NIK, orang tua, pembayaran, dan kelas tidak dapat diubah; field tambahan ditolak.
+
+```sh
+curl -X POST "https://app.hijrah-attauhid.or.id/api/v1/pendaftaran/PENDAFTARAN_ID/milestone" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"action":"tes"}'
+```
+
+Scope wajib: `pendaftaran:milestone:update`. Batas unit dan tahun ajaran token tetap berlaku. API memanggil workflow `spmb_mark_milestone()` existing; tidak menjalankan update biodata atau proses penerimaan/aktivasi siswa.
+
+| Permintaan | Hasil |
+|---|---|
+| Token read-only | `403 forbidden` |
+| Token tidak valid, kedaluwarsa, atau dicabut | `401 unauthorized` |
+| ID tidak ditemukan atau di luar unit/tahun ajaran | `404 not_found` |
+| Lulus sebelum Tes | `400 business_rule_failed` |
+| Daftar Ulang sebelum Lulus | `400 business_rule_failed` |
+| Action valid dengan prasyarat terpenuhi | `200` |
+| Request ulang action yang sama | `200`, `marked_at` tetap sama |
+| Payload tidak valid/field tambahan | `400` |
+
+Contoh respons sukses:
+
+```json
+{"data":{"pendaftaran_id":"00000000-0000-4000-8000-000000000001","action":"tes","marked_at":"2026-09-17T04:00:00+00:00"},"request_id":"00000000-0000-4000-8000-000000000002"}
+```
+
+Idempotensi berlaku berdasarkan pendaftaran dan action, termasuk request bersamaan. Tidak perlu `Idempotency-Key`. Waktu milestone ditentukan workflow dan tidak dapat dikirim atau direset oleh pihak ketiga. Audit mencatat integration ID, token ID, request ID, action dan hasil tanpa token mentah/biodata. Setiap request ulang tetap dicatat sebagai akses.
+
+Jika terjadi `503` atau respons terputus, ulangi **action yang sama**: workflow mengembalikan timestamp existing jika operasi sebelumnya sudah berhasil. Audit intent disimpan sebelum workflow; bila pencatatan hasil gagal, API mengembalikan `503` agar tidak mengklaim hasil yang belum terkonfirmasi.
 
 ## Identitas stabil
 

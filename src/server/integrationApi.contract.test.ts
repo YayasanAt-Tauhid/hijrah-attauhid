@@ -44,7 +44,7 @@ describe('Integration API v1 contract', () => {
   })
 
   it('documents the verified production origin and stable document identity', () => {
-    const origin = 'https://hijrah-attauhid-prod.yayasan-attauhid-1.workers.dev'
+    const origin = 'https://app.hijrah-attauhid.or.id'
     expect(docs).toContain(origin)
     expect(openapi).toContain(origin)
     expect(postman).toContain(origin)

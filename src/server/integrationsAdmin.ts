@@ -1,5 +1,5 @@
 import {createServerFn} from '@tanstack/react-start'; import {authMiddleware,requireContext,requireRole} from './auth'; import {createAdminClient} from './supabase';
-const ALLOWED=['pendaftaran:read','pendaftaran:sensitive:read','pendaftaran:documents:read','siswa:read','kelas:read'];
+const ALLOWED=['pendaftaran:read','pendaftaran:sensitive:read','pendaftaran:documents:read','siswa:read','kelas:read','pendaftaran:milestone:update'];
 async function hash(v:string){const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));return [...new Uint8Array(d)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 function token(){const a=new Uint8Array(32);crypto.getRandomValues(a);return 'hat_live_'+[...a].map(x=>x.toString(16).padStart(2,'0')).join('')}
 async function adminCtx(context:unknown){const c=requireContext(context),db=createAdminClient();await requireRole(db,c.userId,['admin']);return {c,db}}

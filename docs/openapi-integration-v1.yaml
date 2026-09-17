@@ -2,9 +2,9 @@ openapi: 3.1.0
 info:
   title: Hijrah At-Tauhid Integration API
   version: 1.0.0
-  description: Read-only API for SPMB registrations, students, classes, documents, and incremental synchronization.
+  description: Read API and scoped milestone updates for SPMB registrations, students, classes, documents, and incremental synchronization.
 servers:
-  - url: https://hijrah-attauhid-prod.yayasan-attauhid-1.workers.dev
+  - url: https://app.hijrah-attauhid.or.id
     description: Production Cloudflare Worker
 security:
   - bearerAuth: []
@@ -180,3 +180,53 @@ paths:
       summary: Issue a private signed document URL valid for 60 seconds
       parameters: [{ name: id, in: path, required: true, schema: { type: string, pattern: '^[0-9a-fA-F-]{36}\.(kk|akta|rapor|ijazah)$' } }]
       responses: { '200': { description: Signed URL }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { description: Not found or outside scope } }
+
+  /api/v1/pendaftaran/{id}/milestone:
+    post:
+      summary: Update Status SPMB (Tes, Lulus, Daftar Ulang)
+      description: Requires pendaftaran:milestone:update. Unit/year restrictions apply. Uses the existing SPMB workflow; repeated actions return the original timestamp. No student biodata, payments, or class writes.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+          description: Registration ID, not student ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action]
+              properties:
+                action: { type: string, enum: [tes, lulus, daftar_ulang] }
+      responses:
+        '200':
+          description: Milestone marked or already marked (idempotent)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, request_id]
+                properties:
+                  request_id: { type: string, format: uuid }
+                  data:
+                    type: object
+                    required: [pendaftaran_id, action, marked_at]
+                    properties:
+                      pendaftaran_id: { type: string, format: uuid }
+                      action: { type: string, enum: [tes, lulus, daftar_ulang] }
+                      marked_at: { type: string, format: date-time }
+        '400':
+          description: Invalid payload or unmet workflow prerequisite
+        '401':
+          description: Invalid, expired or revoked token
+        '403':
+          description: Missing pendaftaran:milestone:update scope
+        '404':
+          description: Registration missing or outside permitted unit/year
+        '429':
+          description: Rate limit exceeded; obey Retry-After
+        '503':
+          description: Outcome unconfirmed; retry the same action safely

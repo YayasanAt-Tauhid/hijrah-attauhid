@@ -1,42 +1,242 @@
 {
   "info": {
     "name": "Hijrah Integration API v1",
-    "description": "Read-only Hijrah → third-party backend integration. Never place the bearer token in browser/mobile code.",
+    "description": "Hijrah read integration and optional SPMB milestone updates. Never place the bearer token in browser/mobile code.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    {"key":"baseUrl","value":"https://hijrah-attauhid-prod.yayasan-attauhid-1.workers.dev"},
-    {"key":"token","value":"REPLACE_WITH_BACKEND_TOKEN","type":"secret"},
-    {"key":"pendaftaranId","value":"00000000-0000-4000-8000-000000000001"},
-    {"key":"siswaId","value":"00000000-0000-4000-8000-000000000001"},
-    {"key":"kelasId","value":"00000000-0000-4000-8000-000000000001"},
-    {"key":"checkpoint","value":"0"}
+    {
+      "key": "baseUrl",
+      "value": "https://app.hijrah-attauhid.or.id"
+    },
+    {
+      "key": "token",
+      "value": "REPLACE_WITH_BACKEND_TOKEN",
+      "type": "secret"
+    },
+    {
+      "key": "pendaftaranId",
+      "value": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "key": "siswaId",
+      "value": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "key": "kelasId",
+      "value": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "key": "checkpoint",
+      "value": "0"
+    }
   ],
-  "auth": {"type":"bearer","bearer":[{"key":"token","value":"{{token}}","type":"string"}]},
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
   "item": [
-    {"name":"Pendaftaran","item":[
-      {"name":"List","request":{"method":"GET","url":"{{baseUrl}}/api/v1/pendaftaran?limit=100"}},
-      {"name":"Detail","request":{"method":"GET","url":"{{baseUrl}}/api/v1/pendaftaran/{{pendaftaranId}}"}}
-    ]},
-    {"name":"Siswa","item":[
-      {"name":"List","request":{"method":"GET","url":"{{baseUrl}}/api/v1/siswa?limit=100"}},
-      {"name":"Detail","request":{"method":"GET","url":"{{baseUrl}}/api/v1/siswa/{{siswaId}}"}}
-    ]},
-    {"name":"Kelas","item":[
-      {"name":"List","request":{"method":"GET","url":"{{baseUrl}}/api/v1/kelas?limit=100"}},
-      {"name":"Siswa Kelas","request":{"method":"GET","url":"{{baseUrl}}/api/v1/kelas/{{kelasId}}/siswa?limit=100"}}
-    ]},
-    {"name":"Incremental Sync","description":"For bootstrap, capture the first sync checkpoint before finishing list snapshots; then resume from that checkpoint.","item":[
-      {"name":"Pendaftaran - initial checkpoint","request":{"method":"GET","url":"{{baseUrl}}/api/v1/sync/pendaftaran?limit=1"}},
-      {"name":"Pendaftaran - from checkpoint","request":{"method":"GET","url":"{{baseUrl}}/api/v1/sync/pendaftaran?limit=100&checkpoint={{checkpoint}}"}},
-      {"name":"Siswa","request":{"method":"GET","url":"{{baseUrl}}/api/v1/sync/siswa?limit=100&checkpoint={{checkpoint}}"}},
-      {"name":"Kelas","request":{"method":"GET","url":"{{baseUrl}}/api/v1/sync/kelas?limit=100&checkpoint={{checkpoint}}"}}
-    ]},
-    {"name":"Dokumen","item":[
-      {"name":"KK signed URL","request":{"method":"GET","url":"{{baseUrl}}/api/v1/documents/{{pendaftaranId}}.kk"}},
-      {"name":"Akta signed URL","request":{"method":"GET","url":"{{baseUrl}}/api/v1/documents/{{pendaftaranId}}.akta"}},
-      {"name":"Rapor signed URL","request":{"method":"GET","url":"{{baseUrl}}/api/v1/documents/{{pendaftaranId}}.rapor"}},
-      {"name":"Ijazah signed URL","request":{"method":"GET","url":"{{baseUrl}}/api/v1/documents/{{pendaftaranId}}.ijazah"}}
-    ]}
+    {
+      "name": "Pendaftaran",
+      "item": [
+        {
+          "name": "List",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/pendaftaran?limit=100"
+          }
+        },
+        {
+          "name": "Detail",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/pendaftaran/{{pendaftaranId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Siswa",
+      "item": [
+        {
+          "name": "List",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/siswa?limit=100"
+          }
+        },
+        {
+          "name": "Detail",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/siswa/{{siswaId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Kelas",
+      "item": [
+        {
+          "name": "List",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/kelas?limit=100"
+          }
+        },
+        {
+          "name": "Siswa Kelas",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/kelas/{{kelasId}}/siswa?limit=100"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Incremental Sync",
+      "description": "For bootstrap, capture the first sync checkpoint before finishing list snapshots; then resume from that checkpoint.",
+      "item": [
+        {
+          "name": "Pendaftaran - initial checkpoint",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/sync/pendaftaran?limit=1"
+          }
+        },
+        {
+          "name": "Pendaftaran - from checkpoint",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/sync/pendaftaran?limit=100&checkpoint={{checkpoint}}"
+          }
+        },
+        {
+          "name": "Siswa",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/sync/siswa?limit=100&checkpoint={{checkpoint}}"
+          }
+        },
+        {
+          "name": "Kelas",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/sync/kelas?limit=100&checkpoint={{checkpoint}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dokumen",
+      "item": [
+        {
+          "name": "KK signed URL",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/documents/{{pendaftaranId}}.kk"
+          }
+        },
+        {
+          "name": "Akta signed URL",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/documents/{{pendaftaranId}}.akta"
+          }
+        },
+        {
+          "name": "Rapor signed URL",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/documents/{{pendaftaranId}}.rapor"
+          }
+        },
+        {
+          "name": "Ijazah signed URL",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/documents/{{pendaftaranId}}.ijazah"
+          }
+        }
+      ]
+    },
+    {
+      "name": "SPMB Milestone",
+      "description": "Requires pendaftaran:milestone:update. Run in order on an authorized test registration. Repeating the same action is idempotent.",
+      "item": [
+        {
+          "name": "tes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/pendaftaran/{{pendaftaranId}}/milestone",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"action\": \"tes\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "lulus",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/pendaftaran/{{pendaftaranId}}/milestone",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"action\": \"lulus\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "daftar_ulang",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/pendaftaran/{{pendaftaranId}}/milestone",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"action\": \"daftar_ulang\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
   ]
 }

@@ -1,6 +1,6 @@
 import { createAdminClient } from './supabase'
 
-const SCOPES = ['pendaftaran:read','pendaftaran:sensitive:read','pendaftaran:documents:read','siswa:read','kelas:read'] as const
+const SCOPES = ['pendaftaran:read','pendaftaran:sensitive:read','pendaftaran:documents:read','siswa:read','kelas:read','pendaftaran:milestone:update'] as const
 type Scope=(typeof SCOPES)[number]
 type Ctx={integration:any;token:any;admin:any;requestId:string;started:number;tokenHash:string}
 const MAX_PAGE=200, DEFAULT_PAGE=100
@@ -14,8 +14,8 @@ async function hmac(keyHex:string,s:string){const key=Uint8Array.from(keyHex.mat
 function json(body:unknown,status=200,headers:Record<string,string>={}){return new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff',...headers}})}
 function err(code:string,message:string,status:number,requestId:string,extra:Record<string,unknown>={},headers:Record<string,string>={}){return json({error:{code,message,request_id:requestId,...extra}},status,headers)}
 function has(ctx:Ctx,s:Scope){return (ctx.integration.scopes||[]).includes(s)}
-function allowed(ctx:Ctx,dept?:string|null,year?:string|null){const ds:string[]=ctx.integration.department_ids||[],ys:string[]=ctx.integration.academic_year_ids||[];return (!ds.length||!!dept&&ds.includes(dept))&&(!ys.length||!!year&&ys.includes(year))}
-function uuid(v:string|null){return !!v&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)}
+export function allowed(ctx:Ctx,dept?:string|null,year?:string|null){const ds:string[]=ctx.integration.department_ids||[],ys:string[]=ctx.integration.academic_year_ids||[];return (!ds.length||!!dept&&ds.includes(dept))&&(!ys.length||!!year&&ys.includes(year))}
+export function uuid(v:string|null){return !!v&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)}
 function page(url:URL){const n=Number(url.searchParams.get('limit')||DEFAULT_PAGE);if(!Number.isInteger(n)||n<1||n>MAX_PAGE)throw new Error('LIMIT');return n}
 function scopeFingerprint(ctx:Ctx){return JSON.stringify({s:[...(ctx.integration.scopes||[])].sort(),d:[...(ctx.integration.department_ids||[])].sort(),y:[...(ctx.integration.academic_year_ids||[])].sort()})}
 function filterFingerprint(u:URL){return JSON.stringify([...u.searchParams.entries()].filter(([k])=>k!=='cursor'&&k!=='limit'&&k!=='checkpoint').sort())}
@@ -34,8 +34,8 @@ export async function authenticateIntegration(request:Request):Promise<Ctx|Respo
  await Promise.all([(admin.from('integration_tokens') as any).update({last_used_at:new Date().toISOString()}).eq('id',t.id),(admin.from('integration_apps') as any).update({last_used_at:new Date().toISOString()}).eq('id',i.id)])
  return {integration:i,token:t,admin,requestId,started,tokenHash}
 }
-async function done(ctx:Ctx,route:string,response:Response){try{await (ctx.admin.from('integration_api_usage') as any).insert({integration_id:ctx.integration.id,route,request_id:ctx.requestId,status:response.status,duration_ms:Date.now()-ctx.started})}catch{}response.headers.set('X-Request-ID',ctx.requestId);return response}
-function need(ctx:Ctx,s:Scope){return has(ctx,s)?null:err('forbidden',`Scope ${s} diperlukan`,403,ctx.requestId)}
+export async function done(ctx:Ctx,route:string,response:Response){try{await (ctx.admin.from('integration_api_usage') as any).insert({integration_id:ctx.integration.id,route,request_id:ctx.requestId,status:response.status,duration_ms:Date.now()-ctx.started})}catch{}response.headers.set('X-Request-ID',ctx.requestId);return response}
+export function need(ctx:Ctx,s:Scope){return has(ctx,s)?null:err('forbidden',`Scope ${s} diperlukan`,403,ctx.requestId)}
 
 const BASE='id,nis,nama,jenis_kelamin,tempat_lahir,tanggal_lahir,agama,alamat,telepon,email,status,angkatan_id,created_at,departemen_id,terverifikasi'
 const DETAIL='id,siswa_id,pendaftaran_id,tahun_ajaran_id,jenis_pendaftaran,nik,no_kk,kategori,status_asrama,anak_ke,jumlah_bersaudara,tinggi_badan_cm,berat_badan_kg,lingkar_kepala_cm,ukuran_baju,penyakit_pernah_diderita,jarak_rumah_km,waktu_perjalanan_menit,transportasi,nama_ayah,nik_ayah,tempat_lahir_ayah,tanggal_lahir_ayah,pendidikan_ayah,pekerjaan_ayah,penghasilan_ayah,telepon_ayah,alamat_ayah,nama_ibu,nik_ibu,tempat_lahir_ibu,tanggal_lahir_ibu,pendidikan_ibu,pekerjaan_ibu,penghasilan_ibu,telepon_ibu,alamat_ibu,telepon_ortu,alamat_ortu,asal_sekolah,kelas_terakhir,alasan_pindah,alamat_sekolah_asal,kabupaten_sekolah_asal,kecamatan_sekolah_asal,kelurahan_sekolah_asal,kemampuan_iqro,membaca_latin,menulis_latin,hafalan_quran,dokumen_kk_path,dokumen_akta_path,dokumen_rapor_path,dokumen_ijazah_path,spmb_tanggal_tes,spmb_tanggal_lulus,spmb_tanggal_daftar_ulang,spmb_verifikasi_status,spmb_verifikasi_at'
