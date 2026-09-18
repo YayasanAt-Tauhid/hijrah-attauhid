@@ -49,9 +49,10 @@ export function useSiswaList() {
             )
           `)
           .order("nama")
-          .order("id")
-          .range(from, to)
-      );
+          .order("id");
+        if (role === "admin_tu" && departemenId) q = q.eq("departemen_id", departemenId);
+        return q.range(from, to);
+      });
       return data as SiswaWithRelations[];
     },
     enabled: role !== "admin_tu" || Boolean(departemenId),
@@ -74,8 +75,9 @@ export function useSiswaDetail(id: string) {
             tahun_ajaran:tahun_ajaran_id(id, nama)
           )
         `)
-        .eq("id", id)
-        .single();
+        .eq("id", id);
+      if (role === "admin_tu" && departemenId) q = q.eq("departemen_id", departemenId);
+      const { data, error } = await q.single();
       if (error) throw error;
       return data as SiswaWithRelations;
     },
