@@ -3,6 +3,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
 const STAFF_ROLES = [
   "admin",
+  "admin_tu",
   "kepala_sekolah",
   "guru",
   "keuangan",
