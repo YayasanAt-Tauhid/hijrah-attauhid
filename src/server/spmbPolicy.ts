@@ -31,8 +31,8 @@ export const spmbGetPolicyStatus = createServerFn({ method: "POST" })
       .maybeSingle();
     if (siswaError || !siswa?.created_at) throw new Error("Data calon murid SPMB tidak ditemukan");
 
-    const { data: config } = await admin
-      .from("konfigurasi_pmb")
+    const { data: config } = await (admin
+      .from("konfigurasi_pmb") as any)
       .select("group_calon_siswa_url")
       .eq("departemen_id", siswa.departemen_id)
       .maybeSingle();
