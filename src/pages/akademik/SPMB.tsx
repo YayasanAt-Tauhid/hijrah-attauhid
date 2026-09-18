@@ -689,7 +689,7 @@ export default function SPMB() {
                       </p>
                     ) : (
                       <p className="rounded-md border border-warning/20 bg-warning/5 p-3 text-warning">
-                        Pendaftaran ini tidak otomatis mendapat pembebasan biaya. Hak gratis ditentukan dari tanggal pendaftaran 21 September–23 Oktober 2026; pembayaran baru ditampilkan mulai 24 Oktober 2026.
+                        Pendaftaran ini tidak otomatis mendapat pembebasan biaya. Hak gratis ditentukan dari tanggal pendaftaran 21 September–23 Oktober 2026. Di luar periode promo, biaya pendaftaran tetap berlaku dan pembayaran online tersedia.
                       </p>
                     )}
                   </div>
