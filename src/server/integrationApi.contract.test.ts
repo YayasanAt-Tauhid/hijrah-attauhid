@@ -49,6 +49,11 @@ describe('Integration API v1 contract', () => {
     expect(api).not.toContain('pmb_payment_token:')
   })
 
+  it('exports latest SPMB wave metadata and keeps NISN in the sensitive block', () => {
+    expect(api).toContain('gelombang:d.spmb_gelombang?')
+    expect(api).toContain('out.data_sensitif={nisn:s.nisn')
+  })
+
   it('keeps sensitive and document fields behind explicit scopes', () => {
     expect(api).toContain("has(ctx,'pendaftaran:sensitive:read')")
     expect(api).toContain("has(ctx,'pendaftaran:documents:read')")
