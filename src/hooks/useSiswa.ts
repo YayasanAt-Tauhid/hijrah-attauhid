@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllPages } from "@/lib/fetchAll";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface SiswaWithRelations {
   id: string;
@@ -30,11 +31,12 @@ export interface SiswaWithRelations {
 }
 
 export function useSiswaList() {
+  const { role, departemenId } = useAuth();
   return useQuery({
-    queryKey: ["siswa"],
+    queryKey: ["siswa", role === "admin_tu" ? departemenId : "all"],
     queryFn: async () => {
-      const data = await fetchAllPages((from, to) =>
-        supabase
+      const data = await fetchAllPages((from, to) => {
+        let q = supabase
           .from("siswa")
           .select(`
             *,
@@ -52,14 +54,16 @@ export function useSiswaList() {
       );
       return data as SiswaWithRelations[];
     },
+    enabled: role !== "admin_tu" || Boolean(departemenId),
   });
 }
 
 export function useSiswaDetail(id: string) {
+  const { role, departemenId } = useAuth();
   return useQuery({
-    queryKey: ["siswa", id],
+    queryKey: ["siswa", id, role === "admin_tu" ? departemenId : "all"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("siswa")
         .select(`
           *,
@@ -75,13 +79,14 @@ export function useSiswaDetail(id: string) {
       if (error) throw error;
       return data as SiswaWithRelations;
     },
-    enabled: !!id,
+    enabled: !!id && (role !== "admin_tu" || Boolean(departemenId)),
   });
 }
 
 export function useSiswaDetailOrangtua(siswaId: string) {
+  const { role, departemenId } = useAuth();
   return useQuery({
-    queryKey: ["siswa_detail", siswaId],
+    queryKey: ["siswa_detail", siswaId, role === "admin_tu" ? departemenId : "all"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("siswa_detail")
@@ -91,7 +96,7 @@ export function useSiswaDetailOrangtua(siswaId: string) {
       if (error) throw error;
       return data;
     },
-    enabled: !!siswaId,
+    enabled: !!siswaId && (role !== "admin_tu" || Boolean(departemenId)),
   });
 }
 
