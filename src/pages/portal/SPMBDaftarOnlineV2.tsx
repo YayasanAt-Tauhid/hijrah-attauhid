@@ -7,7 +7,7 @@ import {
   type PmbPaymentResult,
   type PmbRegistrationStatusResult,
 } from "@/server/pmbPayment";
-import { spmbGetPolicyStatus, type SpmbPolicyStatusResult } from "@/server/spmbPolicy";
+import { spmbGetPolicyStatus, spmbGetPublicWave, type SpmbPolicyStatusResult, type SpmbPublicWaveResult, type SpmbWaveSummary } from "@/server/spmbPolicy";
 import {
   SPMB_CATEGORY_LABEL,
   SPMB_CATEGORY_VALUE,
@@ -15,9 +15,6 @@ import {
   SPMB_TRANSFER_CATEGORY_VALUE,
   SPMB_TARGET_ACADEMIC_YEAR,
   SPMB_TARGET_COHORT,
-  isSpmbFirstWaveFree,
-  isSpmbPaymentVisible,
-  isSpmbRegistrationOpen,
 } from "@/lib/spmbPolicy";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -111,6 +108,31 @@ function namaLembagaPromo(dept?: Departemen, fallback?: string | null): string {
   return namaPerJenjang[kode] || fallback || dept?.nama || "At-Tauhid";
 }
 
+function formatTanggalGelombang(value?: string | null): string {
+  if (!value) return "";
+  return new Date(value).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Jakarta",
+  });
+}
+
+function rentangGelombang(wave?: Pick<SpmbWaveSummary, "tanggal_mulai" | "tanggal_selesai"> | null): string {
+  if (!wave) return "";
+  const mulai = formatTanggalGelombang(wave.tanggal_mulai);
+  if (!wave.tanggal_selesai) return `mulai ${mulai}`;
+  const akhirEksklusif = new Date(wave.tanggal_selesai);
+  akhirEksklusif.setMilliseconds(akhirEksklusif.getMilliseconds() - 1);
+  const selesai = akhirEksklusif.toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Jakarta",
+  });
+  return `${mulai}–${selesai}`;
+}
+
 function OptionSelect({ value, placeholder, options, onValueChange, disabled }: {
   value: string;
   placeholder: string;
@@ -187,11 +209,13 @@ export default function SPMBDaftarOnlineV2() {
   const [paymentReturn, setPaymentReturn] = useState<string | null>(null);
   const [registrationStatus, setRegistrationStatus] = useState<PmbRegistrationStatusResult | null>(null);
   const [policyStatus, setPolicyStatus] = useState<SpmbPolicyStatusResult | null>(null);
+  const [publicWave, setPublicWave] = useState<SpmbPublicWaveResult | null>(null);
   const [payment, setPayment] = useState<PmbPaymentResult | null>(null);
 
   useEffect(() => {
     setOptionsLoading(true);
-    pmbOptions().then((data) => {
+    Promise.all([pmbOptions(), spmbGetPublicWave()]).then(([data, wave]) => {
+      setPublicWave(wave);
       const targetYears = (data.tahun_ajaran || []).filter((tahun) => tahun.nama === SPMB_TARGET_ACADEMIC_YEAR);
       const targetAngkatan = (data.angkatan || []).filter((angkatan) => angkatan.nama === SPMB_TARGET_COHORT);
       setDepartemenList(data.departemen || []);
@@ -273,7 +297,9 @@ export default function SPMBDaftarOnlineV2() {
   const wajibNisn = useMemo(() => perluNisn(selectedDept), [selectedDept]);
   const mtaWajibAsrama = deptCode === "MTA";
   const siswaPindahan = form.kategori === SPMB_TRANSFER_CATEGORY_VALUE;
-  const registrationOpen = isSpmbRegistrationOpen();
+  const registrationOpen = publicWave?.registration_open === true;
+  const currentWave = publicWave?.current_wave || null;
+  const nextWave = publicWave?.next_wave || null;
   const angkatanList = useMemo(() => allAngkatan.filter((angkatan) => !form.departemen_id || angkatan.departemen_id === form.departemen_id), [allAngkatan, form.departemen_id]);
 
   useEffect(() => {
@@ -320,7 +346,9 @@ export default function SPMBDaftarOnlineV2() {
     event.preventDefault();
     setSubmitError(null);
     if (!registrationOpen) {
-      const message = "SPMB Gelombang 1 dibuka 23 September sampai 30 Oktober 2026.";
+      const message = nextWave
+        ? `Pendaftaran SPMB sedang ditutup. ${nextWave.nama} dibuka ${rentangGelombang(nextWave)}.`
+        : "Pendaftaran SPMB sedang ditutup.";
       setSubmitError(message);
       toast.error(message);
       return;
@@ -446,8 +474,8 @@ export default function SPMBDaftarOnlineV2() {
   async function mulaiBayar() {
     const token = registration?.payment_token || statusToken;
     if (!token) return;
-    const promoFree = policyStatus?.gratis_pendaftaran ?? isSpmbFirstWaveFree(Date.now());
-    const paymentVisible = policyStatus?.payment_visible ?? isSpmbPaymentVisible();
+    const promoFree = policyStatus?.gratis_pendaftaran ?? currentWave?.gratis_pendaftaran === true;
+    const paymentVisible = policyStatus?.payment_visible ?? Boolean(currentWave && !currentWave.gratis_pendaftaran);
     if (promoFree) {
       toast.success("Calon murid ini berhak gratis biaya pendaftaran. Tidak ada transaksi yang perlu dibuat.");
       return;
@@ -531,8 +559,17 @@ export default function SPMBDaftarOnlineV2() {
             {promoFree ? (
               <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-left text-sm text-emerald-900">
                 <p className="text-base font-bold">🎉 Selamat!</p>
-                <p>Anda mendapatkan <strong>gratis biaya pendaftaran</strong> sebagai apresiasi bagi pendaftar <strong>Gelombang Pertama</strong>.</p>
-                <p className="font-medium">📅 23 September–30 Oktober 2026.</p>
+                <p>Anda mendapatkan <strong>gratis biaya pendaftaran</strong> untuk <strong>{policyStatus?.gelombang_nama || currentWave?.nama || "gelombang pendaftaran ini"}</strong>.</p>
+                {(policyStatus?.gelombang_mulai || currentWave) && (
+                  <p className="font-medium">
+                    📅 {policyStatus?.gelombang_mulai
+                      ? rentangGelombang({
+                          tanggal_mulai: policyStatus.gelombang_mulai,
+                          tanggal_selesai: policyStatus.gelombang_selesai,
+                        })
+                      : rentangGelombang(currentWave)}
+                  </p>
+                )}
                 <p>Tim kami akan menghubungi Anda untuk menginformasikan jadwal seleksi selanjutnya.</p>
                 <p>Terima kasih telah memilih <strong>{lembagaPromo}</strong>.</p>
               </div>
@@ -591,7 +628,19 @@ export default function SPMBDaftarOnlineV2() {
               {!registrationOpen && (
                 <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
                   <Clock3 className="mt-0.5 h-4 w-4 shrink-0" />
-                  <div><strong>SPMB Gelombang 1 belum dibuka.</strong><br />Pendaftaran dibuka 23 September–30 Oktober 2026.</div>
+                  <div>
+                    <strong>Pendaftaran SPMB sedang ditutup.</strong>
+                    {nextWave && <><br />{nextWave.nama} dibuka {rentangGelombang(nextWave)}.</>}
+                  </div>
+                </div>
+              )}
+              {registrationOpen && currentWave && (
+                <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900" role="status">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <strong>{currentWave.nama} sedang dibuka.</strong><br />
+                    Periode {rentangGelombang(currentWave)} · {currentWave.gratis_pendaftaran ? "Gratis biaya pendaftaran" : "Biaya pendaftaran normal"}
+                  </div>
                 </div>
               )}
               {optionsError && <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{optionsError}</div>}
