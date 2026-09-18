@@ -11,7 +11,6 @@ import { spmbGetPolicyStatus, type SpmbPolicyStatusResult } from "@/server/spmbP
 import {
   SPMB_CATEGORY_LABEL,
   SPMB_CATEGORY_VALUE,
-  SPMB_FIRST_WAVE_MESSAGE,
   SPMB_TARGET_ACADEMIC_YEAR,
   SPMB_TARGET_COHORT,
   isSpmbFirstWaveFree,
@@ -91,10 +90,10 @@ function perluPilihanAsrama(dept?: Departemen): boolean {
 function namaLembagaPromo(dept?: Departemen, fallback?: string | null): string {
   const kode = (dept?.kode || dept?.nama || fallback || "").trim().toUpperCase();
   const namaPerJenjang: Record<string, string> = {
-    TK: "TKITA At-Tauhid",
-    SD: "SDITA At-Tauhid",
-    SMP: "SMPITA At-Tauhid",
-    SMA: "SMAITA At-Tauhid",
+    TK: "TK At-Tauhid",
+    SD: "SD At-Tauhid",
+    SMP: "SMP At-Tauhid",
+    SMA: "SMA At-Tauhid",
     MTA: "MTA At-Tauhid",
   };
   return namaPerJenjang[kode] || fallback || dept?.nama || "At-Tauhid";
@@ -465,15 +464,16 @@ export default function SPMBDaftarOnlineV2() {
             {promoFree ? (
               <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-left text-sm text-emerald-900">
                 <p className="text-base font-bold">🎉 Selamat!</p>
-                <p>{SPMB_FIRST_WAVE_MESSAGE.replace(/^Selamat!\s*/i, "")}</p>
+                <p>Anda mendapatkan <strong>gratis biaya pendaftaran</strong> sebagai apresiasi bagi pendaftar <strong>Gelombang Pertama</strong>.</p>
+                <p className="font-medium">📅 21 September–23 Oktober 2026.</p>
+                <p>Tim kami akan menghubungi Anda untuk menginformasikan jadwal seleksi selanjutnya.</p>
                 <p>Terima kasih telah memilih <strong>{lembagaPromo}</strong>.</p>
               </div>
             ) : !paymentVisible ? (
               <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-left text-sm text-amber-900">
                 <p className="font-medium">Pendaftaran berhasil tersimpan.</p>
-                <p>Program gratis biaya pendaftaran Gelombang Pertama berlaku khusus untuk pendaftaran pada <strong>21 September–23 Oktober 2026</strong>. Pendaftaran di luar periode tersebut tidak otomatis mendapatkan pembebasan biaya.</p>
-                <p>Tombol pembayaran biaya pendaftaran baru ditampilkan mulai <strong>24 Oktober 2026</strong>.</p>
-                <p>Tim kami akan menghubungi orang tua/wali untuk menginformasikan jadwal dan tahapan seleksi.</p>
+                <p>Tim kami akan menghubungi Anda untuk menginformasikan jadwal seleksi selanjutnya.</p>
+                <p>Terima kasih telah memilih <strong>{lembagaPromo}</strong>.</p>
               </div>
             ) : null}
 
