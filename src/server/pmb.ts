@@ -171,7 +171,15 @@ function cleanInteger(value: unknown): number | null {
 function validateDocumentPath(path: string | undefined, kind: PmbDocumentKind, required: boolean): string | null {
   const value = (path || "").trim();
   if (!value) {
-    if (required) throw new Error(kind === "kk" ? "Kartu Keluarga wajib diupload" : "Akta Kelahiran wajib diupload");
+    if (required) {
+      const labels: Record<PmbDocumentKind, string> = {
+        kk: "Kartu Keluarga",
+        akta: "Akta Kelahiran",
+        rapor: "Rapor",
+        ijazah: "Ijazah / SKHUN",
+      };
+      throw new Error(`${labels[kind]} wajib diupload`);
+    }
     return null;
   }
   const escapedKind = kind.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
