@@ -262,13 +262,14 @@ function DialogTambahUser({ open, onOpenChange, departemenList, pegawaiList, onS
             <Label>Password</Label>
             <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
             <p className="text-xs text-muted-foreground">Minimal 8 karakter. Sampaikan ke pengguna untuk diganti setelah login.</p>
+            <p className="text-xs text-muted-foreground">Untuk Admin TU, buat akun terlebih dahulu lalu tetapkan lembaganya melalui Pengaturan → Admin TU Akademik.</p>
           </div>
           <div className="space-y-1.5">
             <Label>Role</Label>
             <Select value={userRole} onValueChange={setUserRole}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {ROLE_OPTIONS.map((o) => (
+                {ROLE_OPTIONS.filter((o) => o.value !== "admin_tu").map((o) => (
                   <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                 ))}
               </SelectContent>
