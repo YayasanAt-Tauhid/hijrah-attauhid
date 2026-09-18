@@ -366,7 +366,7 @@ export default function SPMB() {
   });
 
   const focusFirstError = (errors: RegistrationErrors) => {
-    const order: Array<keyof RegistrationForm> = ["nama", "nik", "departemen_id", "tahun_ajaran_id", "angkatan_id", "telepon"];
+    const order: Array<keyof RegistrationForm> = ["nama", "nik", "departemen_id", "tahun_ajaran_id", "angkatan_id", "telepon", "alamat"];
     const first = order.find((key) => errors[key]);
     if (!first) return;
     window.requestAnimationFrame(() => document.getElementById(`spmb-${first}`)?.focus());
@@ -389,9 +389,12 @@ export default function SPMB() {
     } else if (!targetAngkatan || formData.angkatan_id !== targetAngkatan.id) {
       errors.angkatan_id = `${SPMB_TARGET_COHORT} untuk lembaga ini belum tersedia.`;
     }
-    if (cleanPhone && !/^(?:\+62|62|0)[0-9]{7,16}$/.test(cleanPhone.replace(/[\s-]/g, ""))) {
-      errors.telepon = "Masukkan nomor HP orang tua/wali yang valid, misalnya 08xxxxxxxxxx.";
+    if (!cleanPhone) {
+      errors.telepon = "No. HP / WhatsApp yang bisa dihubungi wajib diisi.";
+    } else if (!/^(?:\+62|62|0)[0-9]{7,16}$/.test(cleanPhone.replace(/[\s-]/g, ""))) {
+      errors.telepon = "Masukkan nomor HP / WhatsApp yang valid, misalnya 08xxxxxxxxxx.";
     }
+    if (!formData.alamat.trim()) errors.alamat = "Alamat rumah wajib diisi.";
 
     setFormErrors(errors);
     if (Object.keys(errors).length) {
@@ -852,7 +855,7 @@ export default function SPMB() {
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                          <Label htmlFor="spmb-telepon">No. HP / WhatsApp Orang Tua/Wali</Label>
+                          <Label htmlFor="spmb-telepon">No. HP / WhatsApp yang Bisa Dihubungi *</Label>
                           <Input
                             id="spmb-telepon"
                             inputMode="tel"
