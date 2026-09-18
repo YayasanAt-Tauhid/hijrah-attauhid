@@ -24,6 +24,9 @@ import { useAngkatan, useDepartemen, useTahunAjaran } from "@/hooks/useAkademikD
 import { generateNISViaEdgeFunction } from "@/utils/nisGenerator";
 import {
   SPMB_CATEGORY_LABEL,
+  SPMB_CATEGORY_VALUE,
+  SPMB_TRANSFER_CATEGORY_LABEL,
+  SPMB_TRANSFER_CATEGORY_VALUE,
   SPMB_FIRST_WAVE_MESSAGE,
   SPMB_TARGET_ACADEMIC_YEAR,
   SPMB_TARGET_COHORT,
@@ -97,6 +100,8 @@ const DEFAULT_FILTERS: SpmbFilterState = {
 type RegistrationForm = {
   nama: string;
   nik: string;
+  nisn: string;
+  kategori: string;
   jenis_kelamin: "L" | "P";
   telepon: string;
   alamat: string;
@@ -162,6 +167,8 @@ export default function SPMB() {
   const emptyForm = (): RegistrationForm => ({
     nama: "",
     nik: "",
+    nisn: "",
+    kategori: SPMB_CATEGORY_VALUE,
     jenis_kelamin: "L",
     telepon: "",
     alamat: "",
@@ -222,6 +229,7 @@ export default function SPMB() {
       )
     : undefined;
   const selectedDept = departemenList.find((d: any) => d.id === formData.departemen_id);
+  const selectedDeptNeedsNisn = departemenPerluAsrama(selectedDept);
 
   const initialSnapshot = emptyForm();
   const isDirty = (Object.keys(initialSnapshot) as Array<keyof RegistrationForm>).some(
@@ -367,7 +375,7 @@ export default function SPMB() {
   });
 
   const focusFirstError = (errors: RegistrationErrors) => {
-    const order: Array<keyof RegistrationForm> = ["nama", "nik", "departemen_id", "tahun_ajaran_id", "angkatan_id", "telepon", "alamat"];
+    const order: Array<keyof RegistrationForm> = ["nama", "nik", "nisn", "departemen_id", "tahun_ajaran_id", "angkatan_id", "telepon", "alamat"];
     const first = order.find((key) => errors[key]);
     if (!first) return;
     window.requestAnimationFrame(() => document.getElementById(`spmb-${first}`)?.focus());
@@ -381,6 +389,7 @@ export default function SPMB() {
 
     if (cleanName.length < 2) errors.nama = "Nama lengkap minimal 2 karakter dan tidak boleh hanya spasi.";
     if (cleanNik.length !== 16) errors.nik = "NIK Calon Murid harus terdiri dari tepat 16 digit.";
+    if (selectedDeptNeedsNisn && normalizeDigits(formData.nisn).length !== 10) errors.nisn = "NISN wajib terdiri dari tepat 10 digit untuk SMP, SMA, dan MTA.";
     if (!formData.departemen_id) errors.departemen_id = "Pilih lembaga tujuan pendaftaran.";
     if (!targetYear || formData.tahun_ajaran_id !== targetYear.id) {
       errors.tahun_ajaran_id = `${SPMB_TARGET_ACADEMIC_YEAR} belum tersedia atau belum terpilih.`;
@@ -415,6 +424,8 @@ export default function SPMB() {
         p_payload: {
           nama: formData.nama.trim(),
           nik: normalizeDigits(formData.nik),
+          nisn: selectedDeptNeedsNisn ? normalizeDigits(formData.nisn) : null,
+          kategori: formData.kategori,
           jenis_kelamin: formData.jenis_kelamin,
           telepon: formData.telepon.trim() || null,
           alamat: formData.alamat.trim() || null,
@@ -842,10 +853,34 @@ export default function SPMB() {
                           <Input id="spmb-angkatan_id" value={!formData.departemen_id ? "Pilih lembaga terlebih dahulu" : targetAngkatan ? "2027" : "Belum dikonfigurasi untuk lembaga ini"} disabled aria-invalid={Boolean(formErrors.angkatan_id)} />
                           {formErrors.angkatan_id && <p className="text-xs text-destructive" role="alert">{formErrors.angkatan_id}</p>}
                         </div>
-                        <div className="space-y-1.5 sm:col-span-2">
-                          <Label>Kategori</Label>
-                          <Input value={SPMB_CATEGORY_LABEL} disabled />
+                        <div className="space-y-1.5">
+                          <Label>Kategori *</Label>
+                          <Select value={formData.kategori} onValueChange={(value) => setFormData((current) => ({ ...current, kategori: value }))}>
+                            <SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={SPMB_CATEGORY_VALUE}>{SPMB_CATEGORY_LABEL}</SelectItem>
+                              <SelectItem value={SPMB_TRANSFER_CATEGORY_VALUE}>{SPMB_TRANSFER_CATEGORY_LABEL}</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
+                        {selectedDeptNeedsNisn && (
+                          <div className="space-y-1.5">
+                            <Label htmlFor="spmb-nisn">NISN *</Label>
+                            <Input
+                              id="spmb-nisn"
+                              inputMode="numeric"
+                              maxLength={10}
+                              value={formData.nisn}
+                              aria-invalid={Boolean(formErrors.nisn)}
+                              onChange={(event) => {
+                                setFormData((current) => ({ ...current, nisn: normalizeDigits(event.target.value).slice(0, 10) }));
+                                if (formErrors.nisn) setFormErrors((current) => ({ ...current, nisn: undefined }));
+                              }}
+                              placeholder="10 digit NISN"
+                            />
+                            {formErrors.nisn && <p className="text-xs text-destructive" role="alert">{formErrors.nisn}</p>}
+                          </div>
+                        )}
                       </div>
                     </section>
 
@@ -872,8 +907,18 @@ export default function SPMB() {
                           {formErrors.telepon && <p className="text-xs text-destructive" role="alert">{formErrors.telepon}</p>}
                         </div>
                         <div className="space-y-1.5 sm:col-span-2">
-                          <Label htmlFor="spmb-alamat">Alamat Domisili Calon Murid</Label>
-                          <Textarea id="spmb-alamat" value={formData.alamat} onChange={(event) => setFormData((current) => ({ ...current, alamat: event.target.value }))} rows={3} />
+                          <Label htmlFor="spmb-alamat">Alamat Rumah *</Label>
+                          <Textarea
+                            id="spmb-alamat"
+                            value={formData.alamat}
+                            aria-invalid={Boolean(formErrors.alamat)}
+                            onChange={(event) => {
+                              setFormData((current) => ({ ...current, alamat: event.target.value }));
+                              if (formErrors.alamat) setFormErrors((current) => ({ ...current, alamat: undefined }));
+                            }}
+                            rows={3}
+                          />
+                          {formErrors.alamat && <p className="text-xs text-destructive" role="alert">{formErrors.alamat}</p>}
                         </div>
                       </div>
                     </section>
