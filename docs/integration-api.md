@@ -24,7 +24,7 @@ Token hanya boleh disimpan di backend penerima, bukan browser/APK, URL, analytic
 | `pendaftaran:read` | data dasar pendaftaran, proses SPMB, status pembayaran pendaftaran |
 | `pendaftaran:sensitive:read` | NIK/KK, kontak/alamat, orang tua, kesehatan/fisik, sekolah asal, kemampuan |
 | `pendaftaran:documents:read` | metadata dokumen dan signed URL 60 detik |
-| `pendaftaran:milestone:update` | Update Status SPMB (Tes dan Lulus) |
+| `pendaftaran:milestone:update` | Update Status SPMB (Tes, Lulus, dan Tidak Lulus) |
 | `siswa:read` | siswa non-calon dan relasi kelas |
 | `kelas:read` | kelas; anggota kelas juga membutuhkan `siswa:read` |
 
@@ -42,7 +42,7 @@ List menggunakan `limit` default 100, maksimum 200, dan `cursor` opaque. Filter 
 
 ## Write milestone SPMB
 
-Admin memilih **Update Status SPMB (Tes dan Lulus)** di **Pengaturan → Integrasi API**, saat membuat token atau mengubah izin integrasi. Token read-only tetap tidak memiliki akses write. Scope write tidak otomatis memberikan izin baca atau data sensitif.
+Admin memilih **Update Status SPMB (Tes, Lulus, dan Tidak Lulus)** di **Pengaturan → Integrasi API**, saat membuat token atau mengubah izin integrasi. Token read-only tetap tidak memiliki akses write. Scope write tidak otomatis memberikan izin baca atau data sensitif.
 
 ```http
 POST /api/v1/pendaftaran/{id}/milestone
@@ -52,13 +52,19 @@ Content-Type: application/json
 {"action":"tes"}
 ```
 
-Gunakan `id` dari respons API pendaftaran, bukan ID siswa. Payload hanya menerima satu field `action`: `tes` atau `lulus`. Biodata, NIK, orang tua, pembayaran, dan kelas tidak dapat diubah; field tambahan ditolak.
+Gunakan `id` dari respons API pendaftaran, bukan ID siswa. Payload hanya menerima satu field `action`: `tes`, `lulus`, atau `tidak_lulus`. Biodata, NIK, orang tua, pembayaran, dan kelas tidak dapat diubah; field tambahan ditolak.
 
 ```sh
 curl -X POST "https://app.hijrah-attauhid.or.id/api/v1/pendaftaran/PENDAFTARAN_ID/milestone" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   --data '{"action":"tes"}'
+```
+
+Contoh keputusan tidak lulus:
+
+```json
+{"action":"tidak_lulus"}
 ```
 
 Scope wajib: `pendaftaran:milestone:update`. Batas unit dan tahun ajaran token tetap berlaku. API memanggil workflow `spmb_mark_milestone()` existing; tidak menjalankan update biodata atau proses penerimaan/aktivasi siswa.
@@ -68,7 +74,7 @@ Scope wajib: `pendaftaran:milestone:update`. Batas unit dan tahun ajaran token t
 | Token read-only | `403 forbidden` |
 | Token tidak valid, kedaluwarsa, atau dicabut | `401 unauthorized` |
 | ID tidak ditemukan atau di luar unit/tahun ajaran | `404 not_found` |
-| Lulus sebelum Tes | `400 business_rule_failed` |
+| Lulus/Tidak Lulus sebelum Tes | `400 business_rule_failed` |
 | Action valid dengan prasyarat terpenuhi | `200` |
 | Request ulang action yang sama | `200`, `marked_at` tetap sama |
 | Payload tidak valid/field tambahan | `400` |
@@ -79,7 +85,7 @@ Contoh respons sukses:
 {"data":{"pendaftaran_id":"00000000-0000-4000-8000-000000000001","action":"tes","marked_at":"2026-09-17T04:00:00+00:00"},"request_id":"00000000-0000-4000-8000-000000000002"}
 ```
 
-Idempotensi berlaku berdasarkan pendaftaran dan action, termasuk request bersamaan. Tidak perlu `Idempotency-Key`. Waktu milestone ditentukan workflow dan tidak dapat dikirim atau direset oleh pihak ketiga. Audit mencatat integration ID, token ID, request ID, action dan hasil tanpa token mentah/biodata. Setiap request ulang tetap dicatat sebagai akses.
+`tes`, `lulus`, dan `tidak_lulus` bersifat idempotent berdasarkan pendaftaran dan action, termasuk request bersamaan. `daftar_ulang` tetap tidak tersedia melalui API pihak ketiga. Tidak perlu `Idempotency-Key`. Waktu milestone ditentukan workflow dan tidak dapat dikirim atau direset oleh pihak ketiga. Audit mencatat integration ID, token ID, request ID, action dan hasil tanpa token mentah/biodata. Setiap request ulang tetap dicatat sebagai akses.
 
 Jika terjadi `503` atau respons terputus, ulangi **action yang sama**: workflow mengembalikan timestamp existing jika operasi sebelumnya sudah berhasil. Audit intent disimpan sebelum workflow; bila pencatatan hasil gagal, API mengembalikan `503` agar tidak mengklaim hasil yang belum terkonfirmasi.
 
