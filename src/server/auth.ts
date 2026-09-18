@@ -96,3 +96,36 @@ export async function requireRole(
   }
   return profile.role;
 }
+
+
+export interface AcademicAccessProfile {
+  role: string;
+  departemen_id: string | null;
+}
+
+/**
+ * Otorisasi akademik yang sadar lembaga.
+ * Admin/kepala_sekolah dapat lintas lembaga; admin_tu hanya pada departemen profilnya.
+ */
+export async function requireAcademicDepartment(
+  admin: SupabaseClient<Database>,
+  userId: string,
+  departemenId: string | null | undefined,
+  roles: string[] = ["admin", "kepala_sekolah", "admin_tu"],
+): Promise<AcademicAccessProfile> {
+  const { data: profile } = await admin
+    .from("users_profile")
+    .select("role, departemen_id, aktif")
+    .eq("id", userId)
+    .single();
+
+  if (!profile || profile.aktif === false || !roles.includes(profile.role)) {
+    throw new ForbiddenError();
+  }
+  if (profile.role === "admin_tu") {
+    if (!departemenId || !profile.departemen_id || profile.departemen_id !== departemenId) {
+      throw new ForbiddenError("Forbidden: lembaga di luar kewenangan Admin TU");
+    }
+  }
+  return { role: profile.role, departemen_id: profile.departemen_id };
+}
