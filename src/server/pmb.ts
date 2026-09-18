@@ -7,6 +7,7 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { createAdminClient } from "./supabase";
+import { isSpmbRegistrationOpen } from "@/lib/spmbPolicy";
 
 const PMB_DOCUMENT_BUCKET = "pmb-dokumen";
 const PMB_DOCUMENT_KINDS = ["kk", "akta", "rapor", "ijazah"] as const;
@@ -86,6 +87,7 @@ export interface PmbDaftarInput {
   tanggal_lahir?: string;
   alamat?: string;
   telepon?: string;
+  nisn?: string;
   nik?: string;
   no_kk?: string;
   kategori?: string;
@@ -178,29 +180,46 @@ function validateDocumentPath(path: string | undefined, kind: PmbDocumentKind, r
   return value;
 }
 
-function departemenPerluAsrama(dept: { kode?: string | null; nama?: string | null }): boolean {
+function kodeDepartemen(dept: { kode?: string | null; nama?: string | null }): string {
   const kode = (dept.kode || "").trim().toUpperCase();
-  const nama = (dept.nama || "").trim().toUpperCase();
-  return ["SMP", "SMA", "MTA"].includes(kode) || /(^|\s)(SMP|SMA|MTA)(\s|$)/.test(nama);
+  if (["TK", "SD", "SMP", "SMA", "MTA"].includes(kode)) return kode;
+  const match = (dept.nama || "").trim().toUpperCase().match(/(^|\s)(TK|SD|SMP|SMA|MTA)(\s|$)/);
+  return match?.[2] || "";
+}
+
+function departemenPerluAsrama(dept: { kode?: string | null; nama?: string | null }): boolean {
+  return ["SMP", "SMA", "MTA"].includes(kodeDepartemen(dept));
+}
+
+function departemenPerluNisn(dept: { kode?: string | null; nama?: string | null }): boolean {
+  return ["SMP", "SMA", "MTA"].includes(kodeDepartemen(dept));
 }
 
 export const pmbDaftar = createServerFn({ method: "POST" })
   .inputValidator((d: PmbDaftarInput) => d)
   .handler(async ({ data }): Promise<PmbDaftarResult> => {
+    if (!isSpmbRegistrationOpen()) {
+      throw new Error("SPMB Gelombang 1 dibuka 23 September sampai 30 Oktober 2026.");
+    }
+
     const admin = createAdminClient();
     const nama = (data.nama || "").trim();
     const departemen_id = (data.departemen_id || "").trim();
     const angkatan_id = (data.angkatan_id || "").trim() || null;
     const tahun_ajaran_id = (data.tahun_ajaran_id || "").trim() || null;
-    const jenis_pendaftaran = ["baru", "pindahan", "alumni_internal"].includes(data.jenis_pendaftaran || "") ? data.jenis_pendaftaran! : "baru";
+    const kategori = cleanChoice(data.kategori, KATEGORI_OPTIONS, "Kategori") || "MURID BARU";
+    const jenis_pendaftaran = kategori === "MURID PINDAHAN" ? "pindahan" : "baru";
+    const isTransfer = kategori === "MURID PINDAHAN";
 
     if (!nama || nama.length < 2 || nama.length > 200) throw new Error("Nama lengkap wajib diisi (2-200 karakter)");
     if (!departemen_id) throw new Error("Departemen/lembaga wajib dipilih");
+    if (!cleanText(data.alamat, 500)) throw new Error("Alamat rumah wajib diisi");
+    if (!cleanText(data.telepon, 20)) throw new Error("No. HP/WhatsApp yang bisa dihubungi wajib diisi");
 
     const dokumenKkPath = validateDocumentPath(data.dokumen_kk_path, "kk", true);
     const dokumenAktaPath = validateDocumentPath(data.dokumen_akta_path, "akta", true);
-    const dokumenRaporPath = validateDocumentPath(data.dokumen_rapor_path, "rapor", false);
-    const dokumenIjazahPath = validateDocumentPath(data.dokumen_ijazah_path, "ijazah", false);
+    const dokumenRaporPath = validateDocumentPath(data.dokumen_rapor_path, "rapor", isTransfer);
+    const dokumenIjazahPath = validateDocumentPath(data.dokumen_ijazah_path, "ijazah", isTransfer);
 
     const { data: dept } = await admin.from("departemen")
       .select("id, nama, kode")
@@ -211,11 +230,19 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       .single();
     if (!dept) throw new Error("Departemen tidak valid atau SPMB belum dibuka untuk lembaga ini");
 
+    const deptCode = kodeDepartemen(dept);
     const perluAsrama = departemenPerluAsrama(dept);
-    const statusAsrama = perluAsrama
+    const perluNisn = departemenPerluNisn(dept);
+    const nisn = cleanText(data.nisn, 10);
+    if (perluNisn && !/^\d{10}$/.test(nisn || "")) {
+      throw new Error("NISN wajib diisi 10 digit untuk SMP, SMA, dan MTA");
+    }
+
+    let statusAsrama = perluAsrama
       ? cleanChoice(data.status_asrama, STATUS_ASRAMA_OPTIONS, "Pilihan asrama")
       : null;
-    if (perluAsrama && !statusAsrama) throw new Error("Pilihan Asrama / Non Asrama wajib dipilih untuk SMP, SMA, atau MTA");
+    if (deptCode === "MTA") statusAsrama = "asrama";
+    if (perluAsrama && !statusAsrama) throw new Error("Pilihan Asrama / Non Asrama wajib dipilih untuk SMP atau SMA");
 
     if (angkatan_id) {
       const { data: angkatan, error } = await admin.from("angkatan").select("id").eq("id", angkatan_id).eq("departemen_id", departemen_id).eq("aktif", true).maybeSingle();
@@ -227,7 +254,6 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       if (error || !tahunAjaran) throw new Error("Periode tahun ajaran tidak valid");
     }
 
-    const kategori = cleanChoice(data.kategori, KATEGORI_OPTIONS, "Kategori");
     const ukuranBaju = cleanChoice(data.ukuran_baju, UKURAN_BAJU_OPTIONS, "Ukuran baju");
     const transportasi = cleanChoice(data.transportasi, TRANSPORTASI_OPTIONS, "Transportasi");
     const pendidikanAyah = cleanChoice(data.pendidikan_ayah, PENDIDIKAN_OPTIONS, "Pendidikan ayah");
@@ -239,11 +265,37 @@ export const pmbDaftar = createServerFn({ method: "POST" })
     const menulisLatin = cleanChoice(data.menulis_latin, LATIN_OPTIONS, "Kemampuan menulis Latin");
     const hafalanQuran = cleanChoice(data.hafalan_quran, HAFALAN_OPTIONS, "Hafalan Qur'an");
 
-    const { data: siswa, error: siswaError } = await admin.from("siswa").insert({
+    const requiredParentValues = [
+      ["Nama Ayah", data.nama_ayah],
+      ["NIK Ayah", data.nik_ayah],
+      ["Tempat lahir Ayah", data.tempat_lahir_ayah],
+      ["Tanggal lahir Ayah", data.tanggal_lahir_ayah],
+      ["Pendidikan Ayah", data.pendidikan_ayah],
+      ["Pekerjaan Ayah", data.pekerjaan_ayah],
+      ["Penghasilan Ayah", data.penghasilan_ayah],
+      ["No. HP/WA Ayah", data.telepon_ayah],
+      ["Alamat Ayah", data.alamat_ayah],
+      ["Nama Ibu", data.nama_ibu],
+      ["NIK Ibu", data.nik_ibu],
+      ["Tempat lahir Ibu", data.tempat_lahir_ibu],
+      ["Tanggal lahir Ibu", data.tanggal_lahir_ibu],
+      ["Pendidikan Ibu", data.pendidikan_ibu],
+      ["Pekerjaan Ibu", data.pekerjaan_ibu],
+      ["Penghasilan Ibu", data.penghasilan_ibu],
+      ["No. HP/WA Ibu", data.telepon_ibu],
+      ["Alamat Ibu", data.alamat_ibu],
+    ] as const;
+    const missingParent = requiredParentValues.find(([, value]) => value === null || value === undefined || String(value).trim() === "");
+    if (missingParent) throw new Error(`${missingParent[0]} wajib diisi`);
+    if (!/^\d{16}$/.test(String(data.nik_ayah || "").replace(/\D/g, ""))) throw new Error("NIK Ayah harus 16 digit");
+    if (!/^\d{16}$/.test(String(data.nik_ibu || "").replace(/\D/g, ""))) throw new Error("NIK Ibu harus 16 digit");
+
+    const { data: siswa, error: siswaError } = await (admin.from("siswa") as any).insert({
       nama,
       jenis_kelamin: data.jenis_kelamin === "P" ? "P" : "L",
       tempat_lahir: cleanText(data.tempat_lahir, 100),
       tanggal_lahir: data.tanggal_lahir || null,
+      nisn: perluNisn ? nisn : null,
       alamat: cleanText(data.alamat, 500),
       telepon: cleanText(data.telepon, 20),
       agama: "Islam",
@@ -272,7 +324,7 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       waktu_perjalanan_menit: cleanInteger(data.waktu_perjalanan_menit),
       transportasi,
       nama_ayah: cleanText(data.nama_ayah, 200),
-      nik_ayah: cleanText(data.nik_ayah, 32),
+      nik_ayah: String(data.nik_ayah || "").replace(/\D/g, ""),
       tempat_lahir_ayah: cleanText(data.tempat_lahir_ayah, 100),
       tanggal_lahir_ayah: data.tanggal_lahir_ayah || null,
       pendidikan_ayah: pendidikanAyah,
@@ -281,7 +333,7 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       telepon_ayah: cleanText(data.telepon_ayah, 20),
       alamat_ayah: cleanText(data.alamat_ayah, 500),
       nama_ibu: cleanText(data.nama_ibu, 200),
-      nik_ibu: cleanText(data.nik_ibu, 32),
+      nik_ibu: String(data.nik_ibu || "").replace(/\D/g, ""),
       tempat_lahir_ibu: cleanText(data.tempat_lahir_ibu, 100),
       tanggal_lahir_ibu: data.tanggal_lahir_ibu || null,
       pendidikan_ibu: pendidikanIbu,
