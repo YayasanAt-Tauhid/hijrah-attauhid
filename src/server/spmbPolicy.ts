@@ -25,6 +25,8 @@ export interface SpmbPolicyStatusResult {
   group_calon_siswa_url: string | null;
   gelombang_id: string | null;
   gelombang_nama: string | null;
+  gelombang_mulai: string | null;
+  gelombang_selesai: string | null;
 }
 
 export const spmbGetPublicWave = createServerFn({ method: "GET" }).handler(
@@ -121,5 +123,7 @@ export const spmbGetPolicyStatus = createServerFn({ method: "POST" })
       group_calon_siswa_url: (config as any)?.group_calon_siswa_url || null,
       gelombang_id: wave?.id || null,
       gelombang_nama: wave?.nama || null,
+      gelombang_mulai: wave?.tanggal_mulai || null,
+      gelombang_selesai: wave?.tanggal_selesai || null,
     };
   });
