@@ -29,7 +29,7 @@ export function isSpmbFirstWaveFree(createdAt: Date | number | string): boolean 
 
 export function isSpmbPaymentVisible(now: Date | number | string = Date.now()): boolean {
   const time = toMillis(now);
-  return Number.isFinite(time) && (time < SPMB_FIRST_WAVE_START_AT || time >= SPMB_FIRST_WAVE_END_AT);
+  return Number.isFinite(time) && time >= SPMB_FIRST_WAVE_END_AT;
 }
 
 export const SPMB_FIRST_WAVE_MESSAGE =
