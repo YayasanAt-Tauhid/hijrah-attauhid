@@ -7,7 +7,6 @@ export const SPMB_CATEGORY_LABEL = "Murid Baru";
 export const SPMB_FIRST_WAVE_START_AT = Date.parse("2026-09-20T17:00:00.000Z");
 // 24 Oct 2026 00:00 WIB = 23 Oct 2026 17:00 UTC.
 export const SPMB_FIRST_WAVE_END_AT = Date.parse("2026-10-23T17:00:00.000Z");
-export const SPMB_PAYMENT_VISIBLE_FROM = SPMB_FIRST_WAVE_END_AT;
 
 function toMillis(value: Date | number | string): number {
   if (value instanceof Date) return value.getTime();
@@ -22,7 +21,7 @@ export function isSpmbFirstWaveFree(createdAt: Date | number | string): boolean 
 
 export function isSpmbPaymentVisible(now: Date | number | string = Date.now()): boolean {
   const time = toMillis(now);
-  return Number.isFinite(time) && time >= SPMB_PAYMENT_VISIBLE_FROM;
+  return Number.isFinite(time) && (time < SPMB_FIRST_WAVE_START_AT || time >= SPMB_FIRST_WAVE_END_AT);
 }
 
 export const SPMB_FIRST_WAVE_MESSAGE =
