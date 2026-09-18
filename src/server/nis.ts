@@ -5,7 +5,7 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { getKodeRombel } from "@/lib/nisRombel";
-import { authMiddleware, requireContext, requireRole } from "./auth";
+import { authMiddleware, requireAcademicDepartment, requireContext } from "./auth";
 import { createAdminClient } from "./supabase";
 
 export interface GenerateNisInput {
@@ -20,9 +20,8 @@ export const generateNis = createServerFn({ method: "POST" })
   .inputValidator((d: GenerateNisInput) => d)
   .handler(async ({ data, context }): Promise<{ success: true; nis: string }> => {
     const admin = createAdminClient();
-    await requireRole(admin, requireContext(context).userId, ["admin", "kepala_sekolah"]);
-
     const { siswa_id, departemen_id, angkatan_id, kelas_id } = data;
+    await requireAcademicDepartment(admin, requireContext(context).userId, departemen_id);
     if (!siswa_id || !departemen_id || !angkatan_id || !kelas_id) {
       throw new Error(
         "siswa_id, departemen_id, angkatan_id, dan kelas_id diperlukan"
@@ -41,8 +40,9 @@ export const generateNis = createServerFn({ method: "POST" })
     // 2. Angkatan → tahun
     const { data: angkatan } = await admin
       .from("angkatan")
-      .select("nama")
+      .select("nama, departemen_id")
       .eq("id", angkatan_id)
+      .eq("departemen_id", departemen_id)
       .single();
     if (!angkatan) throw new Error("Angkatan tidak ditemukan");
     const tahunMatch = angkatan.nama.trim().match(/\d{4}/);
@@ -56,8 +56,9 @@ export const generateNis = createServerFn({ method: "POST" })
     // 3. Kelas → kode rombel
     const { data: kelas } = await admin
       .from("kelas")
-      .select("nama")
+      .select("nama, departemen_id")
       .eq("id", kelas_id)
+      .eq("departemen_id", departemen_id)
       .single();
     if (!kelas) throw new Error("Kelas tidak ditemukan");
     const rombelCode = getKodeRombel(kelas.nama);
@@ -91,7 +92,8 @@ export const generateNis = createServerFn({ method: "POST" })
         const { error: updateErr } = await admin
           .from("siswa")
           .update({ nis: generatedNIS })
-          .eq("id", siswa_id);
+          .eq("id", siswa_id)
+          .eq("departemen_id", departemen_id);
         if (updateErr) throw new Error(updateErr.message);
         return { success: true, nis: generatedNIS };
       }
