@@ -37,6 +37,11 @@ describe('Integration API v1 contract', () => {
     expect(api).toContain('download_path:`/api/v1/documents/${pid}.${kind}`')
   })
 
+  it('serializes the SPMB selection decision for read/sync consumers', () => {
+    expect(api).toContain('status_kelulusan:d.spmb_status_kelulusan')
+    expect(api).toContain('tanggal_keputusan:d.spmb_tanggal_keputusan')
+  })
+
   it('serializes registration payment without exposing provider secrets', () => {
     expect(api).toContain('integration_registration_payment_status')
     expect(api).toContain('pembayaran_pendaftaran:await payment(ctx,s)')
