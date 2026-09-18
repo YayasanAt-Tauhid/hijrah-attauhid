@@ -2,12 +2,13 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-export type UserRole = "admin" | "kepala_sekolah" | "guru" | "keuangan" | "siswa" | "pustakawan" | "kasir" | "ortu" | "sekretaris_yayasan";
+export type UserRole = "admin" | "admin_tu" | "kepala_sekolah" | "guru" | "keuangan" | "siswa" | "pustakawan" | "kasir" | "ortu" | "sekretaris_yayasan";
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   role: UserRole | null;
+  departemenId: string | null;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signInWithGoogle: (redirectTo: string) => Promise<{ error: string | null }>;
@@ -21,17 +22,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
+  const [departemenId, setDepartemenId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchRole = async (userId: string) => {
     const { data } = await supabase
       .from("users_profile")
-      .select("role")
+      .select("role, departemen_id")
       .eq("id", userId)
       .single();
-    if (data?.role) {
-      setRole(data.role as UserRole);
-    }
+    setRole(data?.role ? data.role as UserRole : null);
+    setDepartemenId(data?.departemen_id || null);
   };
 
   useEffect(() => {
@@ -43,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setTimeout(() => fetchRole(session.user.id), 0);
         } else {
           setRole(null);
+          setDepartemenId(null);
         }
         setIsLoading(false);
       }
@@ -95,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSession(null);
     setRole(null);
+    setDepartemenId(null);
   };
 
   const changePassword = async (newPassword: string) => {
@@ -104,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, role, isLoading, signIn, signInWithGoogle, signOut, changePassword }}>
+    <AuthContext.Provider value={{ user, session, role, departemenId, isLoading, signIn, signInWithGoogle, signOut, changePassword }}>
       {children}
     </AuthContext.Provider>
   );
