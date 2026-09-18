@@ -567,12 +567,11 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
               <Card className="mb-4"><CardContent className="pt-6 space-y-4">
                 <p className="font-medium">Dokumen SPMB</p>
                 {isEdit && verificationState?.can_verify && (
-                  <p className="text-sm text-muted-foreground">Centang “Sudah diperiksa” setelah memeriksa nilai atau dokumen. Checklist disimpan bersama tombol Simpan Perubahan.</p>
+                  <p className="text-sm text-muted-foreground">Centang “Sudah diperiksa” setelah memeriksa nilai atau dokumen. Checklist bertanda opsional boleh dibiarkan kosong dan tidak menghalangi Verifikasi Data SPMB. Checklist disimpan bersama tombol Simpan Perubahan.</p>
                 )}
                 {([ ["kk", "Kartu Keluarga (wajib)"], ["akta", "Akta Kelahiran (wajib)"], ["rapor", "Rapor"], ["ijazah", "Ijazah/SKHUN (bila sudah ada)"] ] as const).map(([kind, label]) => {
                   const name = `dokumen_${kind}_path` as keyof SiswaForm;
                   const verificationKey = String(name);
-                  const requiredDocument = kind === "kk" || kind === "akta";
                   return (
                     <div key={kind} className="space-y-2">
                       <SpmbDocumentUpload
