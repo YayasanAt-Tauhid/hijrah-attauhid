@@ -95,7 +95,6 @@ type SiswaForm = z.infer<typeof siswaSchema>;
 type Choice = { value: string; label: string };
 
 const makeChoices = (values: string[]): Choice[] => values.map((value) => ({ value, label: value }));
-const agamaOptions = makeChoices(["Islam", "Kristen", "Katolik", "Hindu", "Buddha", "Konghucu"]);
 const kategoriOptions = makeChoices(["MURID BARU", "MURID PINDAHAN"]);
 const ukuranBajuOptions = makeChoices(["S", "M", "L", "XL", "XXL", "X3L", "X4L", "X5L"]);
 const transportasiOptions = makeChoices(["Mobil Pribadi", "Sepeda Motor", "Mobil/Bus Antar Jemput", "Sepeda", "Jalan Kaki", "Lainnya"]);
@@ -509,7 +508,6 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                         )}
                       </div>
                       <SelectField form={form} name="jenis_kelamin" label="Jenis Kelamin *" options={jenisKelaminOptions} onValueChange={() => resetVerification("jenis_kelamin")} after={verificationControl("jenis_kelamin")} />
-                      <SelectField form={form} name="agama" label="Agama" options={agamaOptions} />
                       <TextField form={form} name="tempat_lahir" label="Tempat Lahir" onValueChange={() => resetVerification("tempat_lahir")} after={verificationControl("tempat_lahir")} />
                       <TextField form={form} name="tanggal_lahir" label="Tanggal Lahir" type="date" onValueChange={() => resetVerification("tanggal_lahir")} after={verificationControl("tanggal_lahir")} />
                       <TextField form={form} name="telepon" label="No. HP Siswa / Pendaftar" inputMode="tel" />
