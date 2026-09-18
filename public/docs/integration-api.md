@@ -97,7 +97,9 @@ Dokumen memakai ID stabil `<pendaftaran_id>.<jenis>`. Signed URL bukan identitas
 
 ## Payload pendaftaran
 
-Field dasar mencakup `id`, `siswa_id`, `status`, `tanggal_pendaftaran`, `unit`, `tahun_ajaran`, `angkatan`, `identitas`, `jenis_pendaftaran`, `kategori`, `status_asrama`, `tanggal_tes`, `tanggal_kelulusan`, `tanggal_daftar_ulang`, `verifikasi`, dan `pembayaran_pendaftaran`.
+`status_kelulusan` bernilai `lulus`, `tidak_lulus`, atau `null` bila keputusan belum dibuat. `tanggal_keputusan` diisi saat keputusan Lulus/Tidak Lulus ditetapkan.
+
+Field dasar mencakup `id`, `siswa_id`, `status`, `tanggal_pendaftaran`, `unit`, `tahun_ajaran`, `angkatan`, `identitas`, `jenis_pendaftaran`, `kategori`, `status_asrama`, `tanggal_tes`, `status_kelulusan`, `tanggal_kelulusan`, `tanggal_keputusan`, `tanggal_daftar_ulang`, `verifikasi`, dan `pembayaran_pendaftaran`.
 
 `pembayaran_pendaftaran` berbentuk:
 
