@@ -230,8 +230,12 @@ export function SiswaSpmbDetail({ detail }: { detail: Detail | null | undefined 
         <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground"><FileText className="h-4 w-4" />Dokumen dapat dilihat dari halaman detail tanpa mengubah status pemeriksaan.</div>
         <DocumentRow label="Kartu Keluarga (wajib)" path={detail.dokumen_kk_path} />
         <DocumentRow label="Akta Kelahiran (wajib)" path={detail.dokumen_akta_path} />
-        <DocumentRow label="Rapor (opsional sesuai tahap)" path={detail.dokumen_rapor_path} />
-        <DocumentRow label="Ijazah/SKHUN (bila sudah ada)" path={detail.dokumen_ijazah_path} />
+        {(detail.kategori === "MURID PINDAHAN" || detail.jenis_pendaftaran === "pindahan") && (
+          <>
+            <DocumentRow label="Rapor Siswa Pindahan (wajib)" path={detail.dokumen_rapor_path} />
+            <DocumentRow label="Ijazah/SKHUN Siswa Pindahan (wajib)" path={detail.dokumen_ijazah_path} />
+          </>
+        )}
       </Section>
     </div>
   );
