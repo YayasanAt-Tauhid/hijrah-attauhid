@@ -32,7 +32,7 @@ const getKategoriColor = (k: string) => KATEGORI.find(c => c.value === k)?.color
 export default function KalenderAkademik() {
   const { role } = useAuth();
   const qc = useQueryClient();
-  const canEdit = role === "admin" || role === "kepala_sekolah";
+  const canEdit = role === "admin" || role === "admin_tu" || role === "kepala_sekolah";
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [taId, setTaId] = useState("");
   const [deptId, setDeptId] = useState("");
