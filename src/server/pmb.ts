@@ -7,7 +7,6 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { createAdminClient } from "./supabase";
-import { isSpmbRegistrationOpen } from "@/lib/spmbPolicy";
 
 const PMB_DOCUMENT_BUCKET = "pmb-dokumen";
 const PMB_DOCUMENT_KINDS = ["kk", "akta", "rapor", "ijazah"] as const;
@@ -206,11 +205,23 @@ function departemenPerluNisn(dept: { kode?: string | null; nama?: string | null 
 export const pmbDaftar = createServerFn({ method: "POST" })
   .inputValidator((d: PmbDaftarInput) => d)
   .handler(async ({ data }): Promise<PmbDaftarResult> => {
-    if (!isSpmbRegistrationOpen()) {
-      throw new Error("SPMB Gelombang 1 dibuka 23 September sampai 30 Oktober 2026.");
-    }
-
     const admin = createAdminClient();
+    const now = new Date().toISOString();
+    const { data: currentWave, error: waveError } = await (admin
+      .from("spmb_gelombang") as any)
+      .select("id,nama,gratis_pendaftaran")
+      .eq("aktif", true)
+      .lte("tanggal_mulai", now)
+      .or(`tanggal_selesai.is.null,tanggal_selesai.gt.${now}`)
+      .order("urutan")
+      .order("tanggal_mulai")
+      .limit(1)
+      .maybeSingle();
+
+    if (waveError) throw new Error(waveError.message);
+    if (!currentWave) {
+      throw new Error("Pendaftaran SPMB sedang ditutup. Silakan lihat jadwal gelombang berikutnya.");
+    }
     const nama = (data.nama || "").trim();
     const departemen_id = (data.departemen_id || "").trim();
     const angkatan_id = (data.angkatan_id || "").trim() || null;
