@@ -11,10 +11,13 @@ import { spmbGetPolicyStatus, type SpmbPolicyStatusResult } from "@/server/spmbP
 import {
   SPMB_CATEGORY_LABEL,
   SPMB_CATEGORY_VALUE,
+  SPMB_TRANSFER_CATEGORY_LABEL,
+  SPMB_TRANSFER_CATEGORY_VALUE,
   SPMB_TARGET_ACADEMIC_YEAR,
   SPMB_TARGET_COHORT,
   isSpmbFirstWaveFree,
   isSpmbPaymentVisible,
+  isSpmbRegistrationOpen,
 } from "@/lib/spmbPolicy";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -55,7 +58,7 @@ const HAFALAN_OPTIONS = [
 ] as const;
 
 const initialForm = {
-  nama: "", jenis_kelamin: "", tempat_lahir: "", tanggal_lahir: "", alamat: "", telepon: "",
+  nama: "", jenis_kelamin: "", tempat_lahir: "", tanggal_lahir: "", alamat: "", telepon: "", nisn: "",
   departemen_id: "", angkatan_id: "", tahun_ajaran_id: "", jenis_pendaftaran: "baru", kelas_terakhir: "", alasan_pindah: "",
   nik: "", no_kk: "", kategori: SPMB_CATEGORY_VALUE, status_asrama: "", anak_ke: "", jumlah_bersaudara: "",
   penyakit_pernah_diderita: "", jarak_rumah_km: "", waktu_perjalanan_menit: "", transportasi: "",
@@ -80,11 +83,20 @@ function labelStatusPendaftaran(status: string): string {
   return status || "Terdaftar";
 }
 
-function perluPilihanAsrama(dept?: Departemen): boolean {
-  if (!dept) return false;
+function kodeDepartemen(dept?: Departemen): string {
+  if (!dept) return "";
   const kode = (dept.kode || "").trim().toUpperCase();
-  const nama = dept.nama.trim().toUpperCase();
-  return ["SMP", "SMA", "MTA"].includes(kode) || /(^|\s)(SMP|SMA|MTA)(\s|$)/.test(nama);
+  if (["TK", "SD", "SMP", "SMA", "MTA"].includes(kode)) return kode;
+  const match = dept.nama.trim().toUpperCase().match(/(^|\s)(TK|SD|SMP|SMA|MTA)(\s|$)/);
+  return match?.[2] || "";
+}
+
+function perluPilihanAsrama(dept?: Departemen): boolean {
+  return ["SMP", "SMA", "MTA"].includes(kodeDepartemen(dept));
+}
+
+function perluNisn(dept?: Departemen): boolean {
+  return ["SMP", "SMA", "MTA"].includes(kodeDepartemen(dept));
 }
 
 function namaLembagaPromo(dept?: Departemen, fallback?: string | null): string {
@@ -256,8 +268,21 @@ export default function SPMBDaftarOnlineV2() {
   }, [statusToken, currentPaymentStatus]);
 
   const selectedDept = useMemo(() => departemenList.find((dept) => dept.id === form.departemen_id), [departemenList, form.departemen_id]);
+  const deptCode = useMemo(() => kodeDepartemen(selectedDept), [selectedDept]);
   const wajibAsrama = useMemo(() => perluPilihanAsrama(selectedDept), [selectedDept]);
+  const wajibNisn = useMemo(() => perluNisn(selectedDept), [selectedDept]);
+  const mtaWajibAsrama = deptCode === "MTA";
+  const siswaPindahan = form.kategori === SPMB_TRANSFER_CATEGORY_VALUE;
+  const registrationOpen = isSpmbRegistrationOpen();
   const angkatanList = useMemo(() => allAngkatan.filter((angkatan) => !form.departemen_id || angkatan.departemen_id === form.departemen_id), [allAngkatan, form.departemen_id]);
+
+  useEffect(() => {
+    if (mtaWajibAsrama && form.status_asrama !== "asrama") {
+      setForm((current) => ({ ...current, status_asrama: "asrama" }));
+    } else if (!wajibAsrama && form.status_asrama) {
+      setForm((current) => ({ ...current, status_asrama: "" }));
+    }
+  }, [mtaWajibAsrama, wajibAsrama, form.status_asrama]);
   const set = (key: keyof typeof initialForm) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((current) => ({ ...current, [key]: event.target.value }));
 
@@ -294,11 +319,22 @@ export default function SPMBDaftarOnlineV2() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setSubmitError(null);
+    if (!registrationOpen) {
+      const message = "SPMB Gelombang 1 dibuka 23 September sampai 30 Oktober 2026.";
+      setSubmitError(message);
+      toast.error(message);
+      return;
+    }
     const requiredValues = [
       form.departemen_id, form.tahun_ajaran_id, form.angkatan_id, form.nik, form.no_kk, form.kategori, form.nama,
-      form.jenis_kelamin, form.tempat_lahir, form.tanggal_lahir, form.anak_ke, form.jumlah_bersaudara,
-      form.jarak_rumah_km, form.waktu_perjalanan_menit, form.transportasi,
+      form.jenis_kelamin, form.tempat_lahir, form.tanggal_lahir, form.alamat, form.telepon,
+      form.anak_ke, form.jumlah_bersaudara, form.jarak_rumah_km, form.waktu_perjalanan_menit, form.transportasi,
       form.kemampuan_iqro, form.membaca_latin, form.menulis_latin, form.hafalan_quran,
+      form.nama_ayah, form.nik_ayah, form.tempat_lahir_ayah, form.tanggal_lahir_ayah, form.pendidikan_ayah,
+      form.pekerjaan_ayah, form.penghasilan_ayah, form.telepon_ayah, form.alamat_ayah,
+      form.nama_ibu, form.nik_ibu, form.tempat_lahir_ibu, form.tanggal_lahir_ibu, form.pendidikan_ibu,
+      form.pekerjaan_ibu, form.penghasilan_ibu, form.telepon_ibu, form.alamat_ibu,
+      ...(wajibNisn ? [form.nisn] : []),
     ];
     if (requiredValues.some((value) => !String(value).trim())) {
       const message = "Lengkapi seluruh data wajib bertanda *.";
@@ -314,6 +350,25 @@ export default function SPMBDaftarOnlineV2() {
       focusField("spmb-public-nik");
       return;
     }
+    if (wajibNisn && !/^\d{10}$/.test(form.nisn)) {
+      const message = "NISN wajib diisi 10 digit untuk SMP, SMA, dan MTA.";
+      setSubmitError(message);
+      toast.error(message);
+      focusField("spmb-public-nisn");
+      return;
+    }
+    if (!/^(?:\+62|62|0)[0-9]{7,16}$/.test(form.telepon.replace(/[\s-]/g, ""))) {
+      const message = "Masukkan No. HP / WhatsApp yang aktif dan bisa dihubungi.";
+      setSubmitError(message);
+      toast.error(message);
+      return;
+    }
+    if (!/^\d{16}$/.test(form.nik_ayah.replace(/\D/g, "")) || !/^\d{16}$/.test(form.nik_ibu.replace(/\D/g, ""))) {
+      const message = "NIK Ayah dan NIK Ibu masing-masing harus 16 digit.";
+      setSubmitError(message);
+      toast.error(message);
+      return;
+    }
     if (!angkatanList.some((angkatan) => angkatan.id === form.angkatan_id)) {
       const message = "Konfigurasi Angkatan 2027 untuk lembaga yang dipilih belum tersedia. Silakan hubungi admin sekolah.";
       setSubmitError(message);
@@ -322,13 +377,25 @@ export default function SPMBDaftarOnlineV2() {
       return;
     }
     if (wajibAsrama && !form.status_asrama) {
-      const message = "Pilihan Asrama / Non Asrama wajib dipilih untuk SMP, SMA, atau MTA.";
+      const message = "Pilihan Asrama / Non Asrama wajib dipilih untuk SMP atau SMA. MTA otomatis Asrama.";
+      setSubmitError(message);
+      toast.error(message);
+      return;
+    }
+    if (mtaWajibAsrama && form.status_asrama !== "asrama") {
+      const message = "Pendaftar MTA wajib Asrama. Non Asrama hanya untuk murid lama.";
       setSubmitError(message);
       toast.error(message);
       return;
     }
     if (!documents.kk || !documents.akta) {
       const message = "Kartu Keluarga dan Akta Kelahiran wajib diunggah.";
+      setSubmitError(message);
+      toast.error(message);
+      return;
+    }
+    if (siswaPindahan && (!documents.rapor || !documents.ijazah)) {
+      const message = "Rapor dan Ijazah / SKHUN wajib diunggah untuk Siswa Pindahan.";
       setSubmitError(message);
       toast.error(message);
       return;
@@ -344,9 +411,9 @@ export default function SPMBDaftarOnlineV2() {
         ...form,
         nama: form.nama.trim(),
         nik: form.nik,
-        kategori: SPMB_CATEGORY_VALUE,
-        jenis_pendaftaran: "baru",
-        status_asrama: wajibAsrama ? form.status_asrama : "",
+        kategori: form.kategori,
+        jenis_pendaftaran: siswaPindahan ? "pindahan" : "baru",
+        status_asrama: mtaWajibAsrama ? "asrama" : wajibAsrama ? form.status_asrama : "",
         telepon_ortu: form.telepon_ayah || form.telepon_ibu,
         alamat_ortu: form.alamat_ayah || form.alamat_ibu,
         dokumen_kk_path: dokumenKk,
@@ -465,7 +532,7 @@ export default function SPMBDaftarOnlineV2() {
               <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-left text-sm text-emerald-900">
                 <p className="text-base font-bold">🎉 Selamat!</p>
                 <p>Anda mendapatkan <strong>gratis biaya pendaftaran</strong> sebagai apresiasi bagi pendaftar <strong>Gelombang Pertama</strong>.</p>
-                <p className="font-medium">📅 21 September–23 Oktober 2026.</p>
+                <p className="font-medium">📅 23 September–30 Oktober 2026.</p>
                 <p>Tim kami akan menghubungi Anda untuk menginformasikan jadwal seleksi selanjutnya.</p>
                 <p>Terima kasih telah memilih <strong>{lembagaPromo}</strong>.</p>
               </div>
@@ -493,6 +560,11 @@ export default function SPMBDaftarOnlineV2() {
               </Button>
             )}
             {paymentVisible && !promoFree && (registrationStatus || statusToken) && <Button variant="outline" className="min-h-11 w-full" onClick={() => refreshStatus()} disabled={statusLoading}><RefreshCw className={`mr-2 h-4 w-4 ${statusLoading ? "animate-spin" : ""}`} />Perbarui Status</Button>}
+            {policyStatus?.group_calon_siswa_url && (
+              <Button asChild className="min-h-11 w-full bg-emerald-700 hover:bg-emerald-800">
+                <a href={policyStatus.group_calon_siswa_url} target="_blank" rel="noreferrer">Gabung Grup Calon Siswa {lembagaPromo}</a>
+              </Button>
+            )}
             {(promoFree || !paymentVisible || isPaid) && <Button variant="outline" className="min-h-11 w-full" onClick={clearRegistration}>Daftarkan Calon Murid Lain</Button>}
           </CardContent>
         </Card>
@@ -516,10 +588,16 @@ export default function SPMBDaftarOnlineV2() {
           </CardHeader>
           <CardContent>
             <form onSubmit={submit} className="space-y-6" noValidate>
+              {!registrationOpen && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+                  <Clock3 className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div><strong>SPMB Gelombang 1 belum dibuka.</strong><br />Pendaftaran dibuka 23 September–30 Oktober 2026.</div>
+                </div>
+              )}
               {optionsError && <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{optionsError}</div>}
               {submitError && <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{submitError}</div>}
 
-              <fieldset disabled={loading || optionsLoading || Boolean(optionsError)} className="space-y-6 disabled:opacity-70">
+              <fieldset disabled={loading || optionsLoading || Boolean(optionsError) || !registrationOpen} className="space-y-6 disabled:opacity-70">
                 <FormSection title="Data Diri Murid" description="Informasi pendaftaran dan identitas calon murid">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
@@ -535,11 +613,30 @@ export default function SPMBDaftarOnlineV2() {
                       <Input className="min-h-11" disabled value={!form.departemen_id ? "Pilih lembaga terlebih dahulu" : angkatanList.length ? "2027" : "Belum dikonfigurasi untuk lembaga ini"} />
                       {form.departemen_id && !angkatanList.length && <p className="mt-1 text-xs text-red-700">Angkatan 2027 untuk lembaga ini belum tersedia. Hubungi admin sekolah.</p>}
                     </div>
-                    <div><Label>Kategori *</Label><Input className="min-h-11" value={SPMB_CATEGORY_LABEL} disabled /></div>
-                    {wajibAsrama && <div><Label>Asrama / Non Asrama *</Label><OptionSelect value={form.status_asrama} placeholder="Pilih status" options={[["asrama", "ASRAMA"], ["non_asrama", "NON ASRAMA"]]} onValueChange={(value) => setForm((current) => ({ ...current, status_asrama: value }))} /></div>}
-                    <div><Label>No. HP Pendaftar</Label><Input className="min-h-11" value={form.telepon} onChange={set("telepon")} inputMode="tel" autoComplete="tel" placeholder="08xxxxxxxxxx" /></div>
+                    <div>
+                      <Label>Kategori *</Label>
+                      <OptionSelect
+                        value={form.kategori}
+                        placeholder="Pilih kategori"
+                        options={[[SPMB_CATEGORY_VALUE, SPMB_CATEGORY_LABEL], [SPMB_TRANSFER_CATEGORY_VALUE, SPMB_TRANSFER_CATEGORY_LABEL]]}
+                        onValueChange={(value) => {
+                          const transfer = value === SPMB_TRANSFER_CATEGORY_VALUE;
+                          setForm((current) => ({ ...current, kategori: value, jenis_pendaftaran: transfer ? "pindahan" : "baru" }));
+                          if (!transfer) setDocuments((current) => ({ ...current, rapor: null, ijazah: null }));
+                        }}
+                      />
+                    </div>
+                    {wajibAsrama && (mtaWajibAsrama
+                      ? <div><Label>Status Asrama *</Label><Input className="min-h-11" value="ASRAMA — wajib untuk pendaftar MTA" disabled /></div>
+                      : <div><Label>Asrama / Non Asrama *</Label><OptionSelect value={form.status_asrama} placeholder="Pilih status" options={[["asrama", "ASRAMA"], ["non_asrama", "NON ASRAMA"]]} onValueChange={(value) => setForm((current) => ({ ...current, status_asrama: value }))} /></div>)}
+                    <div>
+                      <Label>No. HP / WhatsApp yang Bisa Dihubungi *</Label>
+                      <Input className="min-h-11" value={form.telepon} onChange={set("telepon")} inputMode="tel" autoComplete="tel" placeholder="08xxxxxxxxxx" />
+                      <p className="mt-1 text-xs text-muted-foreground">Gunakan nomor aktif yang dapat dihubungi panitia SPMB.</p>
+                    </div>
                     <div><Label htmlFor="spmb-public-nik">NIK Calon Murid *</Label><Input id="spmb-public-nik" className="min-h-11" value={form.nik} onChange={(event) => setForm((current) => ({ ...current, nik: event.target.value.replace(/\D/g, "").slice(0, 16) }))} inputMode="numeric" maxLength={16} placeholder="16 digit NIK" /></div>
                     <div><Label>No. KK *</Label><Input className="min-h-11" value={form.no_kk} onChange={set("no_kk")} inputMode="numeric" minLength={10} maxLength={20} /></div>
+                    {wajibNisn && <div><Label htmlFor="spmb-public-nisn">NISN *</Label><Input id="spmb-public-nisn" className="min-h-11" value={form.nisn} onChange={(event) => setForm((current) => ({ ...current, nisn: event.target.value.replace(/\D/g, "").slice(0, 10) }))} inputMode="numeric" maxLength={10} placeholder="10 digit NISN" /></div>}
                     <div className="md:col-span-2"><Label htmlFor="spmb-public-nama">Nama Lengkap *</Label><Input id="spmb-public-nama" className="min-h-11" value={form.nama} onChange={set("nama")} autoComplete="name" /></div>
                     <div><Label>Jenis Kelamin *</Label><OptionSelect value={form.jenis_kelamin} placeholder="Pilih jenis kelamin" options={[["L", "LAKI-LAKI"], ["P", "PEREMPUAN"]]} onValueChange={(value) => setForm((current) => ({ ...current, jenis_kelamin: value }))} /></div>
                     <div><Label>Tempat Lahir *</Label><Input className="min-h-11" value={form.tempat_lahir} onChange={set("tempat_lahir")} /></div>
@@ -553,35 +650,35 @@ export default function SPMBDaftarOnlineV2() {
                     <div><Label>Waktu Perjalanan (menit) *</Label><Input className="min-h-11" type="number" min="0" value={form.waktu_perjalanan_menit} onChange={set("waktu_perjalanan_menit")} /></div>
                     <div><Label>Transportasi yang Digunakan *</Label><OptionSelect value={form.transportasi} placeholder="Pilih transportasi" options={TRANSPORTASI_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, transportasi: value }))} /></div>
                   </div>
-                  <div><Label>Alamat Rumah</Label><Textarea value={form.alamat} onChange={set("alamat")} /></div>
+                  <div><Label>Alamat Rumah *</Label><Textarea value={form.alamat} onChange={set("alamat")} /></div>
                 </FormSection>
 
                 <FormSection title="Data Ayah" description="Informasi ayah calon murid">
                   <div className="grid gap-4 md:grid-cols-2">
-                    <div><Label>NIK Ayah</Label><Input className="min-h-11" value={form.nik_ayah} onChange={set("nik_ayah")} inputMode="numeric" /></div>
-                    <div><Label>Nama Ayah</Label><Input className="min-h-11" value={form.nama_ayah} onChange={set("nama_ayah")} /></div>
-                    <div><Label>Tempat Lahir</Label><Input className="min-h-11" value={form.tempat_lahir_ayah} onChange={set("tempat_lahir_ayah")} /></div>
-                    <div><Label>Tanggal Lahir</Label><Input className="min-h-11" type="date" value={form.tanggal_lahir_ayah} onChange={set("tanggal_lahir_ayah")} /></div>
-                    <div><Label>Pendidikan Terakhir</Label><OptionSelect value={form.pendidikan_ayah} placeholder="Pilih pendidikan" options={PENDIDIKAN_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, pendidikan_ayah: value }))} /></div>
-                    <div><Label>Pekerjaan</Label><OptionSelect value={form.pekerjaan_ayah} placeholder="Pilih pekerjaan" options={PEKERJAAN_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, pekerjaan_ayah: value }))} /></div>
-                    <div><Label>Penghasilan (Rp)</Label><Input className="min-h-11" type="number" min="0" value={form.penghasilan_ayah} onChange={set("penghasilan_ayah")} /></div>
-                    <div><Label>No. HP / WA</Label><Input className="min-h-11" value={form.telepon_ayah} onChange={set("telepon_ayah")} inputMode="tel" /></div>
+                    <div><Label>NIK Ayah *</Label><Input className="min-h-11" value={form.nik_ayah} onChange={set("nik_ayah")} inputMode="numeric" /></div>
+                    <div><Label>Nama Ayah *</Label><Input className="min-h-11" value={form.nama_ayah} onChange={set("nama_ayah")} /></div>
+                    <div><Label>Tempat Lahir *</Label><Input className="min-h-11" value={form.tempat_lahir_ayah} onChange={set("tempat_lahir_ayah")} /></div>
+                    <div><Label>Tanggal Lahir *</Label><Input className="min-h-11" type="date" value={form.tanggal_lahir_ayah} onChange={set("tanggal_lahir_ayah")} /></div>
+                    <div><Label>Pendidikan Terakhir *</Label><OptionSelect value={form.pendidikan_ayah} placeholder="Pilih pendidikan" options={PENDIDIKAN_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, pendidikan_ayah: value }))} /></div>
+                    <div><Label>Pekerjaan *</Label><OptionSelect value={form.pekerjaan_ayah} placeholder="Pilih pekerjaan" options={PEKERJAAN_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, pekerjaan_ayah: value }))} /></div>
+                    <div><Label>Penghasilan (Rp) *</Label><Input className="min-h-11" type="number" min="0" value={form.penghasilan_ayah} onChange={set("penghasilan_ayah")} /></div>
+                    <div><Label>No. HP / WA *</Label><Input className="min-h-11" value={form.telepon_ayah} onChange={set("telepon_ayah")} inputMode="tel" /></div>
                   </div>
-                  <div><Label>Alamat Ayah</Label><Textarea value={form.alamat_ayah} onChange={set("alamat_ayah")} /></div>
+                  <div><Label>Alamat Ayah *</Label><Textarea value={form.alamat_ayah} onChange={set("alamat_ayah")} /></div>
                 </FormSection>
 
                 <FormSection title="Data Ibu" description="Informasi ibu calon murid">
                   <div className="grid gap-4 md:grid-cols-2">
-                    <div><Label>NIK Ibu</Label><Input className="min-h-11" value={form.nik_ibu} onChange={set("nik_ibu")} inputMode="numeric" /></div>
-                    <div><Label>Nama Ibu</Label><Input className="min-h-11" value={form.nama_ibu} onChange={set("nama_ibu")} /></div>
-                    <div><Label>Tempat Lahir</Label><Input className="min-h-11" value={form.tempat_lahir_ibu} onChange={set("tempat_lahir_ibu")} /></div>
-                    <div><Label>Tanggal Lahir</Label><Input className="min-h-11" type="date" value={form.tanggal_lahir_ibu} onChange={set("tanggal_lahir_ibu")} /></div>
-                    <div><Label>Pendidikan Terakhir</Label><OptionSelect value={form.pendidikan_ibu} placeholder="Pilih pendidikan" options={PENDIDIKAN_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, pendidikan_ibu: value }))} /></div>
-                    <div><Label>Pekerjaan</Label><OptionSelect value={form.pekerjaan_ibu} placeholder="Pilih pekerjaan" options={PEKERJAAN_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, pekerjaan_ibu: value }))} /></div>
-                    <div><Label>Penghasilan (Rp)</Label><Input className="min-h-11" type="number" min="0" value={form.penghasilan_ibu} onChange={set("penghasilan_ibu")} /></div>
-                    <div><Label>No. HP / WA</Label><Input className="min-h-11" value={form.telepon_ibu} onChange={set("telepon_ibu")} inputMode="tel" /></div>
+                    <div><Label>NIK Ibu *</Label><Input className="min-h-11" value={form.nik_ibu} onChange={set("nik_ibu")} inputMode="numeric" /></div>
+                    <div><Label>Nama Ibu *</Label><Input className="min-h-11" value={form.nama_ibu} onChange={set("nama_ibu")} /></div>
+                    <div><Label>Tempat Lahir *</Label><Input className="min-h-11" value={form.tempat_lahir_ibu} onChange={set("tempat_lahir_ibu")} /></div>
+                    <div><Label>Tanggal Lahir *</Label><Input className="min-h-11" type="date" value={form.tanggal_lahir_ibu} onChange={set("tanggal_lahir_ibu")} /></div>
+                    <div><Label>Pendidikan Terakhir *</Label><OptionSelect value={form.pendidikan_ibu} placeholder="Pilih pendidikan" options={PENDIDIKAN_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, pendidikan_ibu: value }))} /></div>
+                    <div><Label>Pekerjaan *</Label><OptionSelect value={form.pekerjaan_ibu} placeholder="Pilih pekerjaan" options={PEKERJAAN_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, pekerjaan_ibu: value }))} /></div>
+                    <div><Label>Penghasilan (Rp) *</Label><Input className="min-h-11" type="number" min="0" value={form.penghasilan_ibu} onChange={set("penghasilan_ibu")} /></div>
+                    <div><Label>No. HP / WA *</Label><Input className="min-h-11" value={form.telepon_ibu} onChange={set("telepon_ibu")} inputMode="tel" /></div>
                   </div>
-                  <div><Label>Alamat Ibu</Label><Textarea value={form.alamat_ibu} onChange={set("alamat_ibu")} /></div>
+                  <div><Label>Alamat Ibu *</Label><Textarea value={form.alamat_ibu} onChange={set("alamat_ibu")} /></div>
                 </FormSection>
 
                 <FormSection title="Data Sekolah Asal" description="Diisi bila calon murid pernah bersekolah sebelumnya">
@@ -607,14 +704,14 @@ export default function SPMBDaftarOnlineV2() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <DocumentPicker label="Kartu Keluarga" required value={documents.kk} onChange={(file) => setDocuments((current) => ({ ...current, kk: file }))} />
                     <DocumentPicker label="Akta Kelahiran" required value={documents.akta} onChange={(file) => setDocuments((current) => ({ ...current, akta: file }))} />
-                    <DocumentPicker label="Rapor" value={documents.rapor} onChange={(file) => setDocuments((current) => ({ ...current, rapor: file }))} />
-                    <DocumentPicker label="Ijazah / SKHUN (bila sudah ada)" value={documents.ijazah} onChange={(file) => setDocuments((current) => ({ ...current, ijazah: file }))} />
+                    {siswaPindahan && <DocumentPicker label="Rapor Siswa Pindahan" required value={documents.rapor} onChange={(file) => setDocuments((current) => ({ ...current, rapor: file }))} />}
+                    {siswaPindahan && <DocumentPicker label="Ijazah / SKHUN Siswa Pindahan" required value={documents.ijazah} onChange={(file) => setDocuments((current) => ({ ...current, ijazah: file }))} />}
                   </div>
-                  <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900"><Upload className="mt-0.5 h-4 w-4 shrink-0" />Kartu Keluarga dan Akta Kelahiran wajib dilampirkan. Rapor dan Ijazah/SKHUN opsional.</div>
+                  <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900"><Upload className="mt-0.5 h-4 w-4 shrink-0" />Kartu Keluarga dan Akta Kelahiran wajib untuk semua pendaftar. Rapor dan Ijazah/SKHUN hanya ditampilkan dan wajib untuk kategori Siswa Pindahan.</div>
                 </FormSection>
               </fieldset>
 
-              <Button type="submit" disabled={loading || optionsLoading || Boolean(optionsError)} className="min-h-11 w-full bg-emerald-600 hover:bg-emerald-700">
+              <Button type="submit" disabled={loading || optionsLoading || Boolean(optionsError) || !registrationOpen} className="min-h-11 w-full bg-emerald-600 hover:bg-emerald-700">
                 <UserPlus className="mr-2 h-4 w-4" />{loading ? "Mengunggah dokumen & mendaftarkan..." : "Daftarkan Calon Murid"}
               </Button>
             </form>
