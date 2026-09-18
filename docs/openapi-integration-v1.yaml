@@ -66,7 +66,9 @@ components:
         kategori: { type: [string, 'null'] }
         status_asrama: { type: [string, 'null'] }
         tanggal_tes: { type: [string, 'null'], format: date-time }
+        status_kelulusan: { type: [string, 'null'], enum: [lulus, tidak_lulus, null] }
         tanggal_kelulusan: { type: [string, 'null'], format: date-time }
+        tanggal_keputusan: { type: [string, 'null'], format: date-time }
         tanggal_daftar_ulang: { type: [string, 'null'], format: date-time }
         verifikasi: { type: object }
         pembayaran_pendaftaran: { $ref: '#/components/schemas/Payment' }
