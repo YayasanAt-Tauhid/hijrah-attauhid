@@ -138,13 +138,14 @@ function perluPilihanAsrama(dept?: { kode?: string | null; nama?: string | null 
   return ["SMP", "SMA", "MTA"].includes(kode) || /(^|\s)(SMP|SMA|MTA)(\s|$)/.test(nama);
 }
 
-function TextField({ form, name, label, type = "text", placeholder, inputMode, onValueChange, after }: {
+function TextField({ form, name, label, type = "text", placeholder, inputMode, disabled, onValueChange, after }: {
   form: UseFormReturn<SiswaForm>;
   name: keyof SiswaForm;
   label: string;
   type?: string;
   placeholder?: string;
   inputMode?: "none" | "text" | "tel" | "url" | "email" | "numeric" | "decimal" | "search";
+  disabled?: boolean;
   onValueChange?: (value: string) => void;
   after?: ReactNode;
 }) {
@@ -157,6 +158,7 @@ function TextField({ form, name, label, type = "text", placeholder, inputMode, o
             type={type}
             placeholder={placeholder}
             inputMode={inputMode}
+            disabled={disabled}
             {...field}
             onChange={(event) => {
               field.onChange(event);
@@ -627,7 +629,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                       <TextField form={form} name="no_kk" label="No. KK" inputMode="numeric" onValueChange={() => resetVerification("no_kk")} after={verificationControl("no_kk")} />
                       <SelectField form={form} name="kategori" label="Kategori" options={kategoriOptions} onValueChange={() => resetVerification("kategori")} after={verificationControl("kategori")} />
                       {wajibAsrama && (mtaWajibAsrama
-                        ? <TextField form={form} name="status_asrama" label="Status Asrama *" disabled valueOverride="asrama" after={verificationControl("status_asrama")} />
+                        ? <TextField form={form} name="status_asrama" label="Status Asrama *" disabled after={verificationControl("status_asrama")} />
                         : <SelectField form={form} name="status_asrama" label="Asrama / Non Asrama *" options={asramaOptions} onValueChange={() => resetVerification("status_asrama")} after={verificationControl("status_asrama")} />)}
                       <TextField form={form} name="anak_ke" label="Anak ke" type="number" onValueChange={() => resetVerification("anak_ke")} after={verificationControl("anak_ke")} />
                       <TextField form={form} name="jumlah_bersaudara" label="Dari Bersaudara" type="number" onValueChange={() => resetVerification("jumlah_bersaudara")} after={verificationControl("jumlah_bersaudara")} />
