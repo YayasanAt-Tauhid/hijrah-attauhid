@@ -29,6 +29,7 @@ const siswaSchema = z.object({
   dokumen_rapor_path: optionalString,
   dokumen_ijazah_path: optionalString,
   nis: optionalString,
+  nisn: optionalString,
   nama: z.string().min(2, "Nama minimal 2 karakter"),
   jenis_kelamin: z.enum(["L", "P"], { required_error: "Pilih jenis kelamin" }),
   tempat_lahir: optionalString,
@@ -255,12 +256,23 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
   const watchTingkat = form.watch("tingkat_id");
   const watchAngkatan = form.watch("angkatan_id");
   const watchKelas = form.watch("kelas_id");
+  const watchKategori = form.watch("kategori");
+  const watchJenisPendaftaran = form.watch("jenis_pendaftaran");
   const { data: tingkatList = [] } = useTingkat(watchDept || null);
   const { data: kelasList = [] } = useKelas(watchTingkat);
   const angkatanList = allAngkatanList.filter((a: any) => !watchDept || a.departemen_id === watchDept);
   const selectedDept = departemenList.find((d: any) => d.id === watchDept) as any;
+  const selectedDeptCode = String(selectedDept?.kode || selectedDept?.nama || "").trim().toUpperCase();
   const wajibAsrama = perluPilihanAsrama(selectedDept);
+  const wajibNisn = ["SMP", "SMA", "MTA"].some((kode) => selectedDeptCode === kode || selectedDeptCode.startsWith(kode + " "));
+  const mtaWajibAsrama = (selectedDeptCode === "MTA" || selectedDeptCode.startsWith("MTA ")) && watchJenisPendaftaran !== "alumni_internal";
+  const siswaPindahan = watchKategori === "MURID PINDAHAN" || watchJenisPendaftaran === "pindahan";
   const nisParamsComplete = !!(watchDept && watchAngkatan && watchKelas);
+  const dokumenSpmb = [
+    ["kk", "Kartu Keluarga (wajib)"],
+    ["akta", "Akta Kelahiran (wajib)"],
+    ...(siswaPindahan ? [["rapor", "Rapor Siswa Pindahan (wajib)"], ["ijazah", "Ijazah/SKHUN Siswa Pindahan (wajib)"]] : []),
+  ] as const;
 
   useEffect(() => {
     if (!isEdit || !verificationState?.can_verify) return;
@@ -292,8 +304,13 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
   };
 
   useEffect(() => {
+    if (mtaWajibAsrama && form.getValues("status_asrama") !== "asrama") {
+      form.setValue("status_asrama", "asrama", { shouldDirty: true });
+      resetVerification("status_asrama");
+      return;
+    }
     if (departemenList.length && !wajibAsrama && form.getValues("status_asrama")) form.setValue("status_asrama", "");
-  }, [wajibAsrama, departemenList, form]);
+  }, [wajibAsrama, mtaWajibAsrama, departemenList, form]);
 
   useEffect(() => {
     if (!isEdit || !siswa || detailRaw === undefined) return;
@@ -301,7 +318,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
     form.reset({
       dokumen_kk_path: detail?.dokumen_kk_path || "", dokumen_akta_path: detail?.dokumen_akta_path || "",
       dokumen_rapor_path: detail?.dokumen_rapor_path || "", dokumen_ijazah_path: detail?.dokumen_ijazah_path || "",
-      nis: siswa.nis || "", nama: siswa.nama, jenis_kelamin: (siswa.jenis_kelamin as "L" | "P") || undefined,
+      nis: siswa.nis || "", nisn: (siswa as any).nisn || "", nama: siswa.nama, jenis_kelamin: (siswa.jenis_kelamin as "L" | "P") || undefined,
       tempat_lahir: siswa.tempat_lahir || "", tanggal_lahir: siswa.tanggal_lahir || "", agama: siswa.agama || "Islam",
       alamat: siswa.alamat || "", telepon: siswa.telepon || "", email: siswa.email || "", foto_url: siswa.foto_url || "",
       status: siswa.status || "aktif", angkatan_id: siswa.angkatan_id || "",
@@ -374,13 +391,21 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
     if (isEdit && ["calon", "diterima"].includes(siswa?.status || "") && values.status !== siswa?.status) {
       toast.error("Ubah status penerimaan melalui halaman SPMB"); return;
     }
+    if (wajibNisn && !/^\d{10}$/.test(values.nisn || "")) {
+      toast.error("NISN wajib diisi 10 digit untuk SMP, SMA, dan MTA");
+      return;
+    }
     if (wajibAsrama && !values.status_asrama) {
-      toast.error("Pilihan Asrama / Non Asrama wajib diisi untuk SMP, SMA, atau MTA");
+      toast.error("Pilihan Asrama / Non Asrama wajib diisi untuk SMP atau SMA. MTA otomatis Asrama.");
+      return;
+    }
+    if (mtaWajibAsrama && values.status_asrama !== "asrama") {
+      toast.error("Pendaftar MTA wajib Asrama. Non Asrama hanya untuk murid lama.");
       return;
     }
 
     const siswaData: Record<string, unknown> = {
-      nama: values.nama, nis: values.nis || null, jenis_kelamin: values.jenis_kelamin,
+      nama: values.nama, nis: values.nis || null, nisn: wajibNisn ? values.nisn || null : null, jenis_kelamin: values.jenis_kelamin,
       tempat_lahir: values.tempat_lahir || null, tanggal_lahir: values.tanggal_lahir || null,
       agama: values.agama || null, alamat: values.alamat || null, telepon: values.telepon || null,
       email: values.email || null, foto_url: values.foto_url || null, status: values.status,
@@ -392,7 +417,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
       dokumen_rapor_path: values.dokumen_rapor_path || null, dokumen_ijazah_path: values.dokumen_ijazah_path || null,
       tahun_ajaran_id: values.spmb_tahun_ajaran_id || null, jenis_pendaftaran: values.jenis_pendaftaran || null,
       nik: values.nik || null, no_kk: values.no_kk || null, kategori: values.kategori || null,
-      status_asrama: wajibAsrama ? values.status_asrama || null : null,
+      status_asrama: mtaWajibAsrama ? "asrama" : wajibAsrama ? values.status_asrama || null : null,
       anak_ke: numberOrNull(values.anak_ke), jumlah_bersaudara: numberOrNull(values.jumlah_bersaudara),
       tinggi_badan_cm: numberOrNull(values.tinggi_badan_cm), berat_badan_kg: numberOrNull(values.berat_badan_kg),
       lingkar_kepala_cm: numberOrNull(values.lingkar_kepala_cm), ukuran_baju: values.ukuran_baju || null,
@@ -518,6 +543,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                         <FormField control={form.control} name="nis" render={({ field }) => (
                           <FormItem><FormLabel>NIS</FormLabel><FormControl><Input {...field} disabled={nisMode !== "ketik"} placeholder={nisMode === "otomatis" ? "Dibuat otomatis saat simpan" : nisMode === "manual" ? "Gunakan tombol Generate NIS" : "Ketik NIS"} /></FormControl><FormMessage /></FormItem>
                         )} />
+                        {wajibNisn && <TextField form={form} name="nisn" label="NISN *" inputMode="numeric" onValueChange={() => resetVerification("nisn")} after={verificationControl("nisn")} />}
                         {nisMode === "manual" && (
                           <Button type="button" size="sm" variant="outline" disabled={!canGenerateManual || isGeneratingNis} onClick={handleGenerateNisClick}>
                             {isGeneratingNis ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Wand2 className="h-3 w-3 mr-1" />}Generate NIS
@@ -527,10 +553,10 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                       <SelectField form={form} name="jenis_kelamin" label="Jenis Kelamin *" options={jenisKelaminOptions} onValueChange={() => resetVerification("jenis_kelamin")} after={verificationControl("jenis_kelamin")} />
                       <TextField form={form} name="tempat_lahir" label="Tempat Lahir" onValueChange={() => resetVerification("tempat_lahir")} after={verificationControl("tempat_lahir")} />
                       <TextField form={form} name="tanggal_lahir" label="Tanggal Lahir" type="date" onValueChange={() => resetVerification("tanggal_lahir")} after={verificationControl("tanggal_lahir")} />
-                      <TextField form={form} name="telepon" label="No. HP Siswa / Pendaftar" inputMode="tel" onValueChange={() => resetVerification("telepon")} after={verificationControl("telepon")} />
+                      <TextField form={form} name="telepon" label="No. HP / WhatsApp yang Bisa Dihubungi *" inputMode="tel" onValueChange={() => resetVerification("telepon")} after={verificationControl("telepon")} />
                       <TextField form={form} name="email" label="Email" type="email" />
                     </div>
-                    <TextAreaField form={form} name="alamat" label="Alamat Rumah" onValueChange={() => resetVerification("alamat")} after={verificationControl("alamat")} />
+                    <TextAreaField form={form} name="alamat" label="Alamat Rumah *" onValueChange={() => resetVerification("alamat")} after={verificationControl("alamat")} />
                   </FormSection>
                 </CardContent>
               </Card>
@@ -569,7 +595,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                 {isEdit && verificationState?.can_verify && (
                   <p className="text-sm text-muted-foreground">Centang “Sudah diperiksa” setelah memeriksa nilai atau dokumen. Checklist bertanda opsional boleh dibiarkan kosong dan tidak menghalangi Verifikasi Data SPMB. Checklist disimpan bersama tombol Simpan Perubahan.</p>
                 )}
-                {([ ["kk", "Kartu Keluarga (wajib)"], ["akta", "Akta Kelahiran (wajib)"], ["rapor", "Rapor"], ["ijazah", "Ijazah/SKHUN (bila sudah ada)"] ] as const).map(([kind, label]) => {
+                {dokumenSpmb.map(([kind, label]) => {
                   const name = `dokumen_${kind}_path` as keyof SiswaForm;
                   const verificationKey = String(name);
                   return (
@@ -600,7 +626,9 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                       <TextField form={form} name="nik" label="NIK" inputMode="numeric" onValueChange={() => resetVerification("nik")} after={verificationControl("nik")} />
                       <TextField form={form} name="no_kk" label="No. KK" inputMode="numeric" onValueChange={() => resetVerification("no_kk")} after={verificationControl("no_kk")} />
                       <SelectField form={form} name="kategori" label="Kategori" options={kategoriOptions} onValueChange={() => resetVerification("kategori")} after={verificationControl("kategori")} />
-                      {wajibAsrama && <SelectField form={form} name="status_asrama" label="Asrama / Non Asrama *" options={asramaOptions} onValueChange={() => resetVerification("status_asrama")} after={verificationControl("status_asrama")} />}
+                      {wajibAsrama && (mtaWajibAsrama
+                        ? <TextField form={form} name="status_asrama" label="Status Asrama *" disabled valueOverride="asrama" after={verificationControl("status_asrama")} />
+                        : <SelectField form={form} name="status_asrama" label="Asrama / Non Asrama *" options={asramaOptions} onValueChange={() => resetVerification("status_asrama")} after={verificationControl("status_asrama")} />)}
                       <TextField form={form} name="anak_ke" label="Anak ke" type="number" onValueChange={() => resetVerification("anak_ke")} after={verificationControl("anak_ke")} />
                       <TextField form={form} name="jumlah_bersaudara" label="Dari Bersaudara" type="number" onValueChange={() => resetVerification("jumlah_bersaudara")} after={verificationControl("jumlah_bersaudara")} />
                       <TextField form={form} name="tinggi_badan_cm" label="Tinggi Badan (cm)" type="number" onValueChange={() => resetVerification("tinggi_badan_cm")} after={verificationControl("tinggi_badan_cm")} />
