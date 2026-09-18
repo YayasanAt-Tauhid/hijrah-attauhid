@@ -178,6 +178,7 @@ export default function SPMB() {
   const [nisLoadingId, setNisLoadingId] = useState<string | null>(null);
   const [milestoneLoadingId, setMilestoneLoadingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<SpmbFilterState>(DEFAULT_FILTERS);
+  const [sortMode, setSortMode] = useState("registration_desc");
 
   useEffect(() => {
     if (!targetYear?.id) return;
@@ -278,7 +279,7 @@ export default function SPMB() {
       const byId = new Map<string, any>((readinessRows || []).map((r: any) => [r.siswa_id, r.readiness]));
       const { data: details, error: detailError } = await (supabase as any)
         .from("siswa_detail")
-        .select("siswa_id, status_asrama, dokumen_kk_path, dokumen_akta_path, spmb_tanggal_tes, spmb_tanggal_lulus, spmb_tanggal_daftar_ulang")
+        .select("siswa_id, status_asrama, kategori, dokumen_kk_path, dokumen_akta_path, spmb_tanggal_tes, spmb_tanggal_lulus, spmb_tanggal_daftar_ulang, spmb_status_kelulusan, spmb_tanggal_keputusan")
         .in("siswa_id", siswaIds);
       if (detailError) throw detailError;
       const detailById = new Map<string, any>((details || []).map((d: any) => [d.siswa_id, d]));
@@ -307,6 +308,8 @@ export default function SPMB() {
           _spmbAsrama: labelAsrama(detail?.status_asrama),
           _spmbTanggalTes: detail?.spmb_tanggal_tes || null,
           _spmbTanggalLulus: detail?.spmb_tanggal_lulus || null,
+          _spmbTanggalKeputusan: detail?.spmb_tanggal_keputusan || null,
+          _spmbStatusKelulusan: detail?.spmb_status_kelulusan || null,
           _spmbTanggalDaftarUlang: detail?.spmb_tanggal_daftar_ulang || null,
           _biayaSort: biayaSort,
           _kesiapanSort: r?.siap ? "siap" : "belum",
@@ -319,6 +322,10 @@ export default function SPMB() {
   const calonCount = calonList.filter((s: any) => s.status === "calon").length;
   const diterimaCount = calonList.filter((s: any) => s.status === "diterima").length;
   const nisKosongCount = calonList.filter((s: any) => s.status === "diterima" && !s.nis).length;
+  const asramaCount = calonList.filter((s: any) => s._spmbDetail?.status_asrama === "asrama").length;
+  const nonAsramaCount = calonList.filter((s: any) => s._spmbDetail?.status_asrama === "non_asrama").length;
+  const lakiCount = calonList.filter((s: any) => s.jenis_kelamin === "L").length;
+  const perempuanCount = calonList.filter((s: any) => s.jenis_kelamin === "P").length;
   const belumSiapCount = calonList.filter(
     (s: any) => s.status === "calon" && !getKesiapanPenerimaan(s as Record<string, unknown>).siap,
   ).length;
@@ -328,12 +335,33 @@ export default function SPMB() {
     if (filters.status !== "all" && s.status !== filters.status) return false;
     if (filters.jenisKelamin !== "all" && s.jenis_kelamin !== filters.jenisKelamin) return false;
     if (filters.tes !== "all" && Boolean(s._spmbTanggalTes) !== (filters.tes === "sudah")) return false;
-    if (filters.kelulusan !== "all" && Boolean(s._spmbTanggalLulus) !== (filters.kelulusan === "sudah")) return false;
+    if (filters.kelulusan === "lulus" && s._spmbStatusKelulusan !== "lulus") return false;
+    if (filters.kelulusan === "tidak_lulus" && s._spmbStatusKelulusan !== "tidak_lulus") return false;
+    if (filters.kelulusan === "belum" && s._spmbStatusKelulusan) return false;
     if (filters.daftarUlang !== "all" && Boolean(s._spmbTanggalDaftarUlang) !== (filters.daftarUlang === "sudah")) return false;
     if (filters.biaya !== "all" && s._biayaSort !== filters.biaya) return false;
     if (filters.kesiapan !== "all" && getKesiapanPenerimaan(s as Record<string, unknown>).siap !== (filters.kesiapan === "siap")) return false;
     if (filters.verifikasi !== "all" && Boolean(s.terverifikasi) !== (filters.verifikasi === "sudah")) return false;
     return true;
+  });
+
+  const sortedCalonList = [...filteredCalonList].sort((a: any, b: any) => {
+    const createdA = new Date(a.created_at || 0).getTime();
+    const createdB = new Date(b.created_at || 0).getTime();
+    const paidA = a._pmbTanggalBayar ? new Date(a._pmbTanggalBayar).getTime() : null;
+    const paidB = b._pmbTanggalBayar ? new Date(b._pmbTanggalBayar).getTime() : null;
+    if (sortMode === "registration_asc") return createdA - createdB;
+    if (sortMode === "payment_desc") {
+      if (paidA === null) return 1;
+      if (paidB === null) return -1;
+      return paidB - paidA;
+    }
+    if (sortMode === "payment_asc") {
+      if (paidA === null) return 1;
+      if (paidB === null) return -1;
+      return paidA - paidB;
+    }
+    return createdB - createdA;
   });
 
   const focusFirstError = (errors: RegistrationErrors) => {
@@ -509,7 +537,7 @@ export default function SPMB() {
     toast.success("Murid diaktifkan");
   };
 
-  const handleMilestone = async (row: Record<string, unknown>, action: "tes" | "lulus" | "daftar_ulang", label: string) => {
+  const handleMilestone = async (row: Record<string, unknown>, action: "tes" | "lulus" | "tidak_lulus" | "daftar_ulang", label: string) => {
     const loadingKey = `${row.id}:${action}`;
     setMilestoneLoadingId(loadingKey);
     try {
@@ -555,8 +583,11 @@ export default function SPMB() {
     { key: "_angkatanNama", label: "Angkatan", sortable: true, render: (value) => (value as string) || "-" },
     { key: "created_at", label: "Tgl Pendaftaran", sortable: true, render: (value) => formatTanggal(value) },
     { key: "_pmbTanggalBayar", label: "Tgl Bayar Pendaftaran", sortable: true, render: (value) => formatTanggal(value) },
+    { key: "_spmbTanggalTes", label: "Status Tes", sortable: true, render: (value) => value ? <span className="text-xs text-success">Sudah Tes</span> : <span className="text-xs text-warning">Belum Tes</span> },
     { key: "_spmbTanggalTes", label: "Tgl Tes", sortable: true, render: (value) => formatTanggal(value) },
-    { key: "_spmbTanggalLulus", label: "Tgl Kelulusan", sortable: true, render: (value) => formatTanggal(value) },
+    { key: "_spmbStatusKelulusan", label: "Status Kelulusan", sortable: true, render: (value) => value === "lulus" ? <span className="text-xs text-success">Lulus</span> : value === "tidak_lulus" ? <span className="text-xs text-destructive">Tidak Lulus</span> : <span className="text-xs text-muted-foreground">Belum Ditentukan</span> },
+    { key: "_spmbTanggalKeputusan", label: "Tgl Keputusan", sortable: true, render: (value) => formatTanggal(value) },
+    { key: "_spmbTanggalLulus", label: "Tgl Lulus", sortable: true, render: (value) => formatTanggal(value) },
     { key: "_spmbTanggalDaftarUlang", label: "Tgl Daftar Ulang", sortable: true, render: (value) => formatTanggal(value) },
     {
       key: "_biayaSort",
@@ -619,8 +650,11 @@ export default function SPMB() {
             <Button size="sm" variant="outline" onClick={() => navigate(`/akademik/siswa/${row.id}`)} title="Lihat biodata, checklist verifikasi & dokumen SPMB"><Eye className="h-3 w-3" /></Button>
             <Button size="sm" variant="outline" onClick={() => navigate(`/akademik/siswa/${row.id}/edit`)} title="Edit data lengkap"><Pencil className="h-3 w-3" /></Button>
             {!detail?.spmb_tanggal_tes && <Button size="sm" variant="outline" disabled={tesLoading} onClick={() => handleMilestone(row, "tes", "Sudah Tes")}>{tesLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Sudah Tes"}</Button>}
-            {detail?.spmb_tanggal_tes && !detail?.spmb_tanggal_lulus && <Button size="sm" variant="outline" disabled={lulusLoading} onClick={() => handleMilestone(row, "lulus", "Kelulusan")}>{lulusLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Lulus"}</Button>}
-            {detail?.spmb_tanggal_lulus && !detail?.spmb_tanggal_daftar_ulang && <Button size="sm" variant="outline" disabled={daftarUlangLoading} onClick={() => handleMilestone(row, "daftar_ulang", "Daftar Ulang")}>{daftarUlangLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Daftar Ulang"}</Button>}
+            {detail?.spmb_tanggal_tes && !detail?.spmb_status_kelulusan && <>
+              <Button size="sm" variant="outline" disabled={lulusLoading} onClick={() => handleMilestone(row, "lulus", "Lulus")}>{lulusLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Lulus"}</Button>
+              <Button size="sm" variant="outline" className="border-destructive/40 text-destructive" disabled={milestoneLoadingId === `${row.id}:tidak_lulus`} onClick={() => handleMilestone(row, "tidak_lulus", "Tidak Lulus")}>{milestoneLoadingId === `${row.id}:tidak_lulus` ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Tidak Lulus"}</Button>
+            </>}
+            {detail?.spmb_status_kelulusan === "lulus" && !detail?.spmb_tanggal_daftar_ulang && <Button size="sm" variant="outline" disabled={daftarUlangLoading} onClick={() => handleMilestone(row, "daftar_ulang", "Daftar Ulang")}>{daftarUlangLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Daftar Ulang"}</Button>}
             {status === "calon" && (
               <span title={kesiapan.kekurangan.length ? `Lengkapi: ${kesiapan.kekurangan.join(", ")}` : "Terima calon murid"}>
                 <Button size="sm" variant="outline" disabled={loading || !kesiapan.siap} onClick={() => handleTerima(row)}>{loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Terima"}</Button>
@@ -689,7 +723,7 @@ export default function SPMB() {
                       </p>
                     ) : (
                       <p className="rounded-md border border-warning/20 bg-warning/5 p-3 text-warning">
-                        Pendaftaran ini tidak otomatis mendapat pembebasan biaya. Hak gratis ditentukan dari tanggal pendaftaran 21 September–23 Oktober 2026. Di luar periode promo, biaya pendaftaran tetap berlaku dan pembayaran online tersedia.
+                        Pendaftaran ini tidak otomatis mendapat pembebasan biaya. Hak gratis Gelombang 1 ditentukan dari tanggal pendaftaran 23 September–30 Oktober 2026.
                       </p>
                     )}
                   </div>
@@ -883,6 +917,13 @@ export default function SPMB() {
         {nisKosongCount > 0 && <StatsCard title="NIS Belum Dibuat" value={nisKosongCount} icon={AlertTriangle} color="destructive" />}
       </div>
 
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatsCard title="Asrama" value={asramaCount} icon={Users} color="primary" />
+        <StatsCard title="Non Asrama" value={nonAsramaCount} icon={Users} color="warning" />
+        <StatsCard title="Laki-laki" value={lakiCount} icon={Users} color="primary" />
+        <StatsCard title="Perempuan" value={perempuanCount} icon={Users} color="success" />
+      </div>
+
       {belumSiapCount > 0 && (
         <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 text-sm">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
@@ -906,11 +947,12 @@ export default function SPMB() {
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="space-y-1"><Label className="text-xs">Urutkan</Label><Select value={sortMode} onValueChange={setSortMode}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="registration_desc">Pendaftaran terbaru</SelectItem><SelectItem value="registration_asc">Pendaftaran terlama</SelectItem><SelectItem value="payment_desc">Pembayaran terbaru</SelectItem><SelectItem value="payment_asc">Pembayaran terlama</SelectItem></SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Lembaga</Label><Select value={filters.departemen} onValueChange={(value) => setFilter("departemen", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua lembaga</SelectItem>{spmbDepartemenList.map((dept: any) => <SelectItem key={dept.id} value={dept.id}>{labelDepartemenSpmb(dept)}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Status</Label><Select value={filters.status} onValueChange={(value) => setFilter("status", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua status</SelectItem><SelectItem value="calon">Calon</SelectItem><SelectItem value="diterima">Diterima</SelectItem></SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Jenis Kelamin</Label><Select value={filters.jenisKelamin} onValueChange={(value) => setFilter("jenisKelamin", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="L">Laki-laki</SelectItem><SelectItem value="P">Perempuan</SelectItem></SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Tes</Label><Select value={filters.tes} onValueChange={(value) => setFilter("tes", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="sudah">Sudah tes</SelectItem><SelectItem value="belum">Belum tes</SelectItem></SelectContent></Select></div>
-          <div className="space-y-1"><Label className="text-xs">Kelulusan</Label><Select value={filters.kelulusan} onValueChange={(value) => setFilter("kelulusan", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="sudah">Sudah lulus</SelectItem><SelectItem value="belum">Belum lulus</SelectItem></SelectContent></Select></div>
+          <div className="space-y-1"><Label className="text-xs">Kelulusan</Label><Select value={filters.kelulusan} onValueChange={(value) => setFilter("kelulusan", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="lulus">Lulus</SelectItem><SelectItem value="tidak_lulus">Tidak Lulus</SelectItem><SelectItem value="belum">Belum ditentukan</SelectItem></SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Daftar Ulang</Label><Select value={filters.daftarUlang} onValueChange={(value) => setFilter("daftarUlang", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="sudah">Sudah daftar ulang</SelectItem><SelectItem value="belum">Belum daftar ulang</SelectItem></SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Biaya Pendaftaran</Label><Select value={filters.biaya} onValueChange={(value) => setFilter("biaya", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="gratis">Gratis</SelectItem><SelectItem value="lunas">Lunas</SelectItem><SelectItem value="belum_bayar">Belum bayar</SelectItem><SelectItem value="belum_diatur">Belum diatur</SelectItem></SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Kesiapan</Label><Select value={filters.kesiapan} onValueChange={(value) => setFilter("kesiapan", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="siap">Siap diterima</SelectItem><SelectItem value="belum">Belum lengkap</SelectItem></SelectContent></Select></div>
@@ -920,7 +962,7 @@ export default function SPMB() {
 
       <DataTable
         columns={columns}
-        data={filteredCalonList as Record<string, unknown>[]}
+        data={sortedCalonList as Record<string, unknown>[]}
         searchPlaceholder="Cari nama, NIS, lembaga, atau angkatan..."
         loading={isLoading}
         pageSize={20}
