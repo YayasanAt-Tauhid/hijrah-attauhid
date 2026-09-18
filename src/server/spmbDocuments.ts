@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { authMiddleware, requireContext, requireRole } from "./auth";
+import { authMiddleware, requireAcademicDepartment, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
 
 const PMB_DOCUMENT_BUCKET = "pmb-dokumen";
@@ -27,11 +27,31 @@ export const spmbGetDocumentUrl = createServerFn({ method: "POST" })
     }
 
     const admin = createAdminClient();
-    await requireRole(admin, requireContext(context).userId, [
+    const userId = requireContext(context).userId;
+    const role = await requireRole(admin, userId, [
       "admin",
+      "admin_tu",
       "kepala_sekolah",
       "sekretaris_yayasan",
     ]);
+
+    if (role === "admin_tu") {
+      let ownerDept: string | null = null;
+      for (const column of ["dokumen_kk_path", "dokumen_akta_path", "dokumen_rapor_path", "dokumen_ijazah_path"] as const) {
+        const { data: owner } = await admin
+          .from("siswa_detail")
+          .select("siswa:siswa_id(departemen_id)")
+          .eq(column, path)
+          .maybeSingle();
+        const siswa = owner?.siswa as { departemen_id?: string | null } | null;
+        if (siswa?.departemen_id) {
+          ownerDept = siswa.departemen_id;
+          break;
+        }
+      }
+      if (!ownerDept) throw new Error("Dokumen SPMB tidak ditemukan atau akses ditolak");
+      await requireAcademicDepartment(admin, userId, ownerDept, ["admin_tu"]);
+    }
 
     const { data: signed, error } = await admin.storage
       .from(PMB_DOCUMENT_BUCKET)
@@ -51,7 +71,7 @@ export const spmbCreateAdminDocumentUpload = createServerFn({ method: "POST" })
   .inputValidator((d: { kind: string; fileName: string; size: number; mime: string }) => d)
   .handler(async ({ data, context }) => {
     const admin = createAdminClient();
-    await requireRole(admin, requireContext(context).userId, ["admin"]);
+    await requireRole(admin, requireContext(context).userId, ["admin", "admin_tu"]);
     const extension = data.fileName.split(".").pop()?.toLowerCase();
     const mimeByExt: Record<string, string> = { pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png" };
     if (!["kk", "akta", "rapor", "ijazah"].includes(data.kind) || !extension || mimeByExt[extension] !== data.mime) {
