@@ -453,7 +453,7 @@ export default function SPMBDaftarOnlineV2() {
       return;
     }
     if (!paymentVisible) {
-      toast.info("Pembayaran biaya pendaftaran baru tersedia mulai 24 Oktober 2026.");
+      toast.info("Pembayaran biaya pendaftaran baru tersedia mulai 31 Oktober 2026.");
       return;
     }
 
