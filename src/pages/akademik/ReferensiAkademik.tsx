@@ -21,7 +21,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function ReferensiAkademik() {
   const { role } = useAuth();
-  const canEdit = role === "admin" || role === "kepala_sekolah";
+  const canEdit = role === "admin" || role === "admin_tu" || role === "kepala_sekolah";
 
   return (
     <div className="space-y-6 animate-fade-in">
