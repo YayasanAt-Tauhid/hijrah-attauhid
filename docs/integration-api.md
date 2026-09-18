@@ -97,9 +97,9 @@ Dokumen memakai ID stabil `<pendaftaran_id>.<jenis>`. Signed URL bukan identitas
 
 ## Payload pendaftaran
 
-`status_kelulusan` bernilai `lulus`, `tidak_lulus`, atau `null` bila keputusan belum dibuat. `tanggal_keputusan` diisi saat keputusan Lulus/Tidak Lulus ditetapkan.
+`status_kelulusan` bernilai `lulus`, `tidak_lulus`, atau `null` bila keputusan belum dibuat. `tanggal_keputusan` diisi saat keputusan Lulus/Tidak Lulus ditetapkan. `gelombang` berisi ID/nama gelombang, periode, dan apakah biaya pendaftarannya gratis.
 
-Field dasar mencakup `id`, `siswa_id`, `status`, `tanggal_pendaftaran`, `unit`, `tahun_ajaran`, `angkatan`, `identitas`, `jenis_pendaftaran`, `kategori`, `status_asrama`, `tanggal_tes`, `status_kelulusan`, `tanggal_kelulusan`, `tanggal_keputusan`, `tanggal_daftar_ulang`, `verifikasi`, dan `pembayaran_pendaftaran`.
+Field dasar mencakup `id`, `siswa_id`, `status`, `tanggal_pendaftaran`, `unit`, `tahun_ajaran`, `angkatan`, `identitas`, `jenis_pendaftaran`, `kategori`, `status_asrama`, `gelombang`, `tanggal_tes`, `status_kelulusan`, `tanggal_kelulusan`, `tanggal_keputusan`, `tanggal_daftar_ulang`, `verifikasi`, dan `pembayaran_pendaftaran`.
 
 `pembayaran_pendaftaran` berbentuk:
 
@@ -114,7 +114,7 @@ Field dasar mencakup `id`, `siswa_id`, `status`, `tanggal_pendaftaran`, `unit`, 
 
 Status berasal dari resolver server-side Hijrah yang menggabungkan pencatatan pembayaran internal dan transaksi pembayaran SPMB. Detail provider, token pembayaran, Snap token, metadata gateway, dan secret tidak pernah diekspor. Consumer harus memperlakukan nilai status baru sebagai enum yang mungkin berkembang.
 
-Dengan `pendaftaran:sensitive:read`, `data_sensitif` mencakup NIK/KK, TTL, agama, alamat, telepon/email, data fisik, penyakit/perjalanan, ayah/ibu, kontak orang tua, sekolah asal, dan kemampuan Iqro/Latin/hafalan. Field yang UI SPMB sedang sembunyikan tetap ada dalam kontrak tetapi dapat `null`.
+Dengan `pendaftaran:sensitive:read`, `data_sensitif` mencakup NISN, NIK/KK, TTL, agama, alamat, telepon/email, data fisik, penyakit/perjalanan, ayah/ibu, kontak orang tua, sekolah asal, dan kemampuan Iqro/Latin/hafalan. Field yang UI SPMB sedang sembunyikan tetap ada dalam kontrak tetapi dapat `null`.
 
 Dengan `pendaftaran:documents:read`, `dokumen` berisi metadata `id`, `jenis`, `nama_file`, `mime_type`, `ukuran`, `version`, dan `download_path`. `version` berubah bila path objek sumber berubah. Path storage privat tidak diekspor.
 
