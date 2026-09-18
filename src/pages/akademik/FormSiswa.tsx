@@ -270,11 +270,13 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
   const mtaWajibAsrama = (selectedDeptCode === "MTA" || selectedDeptCode.startsWith("MTA ")) && watchJenisPendaftaran !== "alumni_internal";
   const siswaPindahan = watchKategori === "MURID PINDAHAN" || watchJenisPendaftaran === "pindahan";
   const nisParamsComplete = !!(watchDept && watchAngkatan && watchKelas);
-  const dokumenSpmb = [
+  const dokumenSpmb: Array<readonly ["kk" | "akta" | "rapor" | "ijazah", string]> = [
     ["kk", "Kartu Keluarga (wajib)"],
     ["akta", "Akta Kelahiran (wajib)"],
-    ...(siswaPindahan ? [["rapor", "Rapor Siswa Pindahan (wajib)"], ["ijazah", "Ijazah/SKHUN Siswa Pindahan (wajib)"]] : []),
-  ] as const;
+    ...(siswaPindahan
+      ? ([["rapor", "Rapor Siswa Pindahan (wajib)"], ["ijazah", "Ijazah/SKHUN Siswa Pindahan (wajib)"]] as const)
+      : []),
+  ];
 
   useEffect(() => {
     if (!isEdit || !verificationState?.can_verify) return;
