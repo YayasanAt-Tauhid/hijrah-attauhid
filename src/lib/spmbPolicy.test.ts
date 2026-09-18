@@ -14,7 +14,9 @@ describe("kebijakan SPMB Gelombang Pertama", () => {
     expect(isSpmbFirstWaveFree(SPMB_FIRST_WAVE_END_AT)).toBe(false);
   });
 
-  it("membuka pembayaran mulai 24 Okt 2026 00:00 WIB", () => {
+  it("membuka pembayaran sebelum promo dan mulai lagi 24 Okt 2026 00:00 WIB", () => {
+    expect(isSpmbPaymentVisible(SPMB_FIRST_WAVE_START_AT - 1)).toBe(true);
+    expect(isSpmbPaymentVisible(SPMB_FIRST_WAVE_START_AT)).toBe(false);
     expect(isSpmbPaymentVisible(SPMB_FIRST_WAVE_END_AT - 1)).toBe(false);
     expect(isSpmbPaymentVisible(SPMB_FIRST_WAVE_END_AT)).toBe(true);
   });
