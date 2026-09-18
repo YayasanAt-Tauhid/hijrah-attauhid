@@ -7,6 +7,7 @@ export interface SpmbPolicyStatusResult {
   registered_at: string;
   gratis_pendaftaran: boolean;
   payment_visible: boolean;
+  group_calon_siswa_url: string | null;
 }
 
 export const spmbGetPolicyStatus = createServerFn({ method: "POST" })
@@ -25,15 +26,22 @@ export const spmbGetPolicyStatus = createServerFn({ method: "POST" })
 
     const { data: siswa, error: siswaError } = await admin
       .from("siswa")
-      .select("id, created_at")
+      .select("id, created_at, departemen_id")
       .eq("id", detail.siswa_id)
       .maybeSingle();
     if (siswaError || !siswa?.created_at) throw new Error("Data calon murid SPMB tidak ditemukan");
+
+    const { data: config } = await admin
+      .from("konfigurasi_pmb")
+      .select("group_calon_siswa_url")
+      .eq("departemen_id", siswa.departemen_id)
+      .maybeSingle();
 
     return {
       siswa_id: siswa.id,
       registered_at: siswa.created_at,
       gratis_pendaftaran: isSpmbFirstWaveFree(siswa.created_at),
       payment_visible: isSpmbPaymentVisible(),
+      group_calon_siswa_url: (config as any)?.group_calon_siswa_url || null,
     };
   });
