@@ -45,7 +45,7 @@ export default function PresensiSiswa() {
 function InputPresensi() {
   const { role } = useAuth();
   const qc = useQueryClient();
-  const canEdit = role === "admin" || role === "kepala_sekolah" || role === "guru";
+  const canEdit = role === "admin" || role === "admin_tu" || role === "kepala_sekolah" || role === "guru";
   const [tanggal, setTanggal] = useState(format(new Date(), "yyyy-MM-dd"));
   const [deptId, setDeptId] = useState("");
   const [kelasId, setKelasId] = useState("");
