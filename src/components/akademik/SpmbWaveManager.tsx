@@ -23,9 +23,23 @@ type Wave = {
 
 function toLocalInput(value?: string | null): string {
   if (!value) return "";
-  const date = new Date(value);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
+}
+
+function wibInputToIso(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return "";
+  return new Date(`${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:00+07:00`).toISOString();
 }
 
 function displayDate(value?: string | null): string {
@@ -112,12 +126,14 @@ export function SpmbWaveManager() {
       toast.error("Nama dan tanggal mulai gelombang wajib diisi");
       return;
     }
-    const start = new Date(mulai);
-    const end = selesai ? new Date(selesai) : null;
-    if (Number.isNaN(start.getTime()) || (end && Number.isNaN(end.getTime()))) {
+    const startIso = wibInputToIso(mulai);
+    const endIso = selesai ? wibInputToIso(selesai) : null;
+    if (!startIso || (selesai && !endIso)) {
       toast.error("Tanggal gelombang tidak valid");
       return;
     }
+    const start = new Date(startIso);
+    const end = endIso ? new Date(endIso) : null;
     if (end && end <= start) {
       toast.error("Tanggal selesai harus setelah tanggal mulai");
       return;
@@ -127,8 +143,8 @@ export function SpmbWaveManager() {
     try {
       const payload = {
         nama: nama.trim(),
-        tanggal_mulai: start.toISOString(),
-        tanggal_selesai: end?.toISOString() || null,
+        tanggal_mulai: startIso,
+        tanggal_selesai: endIso,
         gratis_pendaftaran: gratis,
         aktif,
         urutan: Math.max(1, Number.parseInt(urutan, 10) || 1),
