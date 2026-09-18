@@ -27,6 +27,7 @@ import { id as localeId } from "date-fns/locale";
 
 const roleLabels: Record<string, string> = {
   admin: "Administrator",
+  admin_tu: "Admin TU",
   kepala_sekolah: "Kepala Sekolah",
   guru: "Guru",
   keuangan: "Staff Keuangan",
