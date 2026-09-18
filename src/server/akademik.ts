@@ -39,7 +39,7 @@ export const hitungNilaiAkhir = createServerFn({ method: "POST" })
 
       const { data: profile, error: profileError } = await admin
         .from("users_profile")
-        .select("role, pegawai_id")
+        .select("role, pegawai_id, departemen_id")
         .eq("id", userId)
         .single();
       if (profileError || !profile) throw new ForbiddenError();
@@ -51,7 +51,16 @@ export const hitungNilaiAkhir = createServerFn({ method: "POST" })
       const privilegedRoles = ["admin", "kepala_sekolah", "keuangan"];
       const isPrivileged = privilegedRoles.includes(profile.role);
 
-      if (profile.role === "guru") {
+      if (profile.role === "admin_tu") {
+        if (!profile.departemen_id) throw new ForbiddenError();
+        const [{ data: scopedClass }, { data: scopedStudent }] = await Promise.all([
+          admin.from("kelas").select("id").eq("id", kelas_id).eq("departemen_id", profile.departemen_id).maybeSingle(),
+          admin.from("siswa").select("id").eq("id", siswa_id).eq("departemen_id", profile.departemen_id).maybeSingle(),
+        ]);
+        if (!scopedClass || !scopedStudent) {
+          throw new ForbiddenError("Forbidden: data akademik di luar lembaga Admin TU");
+        }
+      } else if (profile.role === "guru") {
         if (!profile.pegawai_id) throw new ForbiddenError();
 
         const { data: assignment, error: assignmentError } = await admin
