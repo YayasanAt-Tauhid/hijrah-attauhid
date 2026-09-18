@@ -22,8 +22,8 @@ describe("kebijakan SPMB Gelombang Pertama", () => {
     expect(isSpmbFirstWaveFree(SPMB_FIRST_WAVE_END_AT)).toBe(false);
   });
 
-  it("menutup pembayaran selama promo dan membuka kembali 31 Okt 2026 00:00 WIB", () => {
-    expect(isSpmbPaymentVisible(SPMB_FIRST_WAVE_START_AT - 1)).toBe(true);
+  it("menutup pembayaran sebelum dan selama Gelombang 1, lalu membuka 31 Okt 2026 00:00 WIB", () => {
+    expect(isSpmbPaymentVisible(SPMB_FIRST_WAVE_START_AT - 1)).toBe(false);
     expect(isSpmbPaymentVisible(SPMB_FIRST_WAVE_START_AT)).toBe(false);
     expect(isSpmbPaymentVisible(SPMB_FIRST_WAVE_END_AT - 1)).toBe(false);
     expect(isSpmbPaymentVisible(SPMB_FIRST_WAVE_END_AT)).toBe(true);
