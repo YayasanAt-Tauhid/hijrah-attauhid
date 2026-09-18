@@ -168,7 +168,7 @@
     },
     {
       "name": "SPMB Milestone",
-      "description": "Requires pendaftaran:milestone:update. Run in order on an authorized test registration. Repeating the same action is idempotent.",
+      "description": "Requires pendaftaran:milestone:update. Use tes first, then choose lulus or tidak_lulus. Repeating the same action is idempotent; daftar_ulang is not available through this API.",
       "item": [
         {
           "name": "tes",
@@ -206,6 +206,28 @@
             "body": {
               "mode": "raw",
               "raw": "{\"action\": \"lulus\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "tidak_lulus",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/pendaftaran/{{pendaftaranId}}/milestone",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"action\": \"tidak_lulus\"}",
               "options": {
                 "raw": {
                   "language": "json"
