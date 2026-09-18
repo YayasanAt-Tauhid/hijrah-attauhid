@@ -65,6 +65,14 @@ components:
         jenis_pendaftaran: { type: [string, 'null'] }
         kategori: { type: [string, 'null'] }
         status_asrama: { type: [string, 'null'] }
+        gelombang:
+          type: [object, 'null']
+          properties:
+            id: { type: string, format: uuid }
+            nama: { type: string }
+            gratis_pendaftaran: { type: boolean }
+            tanggal_mulai: { type: string, format: date-time }
+            tanggal_selesai: { type: [string, 'null'], format: date-time }
         tanggal_tes: { type: [string, 'null'], format: date-time }
         status_kelulusan: { type: [string, 'null'], enum: [lulus, tidak_lulus, null] }
         tanggal_kelulusan: { type: [string, 'null'], format: date-time }
@@ -72,7 +80,11 @@ components:
         tanggal_daftar_ulang: { type: [string, 'null'], format: date-time }
         verifikasi: { type: object }
         pembayaran_pendaftaran: { $ref: '#/components/schemas/Payment' }
-        data_sensitif: { type: object, description: Omitted without pendaftaran:sensitive:read }
+        data_sensitif:
+          type: object
+          description: Omitted without pendaftaran:sensitive:read
+          properties:
+            nisn: { type: [string, 'null'] }
         dokumen:
           type: array
           description: Omitted without pendaftaran:documents:read
