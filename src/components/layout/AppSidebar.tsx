@@ -226,6 +226,7 @@ const menuItems: MenuItem[] = [
         icon: ShieldCheck,
         items: [
           { title: "Manajemen Pengguna", url: "/pengaturan/pengguna" },
+          { title: "Admin TU Akademik", url: "/pengaturan/admin-tu" },
           { title: "Manajemen Ortu", url: "/pengaturan/ortu" },
         ],
       },
