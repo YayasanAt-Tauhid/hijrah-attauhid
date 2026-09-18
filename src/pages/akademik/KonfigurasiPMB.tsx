@@ -5,6 +5,7 @@ import { useDepartemen } from "@/hooks/useAkademikData";
 import { useJenisPembayaran, formatRupiah } from "@/hooks/useKeuangan";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -16,6 +17,7 @@ export default function KonfigurasiPMB() {
   const [departemenId, setDepartemenId] = useState("");
   const [jenisId, setJenisId] = useState("");
   const [onlineAktif, setOnlineAktif] = useState(true);
+  const [groupUrl, setGroupUrl] = useState("");
   const [saving, setSaving] = useState(false);
 
   const pendidikanList = useMemo(
@@ -31,7 +33,7 @@ export default function KonfigurasiPMB() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("konfigurasi_pmb")
-        .select("departemen_id, jenis_pembayaran_id, pembayaran_online_aktif")
+        .select("departemen_id, jenis_pembayaran_id, pembayaran_online_aktif, group_calon_siswa_url")
         .eq("departemen_id", departemenId)
         .maybeSingle();
       if (error) throw error;
@@ -39,6 +41,7 @@ export default function KonfigurasiPMB() {
         departemen_id: string;
         jenis_pembayaran_id: string;
         pembayaran_online_aktif: boolean;
+        group_calon_siswa_url: string | null;
       } | null;
     },
   });
@@ -46,6 +49,7 @@ export default function KonfigurasiPMB() {
   useEffect(() => {
     setJenisId(config?.jenis_pembayaran_id || "");
     setOnlineAktif(config?.pembayaran_online_aktif ?? true);
+    setGroupUrl(config?.group_calon_siswa_url || "");
   }, [config]);
 
   const selectedJenis = jenisList.find((j: any) => j.id === jenisId) as any;
@@ -59,6 +63,16 @@ export default function KonfigurasiPMB() {
       toast.error("Jenis pembayaran ini belum memiliki akun pendapatan");
       return;
     }
+    const cleanGroupUrl = groupUrl.trim();
+    if (cleanGroupUrl) {
+      try {
+        const parsed = new URL(cleanGroupUrl);
+        if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("protocol");
+      } catch {
+        toast.error("Link grup calon siswa harus berupa URL http/https yang valid");
+        return;
+      }
+    }
 
     setSaving(true);
     try {
@@ -68,6 +82,7 @@ export default function KonfigurasiPMB() {
           departemen_id: departemenId,
           jenis_pembayaran_id: jenisId,
           pembayaran_online_aktif: onlineAktif,
+          group_calon_siswa_url: cleanGroupUrl || null,
           updated_at: new Date().toISOString(),
         }, { onConflict: "departemen_id" });
       if (error) throw error;
@@ -138,6 +153,20 @@ export default function KonfigurasiPMB() {
               </div>
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label>Link Grup Calon Siswa</Label>
+            <Input
+              type="url"
+              value={groupUrl}
+              onChange={(event) => setGroupUrl(event.target.value)}
+              placeholder="https://chat.whatsapp.com/..."
+              disabled={!departemenId || isLoading}
+            />
+            <p className="text-xs text-muted-foreground">
+              Isi link grup khusus lembaga yang dipilih. Setelah pendaftaran berhasil, orang tua/wali akan melihat tombol untuk bergabung ke grup ini.
+            </p>
+          </div>
 
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div>
