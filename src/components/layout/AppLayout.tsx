@@ -1,9 +1,20 @@
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { TopNavbar } from "./TopNavbar";
-import { Outlet } from "@/lib/router-compat";
+import { Navigate, Outlet, useLocation } from "@tanstack/react-router";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function AppLayout() {
+  const { role, departemenId } = useAuth();
+  const location = useLocation();
+
+  if (role === "admin_tu") {
+    if (!departemenId) return <Navigate to="/unauthorized" replace />;
+    if (!location.pathname.startsWith("/akademik")) {
+      return <Navigate to="/akademik" replace />;
+    }
+  }
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full print:block print:min-h-0">
