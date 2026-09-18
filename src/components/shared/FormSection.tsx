@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
+import { SPMB_FIRST_WAVE_END_AT, SPMB_FIRST_WAVE_START_AT } from "@/lib/spmbPolicy";
 
 interface FormSectionProps {
   title: string;
@@ -7,8 +8,8 @@ interface FormSectionProps {
   className?: string;
 }
 
-const SPMB_PROMO_START_AT = Date.parse("2026-09-20T17:00:00.000Z");
-const SPMB_PROMO_END_AT = Date.parse("2026-10-23T17:00:00.000Z");
+const SPMB_PROMO_START_AT = SPMB_FIRST_WAVE_START_AT;
+const SPMB_PROMO_END_AT = SPMB_FIRST_WAVE_END_AT;
 
 function formatCountdown(target: number, now: number) {
   const totalSeconds = Math.max(0, Math.floor((target - now) / 1000));
@@ -38,7 +39,7 @@ function SpmbPromoBanner() {
         <div>
           <p className="text-lg font-bold text-emerald-900">🎉 Gratis Biaya Pendaftaran Gelombang Pertama</p>
           <p className="mt-1 text-sm leading-relaxed text-slate-700">
-            Daftarkan calon murid pada periode <strong>21 September–23 Oktober 2026</strong> dan dapatkan <strong>gratis biaya pendaftaran</strong>.
+            Daftarkan calon murid pada periode <strong>23 September–30 Oktober 2026</strong> dan dapatkan <strong>gratis biaya pendaftaran</strong>.
           </p>
         </div>
 
@@ -52,7 +53,7 @@ function SpmbPromoBanner() {
         </div>
 
         <p className="text-xs text-slate-600">
-          📅 Periode Gelombang Pertama: <strong>21 September–23 Oktober 2026</strong>
+          📅 Periode Gelombang Pertama: <strong>23 September–30 Oktober 2026</strong>
         </p>
       </div>
     </div>
