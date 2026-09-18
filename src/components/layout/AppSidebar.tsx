@@ -48,7 +48,7 @@ const menuItems: MenuItem[] = [
   },
   {
     title: "Akademik", url: "/akademik", icon: GraduationCap,
-    roles: ["admin", "kepala_sekolah", "guru"],
+    roles: ["admin", "admin_tu", "kepala_sekolah", "guru"],
     subGroups: [
       {
         title: "Data Siswa",
