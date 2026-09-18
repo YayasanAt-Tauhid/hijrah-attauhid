@@ -27,7 +27,6 @@ import {
   SPMB_CATEGORY_VALUE,
   SPMB_TRANSFER_CATEGORY_LABEL,
   SPMB_TRANSFER_CATEGORY_VALUE,
-  SPMB_FIRST_WAVE_MESSAGE,
   SPMB_TARGET_ACADEMIC_YEAR,
   SPMB_TARGET_COHORT,
 } from "@/lib/spmbPolicy";
@@ -116,6 +115,7 @@ type RegistrationSuccess = {
   id: string;
   nama: string;
   gratis_pendaftaran: boolean;
+  gelombang_nama: string | null;
 };
 
 function getKesiapanPenerimaan(row: Record<string, unknown>): KesiapanPenerimaan {
@@ -444,6 +444,7 @@ export default function SPMB() {
         id,
         nama: formData.nama.trim(),
         gratis_pendaftaran: data?.gratis_pendaftaran === true,
+        gelombang_nama: data?.gelombang_nama || null,
       });
       setFormErrors({});
       toast.success("Pendaftaran Penerimaan Murid Baru Berhasil", {
@@ -735,11 +736,11 @@ export default function SPMB() {
                     {hasActiveFilters && <p className="rounded-md border bg-background p-2 text-xs text-muted-foreground">Filter daftar pendaftar sedang aktif dan dapat menyembunyikan record baru. Tombol “Lengkapi Biodata & Dokumen” di bawah tetap membuka record yang baru dibuat melalui ID hasil penyimpanan.</p>}
                     {registrationSuccess.gratis_pendaftaran ? (
                       <p className="rounded-md border border-success/20 bg-success/5 p-3 text-success">
-                        Calon murid ini mendapatkan gratis biaya pendaftaran Gelombang Pertama. {SPMB_FIRST_WAVE_MESSAGE.replace(/^Selamat!\s*/i, "")}
+                        Calon murid ini mendapatkan gratis biaya pendaftaran pada <strong>{registrationSuccess.gelombang_nama || "gelombang aktif"}</strong>.
                       </p>
                     ) : (
                       <p className="rounded-md border border-warning/20 bg-warning/5 p-3 text-warning">
-                        Pendaftaran ini tidak otomatis mendapat pembebasan biaya. Hak gratis Gelombang 1 ditentukan dari tanggal pendaftaran 23 September–30 Oktober 2026.
+                        Calon murid tercatat pada <strong>{registrationSuccess.gelombang_nama || "gelombang aktif"}</strong> dengan biaya pendaftaran normal.
                       </p>
                     )}
                   </div>
