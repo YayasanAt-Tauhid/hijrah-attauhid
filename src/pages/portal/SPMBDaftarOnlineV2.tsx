@@ -481,7 +481,7 @@ export default function SPMBDaftarOnlineV2() {
       return;
     }
     if (!paymentVisible) {
-      toast.info("Pembayaran biaya pendaftaran baru tersedia mulai 31 Oktober 2026.");
+      toast.info("Pembayaran tidak tersedia untuk gelombang pendaftaran ini.");
       return;
     }
 
@@ -521,8 +521,8 @@ export default function SPMBDaftarOnlineV2() {
   }
 
   if (registrationStatus || registration) {
-    const paymentVisible = policyStatus?.payment_visible ?? isSpmbPaymentVisible();
-    const promoFree = policyStatus?.gratis_pendaftaran ?? isSpmbFirstWaveFree(Date.now());
+    const paymentVisible = policyStatus?.payment_visible ?? Boolean(currentWave && !currentWave.gratis_pendaftaran);
+    const promoFree = policyStatus?.gratis_pendaftaran ?? currentWave?.gratis_pendaftaran === true;
     const status = registrationStatus?.payment_status || "unpaid";
     const isPaid = status === "paid";
     const returnedFinishPending = paymentReturn === "finish" && status === "pending";
