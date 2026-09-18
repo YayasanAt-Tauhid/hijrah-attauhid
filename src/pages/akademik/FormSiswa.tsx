@@ -158,8 +158,8 @@ function TextField({ form, name, label, type = "text", placeholder, inputMode, d
             type={type}
             placeholder={placeholder}
             inputMode={inputMode}
-            disabled={disabled}
             {...field}
+            disabled={disabled}
             onChange={(event) => {
               field.onChange(event);
               onValueChange?.(event.target.value);
@@ -655,16 +655,16 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                   <CardContent className="pt-6">
                     <FormSection title="Data Ayah">
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <TextField form={form} name="nik_ayah" label="NIK Ayah" inputMode="numeric" onValueChange={() => resetVerification("nik_ayah")} after={verificationControl("nik_ayah")} />
-                        <TextField form={form} name="nama_ayah" label="Nama Ayah" onValueChange={() => resetVerification("nama_ayah")} after={verificationControl("nama_ayah")} />
-                        <TextField form={form} name="tempat_lahir_ayah" label="Tempat Lahir" onValueChange={() => resetVerification("tempat_lahir_ayah")} after={verificationControl("tempat_lahir_ayah")} />
-                        <TextField form={form} name="tanggal_lahir_ayah" label="Tanggal Lahir" type="date" onValueChange={() => resetVerification("tanggal_lahir_ayah")} after={verificationControl("tanggal_lahir_ayah")} />
-                        <SelectField form={form} name="pendidikan_ayah" label="Pendidikan Terakhir" options={pendidikanOptions} onValueChange={() => resetVerification("pendidikan_ayah")} after={verificationControl("pendidikan_ayah")} />
-                        <SelectField form={form} name="pekerjaan_ayah" label="Pekerjaan" options={pekerjaanOptions} onValueChange={() => resetVerification("pekerjaan_ayah")} after={verificationControl("pekerjaan_ayah")} />
-                        <TextField form={form} name="penghasilan_ayah" label="Penghasilan (Rp)" type="number" onValueChange={() => resetVerification("penghasilan_ayah")} after={verificationControl("penghasilan_ayah")} />
-                        <TextField form={form} name="telepon_ayah" label="No. HP / WA" inputMode="tel" onValueChange={() => resetVerification("telepon_ayah")} after={verificationControl("telepon_ayah")} />
+                        <TextField form={form} name="nik_ayah" label="NIK Ayah *" inputMode="numeric" onValueChange={() => resetVerification("nik_ayah")} after={verificationControl("nik_ayah")} />
+                        <TextField form={form} name="nama_ayah" label="Nama Ayah *" onValueChange={() => resetVerification("nama_ayah")} after={verificationControl("nama_ayah")} />
+                        <TextField form={form} name="tempat_lahir_ayah" label="Tempat Lahir *" onValueChange={() => resetVerification("tempat_lahir_ayah")} after={verificationControl("tempat_lahir_ayah")} />
+                        <TextField form={form} name="tanggal_lahir_ayah" label="Tanggal Lahir *" type="date" onValueChange={() => resetVerification("tanggal_lahir_ayah")} after={verificationControl("tanggal_lahir_ayah")} />
+                        <SelectField form={form} name="pendidikan_ayah" label="Pendidikan Terakhir *" options={pendidikanOptions} onValueChange={() => resetVerification("pendidikan_ayah")} after={verificationControl("pendidikan_ayah")} />
+                        <SelectField form={form} name="pekerjaan_ayah" label="Pekerjaan *" options={pekerjaanOptions} onValueChange={() => resetVerification("pekerjaan_ayah")} after={verificationControl("pekerjaan_ayah")} />
+                        <TextField form={form} name="penghasilan_ayah" label="Penghasilan (Rp) *" type="number" onValueChange={() => resetVerification("penghasilan_ayah")} after={verificationControl("penghasilan_ayah")} />
+                        <TextField form={form} name="telepon_ayah" label="No. HP / WA *" inputMode="tel" onValueChange={() => resetVerification("telepon_ayah")} after={verificationControl("telepon_ayah")} />
                       </div>
-                      <TextAreaField form={form} name="alamat_ayah" label="Alamat Ayah" onValueChange={() => resetVerification("alamat_ayah")} after={verificationControl("alamat_ayah")} />
+                      <TextAreaField form={form} name="alamat_ayah" label="Alamat Ayah *" onValueChange={() => resetVerification("alamat_ayah")} after={verificationControl("alamat_ayah")} />
                     </FormSection>
                   </CardContent>
                 </Card>
@@ -672,16 +672,16 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                   <CardContent className="pt-6">
                     <FormSection title="Data Ibu">
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <TextField form={form} name="nik_ibu" label="NIK Ibu" inputMode="numeric" onValueChange={() => resetVerification("nik_ibu")} after={verificationControl("nik_ibu")} />
-                        <TextField form={form} name="nama_ibu" label="Nama Ibu" onValueChange={() => resetVerification("nama_ibu")} after={verificationControl("nama_ibu")} />
-                        <TextField form={form} name="tempat_lahir_ibu" label="Tempat Lahir" onValueChange={() => resetVerification("tempat_lahir_ibu")} after={verificationControl("tempat_lahir_ibu")} />
-                        <TextField form={form} name="tanggal_lahir_ibu" label="Tanggal Lahir" type="date" onValueChange={() => resetVerification("tanggal_lahir_ibu")} after={verificationControl("tanggal_lahir_ibu")} />
-                        <SelectField form={form} name="pendidikan_ibu" label="Pendidikan Terakhir" options={pendidikanOptions} onValueChange={() => resetVerification("pendidikan_ibu")} after={verificationControl("pendidikan_ibu")} />
-                        <SelectField form={form} name="pekerjaan_ibu" label="Pekerjaan" options={pekerjaanOptions} onValueChange={() => resetVerification("pekerjaan_ibu")} after={verificationControl("pekerjaan_ibu")} />
-                        <TextField form={form} name="penghasilan_ibu" label="Penghasilan (Rp)" type="number" onValueChange={() => resetVerification("penghasilan_ibu")} after={verificationControl("penghasilan_ibu")} />
-                        <TextField form={form} name="telepon_ibu" label="No. HP / WA" inputMode="tel" onValueChange={() => resetVerification("telepon_ibu")} after={verificationControl("telepon_ibu")} />
+                        <TextField form={form} name="nik_ibu" label="NIK Ibu *" inputMode="numeric" onValueChange={() => resetVerification("nik_ibu")} after={verificationControl("nik_ibu")} />
+                        <TextField form={form} name="nama_ibu" label="Nama Ibu *" onValueChange={() => resetVerification("nama_ibu")} after={verificationControl("nama_ibu")} />
+                        <TextField form={form} name="tempat_lahir_ibu" label="Tempat Lahir *" onValueChange={() => resetVerification("tempat_lahir_ibu")} after={verificationControl("tempat_lahir_ibu")} />
+                        <TextField form={form} name="tanggal_lahir_ibu" label="Tanggal Lahir *" type="date" onValueChange={() => resetVerification("tanggal_lahir_ibu")} after={verificationControl("tanggal_lahir_ibu")} />
+                        <SelectField form={form} name="pendidikan_ibu" label="Pendidikan Terakhir *" options={pendidikanOptions} onValueChange={() => resetVerification("pendidikan_ibu")} after={verificationControl("pendidikan_ibu")} />
+                        <SelectField form={form} name="pekerjaan_ibu" label="Pekerjaan *" options={pekerjaanOptions} onValueChange={() => resetVerification("pekerjaan_ibu")} after={verificationControl("pekerjaan_ibu")} />
+                        <TextField form={form} name="penghasilan_ibu" label="Penghasilan (Rp) *" type="number" onValueChange={() => resetVerification("penghasilan_ibu")} after={verificationControl("penghasilan_ibu")} />
+                        <TextField form={form} name="telepon_ibu" label="No. HP / WA *" inputMode="tel" onValueChange={() => resetVerification("telepon_ibu")} after={verificationControl("telepon_ibu")} />
                       </div>
-                      <TextAreaField form={form} name="alamat_ibu" label="Alamat Ibu" onValueChange={() => resetVerification("alamat_ibu")} after={verificationControl("alamat_ibu")} />
+                      <TextAreaField form={form} name="alamat_ibu" label="Alamat Ibu *" onValueChange={() => resetVerification("alamat_ibu")} after={verificationControl("alamat_ibu")} />
                     </FormSection>
                   </CardContent>
                 </Card>
