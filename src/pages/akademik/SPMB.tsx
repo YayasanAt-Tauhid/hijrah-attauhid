@@ -129,6 +129,7 @@ function getKesiapanPenerimaan(row: Record<string, unknown>): KesiapanPenerimaan
   if (!detail?.dokumen_kk_path) kekurangan.push("Kartu Keluarga");
   if (!detail?.dokumen_akta_path) kekurangan.push("Akta Kelahiran");
   if (departemenPerluAsrama(departemen) && !detail?.status_asrama) kekurangan.push("pilihan asrama");
+  if (detail?.spmb_status_kelulusan !== "lulus") kekurangan.push("status kelulusan: Lulus");
 
   return { siap: kekurangan.length === 0, kekurangan };
 }
@@ -880,7 +881,7 @@ export default function SPMB() {
                     <section className="space-y-3 rounded-lg border bg-muted/20 p-4" aria-labelledby="spmb-section-lanjutan">
                       <div>
                         <h3 id="spmb-section-lanjutan" className="font-semibold">Setelah Pendaftaran Disimpan</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">Jalur admin ini hanya mencatat data awal. KK dan Akta Kelahiran wajib dilengkapi sebelum penerimaan; Rapor dan Ijazah/SKHUN opsional sesuai ketentuan. Tinggi badan, berat badan, lingkar kepala dan ukuran baju belum diisi pada tahap ini.</p>
+                        <p className="mt-1 text-sm text-muted-foreground">Jalur admin ini hanya mencatat data awal. KK dan Akta Kelahiran wajib dilengkapi sebelum penerimaan. Rapor dan Ijazah/SKHUN hanya diwajibkan untuk Siswa Pindahan. Tinggi badan, berat badan, lingkar kepala dan ukuran baju belum diisi pada tahap ini.</p>
                       </div>
                       <div className="rounded-md border border-warning/20 bg-warning/5 p-3 text-xs text-warning">
                         Kelas tidak dipaksakan saat pendaftaran awal. Sistem tetap mewajibkan kelas, verifikasi, dokumen, biaya pendaftaran (atau hak gratis), angkatan dan NPSN sebelum calon murid dapat diterima.
