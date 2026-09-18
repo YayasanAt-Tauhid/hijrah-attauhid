@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { SpmbWaveManager } from "@/components/akademik/SpmbWaveManager";
 
 export default function KonfigurasiPMB() {
   const qc = useQueryClient();
@@ -103,6 +104,8 @@ export default function KonfigurasiPMB() {
           Tentukan jenis pembayaran pendaftaran yang digunakan untuk setiap lembaga dan checkout mandiri di /spmb.
         </p>
       </div>
+
+      <SpmbWaveManager />
 
       <Card className="max-w-2xl">
         <CardHeader>
