@@ -42,6 +42,7 @@ export function SpmbWaveManager() {
   const qc = useQueryClient();
   const canEdit = role === "admin";
   const [editId, setEditId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   const [nama, setNama] = useState("");
   const [mulai, setMulai] = useState("");
   const [selesai, setSelesai] = useState("");
@@ -73,6 +74,7 @@ export function SpmbWaveManager() {
   }, [waves]);
 
   const reset = () => {
+    setFormOpen(false);
     setEditId(null);
     setNama("");
     setMulai("");
@@ -82,7 +84,19 @@ export function SpmbWaveManager() {
     setUrutan(String(Math.max(0, ...waves.map((wave) => wave.urutan || 0)) + 1));
   };
 
+  const openNew = () => {
+    setEditId(null);
+    setNama("");
+    setMulai("");
+    setSelesai("");
+    setGratis(false);
+    setAktif(true);
+    setUrutan(String(Math.max(0, ...waves.map((wave) => wave.urutan || 0)) + 1));
+    setFormOpen(true);
+  };
+
   const edit = (wave: Wave) => {
+    setFormOpen(true);
     setEditId(wave.id);
     setNama(wave.nama);
     setMulai(toLocalInput(wave.tanggal_mulai));
@@ -145,7 +159,7 @@ export function SpmbWaveManager() {
             Gelombang aktif menentukan apakah /spmb terbuka. Hak gratis/berbayar melekat pada gelombang saat siswa mendaftar.
           </p>
         </div>
-        {canEdit && <Button type="button" variant="outline" size="sm" onClick={reset}><Plus className="mr-1 h-4 w-4" />Tambah</Button>}
+        {canEdit && <Button type="button" variant="outline" size="sm" onClick={openNew}><Plus className="mr-1 h-4 w-4" />Tambah</Button>}
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="space-y-2">
@@ -169,7 +183,7 @@ export function SpmbWaveManager() {
           ))}
         </div>
 
-        {canEdit && (editId !== null || nama || mulai || selesai) && (
+        {canEdit && formOpen && (
           <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -203,7 +217,7 @@ export function SpmbWaveManager() {
           </div>
         )}
 
-        {canEdit && editId === null && !nama && !mulai && !selesai && (
+        {canEdit && !formOpen && (
           <p className="text-xs text-muted-foreground">Klik Tambah untuk membuat Gelombang 3 atau Edit untuk mengubah jadwal yang ada.</p>
         )}
       </CardContent>
