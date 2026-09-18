@@ -17,6 +17,7 @@ import Unauthorized from "@/pages/Unauthorized";
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "admin", label: "Admin" },
+  { value: "admin_tu", label: "Admin TU" },
   { value: "kepala_sekolah", label: "Kepala Sekolah" },
   { value: "guru", label: "Guru" },
   { value: "keuangan", label: "Keuangan" },
@@ -28,6 +29,7 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
 
 const ROLE_COLORS: Record<string, string> = {
   admin: "bg-red-500/15 text-red-700 border-red-200",
+  admin_tu: "bg-amber-500/15 text-amber-700 border-amber-200",
   kepala_sekolah: "bg-purple-500/15 text-purple-700 border-purple-200",
   keuangan: "bg-blue-500/15 text-blue-700 border-blue-200",
   sekretaris_yayasan: "bg-indigo-500/15 text-indigo-700 border-indigo-200",
