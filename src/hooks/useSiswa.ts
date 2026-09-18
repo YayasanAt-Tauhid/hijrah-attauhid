@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 export interface SiswaWithRelations {
   id: string;
   nis: string | null;
+  nisn: string | null;
   nama: string;
   jenis_kelamin: string | null;
   tempat_lahir: string | null;
