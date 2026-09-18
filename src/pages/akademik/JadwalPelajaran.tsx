@@ -41,7 +41,7 @@ export default function JadwalPelajaran() {
 function JadwalPerKelas() {
   const { role } = useAuth();
   const qc = useQueryClient();
-  const canEdit = role === "admin" || role === "kepala_sekolah" || role === "guru";
+  const canEdit = role === "admin" || role === "admin_tu" || role === "kepala_sekolah" || role === "guru";
   const [deptId, setDeptId] = useState("");
   const [tingkatId, setTingkatId] = useState("");
   const [kelasId, setKelasId] = useState("");
