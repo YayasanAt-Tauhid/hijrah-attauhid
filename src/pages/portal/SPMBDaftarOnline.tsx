@@ -359,7 +359,7 @@ export default function SPMBDaftarOnline() {
                   <div className="space-y-3">
                     <p className="text-base font-bold">🎉 Selamat!</p>
                     <p>Anda mendapatkan <strong>gratis biaya pendaftaran</strong> sebagai apresiasi bagi pendaftar <strong>Gelombang Pertama</strong>.</p>
-                    <p className="font-medium">📅 21 September–23 Oktober 2026.</p>
+                    <p className="font-medium">📅 23 September–30 Oktober 2026.</p>
                     <p>Tim kami akan menghubungi Anda untuk menginformasikan jadwal seleksi selanjutnya.</p>
                     <p>Terima kasih telah memilih <strong>{lembagaPromo}</strong>.</p>
                   </div>
@@ -367,7 +367,7 @@ export default function SPMBDaftarOnline() {
                   <div className="space-y-3">
                     <p className="font-medium">Pendaftaran berhasil.</p>
                     <p>Program <strong>gratis biaya pendaftaran Gelombang Pertama</strong> berlangsung pada:</p>
-                    <p className="font-medium">📅 21 September–23 Oktober 2026.</p>
+                    <p className="font-medium">📅 23 September–30 Oktober 2026.</p>
                     <p>Tim kami akan menghubungi Anda untuk menginformasikan jadwal seleksi selanjutnya.</p>
                     <p>Terima kasih telah memilih <strong>{lembagaPromo}</strong>.</p>
                   </div>
