@@ -28,7 +28,7 @@ const siswaSchema = z.object({
   dokumen_akta_path: optionalString,
   dokumen_rapor_path: optionalString,
   dokumen_ijazah_path: optionalString,
-  nis: optionalString,
+  nis: z.string().max(13, "NIS maksimal 13 karakter").optional(),
   nisn: optionalString,
   nama: z.string().min(2, "Nama minimal 2 karakter"),
   jenis_kelamin: z.enum(["L", "P"], { required_error: "Pilih jenis kelamin" }),
@@ -550,7 +550,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                           </div>
                         </div>
                         <FormField control={form.control} name="nis" render={({ field }) => (
-                          <FormItem><FormLabel>NIS</FormLabel><FormControl><Input {...field} disabled={nisMode !== "ketik"} placeholder={nisMode === "otomatis" ? "Dibuat otomatis saat simpan" : nisMode === "manual" ? "Gunakan tombol Generate NIS" : "Ketik NIS"} /></FormControl><FormMessage /></FormItem>
+                          <FormItem><FormLabel>NIS</FormLabel><FormControl><Input {...field} maxLength={13} disabled={nisMode !== "ketik"} placeholder={nisMode === "otomatis" ? "Dibuat otomatis saat simpan" : nisMode === "manual" ? "Gunakan tombol Generate NIS" : "Ketik NIS (maks. 13 karakter)"} /></FormControl><FormMessage /></FormItem>
                         )} />
                         <TextField form={form} name="nisn" label={wajibNisn ? "NISN *" : "NISN"} inputMode="numeric" onValueChange={() => resetVerification("nisn")} after={verificationControl("nisn")} />
                         {nisMode === "manual" && (
