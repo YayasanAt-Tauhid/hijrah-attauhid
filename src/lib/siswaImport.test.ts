@@ -3,6 +3,7 @@ import { dateToISO, prepareImportRows, type ExistingStudentForImport, type Impor
 
 const STUDENT_A = "11111111-1111-4111-8111-111111111111";
 const STUDENT_B = "22222222-2222-4222-8222-222222222222";
+const STUDENT_SPMB = "33333333-3333-4333-8333-333333333333";
 const refs: ImportReferences = {
   departemenList: [{ id: "d-sd", nama: "SDIT At-Tauhid", kode: "SD" }, { id: "d-smp", nama: "SMPIT At-Tauhid", kode: "SMP" }],
   tingkatList: [{ id: "t-1", nama: "1", departemen_id: "d-sd" }, { id: "t-7", nama: "7", departemen_id: "d-smp" }],
@@ -13,6 +14,7 @@ const refs: ImportReferences = {
 const existing: ExistingStudentForImport[] = [
   { id: STUDENT_A, nis: "260001", nisn: "0012345678", nik_dapodik: "3273011405120001", status: "aktif", departemen_id: "d-sd" },
   { id: STUDENT_B, nis: "260002", nisn: "0098765432", nik_dapodik: "3273010205120002", status: "calon", departemen_id: "d-smp" },
+  { id: STUDENT_SPMB, nis: null, nisn: "3147752774", nik: "1971066310140001", nik_dapodik: null, status: "calon", departemen_id: "d-smp", spmb_gelombang_id: "wave-1", spmb_siswa_internal: false },
 ];
 const prepare = (rows: SiswaImportRow[], allowUpdate = true) => prepareImportRows(rows, refs, existing, allowUpdate);
 
@@ -48,6 +50,32 @@ describe("prepareImportRows", () => {
 
     const [collision] = prepare([{ siswa_id: STUDENT_A, nis: "260002" }]);
     expect(collision.errors.join(" ")).toContain("NIS baru sudah digunakan siswa lain");
+  });
+
+  it("adopts an existing SPMB registration during active-student migration", () => {
+    const [row] = prepare([{
+      nis: "2538999999",
+      nisn: "3147752774",
+      nik: "1971066310140001",
+      nama: "ALIFAH YUNDRA MAHIRAH",
+      status: "aktif",
+      departemen: "SDIT At-Tauhid",
+      tingkat: "1",
+      kelas: "1A",
+      tahun_ajaran: "2026/2027",
+      angkatan: "2026",
+    }], true);
+    expect(row.errors).toEqual([]);
+    expect(row.action).toBe("adopt_spmb");
+    expect(row.existingId).toBe(STUDENT_SPMB);
+    expect(row.siswaPayload.departemen_id).toBe("d-sd");
+    expect(row.kelasPayload).toEqual({ kelas_id: "k-1a", tahun_ajaran_id: "ta-26" });
+  });
+
+  it("requires update permission before linking a migrated student to SPMB", () => {
+    const [row] = prepare([{ nisn: "3147752774", nik: "1971066310140001", nama: "ALIFAH YUNDRA MAHIRAH", departemen: "SDIT At-Tauhid" }], false);
+    expect(row.action).toBe("adopt_spmb");
+    expect(row.errors.join(" ")).toContain("aktifkan opsi update");
   });
 
   it("does not turn an existing NIS into a duplicate insert when update is disabled", () => {
