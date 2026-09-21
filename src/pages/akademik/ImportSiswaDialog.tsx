@@ -66,6 +66,10 @@ export function ImportSiswaDialog({
   const busy = importing || validating || exportingCurrent;
   const hasSuccessfulRows = rows.some((row) => row.runStatus === "success");
   const executableRows = rows.filter((row) => row.errors.length === 0 && row.runStatus !== "success");
+  const validationErrorRows = rows.filter((row) => row.errors.length > 0);
+  const previewRows = validationErrorRows.length
+    ? [...validationErrorRows, ...rows.filter((row) => row.errors.length === 0)].slice(0, 20)
+    : rows.slice(0, 20);
   const hasValidationErrors = rows.some((row) => row.errors.length > 0);
 
   const loadExistingStudents = async (data: SiswaImportRow[]): Promise<ExistingStudentForImport[]> => {
@@ -307,12 +311,12 @@ export function ImportSiswaDialog({
           {!!rows.length && (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-                <span>Preview {Math.min(20, rows.length)} dari {rows.length} baris{validating ? " (memvalidasi...)" : ""}</span>
+                <span>Preview {Math.min(20, rows.length)} dari {rows.length} baris{validationErrorRows.length ? " · baris bermasalah diprioritaskan" : ""}{validating ? " (memvalidasi...)" : ""}</span>
                 <span>{rows.filter((row) => !row.errors.length).length} valid · {rows.filter((row) => row.errors.length).length} bermasalah</span>
               </div>
               <div className="border rounded-md overflow-auto max-h-[420px]">
                 <Table><TableHeader><TableRow><TableHead>Baris</TableHead><TableHead>ID / NIS</TableHead><TableHead>Nama</TableHead><TableHead>Lembaga / Kelas</TableHead><TableHead>Aksi</TableHead><TableHead>Hasil / Alasan</TableHead></TableRow></TableHeader>
-                  <TableBody>{rows.slice(0, 20).map((row) => (
+                  <TableBody>{previewRows.map((row) => (
                     <TableRow key={`${row.rowNumber}-${normalize(row.raw.siswa_id)}-${normalize(row.raw.nis)}`} className={row.errors.length || row.runStatus === "error" ? "bg-destructive/10" : ""}>
                       <TableCell>{row.rowNumber}</TableCell>
                       <TableCell className="font-mono text-xs"><div>{normalize(row.raw.siswa_id) || "-"}</div><div className="text-muted-foreground">NIS: {normalize(row.raw.nis) || "-"}</div><div className="text-muted-foreground">NISN: {normalize(row.raw.nisn) || "-"}</div></TableCell>
