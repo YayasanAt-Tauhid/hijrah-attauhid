@@ -77,6 +77,7 @@ export function ImportSiswaDialog({
     const nisList = [...new Set(data.map((row) => normalize(row.nis)).filter(Boolean))];
     const nisnList = [...new Set(data.map((row) => normalize(row.nisn)).filter(Boolean))];
     const nikDapodikList = [...new Set(data.map((row) => normalize(row.nik_dapodik)).filter(Boolean))];
+    const nikLegacyList = [...new Set(data.map((row) => normalize(row.nik)).filter(Boolean))];
     const found = new Map<string, ExistingStudentForImport>();
     for (const idChunk of chunks(ids)) {
       const { data: existing, error } = await supabase.from("siswa").select("id, nis, nisn, status, departemen_id").in("id", idChunk);
@@ -94,26 +95,54 @@ export function ImportSiswaDialog({
       for (const student of existing || []) found.set(student.id, student as ExistingStudentForImport);
     }
 
-    const nikDapodikByStudent = new Map<string, string>();
-    const dapodikStudentIds = new Set<string>();
+    const detailByStudent = new Map<string, Partial<ExistingStudentForImport>>();
+    const discoveredIds = new Set<string>();
+
     for (const nikChunk of chunks(nikDapodikList)) {
-      const { data: details, error } = await (supabase as any).from("siswa_detail").select("siswa_id, nik_dapodik").in("nik_dapodik", nikChunk);
+      const { data: details, error } = await (supabase as any).from("siswa_detail")
+        .select("siswa_id,nik,nik_dapodik,spmb_gelombang_id,spmb_siswa_internal")
+        .in("nik_dapodik", nikChunk);
       if (error) throw error;
       for (const detail of details || []) {
         if (!detail.siswa_id) continue;
-        dapodikStudentIds.add(detail.siswa_id);
-        nikDapodikByStudent.set(detail.siswa_id, detail.nik_dapodik || "");
+        discoveredIds.add(detail.siswa_id);
+        detailByStudent.set(detail.siswa_id, { ...(detailByStudent.get(detail.siswa_id) || {}), ...detail });
       }
     }
-    const missingStudentIds = [...dapodikStudentIds].filter((id) => !found.has(id));
+
+    const spmbDetails = await fetchAllPages<any>((from, to) => (supabase as any).from("siswa_detail")
+      .select("siswa_id,nik,nik_dapodik,spmb_gelombang_id,spmb_siswa_internal")
+      .not("spmb_gelombang_id", "is", null)
+      .order("siswa_id")
+      .range(from, to));
+    const wantedLegacy = new Set(nikLegacyList);
+    for (const detail of spmbDetails || []) {
+      if (!detail.siswa_id) continue;
+      if (wantedLegacy.size && wantedLegacy.has(normalize(detail.nik))) discoveredIds.add(detail.siswa_id);
+      detailByStudent.set(detail.siswa_id, { ...(detailByStudent.get(detail.siswa_id) || {}), ...detail });
+    }
+
+    const allDetailIds = [...new Set([...found.keys(), ...discoveredIds])];
+    for (const idChunk of chunks(allDetailIds)) {
+      const { data: details, error } = await (supabase as any).from("siswa_detail")
+        .select("siswa_id,nik,nik_dapodik,spmb_gelombang_id,spmb_siswa_internal")
+        .in("siswa_id", idChunk);
+      if (error) throw error;
+      for (const detail of details || []) {
+        if (!detail.siswa_id) continue;
+        detailByStudent.set(detail.siswa_id, { ...(detailByStudent.get(detail.siswa_id) || {}), ...detail });
+      }
+    }
+
+    const missingStudentIds = [...discoveredIds].filter((id) => !found.has(id));
     for (const idChunk of chunks(missingStudentIds)) {
       const { data: existing, error } = await supabase.from("siswa").select("id, nis, nisn, status, departemen_id").in("id", idChunk);
       if (error) throw error;
       for (const student of existing || []) found.set(student.id, student as ExistingStudentForImport);
     }
-    for (const [id, nikDapodik] of nikDapodikByStudent) {
-      const student = found.get(id);
-      if (student) found.set(id, { ...student, nik_dapodik: nikDapodik });
+    for (const [id, student] of found) {
+      const detail = detailByStudent.get(id);
+      if (detail) found.set(id, { ...student, ...detail });
     }
     return [...found.values()];
   };
@@ -225,22 +254,44 @@ export function ImportSiswaDialog({
     importGuardRef.current = true; setImporting(true); setProgress(0); setResult(null);
     const pending = rows.map((row, index) => ({ row, index })).filter(({ row }) => row.errors.length === 0 && row.runStatus !== "success");
     let inserted = rows.filter((row) => row.runStatus === "success" && row.action === "insert").length;
-    let updated = rows.filter((row) => row.runStatus === "success" && row.action === "update").length;
+    let updated = rows.filter((row) => row.runStatus === "success" && row.action !== "insert").length;
     let failedThisRun = 0;
     const validationFailures = rows.filter((row) => row.errors.length > 0).length;
     try {
       for (let cursor = 0; cursor < pending.length; cursor++) {
         const { row, index } = pending[cursor];
         try {
-          const { error } = await (supabase as any).rpc("akademik_save_siswa", {
-            p_siswa: row.siswaPayload,
-            p_detail: Object.keys(row.detailPayload).length ? row.detailPayload : null,
-            p_kelas: row.kelasPayload,
-            p_id: row.action === "update" ? row.existingId || null : null,
-          });
+          let error: any = null;
+          if (row.action === "adopt_spmb") {
+            const result = await (supabase as any).rpc("akademik_adopt_spmb_migration", {
+              p_siswa_id: row.existingId,
+              p_current: {
+                nis: row.siswaPayload.nis ?? null,
+                nisn: row.siswaPayload.nisn ?? null,
+                departemen_id: row.siswaPayload.departemen_id ?? null,
+                angkatan_id: row.siswaPayload.angkatan_id ?? null,
+              },
+              p_kelas: row.kelasPayload,
+              p_nik_dapodik: normalize(row.raw.nik_dapodik) || null,
+            });
+            error = result.error;
+          } else {
+            const result = await (supabase as any).rpc("akademik_save_siswa", {
+              p_siswa: row.siswaPayload,
+              p_detail: Object.keys(row.detailPayload).length ? row.detailPayload : null,
+              p_kelas: row.kelasPayload,
+              p_id: row.action === "update" ? row.existingId || null : null,
+            });
+            error = result.error;
+          }
           if (error) throw error;
-          updateRow(index, { runStatus: "success", runMessage: row.action === "update" ? "Berhasil diperbarui" : "Berhasil ditambahkan" });
-          if (row.action === "update") updated++; else inserted++;
+          updateRow(index, {
+            runStatus: "success",
+            runMessage: row.action === "insert" ? "Berhasil ditambahkan"
+              : row.action === "adopt_spmb" ? "SPMB ditautkan ke siswa aktif"
+              : "Berhasil diperbarui",
+          });
+          if (row.action === "insert") inserted++; else updated++;
         } catch (error) {
           failedThisRun++; updateRow(index, { runStatus: "error", runMessage: errorMessage(error) });
         }
@@ -265,7 +316,7 @@ export function ImportSiswaDialog({
     const report = rows.map((row) => ({
       baris_excel: row.rowNumber, siswa_id: normalize(row.raw.siswa_id), nis: normalize(row.raw.nis), nisn: normalize(row.raw.nisn),
       nik_hijrah: normalize(row.raw.nik), nik_dapodik: normalize(row.raw.nik_dapodik), nama: normalize(row.raw.nama),
-      aksi: row.action === "update" ? "update" : "baru",
+      aksi: row.action === "adopt_spmb" ? "tautkan_spmb" : row.action === "update" ? "update" : "baru",
       hasil: row.errors.length ? "gagal_validasi" : row.runStatus === "success" ? "berhasil" : row.runStatus === "error" ? "gagal_simpan" : "belum_diproses",
       alasan: row.errors.length ? row.errors.join("; ") : row.runMessage || "",
     }));
@@ -303,7 +354,7 @@ export function ImportSiswaDialog({
 
           <div className="flex items-start gap-2 rounded-md border p-3">
             <Checkbox id="update-existing" checked={updateExisting} disabled={busy || hasSuccessfulRows} onCheckedChange={(checked) => handleToggleUpdateExisting(checked === true)} />
-            <Label htmlFor="update-existing" className="text-sm cursor-pointer font-normal leading-5">Izinkan update siswa yang sudah ada. Gunakan siswa_id sebagai identitas utama agar NIS/NISN/NIK dapat dikoreksi dengan aman. Tanpa opsi ini, siswa yang sudah terdaftar menjadi error—tidak pernah dibuat sebagai duplikat baru.</Label>
+            <Label htmlFor="update-existing" className="text-sm cursor-pointer font-normal leading-5">Izinkan update siswa yang sudah ada. Opsi ini juga mengizinkan penautan otomatis jika siswa aktif hasil migrasi cocok dengan pendaftaran SPMB existing berdasarkan NISN/NIK. Record SPMB orang tua tetap dipertahankan.</Label>
           </div>
 
           {hasSuccessfulRows && <p className="text-xs text-muted-foreground">File dan opsi update dikunci setelah ada baris berhasil. Tutup dialog untuk memulai file baru; baris sukses pada proses ini tidak akan dijalankan ulang.</p>}
@@ -322,7 +373,7 @@ export function ImportSiswaDialog({
                       <TableCell className="font-mono text-xs"><div>{normalize(row.raw.siswa_id) || "-"}</div><div className="text-muted-foreground">NIS: {normalize(row.raw.nis) || "-"}</div><div className="text-muted-foreground">NISN: {normalize(row.raw.nisn) || "-"}</div></TableCell>
                       <TableCell>{normalize(row.raw.nama) || "-"}</TableCell>
                       <TableCell><div>{normalize(row.raw.departemen) || "(dipertahankan)"}</div><div className="text-xs text-muted-foreground">{normalize(row.raw.kelas) || "-"}</div></TableCell>
-                      <TableCell>{row.action === "update" ? <Badge variant="secondary">Update</Badge> : <Badge variant="outline">Baru</Badge>}</TableCell>
+                      <TableCell>{row.action === "adopt_spmb" ? <Badge variant="secondary">Tautkan SPMB</Badge> : row.action === "update" ? <Badge variant="secondary">Update</Badge> : <Badge variant="outline">Baru</Badge>}</TableCell>
                       <TableCell className="max-w-[360px]">
                         {row.errors.length ? <span className="text-destructive text-xs">{row.errors.join("; ")}</span>
                           : row.runStatus === "success" ? <span className="inline-flex items-center gap-1 text-xs text-green-700"><CheckCircle2 className="h-4 w-4" /> {row.runMessage}</span>
