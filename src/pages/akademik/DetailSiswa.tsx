@@ -50,6 +50,21 @@ export default function DetailSiswa() {
     enabled: !!id,
   });
 
+  const { data: identityAudit = [] } = useQuery({
+    queryKey: ["siswa_identitas_audit", id],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("siswa_identitas_audit")
+        .select("id, field_name, old_value, new_value, changed_at")
+        .eq("siswa_id", id!)
+        .order("changed_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id,
+  });
+
   const { data: pembayaranList = [] } = useQuery({
     queryKey: ["pembayaran", id],
     queryFn: async () => {
@@ -144,6 +159,9 @@ export default function DetailSiswa() {
             <CardContent>
               <InfoRow label="Nama Lengkap" value={siswa.nama} />
               <InfoRow label="NIS" value={siswa.nis || "-"} />
+              <InfoRow label="NISN" value={siswa.nisn || "-"} />
+              <InfoRow label="NIK Hijrah" value={detail?.nik || "-"} />
+              <InfoRow label="NIK Dapodik" value={detail?.nik_dapodik || "-"} />
               <InfoRow label="Jenis Kelamin" value={siswa.jenis_kelamin === "L" ? "Laki-laki" : siswa.jenis_kelamin === "P" ? "Perempuan" : "-"} />
               <InfoRow label="Tempat, Tanggal Lahir" value={`${siswa.tempat_lahir || "-"}, ${formatDate(siswa.tanggal_lahir)}`} />
               <InfoRow label="Agama" value={siswa.agama || "-"} />
@@ -152,6 +170,30 @@ export default function DetailSiswa() {
               <InfoRow label="Email" value={siswa.email || "-"} />
             </CardContent>
           </Card>
+
+          {identityAudit.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Riwayat Perubahan Identitas</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader><TableRow><TableHead>Waktu</TableHead><TableHead>Field</TableHead><TableHead>Sebelum</TableHead><TableHead>Sesudah</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {identityAudit.map((row: any) => {
+                      const labels: Record<string, string> = { nis: "NIS", nisn: "NISN", nik: "NIK Hijrah", nik_dapodik: "NIK Dapodik" };
+                      return (
+                        <TableRow key={row.id}>
+                          <TableCell>{row.changed_at ? format(new Date(row.changed_at), "dd MMM yyyy HH:mm", { locale: localeId }) : "-"}</TableCell>
+                          <TableCell>{labels[row.field_name] || row.field_name}</TableCell>
+                          <TableCell>{row.old_value || "-"}</TableCell>
+                          <TableCell>{row.new_value || "-"}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
 
           {detail && (
             <Card>
