@@ -6,8 +6,8 @@ const STUDENT_B = "22222222-2222-4222-8222-222222222222";
 const STUDENT_SPMB = "33333333-3333-4333-8333-333333333333";
 const refs: ImportReferences = {
   departemenList: [{ id: "d-sd", nama: "SDIT At-Tauhid", kode: "SD" }, { id: "d-smp", nama: "SMPIT At-Tauhid", kode: "SMP" }],
-  tingkatList: [{ id: "t-1", nama: "1", departemen_id: "d-sd" }, { id: "t-7", nama: "7", departemen_id: "d-smp" }],
-  kelasList: [{ id: "k-1a", nama: "1A", tingkat_id: "t-1", departemen_id: "d-sd" }, { id: "k-7a", nama: "7A", tingkat_id: "t-7", departemen_id: "d-smp" }],
+  tingkatList: [{ id: "t-1", nama: "1", departemen_id: "d-sd" }, { id: "t-6", nama: "6", departemen_id: "d-sd" }, { id: "t-7", nama: "7", departemen_id: "d-smp" }],
+  kelasList: [{ id: "k-1a", nama: "1A", tingkat_id: "t-1", departemen_id: "d-sd" }, { id: "k-6c", nama: "6C", tingkat_id: "t-6", departemen_id: "d-sd" }, { id: "k-7a", nama: "7A", tingkat_id: "t-7", departemen_id: "d-smp" }],
   tahunAjaranList: [{ id: "ta-26", nama: "2026/2027" }],
   angkatanList: [{ id: "a-26-sd", nama: "2026", departemen_id: "d-sd" }, { id: "a-26-smp", nama: "2026", departemen_id: "d-smp" }],
 };
@@ -60,16 +60,16 @@ describe("prepareImportRows", () => {
       nama: "ALIFAH YUNDRA MAHIRAH",
       status: "aktif",
       departemen: "SDIT At-Tauhid",
-      tingkat: "1",
-      kelas: "1A",
+      tingkat: "6",
+      kelas: "6C",
       tahun_ajaran: "2026/2027",
-      angkatan: "2026",
     }], true);
     expect(row.errors).toEqual([]);
     expect(row.action).toBe("adopt_spmb");
     expect(row.existingId).toBe(STUDENT_SPMB);
     expect(row.siswaPayload.departemen_id).toBe("d-sd");
-    expect(row.kelasPayload).toEqual({ kelas_id: "k-1a", tahun_ajaran_id: "ta-26" });
+    expect(row.kelasPayload).toEqual({ kelas_id: "k-6c", tahun_ajaran_id: "ta-26" });
+    expect(row.siswaPayload.angkatan_id).toBeUndefined();
   });
 
   it("requires update permission before linking a migrated student to SPMB", () => {
