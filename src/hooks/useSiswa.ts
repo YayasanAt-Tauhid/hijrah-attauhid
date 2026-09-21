@@ -77,7 +77,8 @@ export function useSiswaDetail(id: string) {
           )
         `)
         .eq("id", id);
-      if (role === "admin_tu" && departemenId) q = q.eq("departemen_id", departemenId);
+      // RLS menentukan akses detail: Admin TU boleh membaca siswa pada lembaga
+      // aktifnya atau pendaftaran SPMB yang menargetkan lembaganya.
       const { data, error } = await q.single();
       if (error) throw error;
       return data as SiswaWithRelations;
