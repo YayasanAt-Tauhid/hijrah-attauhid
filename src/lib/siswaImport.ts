@@ -103,6 +103,12 @@ function parseNumber(value: ImportCell, label: string, errors: string[], integer
   }
   return parsed;
 }
+function validateLegacyNik(value: ImportCell, errors: string[]) {
+  if (!normalize(value)) return;
+  if (typeof value === "number") {
+    errors.push("NIK Hijrah harus disimpan sebagai teks di Excel agar nilai legacy tidak berubah");
+  }
+}
 function validateIdentityNumber(value: ImportCell, label: string, errors: string[]) {
   if (!normalize(value)) return;
   if (typeof value === "number") { errors.push(`${label} harus 16 digit dan disimpan sebagai teks di Excel`); return; }
@@ -262,7 +268,8 @@ export function prepareImportRows(rawRows: SiswaImportRow[], references: ImportR
     if (jenisPendaftaran && !VALID_JENIS_PENDAFTARAN.has(jenisPendaftaran)) errors.push(`jenis_pendaftaran tidak valid: ${jenisPendaftaran}`);
     else if (jenisPendaftaran) detailPayload.jenis_pendaftaran = jenisPendaftaran;
 
-    validateIdentityNumber(raw.nik, "NIK Hijrah", errors); validateIdentityNumber(raw.nik_dapodik, "NIK Dapodik", errors);
+    validateLegacyNik(raw.nik, errors);
+    validateIdentityNumber(raw.nik_dapodik, "NIK Dapodik", errors);
     validateIdentityNumber(raw.no_kk, "No. KK", errors);
     validateIdentityNumber(raw.nik_ayah, "NIK ayah", errors); validateIdentityNumber(raw.nik_ibu, "NIK ibu", errors);
     const detailStrings = [
@@ -327,7 +334,7 @@ export function templateWorkbook(): XLSX.WorkBook {
     ["1", "Untuk siswa baru, departemen wajib. Kelas harus disertai tingkat dan tahun_ajaran."],
     ["2", "Untuk update, gunakan siswa_id dari file Data Siswa untuk Update. siswa_id adalah identitas utama; NIS, NISN, NIK Hijrah, dan NIK Dapodik boleh dikoreksi."],
     ["3", "Sel kosong pada update mempertahankan data lama. Penghapusan nilai dilakukan lewat Edit Siswa."],
-    ["4", "NIS, NISN, NIK Hijrah, NIK Dapodik, No. KK, NIK orang tua, dan nomor telepon disiapkan sebagai teks. Jangan ubah ke format angka/scientific notation."],
+    ["4", "NIK Hijrah adalah data legacy: panjangnya tidak dipaksa 16 digit, tetapi tetap simpan sebagai teks agar nilainya tidak berubah. NIK Dapodik dan No. KK harus tepat 16 digit; NISN harus 10 digit."],
     ["5", "Tanggal: YYYY-MM-DD atau DD/MM/YYYY. Tanggal kalender yang tidak nyata akan ditolak."],
     ["6", "Dokumen KK/Akta/Rapor/Ijazah tidak diimport dari Excel; unggah melalui Edit Siswa."],
     ["7", "Status siswa existing tidak dapat diubah lewat import. Gunakan alur SPMB atau Mutasi."],
