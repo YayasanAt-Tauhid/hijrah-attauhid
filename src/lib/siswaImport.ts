@@ -32,10 +32,11 @@ export interface ImportReferences {
   tahunAjaranList: TahunAjaranRef[]; angkatanList: AngkatanRef[];
 }
 export interface ExistingStudentForImport {
-  id: string; nis: string | null; nisn?: string | null; status: string | null; departemen_id: string | null; nik_dapodik?: string | null;
+  id: string; nis: string | null; nisn?: string | null; status: string | null; departemen_id: string | null;
+  nik?: string | null; nik_dapodik?: string | null; spmb_gelombang_id?: string | null; spmb_siswa_internal?: boolean | null;
 }
 export interface PreparedImportRow {
-  rowNumber: number; raw: SiswaImportRow; action: "insert" | "update"; existingId?: string; errors: string[];
+  rowNumber: number; raw: SiswaImportRow; action: "insert" | "update" | "adopt_spmb"; existingId?: string; errors: string[];
   siswaPayload: Record<string, unknown>; detailPayload: Record<string, unknown>;
   kelasPayload: { kelas_id: string; tahun_ajaran_id: string } | null;
 }
@@ -139,12 +140,15 @@ export function prepareImportRows(rawRows: SiswaImportRow[], references: ImportR
   const byId = new Map(existingStudents.map((student) => [student.id, student]));
   const byNis = new Map<string, ExistingStudentForImport[]>();
   const byNisn = new Map<string, ExistingStudentForImport[]>();
+  const byNik = new Map<string, ExistingStudentForImport[]>();
   const byNikDapodik = new Map<string, ExistingStudentForImport[]>();
   for (const student of existingStudents) {
     const nis = normalize(student.nis);
     if (nis) { const list = byNis.get(nis) || []; list.push(student); byNis.set(nis, list); }
     const nisn = normalize(student.nisn);
     if (nisn) { const list = byNisn.get(nisn) || []; list.push(student); byNisn.set(nisn, list); }
+    const nik = normalize(student.nik);
+    if (nik) { const list = byNik.get(nik) || []; list.push(student); byNik.set(nik, list); }
     const nikDapodik = normalize(student.nik_dapodik);
     if (nikDapodik) { const list = byNikDapodik.get(nikDapodik) || []; list.push(student); byNikDapodik.set(nikDapodik, list); }
   }
@@ -155,7 +159,7 @@ export function prepareImportRows(rawRows: SiswaImportRow[], references: ImportR
 
   return rawRows.map((raw, index) => {
     const errors: string[] = [], siswaId = normalize(raw.siswa_id), nis = normalize(raw.nis);
-    const nisn = normalize(raw.nisn), nikDapodik = normalize(raw.nik_dapodik);
+    const nisn = normalize(raw.nisn), nik = normalize(raw.nik), nikDapodik = normalize(raw.nik_dapodik);
     if (siswaId && !UUID_RE.test(siswaId)) errors.push("siswa_id bukan UUID yang valid");
     if (siswaId && (duplicateIds.get(siswaId) || 0) > 1) errors.push(`siswa_id ganda dalam file: ${siswaId}`);
     if (nis && (duplicateNis.get(nis) || 0) > 1) errors.push(`NIS ganda dalam file: ${nis}`);
@@ -165,24 +169,45 @@ export function prepareImportRows(rawRows: SiswaImportRow[], references: ImportR
     const matchById = siswaId ? byId.get(siswaId) : undefined;
     const nisMatches = nis ? byNis.get(nis) || [] : [];
     const nisnMatches = nisn ? byNisn.get(nisn) || [] : [];
+    const nikMatches = nik ? byNik.get(nik) || [] : [];
     const nikDapodikMatches = nikDapodik ? byNikDapodik.get(nikDapodik) || [] : [];
     if (siswaId && !matchById) errors.push(`siswa_id tidak ditemukan: ${siswaId}`);
     if (nisMatches.length > 1) errors.push(`NIS ${nis} terhubung ke lebih dari satu siswa di database`);
     if (nisnMatches.length > 1) errors.push(`NISN ${nisn} terhubung ke lebih dari satu siswa di database`);
+    if (nikMatches.length > 1) errors.push(`NIK Hijrah ${nik} terhubung ke lebih dari satu siswa di database`);
     if (nikDapodikMatches.length > 1) errors.push(`NIK Dapodik ${nikDapodik} terhubung ke lebih dari satu siswa di database`);
     const matchByNis = nisMatches.length === 1 ? nisMatches[0] : undefined;
     const matchByNisn = nisnMatches.length === 1 ? nisnMatches[0] : undefined;
+    const matchByNik = nikMatches.length === 1 ? nikMatches[0] : undefined;
     const matchByNikDapodik = nikDapodikMatches.length === 1 ? nikDapodikMatches[0] : undefined;
+
+    const identityIds = new Set(
+      [matchByNisn?.id, matchByNik?.id, matchByNikDapodik?.id].filter((id): id is string => Boolean(id)),
+    );
+    if (identityIds.size > 1) errors.push("NISN/NIK menunjuk ke siswa yang berbeda; periksa data sebelum import");
+    const identityCandidate = identityIds.size === 1
+      ? [matchByNisn, matchByNik, matchByNikDapodik].find((student) => student?.id === [...identityIds][0])
+      : undefined;
+    const canAdoptSpmb = !matchById && !matchByNis
+      && identityCandidate?.status === "calon"
+      && Boolean(identityCandidate.spmb_gelombang_id)
+      && !identityCandidate.spmb_siswa_internal;
 
     if (matchById && matchByNis && matchById.id !== matchByNis.id) errors.push("NIS baru sudah digunakan siswa lain");
     if (matchById && matchByNisn && matchById.id !== matchByNisn.id) errors.push("NISN baru sudah digunakan siswa lain");
+    if (matchById && matchByNik && matchById.id !== matchByNik.id) errors.push("NIK Hijrah baru sudah digunakan siswa lain");
     if (matchById && matchByNikDapodik && matchById.id !== matchByNikDapodik.id) errors.push("NIK Dapodik baru sudah digunakan siswa lain");
 
-    const existing = matchById || (!siswaId ? matchByNis : undefined);
+    const existing = matchById || (!siswaId ? matchByNis : undefined) || (canAdoptSpmb ? identityCandidate : undefined);
+    const action: "insert" | "update" | "adopt_spmb" = canAdoptSpmb ? "adopt_spmb" : existing ? "update" : "insert";
     if (!existing && matchByNisn) errors.push("NISN sudah terdaftar; gunakan file update yang memuat siswa_id");
+    if (!existing && matchByNik) errors.push("NIK Hijrah sudah terdaftar pada siswa lain");
     if (!existing && matchByNikDapodik) errors.push("NIK Dapodik sudah terdaftar; gunakan file update yang memuat siswa_id");
-    const action: "insert" | "update" = existing ? "update" : "insert";
-    if (existing && !allowUpdate) errors.push("siswa sudah ada di database; aktifkan opsi update untuk memperbarui");
+    if (existing && !allowUpdate) {
+      errors.push(action === "adopt_spmb"
+        ? "Ditemukan pendaftaran SPMB existing; aktifkan opsi update untuk menautkannya ke siswa aktif hasil migrasi"
+        : "siswa sudah ada di database; aktifkan opsi update untuk memperbarui");
+    }
     const insert = action === "insert";
     const siswaPayload: Record<string, unknown> = {}, detailPayload: Record<string, unknown> = {};
 
@@ -209,7 +234,10 @@ export function prepareImportRows(rawRows: SiswaImportRow[], references: ImportR
 
     const status = normalize(raw.status).toLowerCase();
     if (status && !VALID_STATUS.has(status)) errors.push(`status tidak valid: ${status}`);
-    if (existing) {
+    if (action === "adopt_spmb") {
+      if (status && status !== "aktif") errors.push("Siswa hasil migrasi yang ditautkan ke SPMB harus berstatus aktif");
+      siswaPayload.status = "aktif";
+    } else if (existing) {
       if (status && status !== normalize(existing.status).toLowerCase()) errors.push("status siswa existing tidak boleh diubah lewat import; gunakan SPMB/Mutasi");
     } else siswaPayload.status = status || "aktif";
 
