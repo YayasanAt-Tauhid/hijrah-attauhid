@@ -59,7 +59,7 @@ export const pmbGetStatus = createServerFn({ method: "POST" })
     if (!token) throw new Error("Token pendaftaran PMB tidak lengkap");
 
     const { data: detail } = await admin.from("siswa_detail")
-      .select("siswa_id")
+      .select("siswa_id, spmb_departemen_tujuan_id, spmb_status_pendaftaran")
       .eq("pmb_payment_token", token)
       .maybeSingle();
     if (!detail?.siswa_id) throw new Error("Pendaftaran PMB tidak ditemukan");
@@ -71,23 +71,25 @@ export const pmbGetStatus = createServerFn({ method: "POST" })
       .maybeSingle();
     if (siswaErr || !siswa) throw new Error("Calon siswa tidak ditemukan");
 
+    const pmbDepartemenId = (detail as any).spmb_departemen_tujuan_id || siswa.departemen_id;
+    const registrationStatus = (detail as any).spmb_status_pendaftaran || siswa.status;
     let departemenNama: string | null = null;
-    if (siswa.departemen_id) {
+    if (pmbDepartemenId) {
       const { data: departemen } = await admin
         .from("departemen")
         .select("nama")
-        .eq("id", siswa.departemen_id)
+        .eq("id", pmbDepartemenId)
         .maybeSingle();
       departemenNama = departemen?.nama || null;
     }
 
-    if (!siswa.departemen_id) {
+    if (!pmbDepartemenId) {
       return {
         success: true,
         siswa_id: siswa.id,
         nama: siswa.nama,
         departemen_nama: departemenNama,
-        status_pendaftaran: siswa.status,
+        status_pendaftaran: registrationStatus,
         terverifikasi: !!siswa.terverifikasi,
         payment_status: "unpaid",
         jenis_nama: null,
@@ -100,7 +102,7 @@ export const pmbGetStatus = createServerFn({ method: "POST" })
 
     const { data: config } = await admin.from("konfigurasi_pmb")
       .select("jenis_pembayaran_id, pembayaran_online_aktif")
-      .eq("departemen_id", siswa.departemen_id)
+      .eq("departemen_id", pmbDepartemenId)
       .maybeSingle();
 
     if (!config?.jenis_pembayaran_id) {
@@ -109,7 +111,7 @@ export const pmbGetStatus = createServerFn({ method: "POST" })
         siswa_id: siswa.id,
         nama: siswa.nama,
         departemen_nama: departemenNama,
-        status_pendaftaran: siswa.status,
+        status_pendaftaran: registrationStatus,
         terverifikasi: !!siswa.terverifikasi,
         payment_status: "unpaid",
         jenis_nama: null,
@@ -197,7 +199,7 @@ export const pmbGetStatus = createServerFn({ method: "POST" })
 
     const nominal = Number(latestTx?.total_amount) || Number(pembayaran?.jumlah) || configuredNominal;
     const canPay =
-      siswa.status === "calon" &&
+      registrationStatus === "calon" &&
       config.pembayaran_online_aktif === true &&
       ["unpaid", "pending", "failed", "expired"].includes(paymentStatus);
 
@@ -206,7 +208,7 @@ export const pmbGetStatus = createServerFn({ method: "POST" })
       siswa_id: siswa.id,
       nama: siswa.nama,
       departemen_nama: departemenNama,
-      status_pendaftaran: siswa.status,
+      status_pendaftaran: registrationStatus,
       terverifikasi: !!siswa.terverifikasi,
       payment_status: paymentStatus,
       jenis_nama: jenis.nama,
@@ -228,7 +230,7 @@ export const pmbCreatePayment = createServerFn({ method: "POST" })
     // Token pendaftaran adalah credential publik yang opaque. siswa_id hanya
     // dipakai sebagai cross-check bila masih tersedia di state browser.
     const { data: detail } = await admin.from("siswa_detail")
-      .select("siswa_id, pmb_payment_token")
+      .select("siswa_id, pmb_payment_token, spmb_departemen_tujuan_id, spmb_status_pendaftaran")
       .eq("pmb_payment_token", token)
       .maybeSingle();
     if (!detail?.siswa_id) throw new Error("Tautan pembayaran PMB tidak valid");
@@ -241,14 +243,16 @@ export const pmbCreatePayment = createServerFn({ method: "POST" })
       .from("siswa")
       .select("id, nama, departemen_id, angkatan_id, status")
       .eq("id", siswaId)
-      .eq("status", "calon")
       .maybeSingle();
-    if (siswaErr || !siswa || !siswa.departemen_id) throw new Error("Calon siswa tidak ditemukan");
+    if (siswaErr || !siswa) throw new Error("Calon siswa tidak ditemukan");
+    const pmbDepartemenId = (detail as any).spmb_departemen_tujuan_id || siswa.departemen_id;
+    const registrationStatus = (detail as any).spmb_status_pendaftaran || siswa.status;
+    if (!pmbDepartemenId || registrationStatus !== "calon") throw new Error("Pendaftaran calon siswa tidak aktif");
 
     // Gunakan konfigurasi PMB eksplisit per lembaga. Jangan menebak dari nama jenis pembayaran.
     const { data: config, error: configErr } = await admin.from("konfigurasi_pmb")
       .select("jenis_pembayaran_id, pembayaran_online_aktif")
-      .eq("departemen_id", siswa.departemen_id)
+      .eq("departemen_id", pmbDepartemenId)
       .maybeSingle();
     if (configErr) throw configErr;
     if (!config) throw new Error("Konfigurasi pembayaran PMB belum diset untuk lembaga ini");
@@ -262,7 +266,7 @@ export const pmbCreatePayment = createServerFn({ method: "POST" })
       .maybeSingle();
     if (jenisErr) throw jenisErr;
     if (!jenis) throw new Error("Jenis pembayaran PMB yang dikonfigurasi tidak ditemukan atau tidak aktif");
-    if (jenis.departemen_id && jenis.departemen_id !== siswa.departemen_id) {
+    if (jenis.departemen_id && jenis.departemen_id !== pmbDepartemenId) {
       throw new Error("Jenis pembayaran PMB tidak berlaku untuk lembaga calon siswa ini");
     }
     if (!jenis.akun_pendapatan_id) throw new Error(`Akun pendapatan untuk ${jenis.nama} belum dikonfigurasi`);
@@ -358,7 +362,7 @@ export const pmbCreatePayment = createServerFn({ method: "POST" })
       bulan: 0,
       jumlah: nominal,
       nama_item: `${jenis.nama} - ${siswa.nama}`,
-      departemen_id: siswa.departemen_id,
+      departemen_id: pmbDepartemenId,
       tahun_ajaran_id: null,
     });
     if (itemErr) {
