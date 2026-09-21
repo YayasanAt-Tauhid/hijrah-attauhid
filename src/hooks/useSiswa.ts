@@ -42,7 +42,7 @@ export function useSiswaList() {
           .select(`
             *,
             angkatan:angkatan_id(id, nama),
-            siswa_detail(status_asrama, kategori),
+            siswa_detail(status_asrama, kategori, nik, nik_dapodik),
             kelas_siswa(
               id, aktif,
               kelas:kelas_id(id, nama, tingkat:tingkat_id(id, nama), departemen:departemen_id(id, nama)),
