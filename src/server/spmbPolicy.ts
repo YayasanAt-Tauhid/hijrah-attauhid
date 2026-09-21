@@ -75,7 +75,7 @@ export const spmbGetPolicyStatus = createServerFn({ method: "POST" })
     const admin = createAdminClient();
     const { data: detail, error: detailError } = await (admin
       .from("siswa_detail") as any)
-      .select("siswa_id,spmb_gelombang_id")
+      .select("siswa_id,spmb_gelombang_id,spmb_departemen_tujuan_id")
       .eq("pmb_payment_token", token)
       .maybeSingle();
     if (detailError || !detail?.siswa_id) throw new Error("Pendaftaran SPMB tidak ditemukan");
@@ -109,10 +109,11 @@ export const spmbGetPolicyStatus = createServerFn({ method: "POST" })
       wave = (historicalWave as SpmbWaveSummary | null) || null;
     }
 
+    const targetDepartemenId = (detail as any).spmb_departemen_tujuan_id || siswa.departemen_id;
     const { data: config } = await (admin
       .from("konfigurasi_pmb") as any)
       .select("group_calon_siswa_url")
-      .eq("departemen_id", siswa.departemen_id)
+      .eq("departemen_id", targetDepartemenId)
       .maybeSingle();
 
     return {
