@@ -62,6 +62,14 @@ describe('SPMB milestone write authorization and workflow', () => {
     expect((await handleMilestoneUpdate(request(), pid)).status).toBe(404)
     expect(mutations()).toHaveLength(0)
   })
+  it('authorizes a linked internal student by the SPMB target unit', async () => {
+    student.departemen_id = 'source-dept'
+    detail.spmb_departemen_tujuan_id = 'dept'
+    const res = await handleMilestoneUpdate(request({ action: 'tes' }), pid)
+    expect(res.status).toBe(200)
+    expect(mutations()).toHaveLength(1)
+  })
+
   it.each(['tes', 'lulus', 'tidak_lulus'])('delegates %s to the existing workflow and records audit', async (action) => {
     const res = await handleMilestoneUpdate(request({ action }), pid)
     expect(res.status).toBe(200)
