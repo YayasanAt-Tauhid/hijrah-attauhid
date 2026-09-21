@@ -82,12 +82,22 @@ describe("prepareImportRows", () => {
     expect(row.siswaPayload).not.toHaveProperty("status");
   });
 
-  it("validates NISN and NIK fields as text with the correct length", () => {
-    const [numeric] = prepare([{ nama: "Siswa Baru", departemen: "SDIT At-Tauhid", nik: 3273011405120001 }]);
-    expect(numeric.errors.join(" ")).toContain("disimpan sebagai teks");
-    const [short] = prepare([{ nama: "Siswa Baru", departemen: "SDIT At-Tauhid", no_kk: "12345", nisn: "123" }]);
-    expect(short.errors.join(" ")).toContain("No. KK harus tepat 16 digit");
-    expect(short.errors.join(" ")).toContain("NISN harus tepat 10 digit");
+  it("allows legacy NIK with non-16-digit length but keeps strict official identifiers", () => {
+    const [legacyShort] = prepare([{ nama: "Siswa Baru", departemen: "SDIT At-Tauhid", nik: "12345" }]);
+    expect(legacyShort.errors).toEqual([]);
+    expect(legacyShort.detailPayload.nik).toBe("12345");
+
+    const [legacyLong] = prepare([{ nama: "Siswa Baru", departemen: "SDIT At-Tauhid", nik: "327301140512000123" }]);
+    expect(legacyLong.errors).toEqual([]);
+    expect(legacyLong.detailPayload.nik).toBe("327301140512000123");
+
+    const [numericLegacy] = prepare([{ nama: "Siswa Baru", departemen: "SDIT At-Tauhid", nik: 3273011405120001 }]);
+    expect(numericLegacy.errors.join(" ")).toContain("NIK Hijrah harus disimpan sebagai teks");
+
+    const [strict] = prepare([{ nama: "Siswa Baru", departemen: "SDIT At-Tauhid", nik_dapodik: "12345", no_kk: "12345", nisn: "123" }]);
+    expect(strict.errors.join(" ")).toContain("NIK Dapodik harus tepat 16 digit");
+    expect(strict.errors.join(" ")).toContain("No. KK harus tepat 16 digit");
+    expect(strict.errors.join(" ")).toContain("NISN harus tepat 10 digit");
   });
 
   it("imports mutable NISN, NIK Hijrah, and NIK Dapodik through siswa_id", () => {
