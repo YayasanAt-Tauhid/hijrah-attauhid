@@ -287,7 +287,7 @@ export function prepareImportRows(rawRows: SiswaImportRow[], references: ImportR
     if (departmentChanged && !(kelas && tahunAjaran)) {
       errors.push("perubahan departemen siswa existing harus disertai kelas dan tahun_ajaran baru yang sesuai");
     }
-    if (departmentChanged && !normalize(raw.angkatan)) {
+    if (departmentChanged && action !== "adopt_spmb" && !normalize(raw.angkatan)) {
       errors.push("perubahan departemen siswa existing harus disertai angkatan baru yang sesuai");
     }
     const kelasPayload = kelas && tahunAjaran ? { kelas_id: kelas.id, tahun_ajaran_id: tahunAjaran.id } : null;
