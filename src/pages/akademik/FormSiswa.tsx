@@ -48,6 +48,7 @@ const siswaSchema = z.object({
   spmb_tahun_ajaran_id: optionalString,
   jenis_pendaftaran: optionalString,
   nik: optionalString,
+  nik_dapodik: optionalString,
   no_kk: optionalString,
   kategori: optionalString,
   status_asrama: optionalString,
@@ -329,7 +330,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
       departemen_id: activeKelas?.kelas?.departemen?.id || (siswa as any).departemen_id || "",
       tingkat_id: activeKelas?.kelas?.tingkat?.id || "", kelas_id: activeKelas?.kelas?.id || "", tahun_ajaran_id: activeKelas?.tahun_ajaran?.id || "",
       spmb_tahun_ajaran_id: detail?.tahun_ajaran_id || "", jenis_pendaftaran: detail?.jenis_pendaftaran || "baru",
-      nik: detail?.nik || "", no_kk: detail?.no_kk || "", kategori: detail?.kategori || "", status_asrama: detail?.status_asrama || "",
+      nik: detail?.nik || "", nik_dapodik: detail?.nik_dapodik || "", no_kk: detail?.no_kk || "", kategori: detail?.kategori || "", status_asrama: detail?.status_asrama || "",
       anak_ke: detail?.anak_ke?.toString?.() || "", jumlah_bersaudara: detail?.jumlah_bersaudara?.toString?.() || "",
       tinggi_badan_cm: detail?.tinggi_badan_cm?.toString?.() || "", berat_badan_kg: detail?.berat_badan_kg?.toString?.() || "",
       lingkar_kepala_cm: detail?.lingkar_kepala_cm?.toString?.() || "", ukuran_baju: detail?.ukuran_baju || "",
@@ -399,6 +400,10 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
       toast.error("NISN wajib diisi 10 digit untuk SMP, SMA, dan MTA");
       return;
     }
+    if (values.nik_dapodik && !/^\d{16}$/.test(values.nik_dapodik)) {
+      toast.error("NIK Dapodik harus 16 digit");
+      return;
+    }
     if (wajibAsrama && !values.status_asrama) {
       toast.error("Pilihan Asrama / Non Asrama wajib diisi untuk SMP atau SMA. MTA otomatis Asrama.");
       return;
@@ -409,7 +414,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
     }
 
     const siswaData: Record<string, unknown> = {
-      nama: values.nama, nis: values.nis || null, nisn: wajibNisn ? values.nisn || null : null, jenis_kelamin: values.jenis_kelamin,
+      nama: values.nama, nis: values.nis || null, nisn: values.nisn || null, jenis_kelamin: values.jenis_kelamin,
       tempat_lahir: values.tempat_lahir || null, tanggal_lahir: values.tanggal_lahir || null,
       agama: values.agama || null, alamat: values.alamat || null, telepon: values.telepon || null,
       email: values.email || null, foto_url: values.foto_url || null, status: values.status,
@@ -420,7 +425,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
       dokumen_kk_path: values.dokumen_kk_path || null, dokumen_akta_path: values.dokumen_akta_path || null,
       dokumen_rapor_path: values.dokumen_rapor_path || null, dokumen_ijazah_path: values.dokumen_ijazah_path || null,
       tahun_ajaran_id: values.spmb_tahun_ajaran_id || null, jenis_pendaftaran: values.jenis_pendaftaran || null,
-      nik: values.nik || null, no_kk: values.no_kk || null, kategori: values.kategori || null,
+      nik: values.nik || null, nik_dapodik: values.nik_dapodik || null, no_kk: values.no_kk || null, kategori: values.kategori || null,
       status_asrama: mtaWajibAsrama ? "asrama" : wajibAsrama ? values.status_asrama || null : null,
       anak_ke: numberOrNull(values.anak_ke), jumlah_bersaudara: numberOrNull(values.jumlah_bersaudara),
       tinggi_badan_cm: numberOrNull(values.tinggi_badan_cm), berat_badan_kg: numberOrNull(values.berat_badan_kg),
@@ -547,7 +552,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                         <FormField control={form.control} name="nis" render={({ field }) => (
                           <FormItem><FormLabel>NIS</FormLabel><FormControl><Input {...field} disabled={nisMode !== "ketik"} placeholder={nisMode === "otomatis" ? "Dibuat otomatis saat simpan" : nisMode === "manual" ? "Gunakan tombol Generate NIS" : "Ketik NIS"} /></FormControl><FormMessage /></FormItem>
                         )} />
-                        {wajibNisn && <TextField form={form} name="nisn" label="NISN *" inputMode="numeric" onValueChange={() => resetVerification("nisn")} after={verificationControl("nisn")} />}
+                        <TextField form={form} name="nisn" label={wajibNisn ? "NISN *" : "NISN"} inputMode="numeric" onValueChange={() => resetVerification("nisn")} after={verificationControl("nisn")} />
                         {nisMode === "manual" && (
                           <Button type="button" size="sm" variant="outline" disabled={!canGenerateManual || isGeneratingNis} onClick={handleGenerateNisClick}>
                             {isGeneratingNis ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Wand2 className="h-3 w-3 mr-1" />}Generate NIS
@@ -627,7 +632,8 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                         <FormItem><FormLabel>Periode Tahun Ajaran SPMB</FormLabel><Select onValueChange={(value) => { field.onChange(value); resetVerification("tahun_ajaran_id"); }} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Pilih periode" /></SelectTrigger></FormControl><SelectContent>{tahunAjaranList.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.nama} {t.aktif ? "(Aktif)" : ""}</SelectItem>)}</SelectContent></Select><FormMessage />{verificationControl("tahun_ajaran_id")}</FormItem>
                       )} />
                       <SelectField form={form} name="jenis_pendaftaran" label="Jenis Pendaftaran" options={jenisPendaftaranOptions} onValueChange={() => resetVerification("jenis_pendaftaran")} after={verificationControl("jenis_pendaftaran")} />
-                      <TextField form={form} name="nik" label="NIK" inputMode="numeric" onValueChange={() => resetVerification("nik")} after={verificationControl("nik")} />
+                      <TextField form={form} name="nik" label="NIK Hijrah" inputMode="numeric" onValueChange={() => resetVerification("nik")} after={verificationControl("nik")} />
+                      <TextField form={form} name="nik_dapodik" label="NIK Dapodik" inputMode="numeric" />
                       <TextField form={form} name="no_kk" label="No. KK" inputMode="numeric" onValueChange={() => resetVerification("no_kk")} after={verificationControl("no_kk")} />
                       <SelectField form={form} name="kategori" label="Kategori" options={kategoriOptions} onValueChange={() => resetVerification("kategori")} after={verificationControl("kategori")} />
                       {wajibAsrama && (mtaWajibAsrama
