@@ -284,7 +284,7 @@ export function ImportSiswaDialog({
         <div className="space-y-4">
           <div className="space-y-1 text-sm text-muted-foreground">
             <p>Untuk siswa baru, <span className="font-medium text-foreground">departemen wajib</span>. Kelas harus sesuai lembaga dan tingkat serta diisi bersama tahun ajaran. Untuk update, gunakan file unduhan yang berisi <span className="font-medium text-foreground">siswa_id</span>; siswa tanpa NIS tetap dapat dicocokkan dengan aman.</p>
-            <p>Sel kosong saat update mempertahankan nilai lama. NIS, NISN, NIK Hijrah, dan NIK Dapodik dapat dikoreksi melalui file update; perubahannya tetap masuk audit identitas. NISN harus 10 digit, sedangkan NIK/No. KK 16 digit, dan semuanya sebaiknya disimpan sebagai teks di Excel.</p>
+            <p>Sel kosong saat update mempertahankan nilai lama. NIS, NISN, NIK Hijrah, dan NIK Dapodik dapat dikoreksi melalui file update; perubahannya tetap masuk audit identitas. NIK Hijrah adalah data legacy sehingga boleh kurang/lebih dari 16 digit, tetapi tetap simpan sebagai teks. NISN harus 10 digit, sedangkan NIK Dapodik dan No. KK harus tepat 16 digit.</p>
           </div>
 
           <div className="flex flex-wrap gap-3">
