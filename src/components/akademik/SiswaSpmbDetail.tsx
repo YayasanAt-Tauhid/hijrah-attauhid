@@ -168,7 +168,8 @@ export function SiswaSpmbDetail({ detail }: { detail: Detail | null | undefined 
         <InfoRow label="Periode Tahun Ajaran" value={tahunAjaran || detail.tahun_ajaran_id} />
         <InfoRow label="Jenis Pendaftaran" value={detail.jenis_pendaftaran} />
         <InfoRow label="Kategori" value={detail.kategori} />
-        <InfoRow label="NIK Calon Siswa" value={detail.nik} />
+        <InfoRow label="NIK Hijrah" value={detail.nik} />
+        <InfoRow label="NIK Dapodik" value={detail.nik_dapodik} />
         <InfoRow label="No. KK" value={detail.no_kk} />
         <InfoRow label="Asrama / Non Asrama" value={statusAsrama} />
         <InfoRow label="Anak ke" value={detail.anak_ke} />
