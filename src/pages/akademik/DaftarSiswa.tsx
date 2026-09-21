@@ -65,6 +65,9 @@ export default function DaftarSiswa() {
 
   const columns: DataTableColumn<Record<string, unknown>>[] = [
     { key: "nis", label: "NIS", sortable: true },
+    { key: "nisn", label: "NISN", sortable: true },
+    { key: "_nik_hijrah", label: "NIK Hijrah", sortable: true, render: (_, row) => (row as any)._nik_hijrah || "-" },
+    { key: "_nik_dapodik", label: "NIK Dapodik", sortable: true, render: (_, row) => (row as any)._nik_dapodik || "-" },
     {
       key: "foto_url", label: "Foto", className: "w-12",
       render: (val, row) => (
@@ -110,6 +113,8 @@ export default function DaftarSiswa() {
       _tingkat: kelas?.tingkat?.nama || "-",
       _departemen: kelas?.departemen?.nama || departemenList.find((d: any) => d.id === s.departemen_id)?.nama || "-",
       _asrama: labelAsrama(detail?.status_asrama),
+      _nik_hijrah: detail?.nik || "",
+      _nik_dapodik: detail?.nik_dapodik || "",
     } as Record<string, unknown>;
   });
 
@@ -119,6 +124,9 @@ export default function DaftarSiswa() {
       const detail = siswaDetail(s);
       return {
         NIS: s.nis || "",
+        NISN: s.nisn || "",
+        "NIK Hijrah": detail?.nik || "",
+        "NIK Dapodik": detail?.nik_dapodik || "",
         Nama: s.nama,
         "Jenis Kelamin": s.jenis_kelamin === "L" ? "Laki-laki" : s.jenis_kelamin === "P" ? "Perempuan" : "",
         Kelas: kelas?.nama || "",
@@ -189,7 +197,7 @@ export default function DaftarSiswa() {
       <DataTable
         columns={columns}
         data={tableData}
-        searchPlaceholder="Cari NIS atau nama siswa..."
+        searchPlaceholder="Cari NIS, NISN, NIK, atau nama siswa..."
         pageSize={20}
         exportable
         exportFilename="data-siswa"
