@@ -44,7 +44,8 @@ describe('Integration API v1 contract', () => {
 
   it('serializes registration payment without exposing provider secrets', () => {
     expect(api).toContain('integration_registration_payment_status')
-    expect(api).toContain('pembayaran_pendaftaran:await payment(ctx,s)')
+    expect(api).toContain('pembayaran_pendaftaran:await payment(ctx,s,d)')
+    expect(api).toContain('d.spmb_departemen_tujuan_id||s.departemen_id')
     expect(api).not.toContain('snap_token:')
     expect(api).not.toContain('pmb_payment_token:')
   })
