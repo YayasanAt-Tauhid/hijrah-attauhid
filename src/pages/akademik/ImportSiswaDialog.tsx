@@ -71,16 +71,45 @@ export function ImportSiswaDialog({
   const loadExistingStudents = async (data: SiswaImportRow[]): Promise<ExistingStudentForImport[]> => {
     const ids = [...new Set(data.map((row) => normalize(row.siswa_id)).filter(Boolean))];
     const nisList = [...new Set(data.map((row) => normalize(row.nis)).filter(Boolean))];
+    const nisnList = [...new Set(data.map((row) => normalize(row.nisn)).filter(Boolean))];
+    const nikDapodikList = [...new Set(data.map((row) => normalize(row.nik_dapodik)).filter(Boolean))];
     const found = new Map<string, ExistingStudentForImport>();
     for (const idChunk of chunks(ids)) {
-      const { data: existing, error } = await supabase.from("siswa").select("id, nis, status, departemen_id").in("id", idChunk);
+      const { data: existing, error } = await supabase.from("siswa").select("id, nis, nisn, status, departemen_id").in("id", idChunk);
       if (error) throw error;
       for (const student of existing || []) found.set(student.id, student as ExistingStudentForImport);
     }
     for (const nisChunk of chunks(nisList)) {
-      const { data: existing, error } = await supabase.from("siswa").select("id, nis, status, departemen_id").in("nis", nisChunk);
+      const { data: existing, error } = await supabase.from("siswa").select("id, nis, nisn, status, departemen_id").in("nis", nisChunk);
       if (error) throw error;
       for (const student of existing || []) found.set(student.id, student as ExistingStudentForImport);
+    }
+    for (const nisnChunk of chunks(nisnList)) {
+      const { data: existing, error } = await supabase.from("siswa").select("id, nis, nisn, status, departemen_id").in("nisn", nisnChunk);
+      if (error) throw error;
+      for (const student of existing || []) found.set(student.id, student as ExistingStudentForImport);
+    }
+
+    const nikDapodikByStudent = new Map<string, string>();
+    const dapodikStudentIds = new Set<string>();
+    for (const nikChunk of chunks(nikDapodikList)) {
+      const { data: details, error } = await (supabase as any).from("siswa_detail").select("siswa_id, nik_dapodik").in("nik_dapodik", nikChunk);
+      if (error) throw error;
+      for (const detail of details || []) {
+        if (!detail.siswa_id) continue;
+        dapodikStudentIds.add(detail.siswa_id);
+        nikDapodikByStudent.set(detail.siswa_id, detail.nik_dapodik || "");
+      }
+    }
+    const missingStudentIds = [...dapodikStudentIds].filter((id) => !found.has(id));
+    for (const idChunk of chunks(missingStudentIds)) {
+      const { data: existing, error } = await supabase.from("siswa").select("id, nis, nisn, status, departemen_id").in("id", idChunk);
+      if (error) throw error;
+      for (const student of existing || []) found.set(student.id, student as ExistingStudentForImport);
+    }
+    for (const [id, nikDapodik] of nikDapodikByStudent) {
+      const student = found.get(id);
+      if (student) found.set(id, { ...student, nik_dapodik: nikDapodik });
     }
     return [...found.values()];
   };
@@ -140,7 +169,7 @@ export function ImportSiswaDialog({
     try {
       const siswaData = await fetchAllPages<any>((from, to) =>
         supabase.from("siswa").select(`
-          id, nis, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, agama, alamat,
+          id, nis, nisn, nama, jenis_kelamin, tempat_lahir, tanggal_lahir, agama, alamat,
           telepon, email, status, departemen_id,
           angkatan:angkatan_id(id, nama), siswa_detail(*),
           kelas_siswa(id, aktif, kelas:kelas_id(id, nama, tingkat:tingkat_id(id, nama), departemen:departemen_id(id, nama)), tahun_ajaran:tahun_ajaran_id(id, nama))
@@ -152,12 +181,12 @@ export function ImportSiswaDialog({
         const department = departemenList.find((item) => item.id === student.departemen_id);
         const registrationPeriod = tahunAjaranList.find((item) => item.id === detail.tahun_ajaran_id);
         return {
-          siswa_id: student.id, nis: student.nis || "", nama: student.nama || "", jenis_kelamin: student.jenis_kelamin || "",
+          siswa_id: student.id, nis: student.nis || "", nisn: student.nisn || "", nama: student.nama || "", jenis_kelamin: student.jenis_kelamin || "",
           tempat_lahir: student.tempat_lahir || "", tanggal_lahir: student.tanggal_lahir || "", agama: student.agama || "", alamat: student.alamat || "",
           telepon: student.telepon || "", email: student.email || "", status: student.status || "",
           departemen: department?.nama || activeClass?.kelas?.departemen?.nama || "", tingkat: activeClass?.kelas?.tingkat?.nama || "",
           kelas: activeClass?.kelas?.nama || "", tahun_ajaran: activeClass?.tahun_ajaran?.nama || "", angkatan: student.angkatan?.nama || "",
-          periode_pendaftaran: registrationPeriod?.nama || "", jenis_pendaftaran: detail.jenis_pendaftaran || "", nik: detail.nik || "", no_kk: detail.no_kk || "",
+          periode_pendaftaran: registrationPeriod?.nama || "", jenis_pendaftaran: detail.jenis_pendaftaran || "", nik: detail.nik || "", nik_dapodik: detail.nik_dapodik || "", no_kk: detail.no_kk || "",
           kategori: detail.kategori || "", status_asrama: detail.status_asrama || "", anak_ke: detail.anak_ke ?? "", jumlah_bersaudara: detail.jumlah_bersaudara ?? "",
           tinggi_badan_cm: detail.tinggi_badan_cm ?? "", berat_badan_kg: detail.berat_badan_kg ?? "", lingkar_kepala_cm: detail.lingkar_kepala_cm ?? "",
           ukuran_baju: detail.ukuran_baju || "", penyakit_pernah_diderita: detail.penyakit_pernah_diderita || "", jarak_rumah_km: detail.jarak_rumah_km ?? "",
@@ -230,7 +259,8 @@ export function ImportSiswaDialog({
 
   const downloadReport = () => {
     const report = rows.map((row) => ({
-      baris_excel: row.rowNumber, siswa_id: normalize(row.raw.siswa_id), nis: normalize(row.raw.nis), nama: normalize(row.raw.nama),
+      baris_excel: row.rowNumber, siswa_id: normalize(row.raw.siswa_id), nis: normalize(row.raw.nis), nisn: normalize(row.raw.nisn),
+      nik_hijrah: normalize(row.raw.nik), nik_dapodik: normalize(row.raw.nik_dapodik), nama: normalize(row.raw.nama),
       aksi: row.action === "update" ? "update" : "baru",
       hasil: row.errors.length ? "gagal_validasi" : row.runStatus === "success" ? "berhasil" : row.runStatus === "error" ? "gagal_simpan" : "belum_diproses",
       alasan: row.errors.length ? row.errors.join("; ") : row.runMessage || "",
@@ -254,7 +284,7 @@ export function ImportSiswaDialog({
         <div className="space-y-4">
           <div className="space-y-1 text-sm text-muted-foreground">
             <p>Untuk siswa baru, <span className="font-medium text-foreground">departemen wajib</span>. Kelas harus sesuai lembaga dan tingkat serta diisi bersama tahun ajaran. Untuk update, gunakan file unduhan yang berisi <span className="font-medium text-foreground">siswa_id</span>; siswa tanpa NIS tetap dapat dicocokkan dengan aman.</p>
-            <p>Sel kosong saat update mempertahankan nilai lama. Penghapusan nilai, perubahan status siswa existing, dan upload dokumen KK/Akta/Rapor/Ijazah dilakukan melalui Edit Siswa/SPMB/Mutasi. NIK dan No. KK harus 16 digit dan disimpan sebagai teks di Excel.</p>
+            <p>Sel kosong saat update mempertahankan nilai lama. NIS, NISN, NIK Hijrah, dan NIK Dapodik dapat dikoreksi melalui file update; perubahannya tetap masuk audit identitas. NISN harus 10 digit, sedangkan NIK/No. KK 16 digit, dan semuanya sebaiknya disimpan sebagai teks di Excel.</p>
           </div>
 
           <div className="flex flex-wrap gap-3">
@@ -269,7 +299,7 @@ export function ImportSiswaDialog({
 
           <div className="flex items-start gap-2 rounded-md border p-3">
             <Checkbox id="update-existing" checked={updateExisting} disabled={busy || hasSuccessfulRows} onCheckedChange={(checked) => handleToggleUpdateExisting(checked === true)} />
-            <Label htmlFor="update-existing" className="text-sm cursor-pointer font-normal leading-5">Izinkan update siswa yang sudah ada. Tanpa opsi ini, NIS/siswa_id yang sudah terdaftar menjadi error—tidak pernah dibuat sebagai duplikat baru.</Label>
+            <Label htmlFor="update-existing" className="text-sm cursor-pointer font-normal leading-5">Izinkan update siswa yang sudah ada. Gunakan siswa_id sebagai identitas utama agar NIS/NISN/NIK dapat dikoreksi dengan aman. Tanpa opsi ini, siswa yang sudah terdaftar menjadi error—tidak pernah dibuat sebagai duplikat baru.</Label>
           </div>
 
           {hasSuccessfulRows && <p className="text-xs text-muted-foreground">File dan opsi update dikunci setelah ada baris berhasil. Tutup dialog untuk memulai file baru; baris sukses pada proses ini tidak akan dijalankan ulang.</p>}
@@ -285,7 +315,7 @@ export function ImportSiswaDialog({
                   <TableBody>{rows.slice(0, 20).map((row) => (
                     <TableRow key={`${row.rowNumber}-${normalize(row.raw.siswa_id)}-${normalize(row.raw.nis)}`} className={row.errors.length || row.runStatus === "error" ? "bg-destructive/10" : ""}>
                       <TableCell>{row.rowNumber}</TableCell>
-                      <TableCell className="font-mono text-xs"><div>{normalize(row.raw.siswa_id) || "-"}</div><div className="text-muted-foreground">NIS: {normalize(row.raw.nis) || "-"}</div></TableCell>
+                      <TableCell className="font-mono text-xs"><div>{normalize(row.raw.siswa_id) || "-"}</div><div className="text-muted-foreground">NIS: {normalize(row.raw.nis) || "-"}</div><div className="text-muted-foreground">NISN: {normalize(row.raw.nisn) || "-"}</div></TableCell>
                       <TableCell>{normalize(row.raw.nama) || "-"}</TableCell>
                       <TableCell><div>{normalize(row.raw.departemen) || "(dipertahankan)"}</div><div className="text-xs text-muted-foreground">{normalize(row.raw.kelas) || "-"}</div></TableCell>
                       <TableCell>{row.action === "update" ? <Badge variant="secondary">Update</Badge> : <Badge variant="outline">Baru</Badge>}</TableCell>
