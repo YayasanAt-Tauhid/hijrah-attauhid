@@ -110,16 +110,31 @@ export function ImportSiswaDialog({
       }
     }
 
-    const spmbDetails = await fetchAllPages<any>((from, to) => (supabase as any).from("siswa_detail")
-      .select("siswa_id,nik,nik_dapodik,spmb_gelombang_id,spmb_siswa_internal")
-      .not("spmb_gelombang_id", "is", null)
-      .order("siswa_id")
-      .range(from, to));
-    const wantedLegacy = new Set(nikLegacyList);
-    for (const detail of spmbDetails || []) {
-      if (!detail.siswa_id) continue;
-      if (wantedLegacy.size && wantedLegacy.has(normalize(detail.nik))) discoveredIds.add(detail.siswa_id);
-      detailByStudent.set(detail.siswa_id, { ...(detailByStudent.get(detail.siswa_id) || {}), ...detail });
+    const { data: spmbCandidates, error: spmbCandidateError } = await (supabase as any).rpc(
+      "akademik_find_spmb_migration_candidates",
+      { p_nisns: nisnList, p_niks: [...new Set([...nikLegacyList, ...nikDapodikList])] },
+    );
+    if (spmbCandidateError) throw spmbCandidateError;
+    for (const candidate of spmbCandidates || []) {
+      if (!candidate.id) continue;
+      discoveredIds.add(candidate.id);
+      found.set(candidate.id, {
+        id: candidate.id,
+        nis: candidate.nis,
+        nisn: candidate.nisn,
+        status: candidate.status,
+        departemen_id: candidate.departemen_id,
+        nik: candidate.nik,
+        nik_dapodik: candidate.nik_dapodik,
+        spmb_gelombang_id: candidate.spmb_gelombang_id,
+        spmb_siswa_internal: candidate.spmb_siswa_internal,
+      });
+      detailByStudent.set(candidate.id, {
+        nik: candidate.nik,
+        nik_dapodik: candidate.nik_dapodik,
+        spmb_gelombang_id: candidate.spmb_gelombang_id,
+        spmb_siswa_internal: candidate.spmb_siswa_internal,
+      });
     }
 
     const allDetailIds = [...new Set([...found.keys(), ...discoveredIds])];
