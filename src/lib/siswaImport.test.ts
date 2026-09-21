@@ -32,6 +32,15 @@ describe("prepareImportRows", () => {
     expect(row.siswaPayload.nama).toBe("Nama Baru"); expect(row.siswaPayload.departemen_id).toBe("d-sd");
   });
 
+  it("accepts NIS up to 13 characters and rejects longer values", () => {
+    const [maxLength] = prepare([{ siswa_id: STUDENT_A, nis: "ABC1234567890" }]);
+    expect(maxLength.errors).toEqual([]);
+    expect(maxLength.siswaPayload.nis).toBe("ABC1234567890");
+
+    const [tooLong] = prepare([{ siswa_id: STUDENT_A, nis: "ABC12345678901" }]);
+    expect(tooLong.errors.join(" ")).toContain("NIS maksimal 13 karakter");
+  });
+
   it("allows correcting NIS by siswa_id but rejects a NIS owned by another student", () => {
     const [corrected] = prepare([{ siswa_id: STUDENT_A, nis: "260099" }]);
     expect(corrected.errors).toEqual([]);
