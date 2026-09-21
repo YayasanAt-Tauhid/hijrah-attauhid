@@ -3,11 +3,11 @@ import * as XLSX from "xlsx";
 export type ImportCell = string | number | boolean | null | undefined;
 
 export interface SiswaImportRow {
-  siswa_id?: ImportCell; nis?: ImportCell; nama?: ImportCell; jenis_kelamin?: ImportCell;
+  siswa_id?: ImportCell; nis?: ImportCell; nisn?: ImportCell; nama?: ImportCell; jenis_kelamin?: ImportCell;
   tempat_lahir?: ImportCell; tanggal_lahir?: ImportCell; agama?: ImportCell; alamat?: ImportCell;
   telepon?: ImportCell; email?: ImportCell; status?: ImportCell; departemen?: ImportCell;
   tingkat?: ImportCell; kelas?: ImportCell; tahun_ajaran?: ImportCell; angkatan?: ImportCell;
-  periode_pendaftaran?: ImportCell; jenis_pendaftaran?: ImportCell; nik?: ImportCell; no_kk?: ImportCell;
+  periode_pendaftaran?: ImportCell; jenis_pendaftaran?: ImportCell; nik?: ImportCell; nik_dapodik?: ImportCell; no_kk?: ImportCell;
   kategori?: ImportCell; status_asrama?: ImportCell; anak_ke?: ImportCell; jumlah_bersaudara?: ImportCell;
   tinggi_badan_cm?: ImportCell; berat_badan_kg?: ImportCell; lingkar_kepala_cm?: ImportCell; ukuran_baju?: ImportCell;
   penyakit_pernah_diderita?: ImportCell; jarak_rumah_km?: ImportCell; waktu_perjalanan_menit?: ImportCell; transportasi?: ImportCell;
@@ -31,7 +31,9 @@ export interface ImportReferences {
   departemenList: DepartemenRef[]; tingkatList: TingkatRef[]; kelasList: KelasRef[];
   tahunAjaranList: TahunAjaranRef[]; angkatanList: AngkatanRef[];
 }
-export interface ExistingStudentForImport { id: string; nis: string | null; status: string | null; departemen_id: string | null }
+export interface ExistingStudentForImport {
+  id: string; nis: string | null; nisn?: string | null; status: string | null; departemen_id: string | null; nik_dapodik?: string | null;
+}
 export interface PreparedImportRow {
   rowNumber: number; raw: SiswaImportRow; action: "insert" | "update"; existingId?: string; errors: string[];
   siswaPayload: Record<string, unknown>; detailPayload: Record<string, unknown>;
@@ -44,9 +46,9 @@ const VALID_STATUS_ASRAMA = new Set(["asrama", "non_asrama"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const IMPORT_COLUMNS = [
-  "siswa_id", "nis", "nama", "jenis_kelamin", "tempat_lahir", "tanggal_lahir", "agama", "alamat", "telepon", "email", "status",
+  "siswa_id", "nis", "nisn", "nama", "jenis_kelamin", "tempat_lahir", "tanggal_lahir", "agama", "alamat", "telepon", "email", "status",
   "departemen", "tingkat", "kelas", "tahun_ajaran", "angkatan",
-  "periode_pendaftaran", "jenis_pendaftaran", "nik", "no_kk", "kategori", "status_asrama",
+  "periode_pendaftaran", "jenis_pendaftaran", "nik", "nik_dapodik", "no_kk", "kategori", "status_asrama",
   "anak_ke", "jumlah_bersaudara", "tinggi_badan_cm", "berat_badan_kg", "lingkar_kepala_cm", "ukuran_baju",
   "penyakit_pernah_diderita", "jarak_rumah_km", "waktu_perjalanan_menit", "transportasi",
   "nama_ayah", "nik_ayah", "tempat_lahir_ayah", "tanggal_lahir_ayah", "pendidikan_ayah", "pekerjaan_ayah", "penghasilan_ayah", "telepon_ayah", "alamat_ayah",
@@ -55,7 +57,7 @@ export const IMPORT_COLUMNS = [
   "kelas_terakhir", "alasan_pindah", "kemampuan_iqro", "membaca_latin", "menulis_latin", "hafalan_quran",
 ] as const;
 
-const TEXT_SENSITIVE_COLUMNS = new Set(["siswa_id", "nis", "nik", "no_kk", "nik_ayah", "nik_ibu", "telepon", "telepon_ayah", "telepon_ibu"]);
+const TEXT_SENSITIVE_COLUMNS = new Set(["siswa_id", "nis", "nisn", "nik", "nik_dapodik", "no_kk", "nik_ayah", "nik_ibu", "telepon", "telepon_ayah", "telepon_ibu"]);
 
 export function normalize(value: unknown): string { return (value ?? "").toString().trim(); }
 function normalizeKey(value: unknown): string { return normalize(value).toLocaleLowerCase("id-ID"); }
@@ -106,6 +108,11 @@ function validateIdentityNumber(value: ImportCell, label: string, errors: string
   if (typeof value === "number") { errors.push(`${label} harus 16 digit dan disimpan sebagai teks di Excel`); return; }
   if (!/^\d{16}$/.test(normalize(value))) errors.push(`${label} harus tepat 16 digit`);
 }
+function validateNisn(value: ImportCell, errors: string[]) {
+  if (!normalize(value)) return;
+  if (typeof value === "number") { errors.push("NISN harus 10 digit dan disimpan sebagai teks di Excel"); return; }
+  if (!/^\d{10}$/.test(normalize(value))) errors.push("NISN harus tepat 10 digit");
+}
 function isAsramaDepartment(dept: DepartemenRef | undefined): boolean {
   if (!dept) return false;
   const kode = normalize(dept.kode).toUpperCase(), nama = normalize(dept.nama).toUpperCase();
@@ -120,28 +127,49 @@ function countDuplicates(values: string[]): Map<string, number> {
 export function prepareImportRows(rawRows: SiswaImportRow[], references: ImportReferences, existingStudents: ExistingStudentForImport[], allowUpdate: boolean): PreparedImportRow[] {
   const byId = new Map(existingStudents.map((student) => [student.id, student]));
   const byNis = new Map<string, ExistingStudentForImport[]>();
+  const byNisn = new Map<string, ExistingStudentForImport[]>();
+  const byNikDapodik = new Map<string, ExistingStudentForImport[]>();
   for (const student of existingStudents) {
-    const nis = normalize(student.nis); if (!nis) continue;
-    const list = byNis.get(nis) || []; list.push(student); byNis.set(nis, list);
+    const nis = normalize(student.nis);
+    if (nis) { const list = byNis.get(nis) || []; list.push(student); byNis.set(nis, list); }
+    const nisn = normalize(student.nisn);
+    if (nisn) { const list = byNisn.get(nisn) || []; list.push(student); byNisn.set(nisn, list); }
+    const nikDapodik = normalize(student.nik_dapodik);
+    if (nikDapodik) { const list = byNikDapodik.get(nikDapodik) || []; list.push(student); byNikDapodik.set(nikDapodik, list); }
   }
   const duplicateIds = countDuplicates(rawRows.map((row) => normalize(row.siswa_id)));
   const duplicateNis = countDuplicates(rawRows.map((row) => normalize(row.nis)));
+  const duplicateNisn = countDuplicates(rawRows.map((row) => normalize(row.nisn)));
+  const duplicateNikDapodik = countDuplicates(rawRows.map((row) => normalize(row.nik_dapodik)));
 
   return rawRows.map((raw, index) => {
     const errors: string[] = [], siswaId = normalize(raw.siswa_id), nis = normalize(raw.nis);
+    const nisn = normalize(raw.nisn), nikDapodik = normalize(raw.nik_dapodik);
     if (siswaId && !UUID_RE.test(siswaId)) errors.push("siswa_id bukan UUID yang valid");
     if (siswaId && (duplicateIds.get(siswaId) || 0) > 1) errors.push(`siswa_id ganda dalam file: ${siswaId}`);
     if (nis && (duplicateNis.get(nis) || 0) > 1) errors.push(`NIS ganda dalam file: ${nis}`);
+    if (nisn && (duplicateNisn.get(nisn) || 0) > 1) errors.push(`NISN ganda dalam file: ${nisn}`);
+    if (nikDapodik && (duplicateNikDapodik.get(nikDapodik) || 0) > 1) errors.push(`NIK Dapodik ganda dalam file: ${nikDapodik}`);
 
     const matchById = siswaId ? byId.get(siswaId) : undefined;
     const nisMatches = nis ? byNis.get(nis) || [] : [];
+    const nisnMatches = nisn ? byNisn.get(nisn) || [] : [];
+    const nikDapodikMatches = nikDapodik ? byNikDapodik.get(nikDapodik) || [] : [];
     if (siswaId && !matchById) errors.push(`siswa_id tidak ditemukan: ${siswaId}`);
     if (nisMatches.length > 1) errors.push(`NIS ${nis} terhubung ke lebih dari satu siswa di database`);
+    if (nisnMatches.length > 1) errors.push(`NISN ${nisn} terhubung ke lebih dari satu siswa di database`);
+    if (nikDapodikMatches.length > 1) errors.push(`NIK Dapodik ${nikDapodik} terhubung ke lebih dari satu siswa di database`);
     const matchByNis = nisMatches.length === 1 ? nisMatches[0] : undefined;
-    if (matchById && nis && normalize(matchById.nis) !== nis) errors.push("siswa_id dan NIS tidak cocok dengan siswa yang sama; ubah NIS melalui Edit Siswa");
-    if (matchById && matchByNis && matchById.id !== matchByNis.id) errors.push("siswa_id dan NIS menunjuk ke siswa yang berbeda");
+    const matchByNisn = nisnMatches.length === 1 ? nisnMatches[0] : undefined;
+    const matchByNikDapodik = nikDapodikMatches.length === 1 ? nikDapodikMatches[0] : undefined;
 
-    const existing = matchById || matchByNis;
+    if (matchById && matchByNis && matchById.id !== matchByNis.id) errors.push("NIS baru sudah digunakan siswa lain");
+    if (matchById && matchByNisn && matchById.id !== matchByNisn.id) errors.push("NISN baru sudah digunakan siswa lain");
+    if (matchById && matchByNikDapodik && matchById.id !== matchByNikDapodik.id) errors.push("NIK Dapodik baru sudah digunakan siswa lain");
+
+    const existing = matchById || (!siswaId ? matchByNis : undefined);
+    if (!existing && matchByNisn) errors.push("NISN sudah terdaftar; gunakan file update yang memuat siswa_id");
+    if (!existing && matchByNikDapodik) errors.push("NIK Dapodik sudah terdaftar; gunakan file update yang memuat siswa_id");
     const action: "insert" | "update" = existing ? "update" : "insert";
     if (existing && !allowUpdate) errors.push("siswa sudah ada di database; aktifkan opsi update untuk memperbarui");
     const insert = action === "insert";
@@ -151,6 +179,8 @@ export function prepareImportRows(rawRows: SiswaImportRow[], references: ImportR
     if (insert && !nama) errors.push("nama wajib diisi untuk siswa baru");
     if (nama) siswaPayload.nama = nama;
     if (nis) siswaPayload.nis = nis; else if (insert) siswaPayload.nis = null;
+    validateNisn(raw.nisn, errors);
+    if (nisn) siswaPayload.nisn = nisn; else if (insert) siswaPayload.nisn = null;
 
     const jk = normalize(raw.jenis_kelamin).toUpperCase();
     if (jk && !["L", "P"].includes(jk)) errors.push("jenis_kelamin harus L atau P");
@@ -232,10 +262,11 @@ export function prepareImportRows(rawRows: SiswaImportRow[], references: ImportR
     if (jenisPendaftaran && !VALID_JENIS_PENDAFTARAN.has(jenisPendaftaran)) errors.push(`jenis_pendaftaran tidak valid: ${jenisPendaftaran}`);
     else if (jenisPendaftaran) detailPayload.jenis_pendaftaran = jenisPendaftaran;
 
-    validateIdentityNumber(raw.nik, "NIK siswa", errors); validateIdentityNumber(raw.no_kk, "No. KK", errors);
+    validateIdentityNumber(raw.nik, "NIK Hijrah", errors); validateIdentityNumber(raw.nik_dapodik, "NIK Dapodik", errors);
+    validateIdentityNumber(raw.no_kk, "No. KK", errors);
     validateIdentityNumber(raw.nik_ayah, "NIK ayah", errors); validateIdentityNumber(raw.nik_ibu, "NIK ibu", errors);
     const detailStrings = [
-      "nik", "no_kk", "kategori", "ukuran_baju", "penyakit_pernah_diderita", "transportasi",
+      "nik", "nik_dapodik", "no_kk", "kategori", "ukuran_baju", "penyakit_pernah_diderita", "transportasi",
       "nama_ayah", "nik_ayah", "tempat_lahir_ayah", "pendidikan_ayah", "pekerjaan_ayah", "telepon_ayah", "alamat_ayah",
       "nama_ibu", "nik_ibu", "tempat_lahir_ibu", "pendidikan_ibu", "pekerjaan_ibu", "telepon_ibu", "alamat_ibu",
       "telepon_ortu", "alamat_ortu", "asal_sekolah", "alamat_sekolah_asal", "kabupaten_sekolah_asal", "kecamatan_sekolah_asal",
@@ -267,10 +298,10 @@ export function rowHasAnyImportValue(row: SiswaImportRow): boolean { return IMPO
 
 function sampleRow(): Record<string, string> {
   return {
-    siswa_id: "", nis: "", nama: "Ahmad Fauzan", jenis_kelamin: "L", tempat_lahir: "Pangkalpinang", tanggal_lahir: "2012-05-14",
+    siswa_id: "", nis: "", nisn: "0123456789", nama: "Ahmad Fauzan", jenis_kelamin: "L", tempat_lahir: "Pangkalpinang", tanggal_lahir: "2012-05-14",
     agama: "Islam", alamat: "Jl. Contoh No. 1", telepon: "081234567890", email: "", status: "aktif",
     departemen: "SDIT At-Tauhid", tingkat: "1", kelas: "1A", tahun_ajaran: "2026/2027", angkatan: "2026",
-    periode_pendaftaran: "2026/2027", jenis_pendaftaran: "baru", nik: "3273011405120001", no_kk: "3273010101010001",
+    periode_pendaftaran: "2026/2027", jenis_pendaftaran: "baru", nik: "3273011405120001", nik_dapodik: "3273011405120001", no_kk: "3273010101010001",
     kategori: "MURID BARU", status_asrama: "", anak_ke: "1", jumlah_bersaudara: "2", tinggi_badan_cm: "125", berat_badan_kg: "25",
     lingkar_kepala_cm: "52", ukuran_baju: "M", penyakit_pernah_diderita: "", jarak_rumah_km: "3.5", waktu_perjalanan_menit: "15", transportasi: "Sepeda Motor",
     nama_ayah: "Abdullah", nik_ayah: "3273010101800001", tempat_lahir_ayah: "Pangkalpinang", tanggal_lahir_ayah: "1980-01-01", pendidikan_ayah: "S1", pekerjaan_ayah: "WIRASWASTA", penghasilan_ayah: "5000000", telepon_ayah: "081200000001", alamat_ayah: "",
@@ -294,9 +325,9 @@ export function templateWorkbook(): XLSX.WorkBook {
   const info = XLSX.utils.aoa_to_sheet([
     ["Petunjuk Import Siswa"],
     ["1", "Untuk siswa baru, departemen wajib. Kelas harus disertai tingkat dan tahun_ajaran."],
-    ["2", "Untuk update, gunakan siswa_id dari file Data Siswa untuk Update. Jika siswa_id dan NIS sama-sama diisi, keduanya harus menunjuk siswa yang sama."],
+    ["2", "Untuk update, gunakan siswa_id dari file Data Siswa untuk Update. siswa_id adalah identitas utama; NIS, NISN, NIK Hijrah, dan NIK Dapodik boleh dikoreksi."],
     ["3", "Sel kosong pada update mempertahankan data lama. Penghapusan nilai dilakukan lewat Edit Siswa."],
-    ["4", "NIK, No. KK, NIK orang tua, NIS, dan nomor telepon disiapkan sebagai teks. Jangan ubah ke format angka/scientific notation."],
+    ["4", "NIS, NISN, NIK Hijrah, NIK Dapodik, No. KK, NIK orang tua, dan nomor telepon disiapkan sebagai teks. Jangan ubah ke format angka/scientific notation."],
     ["5", "Tanggal: YYYY-MM-DD atau DD/MM/YYYY. Tanggal kalender yang tidak nyata akan ditolak."],
     ["6", "Dokumen KK/Akta/Rapor/Ijazah tidak diimport dari Excel; unggah melalui Edit Siswa."],
     ["7", "Status siswa existing tidak dapat diubah lewat import. Gunakan alur SPMB atau Mutasi."],
