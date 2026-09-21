@@ -273,29 +273,56 @@ export default function SPMB() {
   const { data: calonList = [], isLoading } = useQuery({
     queryKey: ["siswa", "calon"],
     queryFn: async () => {
-      const siswaRows = await fetchAllPages<any>((from, to) => supabase
-        .from("siswa")
-        .select("*, angkatan:angkatan_id(nama), departemen:departemen_id(nama,kode,npsn)")
-        .in("status", ["calon", "diterima"])
-        .order("created_at", { ascending: false })
-        .order("id")
+      const details = await fetchAllPages<any>((from, to) => (supabase as any)
+        .from("siswa_detail")
+        .select("siswa_id,status_asrama,kategori,dokumen_kk_path,dokumen_akta_path,spmb_tanggal_tes,spmb_tanggal_lulus,spmb_tanggal_daftar_ulang,spmb_status_kelulusan,spmb_tanggal_keputusan,spmb_departemen_tujuan_id,spmb_angkatan_tujuan_id,spmb_status_pendaftaran,spmb_siswa_internal,spmb_gelombang_id")
+        .not("spmb_gelombang_id", "is", null)
+        .order("siswa_id")
         .range(from, to));
-      if (!siswaRows.length) return [];
+      if (!details.length) return [];
 
-      const siswaIds = siswaRows.map((s) => s.id);
+      const siswaIds = [...new Set(details.map((d: any) => d.siswa_id).filter(Boolean))];
+      const siswaRows: any[] = [];
+      for (let i = 0; i < siswaIds.length; i += 150) {
+        const chunk = siswaIds.slice(i, i + 150);
+        const { data, error } = await supabase
+          .from("siswa")
+          .select("*, angkatan:angkatan_id(nama), departemen:departemen_id(nama,kode,npsn)")
+          .in("id", chunk);
+        if (error) throw error;
+        siswaRows.push(...(data || []));
+      }
+      const siswaById = new Map<string, any>(siswaRows.map((row: any) => [row.id, row]));
+
+      const targetDeptIds = [...new Set(details.map((d: any) => d.spmb_departemen_tujuan_id).filter(Boolean))];
+      const targetCohortIds = [...new Set(details.map((d: any) => d.spmb_angkatan_tujuan_id).filter(Boolean))];
+      const targetDeptById = new Map<string, any>();
+      const targetCohortById = new Map<string, any>();
+      if (targetDeptIds.length) {
+        const { data, error } = await supabase.from("departemen").select("id,nama,kode,npsn").in("id", targetDeptIds);
+        if (error) throw error;
+        for (const item of data || []) targetDeptById.set(item.id, item);
+      }
+      if (targetCohortIds.length) {
+        const { data, error } = await supabase.from("angkatan").select("id,nama").in("id", targetCohortIds);
+        if (error) throw error;
+        for (const item of data || []) targetCohortById.set(item.id, item);
+      }
+
       const { data: readinessRows, error } = await (supabase as any).rpc("spmb_readiness_list", { p_ids: siswaIds });
       if (error) throw error;
       const byId = new Map<string, any>((readinessRows || []).map((r: any) => [r.siswa_id, r.readiness]));
-      const { data: details, error: detailError } = await (supabase as any)
-        .from("siswa_detail")
-        .select("siswa_id, status_asrama, kategori, dokumen_kk_path, dokumen_akta_path, spmb_tanggal_tes, spmb_tanggal_lulus, spmb_tanggal_daftar_ulang, spmb_status_kelulusan, spmb_tanggal_keputusan")
-        .in("siswa_id", siswaIds);
-      if (detailError) throw detailError;
-      const detailById = new Map<string, any>((details || []).map((d: any) => [d.siswa_id, d]));
 
-      return siswaRows.map((s) => {
+      return details.flatMap((detail: any) => {
+        const s = siswaById.get(detail.siswa_id);
+        if (!s) return [];
         const r = byId.get(s.id);
-        const detail = detailById.get(s.id);
+        const targetDeptId = detail.spmb_departemen_tujuan_id || s.departemen_id;
+        const targetCohortId = detail.spmb_angkatan_tujuan_id || s.angkatan_id;
+        const targetDept = targetDeptById.get(targetDeptId) || s.departemen;
+        const targetCohort = targetCohortById.get(targetCohortId) || s.angkatan;
+        const registrationStatus = detail.spmb_status_pendaftaran
+          || (["calon", "diterima"].includes(s.status) ? s.status : "calon");
         const biayaSort = r?.gratis_pendaftaran
           ? "gratis"
           : !r?.configured
@@ -303,8 +330,17 @@ export default function SPMB() {
             : r?.lunas
               ? "lunas"
               : "belum_bayar";
-        return {
+        return [{
           ...s,
+          status: registrationStatus,
+          departemen_id: targetDeptId,
+          angkatan_id: targetCohortId,
+          departemen: targetDept,
+          angkatan: targetCohort,
+          _academicStatus: s.status,
+          _academicDepartemenId: s.departemen_id,
+          _academicLembagaNama: s.departemen?.nama || "",
+          _spmbInternal: detail.spmb_siswa_internal === true,
           _readiness: r,
           _pmbConfigured: r?.configured,
           _pmbLunas: r?.lunas,
@@ -312,8 +348,8 @@ export default function SPMB() {
           _pmbTanggalBayar: r?.tanggal_pembayaran,
           _punyaKelas: r?.punya_kelas,
           _spmbDetail: detail,
-          _lembagaNama: s.departemen?.nama || "",
-          _angkatanNama: s.angkatan?.nama || "",
+          _lembagaNama: targetDept?.nama || "",
+          _angkatanNama: targetCohort?.nama || "",
           _spmbAsrama: labelAsrama(detail?.status_asrama),
           _spmbTesStatus: detail?.spmb_tanggal_tes ? "sudah" : "belum",
           _spmbTanggalTes: detail?.spmb_tanggal_tes || null,
@@ -324,7 +360,7 @@ export default function SPMB() {
           _biayaSort: biayaSort,
           _kesiapanSort: r?.siap ? "siap" : "belum",
           _verifikasiSort: s.terverifikasi ? "sudah" : "belum",
-        };
+        }];
       });
     },
   });
@@ -506,6 +542,18 @@ export default function SPMB() {
     const namaSiswa = row.nama as string;
     setNisLoadingId(id);
     try {
+      if (row._spmbInternal) {
+        const { error } = await (supabase as any).rpc("spmb_set_registration_status", {
+          p_siswa_id: id,
+          p_status: "diterima",
+        });
+        if (error) throw error;
+        await qc.invalidateQueries({ queryKey: ["siswa", "calon"] });
+        toast.success(`${namaSiswa} berhasil diterima pada SPMB`, {
+          description: "Status akademik dan kelas saat ini tetap dipertahankan sampai proses perpindahan jenjang.",
+        });
+        return;
+      }
       if (!row.nis) {
         const nisBerhasil = await generateNIS(id, departemenId, angkatanId, namaSiswa);
         if (!nisBerhasil) return;
@@ -641,6 +689,9 @@ export default function SPMB() {
         return (
           <div className="flex items-center gap-1.5">
             <span className={`rounded-full border px-2 py-0.5 text-xs ${colors[status] || ""}`}>{status}</span>
+            {row._spmbInternal && (
+              <span className="rounded-full border border-info/30 bg-info/10 px-1.5 py-0.5 text-xs text-info" title={`Siswa internal masih aktif di ${row._academicLembagaNama || "lembaga asal"}`}>Internal</span>
+            )}
             {row.terverifikasi && (
               <span className="inline-flex items-center gap-0.5 rounded-full border border-success/30 bg-success/15 px-1.5 py-0.5 text-xs text-success" title="Sudah diverifikasi pada Data SPMB">
                 <CheckCircle2 className="h-3 w-3" />Verified
@@ -656,6 +707,7 @@ export default function SPMB() {
       className: "w-80",
       render: (_, row) => {
         const status = row.status as string;
+        const internalStudent = row._spmbInternal === true;
         const loading = nisLoadingId === (row.id as string);
         const kesiapan = getKesiapanPenerimaan(row);
         const detail = row._spmbDetail as Record<string, any> | undefined;
@@ -677,8 +729,8 @@ export default function SPMB() {
                 <Button size="sm" variant="outline" disabled={loading || !kesiapan.siap} onClick={() => handleTerima(row)}>{loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Terima"}</Button>
               </span>
             )}
-            {status === "diterima" && !row.nis && <Button size="sm" variant="outline" className="border-warning/50 text-warning hover:bg-warning/10" disabled={loading} onClick={() => handleBuatNIS(row)}>{loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <><RefreshCw className="mr-1 h-3 w-3" />Buat NIS</>}</Button>}
-            {status === "diterima" && (
+            {!internalStudent && status === "diterima" && !row.nis && <Button size="sm" variant="outline" className="border-warning/50 text-warning hover:bg-warning/10" disabled={loading} onClick={() => handleBuatNIS(row)}>{loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <><RefreshCw className="mr-1 h-3 w-3" />Buat NIS</>}</Button>}
+            {!internalStudent && status === "diterima" && (
               <span title={!row.nis ? "Buat NIS terlebih dahulu" : "Aktifkan murid"}>
                 <Button size="sm" disabled={loading || !row.nis} onClick={() => handleAktifkan(row)}>Aktifkan</Button>
               </span>
