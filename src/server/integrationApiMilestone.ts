@@ -31,13 +31,14 @@ export async function handleMilestoneUpdate(request: Request, pendaftaranId: str
 
   try {
     const { data: detail, error: detailError } = await ctx.admin.from('siswa_detail')
-      .select('siswa_id,tahun_ajaran_id').eq('pendaftaran_id', pendaftaranId).maybeSingle()
+      .select('siswa_id,tahun_ajaran_id,spmb_departemen_tujuan_id').eq('pendaftaran_id', pendaftaranId).maybeSingle()
     if (detailError) throw detailError
     if (!detail) return fail('not_found', 'Pendaftaran tidak ditemukan atau di luar cakupan', 404)
     const { data: siswa, error: siswaError } = await ctx.admin.from('siswa')
       .select('departemen_id').eq('id', detail.siswa_id).maybeSingle()
     if (siswaError) throw siswaError
-    if (!siswa || !allowed(ctx, siswa.departemen_id, detail.tahun_ajaran_id)) {
+    const targetDepartemenId = detail.spmb_departemen_tujuan_id || siswa?.departemen_id
+    if (!siswa || !allowed(ctx, targetDepartemenId, detail.tahun_ajaran_id)) {
       return fail('not_found', 'Pendaftaran tidak ditemukan atau di luar cakupan', 404)
     }
 
