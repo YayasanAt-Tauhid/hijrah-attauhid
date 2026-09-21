@@ -6,6 +6,10 @@ const migration = readFileSync(
   resolve(process.cwd(), "supabase/migrations/20260921182716_spmb_internal_target_activation.sql"),
   "utf8",
 );
+const guard = readFileSync(
+  resolve(process.cwd(), "supabase/migrations/20260921183134_spmb_internal_status_completion_guard.sql"),
+  "utf8",
+);
 const page = readFileSync(resolve(process.cwd(), "src/pages/akademik/SPMB.tsx"), "utf8");
 
 describe("SPMB internal target activation contract", () => {
@@ -28,6 +32,12 @@ describe("SPMB internal target activation contract", () => {
     expect(migration).toContain("nis=new_nis");
     expect(migration).toContain("spmb_status_pendaftaran='selesai'");
     expect(migration).toContain("spmb_tanggal_aktivasi=now()");
+  });
+
+  it("only allows SPMB completion through the atomic target activation", () => {
+    expect(guard).toContain("p_status NOT IN ('calon','diterima')");
+    expect(guard).toContain("Status selesai hanya boleh dibuat melalui aktivasi ke jenjang tujuan");
+    expect(guard).toContain("spmb_tanggal_aktivasi IS NOT NULL");
   });
 
   it("serializes NIS generation per target class and preserves UI confirmation", () => {
