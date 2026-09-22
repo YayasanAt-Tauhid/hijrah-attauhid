@@ -1,9 +1,12 @@
-export const SPMB_TARGET_ACADEMIC_YEAR = "Tahun Ajaran 2027-2028";
-export const SPMB_TARGET_COHORT = "Angkatan 2027";
+export const SPMB_TARGET_ACADEMIC_YEAR = "Tahun Ajaran 2027/2028";
+export const SPMB_TARGET_COHORT = "2027";
 export const SPMB_CATEGORY_VALUE = "MURID BARU";
 export const SPMB_CATEGORY_LABEL = "Murid Baru";
 export const SPMB_TRANSFER_CATEGORY_VALUE = "MURID PINDAHAN";
 export const SPMB_TRANSFER_CATEGORY_LABEL = "Siswa Pindahan";
+
+// Nama target mengikuti nilai kanonik yang tersimpan di tabel tahun_ajaran dan angkatan.
+// Tahun ajaran target tidak harus berstatus aktif karena pendaftaran dilakukan sebelum tahun ajaran dimulai.
 
 // 23 Sep 2026 00:00 WIB = 22 Sep 2026 17:00 UTC.
 export const SPMB_FIRST_WAVE_START_AT = Date.parse("2026-09-22T17:00:00.000Z");

@@ -21,12 +21,12 @@ BEGIN
   JOIN public.konfigurasi_pmb kp ON kp.departemen_id = d.id
   JOIN public.angkatan a
     ON a.departemen_id = d.id
-   AND a.nama = 'Angkatan 2027'
+   AND a.nama = '2027'
    AND a.aktif = true
   CROSS JOIN LATERAL (
     SELECT id
     FROM public.tahun_ajaran
-    WHERE nama = 'Tahun Ajaran 2027-2028'
+    WHERE nama = 'Tahun Ajaran 2027/2028'
     LIMIT 1
   ) ta
   WHERE d.kode = 'SD'

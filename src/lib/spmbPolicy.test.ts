@@ -2,12 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   SPMB_FIRST_WAVE_END_AT,
   SPMB_FIRST_WAVE_START_AT,
+  SPMB_TARGET_ACADEMIC_YEAR,
+  SPMB_TARGET_COHORT,
   isSpmbFirstWaveFree,
   isSpmbPaymentVisible,
   isSpmbRegistrationOpen,
 } from "./spmbPolicy";
 
 describe("kebijakan SPMB Gelombang Pertama", () => {
+  it("menggunakan nama target yang sama dengan konfigurasi akademik database", () => {
+    expect(SPMB_TARGET_ACADEMIC_YEAR).toBe("Tahun Ajaran 2027/2028");
+    expect(SPMB_TARGET_COHORT).toBe("2027");
+  });
+
   it("membuka pendaftaran hanya 23 Sep sampai 30 Okt 2026 WIB", () => {
     expect(isSpmbRegistrationOpen(SPMB_FIRST_WAVE_START_AT - 1)).toBe(false);
     expect(isSpmbRegistrationOpen(SPMB_FIRST_WAVE_START_AT)).toBe(true);
