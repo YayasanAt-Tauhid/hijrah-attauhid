@@ -36,21 +36,30 @@ export const spmbGetDocumentUrl = createServerFn({ method: "POST" })
     ]);
 
     if (role === "admin_tu") {
-      let ownerDept: string | null = null;
+      let ownerCurrentDept: string | null = null;
+      let ownerTargetDept: string | null = null;
       for (const column of ["dokumen_kk_path", "dokumen_akta_path", "dokumen_rapor_path", "dokumen_ijazah_path"] as const) {
-        const { data: owner } = await admin
-          .from("siswa_detail")
-          .select("siswa:siswa_id(departemen_id)")
+        const { data: owner } = await (admin
+          .from("siswa_detail") as any)
+          .select("spmb_departemen_tujuan_id,siswa:siswa_id(departemen_id)")
           .eq(column, path)
           .maybeSingle();
         const siswa = owner?.siswa as { departemen_id?: string | null } | null;
-        if (siswa?.departemen_id) {
-          ownerDept = siswa.departemen_id;
+        if (owner?.spmb_departemen_tujuan_id || siswa?.departemen_id) {
+          ownerTargetDept = owner?.spmb_departemen_tujuan_id || null;
+          ownerCurrentDept = siswa?.departemen_id || null;
           break;
         }
       }
-      if (!ownerDept) throw new Error("Dokumen SPMB tidak ditemukan atau akses ditolak");
-      await requireAcademicDepartment(admin, userId, ownerDept, ["admin_tu"]);
+      if (!ownerTargetDept && !ownerCurrentDept) {
+        throw new Error("Dokumen SPMB tidak ditemukan atau akses ditolak");
+      }
+
+      // Pendaftaran siswa internal dapat tetap berada di lembaga asal sampai
+      // aktivasi tahun ajaran baru. Dokumen SPMB harus dapat dibaca Admin TU
+      // lembaga tujuan, bukan hanya lembaga siswa saat ini.
+      const effectiveDept = ownerTargetDept || ownerCurrentDept;
+      await requireAcademicDepartment(admin, userId, effectiveDept, ["admin_tu"]);
     }
 
     const { data: signed, error } = await admin.storage
