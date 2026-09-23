@@ -4,7 +4,7 @@
  * Hitung nilai akhir berbobot per mapel. Boleh staff, atau siswa/ortu terkait.
  */
 import { createServerFn } from "@tanstack/react-start";
-import { authMiddleware, ForbiddenError, requireContext } from "./auth";
+import { authMiddleware, ForbiddenError, requireAcademicDepartment, requireContext } from "./auth";
 import { createAdminClient } from "./supabase";
 
 export interface HitungNilaiAkhirInput {
@@ -52,14 +52,23 @@ export const hitungNilaiAkhir = createServerFn({ method: "POST" })
       const isPrivileged = privilegedRoles.includes(profile.role);
 
       if (profile.role === "admin_tu") {
-        if (!profile.departemen_id) throw new ForbiddenError();
         const [{ data: scopedClass }, { data: scopedStudent }] = await Promise.all([
-          admin.from("kelas").select("id").eq("id", kelas_id).eq("departemen_id", profile.departemen_id).maybeSingle(),
-          admin.from("siswa").select("id").eq("id", siswa_id).eq("departemen_id", profile.departemen_id).maybeSingle(),
+          admin.from("kelas").select("id,departemen_id").eq("id", kelas_id).maybeSingle(),
+          admin.from("siswa").select("id,departemen_id").eq("id", siswa_id).maybeSingle(),
         ]);
-        if (!scopedClass || !scopedStudent) {
+        if (
+          !scopedClass?.departemen_id
+          || !scopedStudent?.departemen_id
+          || scopedClass.departemen_id !== scopedStudent.departemen_id
+        ) {
           throw new ForbiddenError("Forbidden: data akademik di luar lembaga Admin TU");
         }
+        await requireAcademicDepartment(
+          admin,
+          userId,
+          scopedClass.departemen_id,
+          ["admin_tu"],
+        );
       } else if (profile.role === "guru") {
         if (!profile.pegawai_id) throw new ForbiddenError();
 

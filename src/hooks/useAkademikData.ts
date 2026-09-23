@@ -3,42 +3,38 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 export function useAngkatan() {
-  const { role, departemenId } = useAuth();
+  const { role } = useAuth();
   return useQuery({
-    queryKey: ["angkatan", role === "admin_tu" ? departemenId : "all"],
+    queryKey: ["angkatan", role === "admin_tu" ? "scoped" : "all"],
     queryFn: async () => {
       let q = supabase
         .from("angkatan")
         .select("*, departemen:departemen_id(id, nama)")
         .order("nama", { ascending: false });
-      if (role === "admin_tu" && departemenId) q = q.eq("departemen_id", departemenId);
       const { data, error } = await q;
       if (error) throw error;
       return data;
     },
-    enabled: role !== "admin_tu" || Boolean(departemenId),
   });
 }
 
 export function useDepartemen() {
-  const { role, departemenId } = useAuth();
+  const { role } = useAuth();
   return useQuery({
-    queryKey: ["departemen", role === "admin_tu" ? departemenId : "all"],
+    queryKey: ["departemen", role === "admin_tu" ? "scoped" : "all"],
     queryFn: async () => {
       let q = supabase.from("departemen").select("*").eq("aktif", true).order("nama");
-      if (role === "admin_tu" && departemenId) q = q.eq("id", departemenId);
       const { data, error } = await q;
       if (error) throw error;
       return data;
     },
-    enabled: role !== "admin_tu" || Boolean(departemenId),
   });
 }
 
 export function useDepartemenPendidikan() {
-  const { role, departemenId } = useAuth();
+  const { role } = useAuth();
   return useQuery({
-    queryKey: ["departemen", "unit_pendidikan", role === "admin_tu" ? departemenId : "all"],
+    queryKey: ["departemen", "unit_pendidikan", role === "admin_tu" ? "scoped" : "all"],
     queryFn: async () => {
       let q = supabase
         .from("departemen")
@@ -46,18 +42,16 @@ export function useDepartemenPendidikan() {
         .eq("aktif", true)
         .eq("kategori", "unit_pendidikan")
         .order("nama");
-      if (role === "admin_tu" && departemenId) q = q.eq("id", departemenId);
       const { data, error } = await q;
       if (error) throw error;
       return data;
     },
-    enabled: role !== "admin_tu" || Boolean(departemenId),
   });
 }
 
 export function useTingkat(departemenIdArg?: string | null) {
-  const { role, departemenId } = useAuth();
-  const effectiveDept = role === "admin_tu" ? departemenId : departemenIdArg;
+  const { role } = useAuth();
+  const effectiveDept = departemenIdArg;
   return useQuery({
     queryKey: ["tingkat", effectiveDept, role],
     queryFn: async () => {
@@ -68,14 +62,14 @@ export function useTingkat(departemenIdArg?: string | null) {
       if (error) throw error;
       return data;
     },
-    enabled: effectiveDept !== null && (role !== "admin_tu" || Boolean(departemenId)),
+    enabled: effectiveDept !== null,
   });
 }
 
 export function useKelas(tingkatId?: string) {
-  const { role, departemenId } = useAuth();
+  const { role } = useAuth();
   return useQuery({
-    queryKey: ["kelas", tingkatId, role === "admin_tu" ? departemenId : "all"],
+    queryKey: ["kelas", tingkatId, role === "admin_tu" ? "scoped" : "all"],
     queryFn: async () => {
       let q = supabase
         .from("kelas")
@@ -83,12 +77,10 @@ export function useKelas(tingkatId?: string) {
         .eq("aktif", true)
         .order("nama");
       if (tingkatId) q = q.eq("tingkat_id", tingkatId);
-      if (role === "admin_tu" && departemenId) q = q.eq("departemen_id", departemenId);
       const { data, error } = await q;
       if (error) throw error;
       return data;
     },
-    enabled: role !== "admin_tu" || Boolean(departemenId),
   });
 }
 

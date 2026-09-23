@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import Unauthorized from "@/pages/Unauthorized";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,11 @@ type Dept = {
   nama: string;
 };
 
+type ScopeRow = {
+  user_id: string;
+  departemen_id: string;
+};
+
 export default function AdminTuAkademik() {
   const { role } = useAuth();
   if (role !== "admin") return <Unauthorized />;
@@ -34,7 +40,7 @@ export default function AdminTuAkademik() {
 function AdminTuManager() {
   const qc = useQueryClient();
   const [userId, setUserId] = useState("");
-  const [departemenId, setDepartemenId] = useState("");
+  const [departemenIds, setDepartemenIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   const { data: users = [], isLoading: usersLoading } = useQuery({
@@ -63,6 +69,17 @@ function AdminTuManager() {
     },
   });
 
+  const { data: scopes = [], isLoading: scopesLoading } = useQuery({
+    queryKey: ["admin_tu_scopes"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("admin_tu_departemen_scope")
+        .select("user_id,departemen_id");
+      if (error) throw error;
+      return (data || []) as ScopeRow[];
+    },
+  });
+
   const candidates = useMemo(
     () => users.filter((user) => user.role !== "admin" && user.role !== "ortu"),
     [users],
@@ -71,23 +88,60 @@ function AdminTuManager() {
     () => users.filter((user) => user.role === "admin_tu"),
     [users],
   );
+  const scopesByUser = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const scope of scopes) {
+      if (!map[scope.user_id]) map[scope.user_id] = [];
+      map[scope.user_id].push(scope.departemen_id);
+    }
+    return map;
+  }, [scopes]);
+
+  const scopeIdsForUser = (user: UserRow) => {
+    const assigned = scopesByUser[user.id] || [];
+    if (assigned.length > 0) return assigned;
+    return user.departemen_id ? [user.departemen_id] : [];
+  };
+
+  const labelDept = (dept: Dept) => (dept.kode ? `${dept.kode} - ${dept.nama}` : dept.nama);
+
+  const selectUser = (value: string) => {
+    setUserId(value);
+    const selected = users.find((user) => user.id === value);
+    setDepartemenIds(selected?.role === "admin_tu" ? scopeIdsForUser(selected) : []);
+  };
+
+  const toggleDepartment = (id: string, checked: boolean) => {
+    setDepartemenIds((currentIds) => (
+      checked
+        ? Array.from(new Set([...currentIds, id]))
+        : currentIds.filter((item) => item !== id)
+    ));
+  };
+
+  const allSelected = departemen.length > 0 && departemen.every((dept) => departemenIds.includes(dept.id));
 
   const assign = async () => {
-    if (!userId || !departemenId) {
-      toast.error("Pilih akun dan lembaga terlebih dahulu");
+    if (!userId || departemenIds.length === 0) {
+      toast.error("Pilih akun dan minimal satu lembaga terlebih dahulu");
       return;
     }
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("users_profile")
-        .update({ role: "admin_tu", departemen_id: departemenId, aktif: true })
-        .eq("id", userId);
+      const { error } = await (supabase as any).rpc("admin_set_admin_tu_scope", {
+        p_user_id: userId,
+        p_departemen_ids: departemenIds,
+      });
       if (error) throw error;
-      toast.success("Akses Admin TU berhasil disimpan");
+      toast.success(departemenIds.length === departemen.length
+        ? "Admin TU sekarang dapat mengakses semua lembaga"
+        : "Cakupan lembaga Admin TU berhasil disimpan");
       setUserId("");
-      setDepartemenId("");
-      await qc.invalidateQueries({ queryKey: ["admin_tu_candidates"] });
+      setDepartemenIds([]);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["admin_tu_candidates"] }),
+        qc.invalidateQueries({ queryKey: ["admin_tu_scopes"] }),
+      ]);
     } catch (error: any) {
       toast.error(error?.message || "Gagal menyimpan akses Admin TU");
     } finally {
@@ -95,9 +149,13 @@ function AdminTuManager() {
     }
   };
 
-  const deptName = (id: string | null) => {
-    const d = departemen.find((item) => item.id === id);
-    return d ? (d.kode ? `${d.kode} - ${d.nama}` : d.nama) : "Belum dipasangkan";
+  const scopeLabel = (user: UserRow) => {
+    const ids = scopeIdsForUser(user);
+    const activeScoped = departemen.filter((dept) => ids.includes(dept.id));
+    if (activeScoped.length === 0) return "Belum dipasangkan";
+    const labels = activeScoped.map(labelDept);
+    const isAll = departemen.length > 0 && departemen.every((dept) => ids.includes(dept.id));
+    return isAll ? `Semua lembaga · ${labels.join(", ")}` : labels.join(", ");
   };
 
   return (
@@ -105,7 +163,8 @@ function AdminTuManager() {
       <div>
         <h1 className="text-2xl font-bold">Admin TU Akademik</h1>
         <p className="text-sm text-muted-foreground">
-          Pasangkan satu akun ke satu lembaga. Admin TU hanya dapat membuka modul Akademik dan data pada lembaga tersebut.
+          Satu akun Admin TU dapat diberi akses ke satu, beberapa, atau semua lembaga pendidikan.
+          Hak aksesnya tetap terbatas pada modul Akademik.
         </p>
       </div>
 
@@ -116,15 +175,13 @@ function AdminTuManager() {
             Tetapkan Admin TU
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+        <CardContent className="grid gap-4 md:grid-cols-[1fr_2fr_auto] md:items-end">
           <div className="space-y-1.5">
             <Label>Akun</Label>
-            <Select value={userId} onValueChange={(value) => {
-              setUserId(value);
-              const selected = users.find((user) => user.id === value);
-              setDepartemenId(selected?.role === "admin_tu" && selected.departemen_id ? selected.departemen_id : "");
-            }}>
-              <SelectTrigger><SelectValue placeholder={usersLoading ? "Memuat..." : "Pilih akun"} /></SelectTrigger>
+            <Select value={userId} onValueChange={selectUser}>
+              <SelectTrigger>
+                <SelectValue placeholder={usersLoading || scopesLoading ? "Memuat..." : "Pilih akun"} />
+              </SelectTrigger>
               <SelectContent>
                 {candidates.map((user) => (
                   <SelectItem key={user.id} value={user.id}>
@@ -134,20 +191,47 @@ function AdminTuManager() {
               </SelectContent>
             </Select>
           </div>
+
           <div className="space-y-1.5">
-            <Label>Lembaga</Label>
-            <Select value={departemenId} onValueChange={setDepartemenId}>
-              <SelectTrigger><SelectValue placeholder={deptLoading ? "Memuat..." : "Pilih TK/SD/SMP/SMA/MTA"} /></SelectTrigger>
-              <SelectContent>
-                {departemen.map((dept) => (
-                  <SelectItem key={dept.id} value={dept.id}>
-                    {dept.kode ? `${dept.kode} - ${dept.nama}` : dept.nama}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center justify-between gap-3">
+              <Label>Lembaga yang dapat dikelola</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={deptLoading || departemen.length === 0}
+                onClick={() => setDepartemenIds(allSelected ? [] : departemen.map((dept) => dept.id))}
+              >
+                {allSelected ? "Kosongkan" : "Pilih Semua Lembaga"}
+              </Button>
+            </div>
+            <div className="grid gap-2 rounded-md border p-3 sm:grid-cols-2">
+              {deptLoading ? (
+                <p className="text-sm text-muted-foreground">Memuat lembaga...</p>
+              ) : departemen.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Belum ada unit pendidikan aktif.</p>
+              ) : departemen.map((dept) => {
+                const checked = departemenIds.includes(dept.id);
+                return (
+                  <label
+                    key={dept.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/60"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(value) => toggleDepartment(dept.id, value === true)}
+                    />
+                    <span className="text-sm">{labelDept(dept)}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Pilih satu atau beberapa lembaga. Tombol Pilih Semua Lembaga memberi akses ke seluruh unit pendidikan aktif saat ini.
+            </p>
           </div>
-          <Button onClick={assign} disabled={saving || !userId || !departemenId}>
+
+          <Button onClick={assign} disabled={saving || !userId || departemenIds.length === 0 || scopesLoading}>
             {saving ? "Menyimpan..." : "Simpan Akses"}
           </Button>
         </CardContent>
@@ -162,9 +246,9 @@ function AdminTuManager() {
             <p className="text-sm text-muted-foreground">Belum ada akun dengan role Admin TU.</p>
           ) : current.map((user) => (
             <div key={user.id} className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
+              <div className="min-w-0">
                 <p className="font-medium">{user.email || user.id}</p>
-                <p className="text-sm text-muted-foreground">{deptName(user.departemen_id)}</p>
+                <p className="text-sm text-muted-foreground">{scopeLabel(user)}</p>
               </div>
               <Badge variant={user.aktif === false ? "secondary" : "default"}>
                 {user.aktif === false ? "Nonaktif" : "Aktif"}
@@ -175,7 +259,8 @@ function AdminTuManager() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Akun Admin TU wajib memiliki tepat satu lembaga. Pengaman database akan menolak role Admin TU tanpa lembaga atau akses data dari lembaga lain.
+        Scope ini tidak mengubah Admin TU menjadi Administrator. Modul keuangan sensitif, pengaturan global,
+        manajemen pengguna, dan administrasi yayasan tetap mengikuti pembatasan role yang sudah ada.
       </p>
     </div>
   );

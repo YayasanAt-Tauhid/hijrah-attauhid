@@ -32,9 +32,9 @@ export interface SiswaWithRelations {
 }
 
 export function useSiswaList() {
-  const { role, departemenId } = useAuth();
+  const { role } = useAuth();
   return useQuery({
-    queryKey: ["siswa", role === "admin_tu" ? departemenId : "all"],
+    queryKey: ["siswa", role === "admin_tu" ? "scoped" : "all"],
     queryFn: async () => {
       const data = await fetchAllPages((from, to) => {
         let q = supabase
@@ -51,19 +51,17 @@ export function useSiswaList() {
           `)
           .order("nama")
           .order("id");
-        if (role === "admin_tu" && departemenId) q = q.eq("departemen_id", departemenId);
         return q.range(from, to);
       });
       return data as SiswaWithRelations[];
     },
-    enabled: role !== "admin_tu" || Boolean(departemenId),
   });
 }
 
 export function useSiswaDetail(id: string) {
-  const { role, departemenId } = useAuth();
+  const { role } = useAuth();
   return useQuery({
-    queryKey: ["siswa", id, role === "admin_tu" ? departemenId : "all"],
+    queryKey: ["siswa", id, role === "admin_tu" ? "scoped" : "all"],
     queryFn: async () => {
       let q = supabase
         .from("siswa")
@@ -83,14 +81,14 @@ export function useSiswaDetail(id: string) {
       if (error) throw error;
       return data as SiswaWithRelations;
     },
-    enabled: !!id && (role !== "admin_tu" || Boolean(departemenId)),
+    enabled: !!id,
   });
 }
 
 export function useSiswaDetailOrangtua(siswaId: string) {
-  const { role, departemenId } = useAuth();
+  const { role } = useAuth();
   return useQuery({
-    queryKey: ["siswa_detail", siswaId, role === "admin_tu" ? departemenId : "all"],
+    queryKey: ["siswa_detail", siswaId, role === "admin_tu" ? "scoped" : "all"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("siswa_detail")
@@ -100,7 +98,7 @@ export function useSiswaDetailOrangtua(siswaId: string) {
       if (error) throw error;
       return data;
     },
-    enabled: !!siswaId && (role !== "admin_tu" || Boolean(departemenId)),
+    enabled: !!siswaId,
   });
 }
 
