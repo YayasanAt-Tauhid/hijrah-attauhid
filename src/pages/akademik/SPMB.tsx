@@ -276,12 +276,29 @@ export default function SPMB() {
   const { data: calonList = [], isLoading } = useQuery({
     queryKey: ["siswa", "calon"],
     queryFn: async () => {
-      const details = await fetchAllPages<any>((from, to) => (supabase as any)
-        .from("siswa_detail")
-        .select("siswa_id,tahun_ajaran_id,status_asrama,kategori,dokumen_kk_path,dokumen_akta_path,spmb_tanggal_tes,spmb_tanggal_lulus,spmb_tanggal_daftar_ulang,spmb_status_kelulusan,spmb_tanggal_keputusan,spmb_departemen_tujuan_id,spmb_angkatan_tujuan_id,spmb_status_pendaftaran,spmb_siswa_internal,spmb_kelas_tujuan_id,spmb_tanggal_aktivasi,spmb_gelombang_id,spmb_registered_at")
-        .not("spmb_gelombang_id", "is", null)
-        .order("siswa_id")
-        .range(from, to));
+      const { data: visibleRows, error: visibleError } = await (supabase as any).rpc("spmb_visible_siswa_ids");
+      if (visibleError) throw visibleError;
+
+      const visibleIds = [...new Set(
+        (visibleRows || []).map((row: any) => row.siswa_id).filter(Boolean),
+      )] as string[];
+      if (!visibleIds.length) return [];
+
+      // Query hanya pendaftaran yang memang menjadi tanggung jawab lembaga tujuan TU.
+      // Siswa internal tetap terlihat di daftar siswa lembaga asal, tetapi tidak bocor
+      // ke daftar SPMB lembaga asal ketika tujuan pendaftarannya berbeda.
+      const details: any[] = [];
+      for (let i = 0; i < visibleIds.length; i += 150) {
+        const chunk = visibleIds.slice(i, i + 150);
+        const rows = await fetchAllPages<any>((from, to) => (supabase as any)
+          .from("siswa_detail")
+          .select("siswa_id,tahun_ajaran_id,status_asrama,kategori,dokumen_kk_path,dokumen_akta_path,spmb_tanggal_tes,spmb_tanggal_lulus,spmb_tanggal_daftar_ulang,spmb_status_kelulusan,spmb_tanggal_keputusan,spmb_departemen_tujuan_id,spmb_angkatan_tujuan_id,spmb_status_pendaftaran,spmb_siswa_internal,spmb_kelas_tujuan_id,spmb_tanggal_aktivasi,spmb_gelombang_id,spmb_registered_at")
+          .in("siswa_id", chunk)
+          .not("spmb_gelombang_id", "is", null)
+          .order("siswa_id")
+          .range(from, to));
+        details.push(...rows);
+      }
       if (!details.length) return [];
 
       const siswaIds = [...new Set(details.map((d: any) => d.siswa_id).filter(Boolean))];
