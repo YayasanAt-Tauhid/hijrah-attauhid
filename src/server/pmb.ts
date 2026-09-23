@@ -167,6 +167,30 @@ function cleanInteger(value: unknown): number | null {
   return number === null ? null : Math.trunc(number);
 }
 
+function normalizeDigits(value: unknown): string {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function normalizeIdentityName(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toLocaleLowerCase("id-ID")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function registrationDbError(error: { message?: string | null; code?: string | null } | null | undefined): Error {
+  const message = error?.message || "Gagal menyimpan pendaftaran SPMB";
+  if (message.includes("siswa_nisn_unique_nonempty")) {
+    return new Error("NISN sudah terdaftar pada data siswa. Jika ini murid Hijrah At-Tauhid yang sedang melanjutkan jenjang, silakan coba lagi atau hubungi Admin TU untuk verifikasi data.");
+  }
+  if (message.includes("siswa_detail_nik_16_unique")) {
+    return new Error("NIK Calon Murid sudah terdaftar pada data siswa. Silakan periksa kembali NIK atau hubungi Admin TU untuk verifikasi data.");
+  }
+  return new Error(message);
+}
+
 function validateDocumentPath(path: string | undefined, kind: PmbDocumentKind, required: boolean): string | null {
   const value = (path || "").trim();
   if (!value) {
@@ -256,6 +280,10 @@ export const pmbDaftar = createServerFn({ method: "POST" })
     if (perluNisn && !/^\d{10}$/.test(nisn || "")) {
       throw new Error("NISN wajib diisi 10 digit untuk SMP, SMA, dan MTA");
     }
+    const nik = normalizeDigits(data.nik);
+    if (!/^\d{16}$/.test(nik)) {
+      throw new Error("NIK Calon Murid harus terdiri dari 16 digit");
+    }
 
     let statusAsrama = perluAsrama
       ? cleanChoice(data.status_asrama, STATUS_ASRAMA_OPTIONS, "Pilihan asrama")
@@ -309,26 +337,113 @@ export const pmbDaftar = createServerFn({ method: "POST" })
     if (!/^\d{16}$/.test(String(data.nik_ayah || "").replace(/\D/g, ""))) throw new Error("NIK Ayah harus 16 digit");
     if (!/^\d{16}$/.test(String(data.nik_ibu || "").replace(/\D/g, ""))) throw new Error("NIK Ibu harus 16 digit");
 
-    const { data: siswa, error: siswaError } = await (admin.from("siswa") as any).insert({
-      nama,
-      jenis_kelamin: data.jenis_kelamin === "P" ? "P" : "L",
-      tempat_lahir: cleanText(data.tempat_lahir, 100),
-      tanggal_lahir: data.tanggal_lahir || null,
-      nisn: perluNisn ? nisn : null,
-      alamat: cleanText(data.alamat, 500),
-      telepon: cleanText(data.telepon, 20),
-      agama: "Islam",
-      status: "calon",
-      departemen_id,
-      angkatan_id,
-    }).select("id").single();
-    if (siswaError) throw new Error(siswaError.message);
+    let nisnOwner: any = null;
+    if (nisn) {
+      const lookup = await (admin.from("siswa") as any)
+        .select("id,nama,jenis_kelamin,tempat_lahir,tanggal_lahir,nisn,status,alamat,telepon,departemen_id,angkatan_id")
+        .eq("nisn", nisn)
+        .maybeSingle();
+      if (lookup.error) throw new Error(lookup.error.message);
+      nisnOwner = lookup.data;
+    }
+
+    const nikLookup = await (admin.from("siswa_detail") as any)
+      .select("siswa_id")
+      .eq("nik", nik)
+      .maybeSingle();
+    if (nikLookup.error) throw new Error(nikLookup.error.message);
+
+    if (nisnOwner?.id && nikLookup.data?.siswa_id && nisnOwner.id !== nikLookup.data.siswa_id) {
+      throw new Error("NISN dan NIK mengarah ke data siswa yang berbeda. Silakan hubungi Admin TU untuk verifikasi identitas.");
+    }
+
+    const existingSiswaId = nisnOwner?.id || nikLookup.data?.siswa_id || null;
+    let existingSiswa: any = nisnOwner;
+    let existingDetail: any = null;
+
+    if (existingSiswaId) {
+      if (!existingSiswa) {
+        const lookup = await (admin.from("siswa") as any)
+          .select("id,nama,jenis_kelamin,tempat_lahir,tanggal_lahir,nisn,status,alamat,telepon,departemen_id,angkatan_id")
+          .eq("id", existingSiswaId)
+          .maybeSingle();
+        if (lookup.error) throw new Error(lookup.error.message);
+        existingSiswa = lookup.data;
+      }
+
+      const detailLookup = await (admin.from("siswa_detail") as any)
+        .select("id,siswa_id,nik,tahun_ajaran_id,pmb_payment_token,spmb_gelombang_id,spmb_departemen_tujuan_id,spmb_angkatan_tujuan_id,spmb_siswa_internal")
+        .eq("siswa_id", existingSiswaId)
+        .maybeSingle();
+      if (detailLookup.error) throw new Error(detailLookup.error.message);
+      existingDetail = detailLookup.data;
+
+      const existingNik = normalizeDigits(existingDetail?.nik);
+      const submittedGender = data.jenis_kelamin === "P" ? "P" : "L";
+      const birthMismatch = Boolean(
+        existingSiswa?.tanggal_lahir &&
+        data.tanggal_lahir &&
+        existingSiswa.tanggal_lahir !== data.tanggal_lahir
+      );
+      const genderMismatch = Boolean(
+        existingSiswa?.jenis_kelamin &&
+        existingSiswa.jenis_kelamin !== submittedGender
+      );
+      const nisnMismatch = Boolean(
+        nisn &&
+        existingSiswa?.nisn &&
+        existingSiswa.nisn !== nisn
+      );
+      const nikMismatch = existingNik.length === 16 && existingNik !== nik;
+      const fallbackIdentityMismatch = existingNik.length !== 16 && (
+        !existingSiswa?.tanggal_lahir ||
+        !data.tanggal_lahir ||
+        existingSiswa.tanggal_lahir !== data.tanggal_lahir ||
+        normalizeIdentityName(existingSiswa?.nama) !== normalizeIdentityName(nama)
+      );
+
+      if (birthMismatch || genderMismatch || nisnMismatch || nikMismatch || fallbackIdentityMismatch) {
+        throw new Error("NISN/NIK sudah terdaftar, tetapi data identitas tidak cocok dengan data sekolah. Silakan hubungi Admin TU untuk verifikasi.");
+      }
+
+      const existingTargetDept = existingDetail?.spmb_departemen_tujuan_id || existingSiswa?.departemen_id || null;
+      const sameCurrentRegistration = Boolean(
+        existingDetail?.pmb_payment_token &&
+        existingDetail?.spmb_gelombang_id === currentWave.id &&
+        existingTargetDept === departemen_id &&
+        existingDetail?.tahun_ajaran_id === tahun_ajaran_id
+      );
+      if (sameCurrentRegistration) {
+        return {
+          success: true,
+          siswa_id: existingSiswaId,
+          payment_token: existingDetail.pmb_payment_token,
+        };
+      }
+      if (existingDetail?.pmb_payment_token && existingDetail?.spmb_gelombang_id === currentWave.id) {
+        throw new Error("Data siswa ini sudah memiliki pendaftaran pada gelombang yang sedang berjalan. Silakan hubungi Admin TU bila tujuan lembaganya perlu diubah.");
+      }
+      if (existingSiswa?.status !== "aktif") {
+        throw new Error("Data siswa sudah terdaftar di sistem tetapi status akademiknya perlu diverifikasi Admin TU sebelum digunakan untuk pendaftaran jenjang berikutnya.");
+      }
+
+      const studentPatch: Record<string, unknown> = {};
+      if (!existingSiswa.nisn && nisn) studentPatch.nisn = nisn;
+      if (!cleanText(existingSiswa.alamat, 500)) studentPatch.alamat = cleanText(data.alamat, 500);
+      if (!cleanText(existingSiswa.telepon, 20)) studentPatch.telepon = cleanText(data.telepon, 20);
+      if (!existingSiswa.tanggal_lahir && data.tanggal_lahir) studentPatch.tanggal_lahir = data.tanggal_lahir;
+      if (!cleanText(existingSiswa.tempat_lahir, 100)) studentPatch.tempat_lahir = cleanText(data.tempat_lahir, 100);
+      if (Object.keys(studentPatch).length) {
+        const patchResult = await (admin.from("siswa") as any).update(studentPatch).eq("id", existingSiswaId);
+        if (patchResult.error) throw registrationDbError(patchResult.error);
+      }
+    }
 
     const paymentToken = crypto.randomUUID();
-    const { error: detailError } = await (admin.from("siswa_detail") as any).insert({
-      siswa_id: siswa.id,
+    const registrationId = crypto.randomUUID();
+    const detailPayload = {
       tahun_ajaran_id,
-      nik: cleanText(data.nik, 32),
+      nik,
       no_kk: cleanText(data.no_kk, 32),
       kategori,
       status_asrama: statusAsrama,
@@ -343,7 +458,7 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       waktu_perjalanan_menit: cleanInteger(data.waktu_perjalanan_menit),
       transportasi,
       nama_ayah: cleanText(data.nama_ayah, 200),
-      nik_ayah: String(data.nik_ayah || "").replace(/\D/g, ""),
+      nik_ayah: normalizeDigits(data.nik_ayah),
       tempat_lahir_ayah: cleanText(data.tempat_lahir_ayah, 100),
       tanggal_lahir_ayah: data.tanggal_lahir_ayah || null,
       pendidikan_ayah: pendidikanAyah,
@@ -352,7 +467,7 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       telepon_ayah: cleanText(data.telepon_ayah, 20),
       alamat_ayah: cleanText(data.alamat_ayah, 500),
       nama_ibu: cleanText(data.nama_ibu, 200),
-      nik_ibu: String(data.nik_ibu || "").replace(/\D/g, ""),
+      nik_ibu: normalizeDigits(data.nik_ibu),
       tempat_lahir_ibu: cleanText(data.tempat_lahir_ibu, 100),
       tanggal_lahir_ibu: data.tanggal_lahir_ibu || null,
       pendidikan_ibu: pendidikanIbu,
@@ -379,11 +494,56 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       dokumen_rapor_path: dokumenRaporPath,
       dokumen_ijazah_path: dokumenIjazahPath,
       pmb_payment_token: paymentToken,
+      pendaftaran_id: registrationId,
+      spmb_gelombang_id: currentWave.id,
+      spmb_registered_at: now,
+      spmb_departemen_tujuan_id: departemen_id,
+      spmb_angkatan_tujuan_id: angkatan_id,
+      spmb_status_pendaftaran: "calon",
+    };
+
+    if (existingSiswaId) {
+      if (existingDetail?.id) {
+        const updateResult = await (admin.from("siswa_detail") as any)
+          .update({ ...detailPayload, spmb_siswa_internal: true })
+          .eq("id", existingDetail.id);
+        if (updateResult.error) throw registrationDbError(updateResult.error);
+      } else {
+        const insertResult = await (admin.from("siswa_detail") as any).insert({
+          siswa_id: existingSiswaId,
+          ...detailPayload,
+          spmb_siswa_internal: true,
+        });
+        if (insertResult.error) throw registrationDbError(insertResult.error);
+      }
+
+      return { success: true, siswa_id: existingSiswaId, payment_token: paymentToken };
+    }
+
+    const { data: siswa, error: siswaError } = await (admin.from("siswa") as any).insert({
+      nama,
+      jenis_kelamin: data.jenis_kelamin === "P" ? "P" : "L",
+      tempat_lahir: cleanText(data.tempat_lahir, 100),
+      tanggal_lahir: data.tanggal_lahir || null,
+      nisn: perluNisn ? nisn : null,
+      alamat: cleanText(data.alamat, 500),
+      telepon: cleanText(data.telepon, 20),
+      agama: "Islam",
+      status: "calon",
+      departemen_id,
+      angkatan_id,
+    }).select("id").single();
+    if (siswaError) throw registrationDbError(siswaError);
+
+    const { error: detailError } = await (admin.from("siswa_detail") as any).insert({
+      siswa_id: siswa.id,
+      ...detailPayload,
+      spmb_siswa_internal: false,
     });
 
     if (detailError) {
       await admin.from("siswa").delete().eq("id", siswa.id);
-      throw new Error(detailError.message);
+      throw registrationDbError(detailError);
     }
     return { success: true, siswa_id: siswa.id, payment_token: paymentToken };
   });
