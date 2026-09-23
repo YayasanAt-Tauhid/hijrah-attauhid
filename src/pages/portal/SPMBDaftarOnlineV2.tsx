@@ -356,7 +356,10 @@ export default function SPMBDaftarOnlineV2() {
   useEffect(() => {
     if (!form.departemen_id) return;
     const angkatan2027 = allAngkatan.find((angkatan) => angkatan.departemen_id === form.departemen_id);
-    setForm((current) => ({ ...current, angkatan_id: angkatan2027?.id || "" }));
+    const nextAngkatanId = angkatan2027?.id || "";
+    setForm((current) => current.angkatan_id === nextAngkatanId
+      ? current
+      : { ...current, angkatan_id: nextAngkatanId });
   }, [allAngkatan, form.departemen_id]);
 
   useEffect(() => {
@@ -473,22 +476,58 @@ export default function SPMBDaftarOnlineV2() {
       toast.error(message);
       return;
     }
-    const requiredValues = [
-      form.departemen_id, form.tahun_ajaran_id, form.angkatan_id, form.nik, form.no_kk, form.kategori, form.nama,
-      form.jenis_kelamin, form.tempat_lahir, form.tanggal_lahir, form.alamat, form.telepon,
-      form.anak_ke, form.jumlah_bersaudara, form.jarak_rumah_km, form.waktu_perjalanan_menit, form.transportasi,
-      form.kemampuan_iqro, form.membaca_latin, form.menulis_latin, form.hafalan_quran,
-      form.nama_ayah, form.nik_ayah, form.tempat_lahir_ayah, form.tanggal_lahir_ayah, form.pendidikan_ayah,
-      form.pekerjaan_ayah, form.penghasilan_ayah, form.telepon_ayah, form.alamat_ayah,
-      form.nama_ibu, form.nik_ibu, form.tempat_lahir_ibu, form.tanggal_lahir_ibu, form.pendidikan_ibu,
-      form.pekerjaan_ibu, form.penghasilan_ibu, form.telepon_ibu, form.alamat_ibu,
-      ...(wajibNisn ? [form.nisn] : []),
+    const requiredFields: Array<{ label: string; value: string; focusId?: string }> = [
+      { label: "Lembaga/Sekolah", value: form.departemen_id, focusId: "spmb-public-departemen" },
+      { label: "Periode Tahun Ajaran", value: form.tahun_ajaran_id },
+      { label: "Angkatan", value: form.angkatan_id, focusId: "spmb-public-angkatan" },
+      { label: "NIK Calon Murid", value: form.nik, focusId: "spmb-public-nik" },
+      { label: "No. KK", value: form.no_kk },
+      { label: "Kategori", value: form.kategori },
+      { label: "Nama Lengkap", value: form.nama, focusId: "spmb-public-nama" },
+      { label: "Jenis Kelamin", value: form.jenis_kelamin },
+      { label: "Tempat Lahir Murid", value: form.tempat_lahir },
+      { label: "Tanggal Lahir Murid", value: form.tanggal_lahir },
+      { label: "Alamat Rumah", value: form.alamat },
+      { label: "No. HP / WhatsApp", value: form.telepon },
+      { label: "Anak ke", value: form.anak_ke },
+      { label: "Dari Bersaudara", value: form.jumlah_bersaudara },
+      { label: "Jarak Rumah ke Sekolah", value: form.jarak_rumah_km },
+      { label: "Waktu Perjalanan", value: form.waktu_perjalanan_menit },
+      { label: "Transportasi", value: form.transportasi },
+      { label: "Kemampuan Dasar (Iqro)", value: form.kemampuan_iqro },
+      { label: "Membaca Latin", value: form.membaca_latin },
+      { label: "Menulis Latin", value: form.menulis_latin },
+      { label: "Hafalan Qur'an", value: form.hafalan_quran },
+      { label: "Nama Ayah", value: form.nama_ayah },
+      { label: "NIK Ayah", value: form.nik_ayah },
+      { label: "Tempat Lahir Ayah", value: form.tempat_lahir_ayah },
+      { label: "Tanggal Lahir Ayah", value: form.tanggal_lahir_ayah },
+      { label: "Pendidikan Ayah", value: form.pendidikan_ayah },
+      { label: "Pekerjaan Ayah", value: form.pekerjaan_ayah },
+      { label: "Penghasilan Ayah", value: form.penghasilan_ayah },
+      { label: "No. HP / WA Ayah", value: form.telepon_ayah },
+      { label: "Alamat Ayah", value: form.alamat_ayah },
+      { label: "Nama Ibu", value: form.nama_ibu },
+      { label: "NIK Ibu", value: form.nik_ibu },
+      { label: "Tempat Lahir Ibu", value: form.tempat_lahir_ibu },
+      { label: "Tanggal Lahir Ibu", value: form.tanggal_lahir_ibu },
+      { label: "Pendidikan Ibu", value: form.pendidikan_ibu },
+      { label: "Pekerjaan Ibu", value: form.pekerjaan_ibu },
+      { label: "Penghasilan Ibu", value: form.penghasilan_ibu },
+      { label: "No. HP / WA Ibu", value: form.telepon_ibu },
+      { label: "Alamat Ibu", value: form.alamat_ibu },
+      ...(wajibNisn ? [{ label: "NISN", value: form.nisn, focusId: "spmb-public-nisn" }] : []),
     ];
-    if (requiredValues.some((value) => !String(value).trim())) {
-      const message = "Lengkapi seluruh data wajib bertanda *.";
+    const missingRequiredFields = requiredFields.filter((field) => !String(field.value).trim());
+    if (missingRequiredFields.length) {
+      const shownFields = missingRequiredFields.slice(0, 5).map((field) => field.label).join(", ");
+      const remaining = missingRequiredFields.length - 5;
+      const message = `Lengkapi data wajib: ${shownFields}${remaining > 0 ? ` (dan ${remaining} data wajib lainnya)` : ""}.`;
       setSubmitError(message);
       toast.error(message);
-      focusField(!form.departemen_id ? "spmb-public-departemen" : !form.nik ? "spmb-public-nik" : "spmb-public-nama");
+      const focusId = missingRequiredFields.find((field) => field.focusId)?.focusId;
+      if (focusId) focusField(focusId);
+      else window.requestAnimationFrame(() => document.getElementById("spmb-submit-error")?.focus());
       return;
     }
     if (!/^\d{16}$/.test(form.nik)) {
@@ -775,23 +814,43 @@ export default function SPMBDaftarOnlineV2() {
                   <span>Isian formulir sebelumnya berhasil dipulihkan. Demi keamanan, file KK, Akta, Rapor, atau Ijazah tidak disimpan di browser sehingga perlu dipilih ulang.</span>
                 </div>
               )}
-              {submitError && <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{submitError}</div>}
+              {submitError && <div id="spmb-submit-error" tabIndex={-1} className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 outline-none focus:ring-2 focus:ring-red-400" role="alert"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{submitError}</div>}
 
               <fieldset disabled={loading || optionsLoading || Boolean(optionsError) || !registrationOpen} className="space-y-6 disabled:opacity-70">
                 <FormSection title="Data Diri Murid" description="Informasi pendaftaran dan identitas calon murid">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
                       <Label htmlFor="spmb-public-departemen">Lembaga/Sekolah *</Label>
-                      <Select value={form.departemen_id} onValueChange={(value) => setForm((current) => ({ ...current, departemen_id: value, angkatan_id: "", status_asrama: "" }))}>
+                      <Select value={form.departemen_id} onValueChange={(value) => {
+                        const angkatan2027 = allAngkatan.find((angkatan) => angkatan.departemen_id === value);
+                        setForm((current) => ({
+                          ...current,
+                          departemen_id: value,
+                          angkatan_id: angkatan2027?.id || "",
+                          status_asrama: "",
+                        }));
+                      }}>
                         <SelectTrigger id="spmb-public-departemen" className="min-h-11"><SelectValue placeholder={optionsLoading ? "Memuat lembaga..." : "Pilih lembaga"} /></SelectTrigger>
                         <SelectContent>{departemenList.length ? departemenList.map((dept) => <SelectItem key={dept.id} value={dept.id}>{dept.nama}</SelectItem>) : <SelectItem value="__empty" disabled>Belum ada lembaga SPMB tersedia</SelectItem>}</SelectContent>
                       </Select>
                     </div>
                     <div><Label>Periode Tahun Ajaran *</Label><Input className="min-h-11" value={tahunAjaranList[0] ? "2027–2028" : "Belum dikonfigurasi"} disabled /></div>
                     <div>
-                      <Label>Angkatan *</Label>
-                      <Input className="min-h-11" disabled value={!form.departemen_id ? "Pilih lembaga terlebih dahulu" : angkatanList.length ? "2027" : "Belum dikonfigurasi untuk lembaga ini"} />
+                      <Label htmlFor="spmb-public-angkatan">Angkatan *</Label>
+                      <Input
+                        id="spmb-public-angkatan"
+                        className="min-h-11"
+                        disabled
+                        value={!form.departemen_id
+                          ? "Pilih lembaga terlebih dahulu"
+                          : form.angkatan_id
+                            ? "2027"
+                            : angkatanList.length
+                              ? "Menyiapkan Angkatan 2027..."
+                              : "Belum dikonfigurasi untuk lembaga ini"}
+                      />
                       {form.departemen_id && !angkatanList.length && <p className="mt-1 text-xs text-red-700">Angkatan 2027 untuk lembaga ini belum tersedia. Hubungi admin sekolah.</p>}
+                      {form.departemen_id && angkatanList.length > 0 && !form.angkatan_id && <p className="mt-1 text-xs text-amber-700">Konfigurasi Angkatan sedang disiapkan. Tunggu sebentar sebelum mengirim formulir.</p>}
                     </div>
                     <div>
                       <Label>Kategori *</Label>
@@ -891,8 +950,12 @@ export default function SPMBDaftarOnlineV2() {
                 </FormSection>
               </fieldset>
 
-              <Button type="submit" disabled={loading || optionsLoading || Boolean(optionsError) || !registrationOpen} className="min-h-11 w-full bg-emerald-600 hover:bg-emerald-700">
-                <UserPlus className="mr-2 h-4 w-4" />{loading ? "Mengunggah dokumen & mendaftarkan..." : "Daftarkan Calon Murid"}
+              <Button type="submit" disabled={loading || optionsLoading || Boolean(optionsError) || !registrationOpen || !form.tahun_ajaran_id || !form.angkatan_id} className="min-h-11 w-full bg-emerald-600 hover:bg-emerald-700">
+                <UserPlus className="mr-2 h-4 w-4" />{loading
+                  ? "Mengunggah dokumen & mendaftarkan..."
+                  : !optionsLoading && form.departemen_id && (!form.tahun_ajaran_id || !form.angkatan_id)
+                    ? "Menyiapkan konfigurasi pendaftaran..."
+                    : "Daftarkan Calon Murid"}
               </Button>
             </form>
           </CardContent>
