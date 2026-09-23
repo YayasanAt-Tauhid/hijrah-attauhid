@@ -34,7 +34,11 @@ interface TahunAjaran { id: string; nama: string; aktif: boolean | null }
 type PmbDocumentKind = "kk" | "akta" | "rapor" | "ijazah";
 type PmbDocuments = Record<PmbDocumentKind, File | null>;
 
-const STORAGE_KEY = "hat_pmb_registration_token";
+const LEGACY_REGISTRATION_STORAGE_KEY = "hat_pmb_registration_token";
+const REGISTRATION_STORAGE_KEY = "hat_spmb_registration_token";
+const DRAFT_STORAGE_KEY = "hat_spmb_form_draft_v1";
+const DRAFT_VERSION = 1;
+const DRAFT_TTL_MS = 4 * 60 * 60 * 1000;
 const PMB_DOCUMENT_BUCKET = "pmb-dokumen";
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024;
 
@@ -64,6 +68,101 @@ const initialForm = {
   asal_sekolah: "", alamat_sekolah_asal: "", kabupaten_sekolah_asal: "", kecamatan_sekolah_asal: "", kelurahan_sekolah_asal: "",
   kemampuan_iqro: "", membaca_latin: "", menulis_latin: "", hafalan_quran: "",
 };
+
+type PmbForm = typeof initialForm;
+
+function sanitizeDraftForm(value: unknown): PmbForm | null {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  const restored: Record<string, string> = { ...initialForm };
+  for (const key of Object.keys(initialForm)) {
+    const candidate = source[key];
+    if (typeof candidate === "string") restored[key] = candidate;
+  }
+  return restored as PmbForm;
+}
+
+function hasMeaningfulDraft(form: PmbForm): boolean {
+  const automaticFields = new Set(["tahun_ajaran_id", "angkatan_id", "jenis_pendaftaran", "kategori", "status_asrama"]);
+  return Object.entries(form).some(([key, value]) => !automaticFields.has(key) && value.trim().length > 0);
+}
+
+function readFormDraft(): PmbForm | null {
+  try {
+    const raw = window.sessionStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { version?: number; saved_at?: number; form?: unknown };
+    if (
+      parsed.version !== DRAFT_VERSION ||
+      typeof parsed.saved_at !== "number" ||
+      Date.now() - parsed.saved_at > DRAFT_TTL_MS
+    ) {
+      window.sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+      return null;
+    }
+    const restored = sanitizeDraftForm(parsed.form);
+    if (!restored || !hasMeaningfulDraft(restored)) {
+      window.sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+      return null;
+    }
+    return restored;
+  } catch {
+    try { window.sessionStorage.removeItem(DRAFT_STORAGE_KEY); } catch { /* storage tidak tersedia */ }
+    return null;
+  }
+}
+
+function saveFormDraft(form: PmbForm) {
+  try {
+    if (!hasMeaningfulDraft(form)) {
+      window.sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({
+      version: DRAFT_VERSION,
+      saved_at: Date.now(),
+      form,
+    }));
+  } catch {
+    // Pendaftaran tetap dapat digunakan walaupun storage browser diblokir.
+  }
+}
+
+function clearFormDraft() {
+  try { window.sessionStorage.removeItem(DRAFT_STORAGE_KEY); } catch { /* storage tidak tersedia */ }
+}
+
+function readRegistrationToken(): string | null {
+  try {
+    const token = window.sessionStorage.getItem(REGISTRATION_STORAGE_KEY);
+    if (token) {
+      try { window.localStorage.removeItem(LEGACY_REGISTRATION_STORAGE_KEY); } catch { /* abaikan */ }
+      return token;
+    }
+  } catch {
+    // Lanjut ke migrasi token lama bila sessionStorage tidak tersedia.
+  }
+
+  try {
+    const legacyToken = window.localStorage.getItem(LEGACY_REGISTRATION_STORAGE_KEY);
+    if (!legacyToken) return null;
+    try { window.sessionStorage.setItem(REGISTRATION_STORAGE_KEY, legacyToken); } catch { /* abaikan */ }
+    window.localStorage.removeItem(LEGACY_REGISTRATION_STORAGE_KEY);
+    return legacyToken;
+  } catch {
+    return null;
+  }
+}
+
+function storeRegistrationToken(token: string) {
+  try { window.sessionStorage.setItem(REGISTRATION_STORAGE_KEY, token); } catch { /* storage tidak tersedia */ }
+  try { window.localStorage.removeItem(LEGACY_REGISTRATION_STORAGE_KEY); } catch { /* abaikan */ }
+}
+
+function clearRegistrationToken() {
+  try { window.sessionStorage.removeItem(REGISTRATION_STORAGE_KEY); } catch { /* abaikan */ }
+  try { window.localStorage.removeItem(LEGACY_REGISTRATION_STORAGE_KEY); } catch { /* abaikan */ }
+}
 
 function emptyDocuments(): PmbDocuments {
   return { kk: null, akta: null, rapor: null, ijazah: null };
@@ -200,6 +299,8 @@ export default function SPMBDaftarOnlineV2() {
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const [form, setForm] = useState({ ...initialForm });
   const [documents, setDocuments] = useState<PmbDocuments>(() => emptyDocuments());
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -211,6 +312,21 @@ export default function SPMBDaftarOnlineV2() {
   const [policyStatus, setPolicyStatus] = useState<SpmbPolicyStatusResult | null>(null);
   const [publicWave, setPublicWave] = useState<SpmbPublicWaveResult | null>(null);
   const [payment, setPayment] = useState<PmbPaymentResult | null>(null);
+
+  useEffect(() => {
+    const draft = readFormDraft();
+    if (draft) {
+      setForm(draft);
+      setDraftRestored(true);
+    }
+    setDraftReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady || registration || statusToken || loading) return;
+    const timer = window.setTimeout(() => saveFormDraft(form), 400);
+    return () => window.clearTimeout(timer);
+  }, [draftReady, form, registration, statusToken, loading]);
 
   useEffect(() => {
     setOptionsLoading(true);
@@ -229,8 +345,8 @@ export default function SPMBDaftarOnlineV2() {
       setForm((current) => ({
         ...current,
         tahun_ajaran_id: targetYears[0].id,
-        kategori: SPMB_CATEGORY_VALUE,
-        jenis_pendaftaran: "baru",
+        kategori: current.kategori || SPMB_CATEGORY_VALUE,
+        jenis_pendaftaran: current.kategori === SPMB_TRANSFER_CATEGORY_VALUE ? "pindahan" : "baru",
       }));
     }).catch(() => {
       setOptionsError("Gagal memuat pilihan SPMB. Periksa koneksi lalu muat ulang halaman.");
@@ -249,15 +365,19 @@ export default function SPMBDaftarOnlineV2() {
       window.history.replaceState({}, "", `/spmb${url.search}${url.hash}`);
       url.pathname = "/spmb";
     }
-    const callbackToken = url.searchParams.get("registration");
+    const hashParams = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash);
+    const callbackToken = url.searchParams.get("registration") || hashParams.get("registration");
     const callbackPayment = url.searchParams.get("payment");
-    const storedToken = window.localStorage.getItem(STORAGE_KEY);
+    const storedToken = readRegistrationToken();
     setPaymentReturn(callbackPayment);
     const token = callbackToken || storedToken;
 
     if (callbackToken) {
-      window.localStorage.setItem(STORAGE_KEY, callbackToken);
+      storeRegistrationToken(callbackToken);
       url.searchParams.delete("registration");
+      hashParams.delete("registration");
+      const cleanHash = hashParams.toString();
+      url.hash = cleanHash ? `#${cleanHash}` : "";
       window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     }
     if (!token) return;
@@ -271,7 +391,7 @@ export default function SPMBDaftarOnlineV2() {
       setRegistrationStatus(status);
       setPolicyStatus(policy);
     }).catch(() => {
-      window.localStorage.removeItem(STORAGE_KEY);
+      clearRegistrationToken();
       setStatusToken(null);
     }).finally(() => setStatusLoading(false));
   }, []);
@@ -449,9 +569,11 @@ export default function SPMBDaftarOnlineV2() {
         dokumen_rapor_path: dokumenRapor,
         dokumen_ijazah_path: dokumenIjazah,
       } });
+      clearFormDraft();
+      setDraftRestored(false);
+      storeRegistrationToken(result.payment_token);
       setRegistration({ siswa_id: result.siswa_id, payment_token: result.payment_token });
       setStatusToken(result.payment_token);
-      window.localStorage.setItem(STORAGE_KEY, result.payment_token);
       try {
         const [status, policy] = await Promise.all([
           pmbGetStatus({ data: { payment_token: result.payment_token } }),
@@ -460,7 +582,7 @@ export default function SPMBDaftarOnlineV2() {
         setRegistrationStatus(status);
         setPolicyStatus(policy);
       } catch {
-        // Pendaftaran sudah tersimpan; status dapat dimuat ulang dari token lokal.
+        // Pendaftaran sudah tersimpan; status dapat dimuat ulang dari token sesi.
       }
     } catch (error: unknown) {
       const message = errorMessage(error, "Gagal mendaftar");
@@ -492,7 +614,7 @@ export default function SPMBDaftarOnlineV2() {
         siswa_id: registration?.siswa_id || registrationStatus?.siswa_id,
       } });
       setPayment(result);
-      window.localStorage.setItem(STORAGE_KEY, token);
+      storeRegistrationToken(token);
       window.location.assign(result.redirect_url);
     } catch (error: unknown) {
       toast.error(errorMessage(error, "Gagal membuat pembayaran"));
@@ -503,7 +625,9 @@ export default function SPMBDaftarOnlineV2() {
   }
 
   function clearRegistration() {
-    window.localStorage.removeItem(STORAGE_KEY);
+    clearRegistrationToken();
+    clearFormDraft();
+    setDraftRestored(false);
     setRegistration(null);
     setStatusToken(null);
     setRegistrationStatus(null);
@@ -621,6 +745,7 @@ export default function SPMBDaftarOnlineV2() {
         <Card className="border-emerald-200 shadow-lg">
           <CardHeader className="pb-2">
             <p className="text-sm text-muted-foreground">Lengkapi data calon murid dan unggah dokumen persyaratan. Field bertanda * wajib diisi.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Isian teks disimpan sementara hanya di tab browser ini hingga 4 jam. Dokumen tidak disimpan di browser dan harus dipilih ulang setelah refresh.</p>
             <p className="mt-1 text-xs text-muted-foreground">Tinggi badan, berat badan, lingkar kepala, dan ukuran baju belum diminta pada tahap pendaftaran karena calon murid belum dinyatakan lulus.</p>
           </CardHeader>
           <CardContent>
@@ -644,6 +769,12 @@ export default function SPMBDaftarOnlineV2() {
                 </div>
               )}
               {optionsError && <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{optionsError}</div>}
+              {draftRestored && (
+                <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900" role="status">
+                  <RefreshCw className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>Isian formulir sebelumnya berhasil dipulihkan. Demi keamanan, file KK, Akta, Rapor, atau Ijazah tidak disimpan di browser sehingga perlu dipilih ulang.</span>
+                </div>
+              )}
               {submitError && <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{submitError}</div>}
 
               <fieldset disabled={loading || optionsLoading || Boolean(optionsError) || !registrationOpen} className="space-y-6 disabled:opacity-70">
