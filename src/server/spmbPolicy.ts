@@ -75,7 +75,7 @@ export const spmbGetPolicyStatus = createServerFn({ method: "POST" })
     const admin = createAdminClient();
     const { data: detail, error: detailError } = await (admin
       .from("siswa_detail") as any)
-      .select("siswa_id,spmb_gelombang_id,spmb_departemen_tujuan_id")
+      .select("siswa_id,spmb_gelombang_id,spmb_departemen_tujuan_id,spmb_registered_at")
       .eq("pmb_payment_token", token)
       .maybeSingle();
     if (detailError || !detail?.siswa_id) throw new Error("Pendaftaran SPMB tidak ditemukan");
@@ -86,6 +86,7 @@ export const spmbGetPolicyStatus = createServerFn({ method: "POST" })
       .eq("id", detail.siswa_id)
       .maybeSingle();
     if (siswaError || !siswa?.created_at) throw new Error("Data calon murid SPMB tidak ditemukan");
+    const registeredAt = (detail as any).spmb_registered_at || siswa.created_at;
 
     let wave: SpmbWaveSummary | null = null;
     if (detail.spmb_gelombang_id) {
@@ -101,8 +102,8 @@ export const spmbGetPolicyStatus = createServerFn({ method: "POST" })
       const { data: historicalWave } = await (admin
         .from("spmb_gelombang") as any)
         .select("id,nama,tanggal_mulai,tanggal_selesai,gratis_pendaftaran,aktif,urutan")
-        .lte("tanggal_mulai", siswa.created_at)
-        .or(`tanggal_selesai.is.null,tanggal_selesai.gt.${siswa.created_at}`)
+        .lte("tanggal_mulai", registeredAt)
+        .or(`tanggal_selesai.is.null,tanggal_selesai.gt.${registeredAt}`)
         .order("urutan")
         .limit(1)
         .maybeSingle();
@@ -118,7 +119,7 @@ export const spmbGetPolicyStatus = createServerFn({ method: "POST" })
 
     return {
       siswa_id: siswa.id,
-      registered_at: siswa.created_at,
+      registered_at: registeredAt,
       gratis_pendaftaran: wave?.gratis_pendaftaran === true,
       payment_visible: Boolean(wave && !wave.gratis_pendaftaran),
       group_calon_siswa_url: (config as any)?.group_calon_siswa_url || null,
