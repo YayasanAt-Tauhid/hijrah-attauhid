@@ -32,6 +32,7 @@ import {
 } from "@/lib/spmbPolicy";
 import {
   AlertTriangle,
+  ArrowRightLeft,
   CheckCircle2,
   Clock,
   Eye,
@@ -43,6 +44,7 @@ import {
   Users,
 } from "lucide-react";
 import { fetchAllPages } from "@/lib/fetchAll";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 function diagnosaNIS(row: Record<string, unknown>): { alasan?: "no_dept_angkatan" | "no_kelas" } {
@@ -152,6 +154,8 @@ function normalizeDigits(value: string) {
 export default function SPMB() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { role } = useAuth();
+  const canChangeSpmbTarget = role === "admin" || role === "admin_tu";
   const angkatanQuery = useAngkatan();
   const departemenQuery = useDepartemen();
   const tahunQuery = useTahunAjaran();
@@ -188,6 +192,12 @@ export default function SPMB() {
   const [activationRow, setActivationRow] = useState<Record<string, unknown> | null>(null);
   const [activationClassId, setActivationClassId] = useState("");
   const [activationLoading, setActivationLoading] = useState(false);
+  const [targetChangeRow, setTargetChangeRow] = useState<Record<string, unknown> | null>(null);
+  const [targetChangeDeptId, setTargetChangeDeptId] = useState("");
+  const [targetChangeCohortId, setTargetChangeCohortId] = useState("");
+  const [targetChangeAsrama, setTargetChangeAsrama] = useState("");
+  const [targetChangeReason, setTargetChangeReason] = useState("");
+  const [targetChangeLoading, setTargetChangeLoading] = useState(false);
   const [filters, setFilters] = useState<SpmbFilterState>(DEFAULT_FILTERS);
   const [sortMode, setSortMode] = useState("registration_desc");
 
@@ -414,6 +424,49 @@ export default function SPMB() {
       });
     },
   });
+
+  const {
+    data: targetChangeRef = { departemen: [], angkatan: [] } as any,
+    isLoading: targetChangeRefLoading,
+    error: targetChangeRefError,
+  } = useQuery({
+    queryKey: ["spmb", "target-change-reference", targetChangeRow?.id],
+    enabled: Boolean(targetChangeRow?.id) && canChangeSpmbTarget,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("spmb_target_change_reference", {
+        p_siswa_id: targetChangeRow?.id,
+      });
+      if (error) throw error;
+      return data || { departemen: [], angkatan: [] };
+    },
+  });
+
+  const targetChangeDept = (targetChangeRef.departemen || []).find(
+    (dept: any) => dept.id === targetChangeDeptId,
+  );
+  const targetChangeCode = String(targetChangeDept?.kode || "").trim().toUpperCase();
+  const targetChangeNeedsAsrama = ["SMP", "SMA", "MTA"].includes(targetChangeCode)
+    || /(^|\s)(SMP|SMA|MTA)(\s|$)/.test(String(targetChangeDept?.nama || "").trim().toUpperCase());
+  const targetChangeInternal = targetChangeRow?._spmbInternal === true;
+  const targetChangeCohorts = (targetChangeRef.angkatan || []).filter(
+    (cohort: any) => cohort.departemen_id === targetChangeDeptId,
+  );
+  const targetChangeDetail = targetChangeRow?._spmbDetail as Record<string, any> | undefined;
+  const targetChangeHasMilestones = Boolean(
+    targetChangeDetail?.spmb_tanggal_tes
+    || targetChangeDetail?.spmb_tanggal_lulus
+    || targetChangeDetail?.spmb_tanggal_daftar_ulang
+    || targetChangeDetail?.spmb_status_kelulusan
+    || targetChangeDetail?.spmb_tanggal_keputusan
+    || (targetChangeDetail?.spmb_status_pendaftaran && targetChangeDetail.spmb_status_pendaftaran !== "calon")
+  );
+  const targetChangeActuallyChanged = Boolean(
+    targetChangeRow
+    && (
+      targetChangeDeptId !== targetChangeRow.departemen_id
+      || targetChangeCohortId !== targetChangeRow.angkatan_id
+    )
+  );
 
   const calonCount = calonList.filter((s: any) => s.status === "calon").length;
   const diterimaCount = calonList.filter((s: any) => s.status === "diterima").length;
@@ -727,6 +780,89 @@ export default function SPMB() {
     }
   };
 
+  const openTargetChange = (row: Record<string, unknown>) => {
+    const detail = row._spmbDetail as Record<string, any> | undefined;
+    setTargetChangeRow(row);
+    setTargetChangeDeptId((row.departemen_id as string) || "");
+    setTargetChangeCohortId((row.angkatan_id as string) || "");
+    setTargetChangeAsrama(detail?.status_asrama || "");
+    setTargetChangeReason("");
+  };
+
+  const closeTargetChange = () => {
+    if (targetChangeLoading) return;
+    setTargetChangeRow(null);
+    setTargetChangeDeptId("");
+    setTargetChangeCohortId("");
+    setTargetChangeAsrama("");
+    setTargetChangeReason("");
+  };
+
+  const handleTargetChange = async () => {
+    if (!targetChangeRow || !targetChangeDeptId || !targetChangeCohortId) {
+      toast.error("Pilih lembaga dan angkatan tujuan");
+      return;
+    }
+    if (!targetChangeActuallyChanged) {
+      toast.error("Lembaga dan angkatan tujuan belum berubah");
+      return;
+    }
+    if (targetChangeNeedsAsrama && !(targetChangeCode === "MTA" && !targetChangeInternal) && !targetChangeAsrama) {
+      toast.error("Pilih status Asrama / Non Asrama");
+      return;
+    }
+    if (targetChangeReason.trim().length < 5) {
+      toast.error("Alasan perubahan tujuan wajib diisi minimal 5 karakter");
+      return;
+    }
+
+    const oldName = (targetChangeRow._lembagaNama as string) || "lembaga lama";
+    const newName = targetChangeDept?.nama || "lembaga baru";
+    const resetMessage = targetChangeHasMilestones
+      ? "\n\nStatus Tes/Lulus/Daftar Ulang yang sudah ada akan direset agar lembaga baru memproses ulang."
+      : "";
+    if (!window.confirm(
+      `Ubah tujuan SPMB ${targetChangeRow.nama as string} dari ${oldName} ke ${newName}?${resetMessage}`,
+    )) return;
+
+    setTargetChangeLoading(true);
+    try {
+      const { data, error } = await (supabase as any).rpc("spmb_change_registration_target", {
+        p_siswa_id: targetChangeRow.id,
+        p_departemen_tujuan_id: targetChangeDeptId,
+        p_angkatan_tujuan_id: targetChangeCohortId,
+        p_status_asrama: targetChangeNeedsAsrama
+          ? (targetChangeCode === "MTA" && !targetChangeInternal ? "asrama" : targetChangeAsrama)
+          : null,
+        p_alasan: targetChangeReason.trim(),
+      });
+      if (error) throw error;
+      const result = Array.isArray(data) ? data[0] : data;
+
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["siswa"] }),
+        qc.invalidateQueries({ queryKey: ["siswa", "calon"] }),
+        qc.invalidateQueries({ queryKey: ["siswa_detail"] }),
+        qc.invalidateQueries({ queryKey: ["spmb_verification_overview"] }),
+      ]);
+
+      toast.success(`Tujuan SPMB ${targetChangeRow.nama as string} berhasil diubah ke ${newName}`, {
+        description: result?.milestones_reset
+          ? "Tahapan Tes/Lulus/Daftar Ulang lama direset. Pendaftaran yang sama tetap dipakai."
+          : "Pendaftaran yang sama tetap dipakai; data siswa tidak digandakan.",
+        duration: 10000,
+      });
+      closeTargetChange();
+    } catch (error: any) {
+      toast.error("Gagal mengubah tujuan SPMB", {
+        description: error?.message || "Terjadi kesalahan teknis",
+        duration: 12000,
+      });
+    } finally {
+      setTargetChangeLoading(false);
+    }
+  };
+
   const columns: DataTableColumn<Record<string, unknown>>[] = [
     { key: "nama", label: "Nama", sortable: true },
     {
@@ -838,6 +974,22 @@ export default function SPMB() {
           <div className="flex flex-wrap gap-1" onClick={(event) => event.stopPropagation()}>
             <Button size="sm" variant="outline" onClick={() => navigate(`/akademik/siswa/${row.id}`)} title="Lihat biodata, checklist verifikasi & dokumen SPMB"><Eye className="h-3 w-3" /></Button>
             <Button size="sm" variant="outline" onClick={() => navigate(`/akademik/siswa/${row.id}/edit`)} title="Edit data lengkap"><Pencil className="h-3 w-3" /></Button>
+            {canChangeSpmbTarget
+              && !detail?.spmb_tanggal_aktivasi
+              && detail?.spmb_status_pendaftaran !== "selesai"
+              && (internalStudent || row._academicStatus !== "aktif")
+              && (
+                <span title={row._pmbLunas && !row._pmbGratis ? "Sudah ada pembayaran pendaftaran; koreksi tujuan harus diselesaikan bersama bagian keuangan." : "Ubah lembaga/jenjang tujuan SPMB"}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={Boolean(row._pmbLunas && !row._pmbGratis)}
+                    onClick={() => openTargetChange(row)}
+                  >
+                    <ArrowRightLeft className="mr-1 h-3 w-3" />Ubah Tujuan
+                  </Button>
+                </span>
+              )}
             {!detail?.spmb_tanggal_tes && <Button size="sm" variant="outline" disabled={tesLoading} onClick={() => handleMilestone(row, "tes", "Sudah Tes")}>{tesLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Sudah Tes"}</Button>}
             {detail?.spmb_tanggal_tes && !detail?.spmb_status_kelulusan && <>
               <Button size="sm" variant="outline" disabled={lulusLoading} onClick={() => handleMilestone(row, "lulus", "Lulus")}>{lulusLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Lulus"}</Button>
@@ -1182,6 +1334,162 @@ export default function SPMB() {
               <Button variant="outline" disabled={activationLoading} onClick={closeInternalActivation}>Batal</Button>
               <Button disabled={activationLoading || !activationClassId || activationClasses.length === 0} onClick={handleInternalActivation}>
                 {activationLoading ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Memproses…</> : "Aktifkan ke Jenjang Tujuan"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(targetChangeRow)}
+        onOpenChange={(open) => {
+          if (!open) closeTargetChange();
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Ubah Lembaga/Jenjang Tujuan SPMB</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+              <p className="font-medium">{targetChangeRow?.nama as string || "-"}</p>
+              <p className="mt-1 text-muted-foreground">
+                Tujuan saat ini: <strong>{targetChangeRow?._lembagaNama as string || "-"}</strong>
+                {targetChangeRow?._angkatanNama ? ` · Angkatan ${targetChangeRow._angkatanNama as string}` : ""}
+              </p>
+              {targetChangeInternal && (
+                <p className="mt-1 text-xs text-info">
+                  Siswa internal tetap aktif di {targetChangeRow?._academicLembagaNama as string || "lembaga asal"} sampai proses SPMB tujuan baru selesai.
+                </p>
+              )}
+            </div>
+
+            {targetChangeRefError && (
+              <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                Referensi tujuan gagal dimuat: {targetChangeRefError instanceof Error ? targetChangeRefError.message : "Terjadi kesalahan."}
+              </p>
+            )}
+
+            <div className="space-y-1.5">
+              <Label>Lembaga/Jenjang Tujuan Baru *</Label>
+              <Select
+                value={targetChangeDeptId}
+                disabled={targetChangeRefLoading || targetChangeLoading}
+                onValueChange={(value) => {
+                  setTargetChangeDeptId(value);
+                  const currentCohortName = String(targetChangeRow?._angkatanNama || "").trim();
+                  const matching = (targetChangeRef.angkatan || []).find(
+                    (cohort: any) => cohort.departemen_id === value
+                      && String(cohort.nama || "").trim() === currentCohortName,
+                  );
+                  const fallback = (targetChangeRef.angkatan || []).find(
+                    (cohort: any) => cohort.departemen_id === value,
+                  );
+                  setTargetChangeCohortId(matching?.id || fallback?.id || "");
+
+                  const dept = (targetChangeRef.departemen || []).find((item: any) => item.id === value);
+                  const code = String(dept?.kode || "").trim().toUpperCase();
+                  const needsAsrama = ["SMP", "SMA", "MTA"].includes(code)
+                    || /(^|\s)(SMP|SMA|MTA)(\s|$)/.test(String(dept?.nama || "").trim().toUpperCase());
+                  if (!needsAsrama) setTargetChangeAsrama("");
+                  else if (code === "MTA" && !targetChangeInternal) setTargetChangeAsrama("asrama");
+                  else {
+                    const existing = (targetChangeRow?._spmbDetail as any)?.status_asrama;
+                    setTargetChangeAsrama(existing === "asrama" || existing === "non_asrama" ? existing : "");
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={targetChangeRefLoading ? "Memuat lembaga..." : "Pilih lembaga tujuan"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(targetChangeRef.departemen || []).map((dept: any) => (
+                    <SelectItem key={dept.id} value={dept.id}>
+                      {dept.kode || dept.nama} — {dept.nama}{dept.psb_dibuka === false ? " (SPMB publik ditutup)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Angkatan Tujuan *</Label>
+              <Select
+                value={targetChangeCohortId}
+                onValueChange={setTargetChangeCohortId}
+                disabled={!targetChangeDeptId || targetChangeLoading}
+              >
+                <SelectTrigger><SelectValue placeholder="Pilih angkatan tujuan" /></SelectTrigger>
+                <SelectContent>
+                  {targetChangeCohorts.map((cohort: any) => (
+                    <SelectItem key={cohort.id} value={cohort.id}>{cohort.nama}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!targetChangeRefLoading && targetChangeDeptId && targetChangeCohorts.length === 0 && (
+                <p className="text-xs text-destructive">Belum ada angkatan aktif pada lembaga tujuan ini.</p>
+              )}
+            </div>
+
+            {targetChangeNeedsAsrama && (
+              <div className="space-y-1.5">
+                <Label>Status Asrama di Tujuan *</Label>
+                {targetChangeCode === "MTA" && !targetChangeInternal ? (
+                  <>
+                    <Input value="Asrama — wajib untuk pendaftar baru MTA" disabled />
+                    <p className="text-xs text-muted-foreground">Aturan MTA otomatis menetapkan pendaftar baru sebagai Asrama.</p>
+                  </>
+                ) : (
+                  <Select value={targetChangeAsrama} onValueChange={setTargetChangeAsrama} disabled={targetChangeLoading}>
+                    <SelectTrigger><SelectValue placeholder="Pilih status asrama" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="asrama">Asrama</SelectItem>
+                      <SelectItem value="non_asrama">Non Asrama{targetChangeCode === "MTA" ? " — murid lama/internal" : ""}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label>Alasan Perubahan *</Label>
+              <Textarea
+                value={targetChangeReason}
+                onChange={(event) => setTargetChangeReason(event.target.value)}
+                placeholder="Contoh: Salah pilih jenjang saat pendaftaran; seharusnya SMA."
+                disabled={targetChangeLoading}
+                rows={3}
+              />
+            </div>
+
+            {targetChangeHasMilestones && (
+              <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/5 p-3 text-xs text-warning">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>Tes, hasil kelulusan, keputusan, dan daftar ulang lama akan direset agar lembaga tujuan baru memproses tahapan seleksi dari awal.</p>
+              </div>
+            )}
+
+            <div className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
+              ID pendaftaran dan data identitas siswa tetap sama. Untuk siswa internal, kelas/NIS/lembaga aktif saat ini tidak berubah.
+              Jika pendaftaran mendapat promo gratis, pembukuan promo lembaga lama dikoreksi dengan jurnal pembalik lalu dibukukan ulang pada lembaga tujuan secara atomik.
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" disabled={targetChangeLoading} onClick={closeTargetChange}>Batal</Button>
+              <Button
+                disabled={
+                  targetChangeLoading
+                  || targetChangeRefLoading
+                  || !targetChangeActuallyChanged
+                  || !targetChangeDeptId
+                  || !targetChangeCohortId
+                  || (targetChangeNeedsAsrama && !(targetChangeCode === "MTA" && !targetChangeInternal) && !targetChangeAsrama)
+                  || targetChangeReason.trim().length < 5
+                }
+                onClick={handleTargetChange}
+              >
+                {targetChangeLoading ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Menyimpan…</> : <><ArrowRightLeft className="mr-2 h-4 w-4" />Simpan Tujuan Baru</>}
               </Button>
             </div>
           </div>
