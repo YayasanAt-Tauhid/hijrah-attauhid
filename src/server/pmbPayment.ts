@@ -372,19 +372,19 @@ export const pmbCreatePayment = createServerFn({ method: "POST" })
 
     const origin = new URL((await import("@tanstack/react-start/server")).getRequest().url).origin;
     const payments = enabledPayments();
-    // Token hanya dibawa sekali pada callback agar browser dapat memulihkan
-    // pendaftaran. Halaman /pmb segera menyimpannya ke localStorage lalu
-    // menghapus token dari address bar untuk mengurangi risiko kebocoran URL.
-    const registrationParam = encodeURIComponent(token);
+    // Token hanya dibawa sekali pada fragment callback agar browser dapat
+    // memulihkan pendaftaran. Fragment tidak dikirim ke server/referrer.
+    // Halaman /spmb segera memindahkannya ke sessionStorage lalu membersihkannya.
+    const registrationFragment = encodeURIComponent(token);
     const payload: Record<string, unknown> = {
       transaction_details: { order_id: orderId, gross_amount: Math.round(nominal) },
       customer_details: { first_name: siswa.nama },
       item_details: [{ id: "PMB-REG", price: Math.round(nominal), quantity: 1, name: `${jenis.nama} - ${siswa.nama}`.slice(0, 50) }],
       enabled_payments: payments,
       callbacks: {
-        finish: `${origin}/pmb?payment=finish&order=${encodeURIComponent(orderId)}&registration=${registrationParam}`,
-        unfinish: `${origin}/pmb?payment=pending&order=${encodeURIComponent(orderId)}&registration=${registrationParam}`,
-        error: `${origin}/pmb?payment=error&order=${encodeURIComponent(orderId)}&registration=${registrationParam}`,
+        finish: `${origin}/spmb?payment=finish&order=${encodeURIComponent(orderId)}#registration=${registrationFragment}`,
+        unfinish: `${origin}/spmb?payment=pending&order=${encodeURIComponent(orderId)}#registration=${registrationFragment}`,
+        error: `${origin}/spmb?payment=error&order=${encodeURIComponent(orderId)}#registration=${registrationFragment}`,
       },
       expiry: { unit: "hours", duration: 24 },
     };
