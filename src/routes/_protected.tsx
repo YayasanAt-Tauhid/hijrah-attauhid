@@ -14,5 +14,8 @@ const STAFF_ROLES = [
 ] as const;
 
 export const Route = createFileRoute("/_protected")({
+  head: () => ({
+    meta: [{ name: "robots", content: "noindex, nofollow, noarchive" }],
+  }),
   component: () => <ProtectedRoute allowedRoles={[...STAFF_ROLES]} />,
 });

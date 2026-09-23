@@ -84,5 +84,11 @@ Content-Type: application/json
 }
 
 export const Route = createFileRoute("/docs/integration-api")({
+  head: () => ({
+    meta: [
+      { title: "Integration API v1 | Hijrah At-Tauhid" },
+      { name: "robots", content: "noindex, nofollow, noarchive" },
+    ],
+  }),
   component: IntegrationApiDocs,
 });
