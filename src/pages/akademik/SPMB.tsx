@@ -278,7 +278,7 @@ export default function SPMB() {
     queryFn: async () => {
       const details = await fetchAllPages<any>((from, to) => (supabase as any)
         .from("siswa_detail")
-        .select("siswa_id,tahun_ajaran_id,status_asrama,kategori,dokumen_kk_path,dokumen_akta_path,spmb_tanggal_tes,spmb_tanggal_lulus,spmb_tanggal_daftar_ulang,spmb_status_kelulusan,spmb_tanggal_keputusan,spmb_departemen_tujuan_id,spmb_angkatan_tujuan_id,spmb_status_pendaftaran,spmb_siswa_internal,spmb_kelas_tujuan_id,spmb_tanggal_aktivasi,spmb_gelombang_id")
+        .select("siswa_id,tahun_ajaran_id,status_asrama,kategori,dokumen_kk_path,dokumen_akta_path,spmb_tanggal_tes,spmb_tanggal_lulus,spmb_tanggal_daftar_ulang,spmb_status_kelulusan,spmb_tanggal_keputusan,spmb_departemen_tujuan_id,spmb_angkatan_tujuan_id,spmb_status_pendaftaran,spmb_siswa_internal,spmb_kelas_tujuan_id,spmb_tanggal_aktivasi,spmb_gelombang_id,spmb_registered_at")
         .not("spmb_gelombang_id", "is", null)
         .order("siswa_id")
         .range(from, to));
@@ -363,6 +363,7 @@ export default function SPMB() {
           _spmbTahunAjaranId: detail?.tahun_ajaran_id || null,
           _spmbKelasTujuanId: detail?.spmb_kelas_tujuan_id || null,
           _spmbTanggalAktivasi: detail?.spmb_tanggal_aktivasi || null,
+          _spmbRegisteredAt: detail?.spmb_registered_at || s.created_at || null,
           _biayaSort: biayaSort,
           _kesiapanSort: r?.siap ? "siap" : "belum",
           _verifikasiSort: s.terverifikasi ? "sudah" : "belum",
@@ -424,8 +425,8 @@ export default function SPMB() {
   });
 
   const sortedCalonList = [...filteredCalonList].sort((a: any, b: any) => {
-    const createdA = new Date(a.created_at || 0).getTime();
-    const createdB = new Date(b.created_at || 0).getTime();
+    const createdA = new Date(a._spmbRegisteredAt || a.created_at || 0).getTime();
+    const createdB = new Date(b._spmbRegisteredAt || b.created_at || 0).getTime();
     const paidA = a._pmbTanggalBayar ? new Date(a._pmbTanggalBayar).getTime() : null;
     const paidB = b._pmbTanggalBayar ? new Date(b._pmbTanggalBayar).getTime() : null;
     if (sortMode === "registration_asc") return createdA - createdB;
@@ -735,7 +736,7 @@ export default function SPMB() {
     { key: "_lembagaNama", label: "Lembaga", sortable: true, render: (value) => (value as string) || "-" },
     { key: "_spmbAsrama", label: "Asrama", sortable: true, render: (value) => (value as string) || "-" },
     { key: "_angkatanNama", label: "Angkatan", sortable: true, render: (value) => (value as string) || "-" },
-    { key: "created_at", label: "Tgl Pendaftaran", sortable: true, render: (value) => formatTanggal(value) },
+    { key: "_spmbRegisteredAt", label: "Tgl Pendaftaran", sortable: true, render: (value) => formatTanggal(value) },
     { key: "_pmbTanggalBayar", label: "Tgl Bayar Pendaftaran", sortable: true, render: (value) => formatTanggal(value) },
     { key: "_spmbTesStatus", label: "Status Tes", sortable: true, render: (value) => value === "sudah" ? <span className="text-xs text-success">Sudah Tes</span> : <span className="text-xs text-warning">Belum Tes</span> },
     { key: "_spmbTanggalTes", label: "Tgl Tes", sortable: true, render: (value) => formatTanggal(value) },
