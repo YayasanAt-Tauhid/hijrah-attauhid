@@ -48,6 +48,14 @@ const PENDIDIKAN_OPTIONS = [
   ["D3", "D3"], ["S1", "S1"], ["S2", "S2"], ["S3", "S3"],
 ] as const;
 const PEKERJAAN_OPTIONS = ["PNS/TNI/POLRI", "KARYAWAN BUMN", "KARYAWAN SWASTA", "WIRASWASTA", "LAINNYA", "SUDAH MENINGGAL"];
+const PENGHASILAN_OPTIONS = [
+  ["1000000", "< Rp 1.000.000"],
+  ["2000000", "Rp 1.000.000 s.d Rp 2.000.000"],
+  ["5000000", "Rp 2.000.000 s.d Rp 5.000.000"],
+  ["20000000", "Rp 5.000.000 s.d Rp 20.000.000"],
+  ["30000000", "> Rp 20.000.000"],
+] as const;
+const PENGHASILAN_VALUES = new Set(PENGHASILAN_OPTIONS.map(([value]) => value));
 const IQRO_OPTIONS = [
   ["0", "BELUM PERNAH BELAJAR IQRO"], ["1", "1"], ["2", "2"], ["3", "3"],
   ["4", "4"], ["5", "5"], ["6", "6"], ["7", "SUDAH MENAMATKAN IQRO"],
@@ -78,6 +86,9 @@ function sanitizeDraftForm(value: unknown): PmbForm | null {
   for (const key of Object.keys(initialForm)) {
     const candidate = source[key];
     if (typeof candidate === "string") restored[key] = candidate;
+  }
+  for (const key of ["penghasilan_ayah", "penghasilan_ibu"] as const) {
+    if (restored[key] && !PENGHASILAN_VALUES.has(restored[key])) restored[key] = "";
   }
   return restored as PmbForm;
 }
@@ -900,7 +911,7 @@ export default function SPMBDaftarOnlineV2() {
                     <div><Label>Tanggal Lahir *</Label><Input className="min-h-11" type="date" value={form.tanggal_lahir_ayah} onChange={set("tanggal_lahir_ayah")} /></div>
                     <div><Label>Pendidikan Terakhir *</Label><OptionSelect value={form.pendidikan_ayah} placeholder="Pilih pendidikan" options={PENDIDIKAN_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, pendidikan_ayah: value }))} /></div>
                     <div><Label>Pekerjaan *</Label><OptionSelect value={form.pekerjaan_ayah} placeholder="Pilih pekerjaan" options={PEKERJAAN_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, pekerjaan_ayah: value }))} /></div>
-                    <div><Label>Penghasilan (Rp) *</Label><Input className="min-h-11" type="number" min="0" value={form.penghasilan_ayah} onChange={set("penghasilan_ayah")} /></div>
+                    <div><Label>Rentang Penghasilan *</Label><OptionSelect value={form.penghasilan_ayah} placeholder="Pilih rentang penghasilan" options={PENGHASILAN_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, penghasilan_ayah: value }))} /></div>
                     <div><Label>No. HP / WA *</Label><Input className="min-h-11" value={form.telepon_ayah} onChange={set("telepon_ayah")} inputMode="tel" /></div>
                   </div>
                   <div><Label>Alamat Ayah *</Label><Textarea value={form.alamat_ayah} onChange={set("alamat_ayah")} /></div>
@@ -914,7 +925,7 @@ export default function SPMBDaftarOnlineV2() {
                     <div><Label>Tanggal Lahir *</Label><Input className="min-h-11" type="date" value={form.tanggal_lahir_ibu} onChange={set("tanggal_lahir_ibu")} /></div>
                     <div><Label>Pendidikan Terakhir *</Label><OptionSelect value={form.pendidikan_ibu} placeholder="Pilih pendidikan" options={PENDIDIKAN_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, pendidikan_ibu: value }))} /></div>
                     <div><Label>Pekerjaan *</Label><OptionSelect value={form.pekerjaan_ibu} placeholder="Pilih pekerjaan" options={PEKERJAAN_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, pekerjaan_ibu: value }))} /></div>
-                    <div><Label>Penghasilan (Rp) *</Label><Input className="min-h-11" type="number" min="0" value={form.penghasilan_ibu} onChange={set("penghasilan_ibu")} /></div>
+                    <div><Label>Rentang Penghasilan *</Label><OptionSelect value={form.penghasilan_ibu} placeholder="Pilih rentang penghasilan" options={PENGHASILAN_OPTIONS} onValueChange={(value) => setForm((current) => ({ ...current, penghasilan_ibu: value }))} /></div>
                     <div><Label>No. HP / WA *</Label><Input className="min-h-11" value={form.telepon_ibu} onChange={set("telepon_ibu")} inputMode="tel" /></div>
                   </div>
                   <div><Label>Alamat Ibu *</Label><Textarea value={form.alamat_ibu} onChange={set("alamat_ibu")} /></div>
