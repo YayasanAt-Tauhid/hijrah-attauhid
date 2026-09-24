@@ -12,7 +12,7 @@ function IntegrationApiDocs() {
             <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-blue-700">Hijrah At-Tauhid</p>
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Integration API v1.1</h1>
             <p className="mt-4 max-w-3xl text-slate-600">
-              Dokumentasi resmi API baca dan update terbatas status SPMB untuk backend aplikasi pihak ketiga.
+              Dokumentasi resmi API baca, update terbatas status SPMB, serta integrasi data pegawai untuk backend aplikasi pihak ketiga.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <a className="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800" href="/docs/openapi-integration-v1.yaml" target="_blank" rel="noreferrer">Buka OpenAPI</a>
@@ -41,11 +41,14 @@ function IntegrationApiDocs() {
                   <tr><td className="px-4 py-3 font-mono">pendaftaran:documents:read</td><td className="px-4 py-3">Metadata dan signed URL dokumen privat</td></tr>
                   <tr><td className="px-4 py-3 font-mono">siswa:read</td><td className="px-4 py-3">Data siswa dan relasi kelas</td></tr>
                   <tr><td className="px-4 py-3 font-mono">kelas:read</td><td className="px-4 py-3">Data kelas</td></tr>
+                  <tr><td className="px-4 py-3 font-mono">pegawai:read</td><td className="px-4 py-3">Data dasar pegawai</td></tr>
+                  <tr><td className="px-4 py-3 font-mono">pegawai:contact:read</td><td className="px-4 py-3">Biodata & kontak pegawai; memerlukan pegawai:read</td></tr>
+                  <tr className="bg-amber-50"><td className="px-4 py-3 font-mono">pegawai:write</td><td className="px-4 py-3 font-semibold">Bulk import dan update data pegawai</td></tr>
                   <tr className="bg-amber-50"><td className="px-4 py-3 font-mono">pendaftaran:milestone:update</td><td className="px-4 py-3 font-semibold">Update Status SPMB (Tes, Lulus, dan Tidak Lulus)</td></tr>
                 </tbody>
               </table>
             </div>
-            <p className="mt-3 text-sm text-slate-500">Pembatasan unit/departemen dan tahun ajaran diterapkan server-side sesuai konfigurasi token. Token lama dengan scope sensitive tetap kompatibel; integrasi baru dianjurkan memakai scope identity/contact yang lebih sempit.</p>
+            <p className="mt-3 text-sm text-slate-500">Pembatasan unit/departemen dan tahun ajaran diterapkan server-side sesuai konfigurasi token. Untuk pegawai, pembatasan unit tetap berlaku sedangkan tahun ajaran tidak relevan. Token lama dengan scope sensitive tetap kompatibel; integrasi baru dianjurkan memakai scope paling sempit.</p>
           </section>
 
           <section className="mt-9 rounded-xl border border-blue-200 bg-blue-50 p-5">
@@ -60,10 +63,32 @@ Content-Type: application/json
             <p className="mt-3 text-sm text-blue-900">Lulus maupun Tidak Lulus wajib setelah Tes, dan request ulang action yang sama idempotent. Payload hanya boleh berisi <code className="rounded bg-white px-1">action</code>; biodata, NIK, orang tua, pembayaran, dan kelas tidak dapat diubah.</p>
           </section>
 
+          <section className="mt-9 rounded-xl border border-violet-200 bg-violet-50 p-5">
+            <h2 className="text-xl font-bold text-violet-950">Integrasi Data Pegawai</h2>
+            <p className="mt-2 text-sm text-violet-900">Baca data pegawai menggunakan <code className="rounded bg-white px-1">pegawai:read</code>. Biodata/kontak membutuhkan <code className="rounded bg-white px-1">pegawai:contact:read</code>. Import/update membutuhkan <code className="rounded bg-white px-1">pegawai:write</code>.</p>
+            <div className="mt-4 grid gap-2">
+              <code className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm">GET {BASE_URL}/pegawai</code>
+              <code className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm">GET {BASE_URL}/pegawai/{'{pegawai_id}'}</code>
+              <code className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm">POST {BASE_URL}/pegawai/import</code>
+            </div>
+            <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-900 p-4 text-sm text-slate-100">{`{
+  "update_existing": true,
+  "rows": [{
+    "pegawai_id": "UUID",
+    "nip": "19870001",
+    "nama": "Ahmad Fulan",
+    "jabatan": "Guru",
+    "departemen_id": "UUID",
+    "status": "aktif"
+  }]
+}`}</pre>
+            <p className="mt-3 text-sm text-violet-900">Update dicocokkan berdasarkan <code className="rounded bg-white px-1">pegawai_id</code> lalu NIP. Nama/email/telepon tidak dijadikan kunci otomatis. Endpoint ini tidak dapat mengubah role/login, presensi, tabungan, jurnal, pembayaran, atau tabel keuangan.</p>
+          </section>
+
           <section className="mt-9">
             <h2 className="text-xl font-bold">Endpoint utama</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {["POST /pendaftaran/{id}/milestone", "GET /pendaftaran", "GET /pendaftaran/{pendaftaran_id}", "GET /siswa", "GET /siswa/{siswa_id}", "GET /kelas", "GET /kelas/{kelas_id}/siswa", "GET /sync/pendaftaran", "GET /sync/siswa", "GET /sync/kelas", "GET /documents/{pendaftaran_id}.{jenis}"].map((endpoint) => <code key={endpoint} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">{endpoint}</code>)}
+              {["POST /pendaftaran/{id}/milestone", "GET /pendaftaran", "GET /pendaftaran/{pendaftaran_id}", "GET /siswa", "GET /siswa/{siswa_id}", "GET /kelas", "GET /kelas/{kelas_id}/siswa", "GET /pegawai", "GET /pegawai/{pegawai_id}", "POST /pegawai/import", "GET /sync/pendaftaran", "GET /sync/siswa", "GET /sync/kelas", "GET /documents/{pendaftaran_id}.{jenis}"].map((endpoint) => <code key={endpoint} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">{endpoint}</code>)}
             </div>
           </section>
 
@@ -89,7 +114,7 @@ Content-Type: application/json
             <p className="mt-3 text-slate-600">Dokumen privat diakses melalui endpoint dokumen dan menghasilkan signed URL sementara. Untuk sinkronisasi berkelanjutan gunakan endpoint <code className="rounded bg-slate-100 px-1">/sync/*</code> dan simpan checkpoint terakhir di backend penerima.</p>
           </section>
 
-          <footer className="mt-10 border-t border-slate-200 pt-6 text-sm text-slate-500">Integration API v1.1 · Backward-compatible /api/v1 · Read + scoped SPMB milestone write + optional webhook</footer>
+          <footer className="mt-10 border-t border-slate-200 pt-6 text-sm text-slate-500">Integration API v1.1 · Backward-compatible /api/v1 · Scoped read + SPMB milestone write + employee import/update + optional webhook</footer>
         </div>
       </div>
     </main>
