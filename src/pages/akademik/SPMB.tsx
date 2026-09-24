@@ -47,7 +47,7 @@ import { fetchAllPages } from "@/lib/fetchAll";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { AdminSpmbRegistrationDialog } from "@/components/akademik/AdminSpmbRegistrationDialog";
-import { spmbAdminUpdateRegistrantName } from "@/server/pmb";
+import { spmbAdminUpdateRegistrantName, spmbAdminUpdateRegistrationMethod } from "@/server/pmb";
 
 function diagnosaNIS(row: Record<string, unknown>): { alasan?: "no_dept_angkatan" | "no_kelas" } {
   const departemenId = row.departemen_id as string | null;
@@ -127,7 +127,7 @@ const SPMB_EXPORT_COLUMNS = [
   { key: "_exportKekurangan", label: "Kekurangan Data" },
   { key: "_exportVerifikasi", label: "Verifikasi" },
   { key: "_exportStatusPendaftaran", label: "Status Pendaftaran" },
-  { key: "_exportSumber", label: "Sumber Pendaftaran" },
+  { key: "_exportSumber", label: "Metode Pendaftaran" },
   { key: "_spmbInputer", label: "Nama Pendaftar" },
 ];
 
@@ -234,6 +234,9 @@ export default function SPMB() {
   const [registrantEditRow, setRegistrantEditRow] = useState<Record<string, unknown> | null>(null);
   const [registrantEditName, setRegistrantEditName] = useState("");
   const [registrantEditLoading, setRegistrantEditLoading] = useState(false);
+  const [methodEditRow, setMethodEditRow] = useState<Record<string, unknown> | null>(null);
+  const [methodEditValue, setMethodEditValue] = useState<"online" | "offline">("online");
+  const [methodEditLoading, setMethodEditLoading] = useState(false);
   const [filters, setFilters] = useState<SpmbFilterState>(DEFAULT_FILTERS);
   const [sortMode, setSortMode] = useState("registration_desc");
 
@@ -338,7 +341,7 @@ export default function SPMB() {
         const chunk = visibleIds.slice(i, i + 150);
         const rows = await fetchAllPages<any>((from, to) => (supabase as any)
           .from("siswa_detail")
-          .select("id,siswa_id,tahun_ajaran_id,nik,status_asrama,kategori,dokumen_kk_path,dokumen_akta_path,spmb_tanggal_tes,spmb_tanggal_lulus,spmb_tanggal_daftar_ulang,spmb_status_kelulusan,spmb_tanggal_keputusan,spmb_departemen_tujuan_id,spmb_angkatan_tujuan_id,spmb_status_pendaftaran,spmb_siswa_internal,spmb_kelas_tujuan_id,spmb_tanggal_aktivasi,spmb_gelombang_id,spmb_registered_at,spmb_inputer_nama,spmb_inputer_email,spmb_sumber_pendaftaran")
+          .select("id,siswa_id,tahun_ajaran_id,nik,status_asrama,kategori,dokumen_kk_path,dokumen_akta_path,spmb_tanggal_tes,spmb_tanggal_lulus,spmb_tanggal_daftar_ulang,spmb_status_kelulusan,spmb_tanggal_keputusan,spmb_departemen_tujuan_id,spmb_angkatan_tujuan_id,spmb_status_pendaftaran,spmb_siswa_internal,spmb_kelas_tujuan_id,spmb_tanggal_aktivasi,spmb_gelombang_id,spmb_registered_at,spmb_inputer_nama,spmb_inputer_email,spmb_sumber_pendaftaran,spmb_metode_pendaftaran")
           .in("siswa_id", chunk)
           .not("spmb_gelombang_id", "is", null)
           .order("siswa_id")
@@ -428,11 +431,13 @@ export default function SPMB() {
           _spmbTanggalAktivasi: detail?.spmb_tanggal_aktivasi || null,
           _spmbRegisteredAt: detail?.spmb_registered_at || s.created_at || null,
           _spmbInputer: detail?.spmb_inputer_nama || "",
-          _spmbSource: detail?.spmb_sumber_pendaftaran === "admin"
-            ? "offline"
-            : detail?.spmb_sumber_pendaftaran === "publik"
-              ? "online"
-              : "unknown",
+          _spmbSource: detail?.spmb_metode_pendaftaran === "online" || detail?.spmb_metode_pendaftaran === "offline"
+            ? detail.spmb_metode_pendaftaran
+            : detail?.spmb_sumber_pendaftaran === "admin"
+              ? "offline"
+              : detail?.spmb_sumber_pendaftaran === "publik"
+                ? "online"
+                : "unknown",
           _biayaSort: biayaSort,
           _kesiapanSort: r?.siap ? "siap" : "belum",
           _verifikasiSort: s.terverifikasi ? "sudah" : "belum",
@@ -469,11 +474,15 @@ export default function SPMB() {
               : registrationStatus === "selesai"
                 ? "Selesai"
                 : registrationStatus,
-          _exportSumber: detail?.spmb_sumber_pendaftaran === "admin"
-            ? "Offline — Admin/TU"
-            : detail?.spmb_sumber_pendaftaran === "publik"
-              ? "Online — /spmb"
-              : "Belum diklasifikasikan",
+          _exportSumber: detail?.spmb_metode_pendaftaran === "offline"
+            ? "Offline"
+            : detail?.spmb_metode_pendaftaran === "online"
+              ? "Online"
+              : detail?.spmb_sumber_pendaftaran === "admin"
+                ? "Offline"
+                : detail?.spmb_sumber_pendaftaran === "publik"
+                  ? "Online"
+                  : "Belum diklasifikasikan",
         }];
       });
     },
@@ -1005,6 +1014,42 @@ export default function SPMB() {
     }
   };
 
+  const openMethodEdit = (row: Record<string, unknown>) => {
+    setMethodEditRow(row);
+    setMethodEditValue(row._spmbSource === "offline" ? "offline" : "online");
+  };
+
+  const closeMethodEdit = () => {
+    if (methodEditLoading) return;
+    setMethodEditRow(null);
+  };
+
+  const handleMethodEdit = async () => {
+    if (!methodEditRow) return;
+    setMethodEditLoading(true);
+    try {
+      const detail = methodEditRow._spmbDetail as Record<string, any> | undefined;
+      await spmbAdminUpdateRegistrationMethod({
+        data: {
+          siswa_id: String(methodEditRow.id || ""),
+          detail_id: detail?.id ? String(detail.id) : undefined,
+          metode: methodEditValue,
+        },
+      });
+      await qc.invalidateQueries({ queryKey: ["siswa", "calon"] });
+      toast.success("Metode pendaftaran berhasil diperbarui", {
+        description: methodEditValue === "offline" ? "Ditandai sebagai pendaftaran Offline." : "Ditandai sebagai pendaftaran Online.",
+      });
+      setMethodEditRow(null);
+    } catch (error: any) {
+      toast.error("Gagal mengubah metode pendaftaran", {
+        description: error?.message || "Terjadi kesalahan teknis",
+      });
+    } finally {
+      setMethodEditLoading(false);
+    }
+  };
+
   const columns: DataTableColumn<Record<string, unknown>>[] = [
     { key: "nama", label: "Nama", sortable: true },
     {
@@ -1034,13 +1079,28 @@ export default function SPMB() {
     { key: "_spmbRegisteredAt", label: "Tgl Pendaftaran", sortable: true, render: (value) => formatTanggal(value) },
     {
       key: "_spmbSource",
-      label: "Sumber",
+      label: "Metode",
       sortable: true,
-      render: (value) => value === "offline"
-        ? <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs text-warning">Offline</span>
-        : value === "online"
-          ? <span className="rounded-full border border-info/30 bg-info/10 px-2 py-0.5 text-xs text-info">Online</span>
-          : <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">Belum diketahui</span>,
+      render: (value, row) => (
+        <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+          {value === "offline"
+            ? <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs text-warning">Offline</span>
+            : value === "online"
+              ? <span className="rounded-full border border-info/30 bg-info/10 px-2 py-0.5 text-xs text-info">Online</span>
+              : <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">Belum diketahui</span>}
+          {canChangeSpmbTarget && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0"
+              title="Edit Online / Offline"
+              onClick={() => openMethodEdit(row)}
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      ),
     },
     {
       key: "_spmbInputer",
@@ -1229,6 +1289,48 @@ export default function SPMB() {
           }}
         />
       </div>
+
+      <Dialog
+        open={Boolean(methodEditRow)}
+        onOpenChange={(open) => {
+          if (!open) closeMethodEdit();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Metode Pendaftaran</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+              <p className="font-medium">{methodEditRow?.nama as string || "-"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Gunakan Offline bila formulir sebenarnya diisikan/dibantu petugas secara langsung, walaupun sebelumnya memakai link /spmb.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Metode Pendaftaran *</Label>
+              <Select value={methodEditValue} onValueChange={(value) => setMethodEditValue(value as "online" | "offline")} disabled={methodEditLoading}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="online">Online — pendaftar mengisi melalui /spmb</SelectItem>
+                  <SelectItem value="offline">Offline — diinput/dibantu petugas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
+              Koreksi ini hanya mengubah klasifikasi Online/Offline untuk statistik dan laporan. Jejak teknis asal pendaftaran tetap disimpan untuk audit.
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" disabled={methodEditLoading} onClick={closeMethodEdit}>Batal</Button>
+              <Button disabled={methodEditLoading} onClick={handleMethodEdit}>
+                {methodEditLoading
+                  ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Menyimpan…</>
+                  : "Simpan Metode"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(registrantEditRow)}
