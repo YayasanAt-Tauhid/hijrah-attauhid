@@ -198,8 +198,8 @@ function kodeDepartemen(dept?: Departemen): string {
   return match?.[2] || "";
 }
 
-function perluPilihanAsrama(dept?: Departemen): boolean {
-  return ["SMP", "SMA", "MTA"].includes(kodeDepartemen(dept));
+function perluPilihanAsrama(dept?: Departemen, jenisKelamin?: string): boolean {
+  return kodeDepartemen(dept) === "SMP" && jenisKelamin === "L";
 }
 
 function perluNisn(dept?: Departemen): boolean {
@@ -442,9 +442,12 @@ export default function SPMBDaftarOnlineV2() {
 
   const selectedDept = useMemo(() => departemenList.find((dept) => dept.id === form.departemen_id), [departemenList, form.departemen_id]);
   const deptCode = useMemo(() => kodeDepartemen(selectedDept), [selectedDept]);
-  const wajibAsrama = useMemo(() => perluPilihanAsrama(selectedDept), [selectedDept]);
-  const wajibNisn = useMemo(() => perluNisn(selectedDept), [selectedDept]);
   const mtaWajibAsrama = deptCode === "MTA";
+  const wajibAsrama = useMemo(
+    () => mtaWajibAsrama || perluPilihanAsrama(selectedDept, form.jenis_kelamin),
+    [mtaWajibAsrama, selectedDept, form.jenis_kelamin],
+  );
+  const wajibNisn = useMemo(() => perluNisn(selectedDept), [selectedDept]);
   const siswaPindahan = form.kategori === SPMB_TRANSFER_CATEGORY_VALUE;
   const registrationOpen = publicWave?.registration_open === true;
   const currentWave = publicWave?.current_wave || null;
@@ -596,7 +599,7 @@ export default function SPMBDaftarOnlineV2() {
       return;
     }
     if (wajibAsrama && !form.status_asrama) {
-      const message = "Pilihan Asrama / Non Asrama wajib dipilih untuk SMP atau SMA. MTA otomatis Asrama.";
+      const message = "Pilihan Asrama / Non Asrama hanya wajib untuk SMP Ikhwan. SMA dan SMP Akhwat tidak berasrama; MTA otomatis Asrama.";
       setSubmitError(message);
       toast.error(message);
       return;
