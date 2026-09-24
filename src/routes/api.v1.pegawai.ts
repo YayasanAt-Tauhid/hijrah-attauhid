@@ -1,0 +1,1 @@
+import {createFileRoute} from '@tanstack/react-router'; import {handlePegawaiList} from '@/server/integrationApi'; export const Route=createFileRoute('/api/v1/pegawai')({server:{handlers:{GET:({request})=>handlePegawaiList(request)}}});
