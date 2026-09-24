@@ -7,6 +7,7 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { createAdminClient } from "./supabase";
+import { authMiddleware, requireAcademicDepartment, requireContext } from "./auth";
 
 const PMB_DOCUMENT_BUCKET = "pmb-dokumen";
 const PMB_DOCUMENT_KINDS = ["kk", "akta", "rapor", "ijazah"] as const;
@@ -144,6 +145,13 @@ export interface PmbDaftarResult {
   success: true;
   siswa_id: string;
   payment_token: string;
+  inputer_nama?: string | null;
+  inputer_email?: string | null;
+}
+
+interface PmbRegistrationActor {
+  userId: string;
+  userEmail: string | null;
 }
 
 function cleanText(value: unknown, maxLength: number): string | null {
@@ -248,9 +256,10 @@ function departemenPerluNisn(dept: { kode?: string | null; nama?: string | null 
   return ["SMP", "SMA", "MTA"].includes(kodeDepartemen(dept));
 }
 
-export const pmbDaftar = createServerFn({ method: "POST" })
-  .inputValidator((d: PmbDaftarInput) => d)
-  .handler(async ({ data }): Promise<PmbDaftarResult> => {
+async function performPmbRegistration(
+  data: PmbDaftarInput,
+  actor?: PmbRegistrationActor,
+): Promise<PmbDaftarResult> {
     const admin = createAdminClient();
     const now = new Date().toISOString();
     const { data: currentWave, error: waveError } = await (admin
@@ -295,6 +304,9 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       .eq("psb_dibuka", true)
       .single();
     if (!dept) throw new Error("Departemen tidak valid atau SPMB belum dibuka untuk lembaga ini");
+    if (actor) {
+      await requireAcademicDepartment(admin, actor.userId, dept.id, ["admin", "admin_tu"]);
+    }
 
     const deptCode = kodeDepartemen(dept);
     const jenisKelamin = data.jenis_kelamin === "P" ? "P" : "L";
@@ -448,6 +460,8 @@ export const pmbDaftar = createServerFn({ method: "POST" })
           success: true,
           siswa_id: existingSiswaId,
           payment_token: existingDetail.pmb_payment_token,
+          inputer_nama: inputerNama,
+          inputer_email: inputerEmail,
         };
       }
       if (existingDetail?.pmb_payment_token && existingDetail?.spmb_gelombang_id === currentWave.id) {
@@ -468,6 +482,18 @@ export const pmbDaftar = createServerFn({ method: "POST" })
         const patchResult = await (admin.from("siswa") as any).update(studentPatch).eq("id", existingSiswaId);
         if (patchResult.error) throw registrationDbError(patchResult.error);
       }
+    }
+
+    let inputerNama: string | null = null;
+    let inputerEmail: string | null = null;
+    if (actor) {
+      const { data: profile } = await (admin.from("users_profile") as any)
+        .select("email,pegawai:pegawai_id(nama)")
+        .eq("id", actor.userId)
+        .maybeSingle();
+      const pegawai = Array.isArray(profile?.pegawai) ? profile.pegawai[0] : profile?.pegawai;
+      inputerEmail = profile?.email || actor.userEmail || null;
+      inputerNama = pegawai?.nama || inputerEmail || "Petugas";
     }
 
     const paymentToken = crypto.randomUUID();
@@ -531,6 +557,10 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       spmb_departemen_tujuan_id: departemen_id,
       spmb_angkatan_tujuan_id: angkatan_id,
       spmb_status_pendaftaran: "calon",
+      spmb_inputer_user_id: actor?.userId || null,
+      spmb_inputer_nama: inputerNama,
+      spmb_inputer_email: inputerEmail,
+      spmb_sumber_pendaftaran: actor ? "admin" : "publik",
     };
 
     if (existingSiswaId) {
@@ -548,7 +578,7 @@ export const pmbDaftar = createServerFn({ method: "POST" })
         if (insertResult.error) throw registrationDbError(insertResult.error);
       }
 
-      return { success: true, siswa_id: existingSiswaId, payment_token: paymentToken };
+      return { success: true, siswa_id: existingSiswaId, payment_token: paymentToken, inputer_nama: inputerNama, inputer_email: inputerEmail };
     }
 
     const { data: siswa, error: siswaError } = await (admin.from("siswa") as any).insert({
@@ -577,5 +607,17 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       await admin.from("siswa").delete().eq("id", siswa.id);
       throw registrationDbError(detailError);
     }
-    return { success: true, siswa_id: siswa.id, payment_token: paymentToken };
+    return { success: true, siswa_id: siswa.id, payment_token: paymentToken, inputer_nama: inputerNama, inputer_email: inputerEmail };
+}
+
+export const pmbDaftar = createServerFn({ method: "POST" })
+  .inputValidator((d: PmbDaftarInput) => d)
+  .handler(async ({ data }): Promise<PmbDaftarResult> => performPmbRegistration(data));
+
+export const spmbAdminDaftar = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: PmbDaftarInput) => d)
+  .handler(async ({ data, context }): Promise<PmbDaftarResult> => {
+    const actor = requireContext(context);
+    return performPmbRegistration(data, { userId: actor.userId, userEmail: actor.userEmail });
   });
