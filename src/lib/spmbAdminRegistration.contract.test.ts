@@ -6,6 +6,7 @@ const adminForm = readFileSync(resolve(process.cwd(), "src/components/akademik/A
 const page = readFileSync(resolve(process.cwd(), "src/pages/akademik/SPMB.tsx"), "utf8");
 const server = readFileSync(resolve(process.cwd(), "src/server/pmb.ts"), "utf8");
 const migration = readFileSync(resolve(process.cwd(), "supabase/migrations/20260924104500_spmb_admin_inputer_audit.sql"), "utf8");
+const methodMigration = readFileSync(resolve(process.cwd(), "supabase/migrations/20260924113500_spmb_registration_method.sql"), "utf8");
 
 describe("Admin SPMB registration parity", () => {
   it("uses the same registration engine for public and admin registration", () => {
@@ -54,6 +55,18 @@ describe("Admin SPMB registration parity", () => {
     expect(page).toContain('detail?.spmb_sumber_pendaftaran === "admin"');
     expect(page).toContain('detail?.spmb_sumber_pendaftaran === "publik"');
     expect(page).toContain('"Belum diklasifikasikan"');
+  });
+
+  it("allows Admin/TU to correct the operational online/offline method without overwriting the technical source", () => {
+    expect(methodMigration).toContain("spmb_metode_pendaftaran");
+    expect(methodMigration).toContain("spmb_metode_diubah_oleh");
+    expect(server).toContain('spmb_metode_pendaftaran: actor ? "offline" : "online"');
+    expect(server).toContain("spmbAdminUpdateRegistrationMethod");
+    expect(server).toContain('requireAcademicDepartment(admin, actor.userId, departemenId, ["admin", "admin_tu"])');
+    expect(page).toContain("Edit Metode Pendaftaran");
+    expect(page).toContain("Edit Online / Offline");
+    expect(page).toContain("spmb_metode_pendaftaran");
+    expect(page).toContain("Jejak teknis asal pendaftaran tetap disimpan untuk audit");
   });
 
   it("persists and exposes the authenticated inputer audit", () => {
