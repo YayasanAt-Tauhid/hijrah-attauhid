@@ -85,7 +85,7 @@ function kodeDepartemen(dept?: Departemen): string {
 
 function perluPilihanAsrama(dept?: Departemen, jenisKelamin?: string): boolean {
   const kode = kodeDepartemen(dept);
-  return kode === "SMA" || (kode === "SMP" && jenisKelamin === "L");
+  return ["SMP", "SMA"].includes(kode) && jenisKelamin === "L";
 }
 
 function namaLembagaPromo(dept?: Departemen, fallback?: string | null): string {
@@ -236,6 +236,7 @@ export default function SPMBDaftarOnline() {
   const selectedDept = useMemo(() => departemenList.find((d) => d.id === form.departemen_id), [departemenList, form.departemen_id]);
   const selectedDeptCode = useMemo(() => kodeDepartemen(selectedDept), [selectedDept]);
   const mtaWajibAsrama = selectedDeptCode === "MTA";
+  const akhwatNonAsrama = ["SMP", "SMA"].includes(selectedDeptCode) && form.jenis_kelamin === "P";
   const wajibAsrama = useMemo(
     () => perluPilihanAsrama(selectedDept, form.jenis_kelamin),
     [selectedDept, form.jenis_kelamin],
@@ -245,10 +246,12 @@ export default function SPMBDaftarOnline() {
   useEffect(() => {
     if (mtaWajibAsrama && form.status_asrama !== "asrama") {
       setForm((current) => ({ ...current, status_asrama: "asrama" }));
-    } else if (!mtaWajibAsrama && !wajibAsrama && form.status_asrama) {
+    } else if (akhwatNonAsrama && form.status_asrama !== "non_asrama") {
+      setForm((current) => ({ ...current, status_asrama: "non_asrama" }));
+    } else if (!mtaWajibAsrama && !akhwatNonAsrama && !wajibAsrama && form.status_asrama) {
       setForm((current) => ({ ...current, status_asrama: "" }));
     }
-  }, [mtaWajibAsrama, wajibAsrama, form.status_asrama]);
+  }, [mtaWajibAsrama, akhwatNonAsrama, wajibAsrama, form.status_asrama]);
   const set = (key: keyof typeof initialForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -282,7 +285,7 @@ export default function SPMBDaftarOnline() {
       return;
     }
     if (wajibAsrama && !form.status_asrama) {
-      toast.error("Pilihan Asrama / Non Asrama wajib dipilih untuk SMA dan SMP Ikhwan");
+      toast.error("Pilihan Asrama / Non Asrama wajib dipilih untuk SMP dan SMA Ikhwan");
       return;
     }
     if (!documents.kk || !documents.akta) {
@@ -298,7 +301,7 @@ export default function SPMBDaftarOnline() {
       ]);
       const r = await pmbDaftar({ data: {
         ...form,
-        status_asrama: mtaWajibAsrama ? "asrama" : wajibAsrama ? form.status_asrama : "",
+        status_asrama: mtaWajibAsrama ? "asrama" : akhwatNonAsrama ? "non_asrama" : wajibAsrama ? form.status_asrama : "",
         telepon_ortu: form.telepon_ayah || form.telepon_ibu,
         alamat_ortu: form.alamat_ayah || form.alamat_ibu,
         dokumen_kk_path: dokumenKk,
@@ -435,12 +438,14 @@ export default function SPMBDaftarOnline() {
                   <div><Label>Kategori *</Label><Input value="MURID" disabled /></div>
                   {mtaWajibAsrama
                     ? <div><Label>Status Asrama *</Label><Input value="ASRAMA — wajib untuk pendaftar MTA" disabled /></div>
-                    : wajibAsrama && <div><Label>Asrama / Non Asrama *</Label><OptionSelect value={form.status_asrama} placeholder="Pilih status" options={[["asrama", "ASRAMA"], ["non_asrama", "NON ASRAMA"]]} onValueChange={(v) => setForm((f) => ({ ...f, status_asrama: v }))} /></div>}
+                    : akhwatNonAsrama
+                      ? <div><Label>Status Asrama *</Label><Input value="NON ASRAMA — khusus Akhwat SMP/SMA" disabled /></div>
+                      : wajibAsrama && <div><Label>Asrama / Non Asrama *</Label><OptionSelect value={form.status_asrama} placeholder="Pilih status" options={[["asrama", "ASRAMA"], ["non_asrama", "NON ASRAMA"]]} onValueChange={(v) => setForm((f) => ({ ...f, status_asrama: v }))} /></div>}
                   <div><Label>No. HP Pendaftar</Label><Input value={form.telepon} onChange={set("telepon")} inputMode="tel" placeholder="08xxxxxxxxxx" /></div>
                   <div><Label>NIK Calon Siswa *</Label><Input value={form.nik} onChange={set("nik")} inputMode="numeric" minLength={10} maxLength={18} /></div>
                   <div><Label>No. KK *</Label><Input value={form.no_kk} onChange={set("no_kk")} inputMode="numeric" minLength={10} maxLength={20} /></div>
                   <div className="md:col-span-2"><Label>Nama Lengkap *</Label><Input value={form.nama} onChange={set("nama")} /></div>
-                  <div><Label>Jenis Kelamin *</Label><OptionSelect value={form.jenis_kelamin} placeholder="Pilih jenis kelamin" options={[["L", "LAKI-LAKI"], ["P", "PEREMPUAN"]]} onValueChange={(v) => setForm((f) => ({ ...f, jenis_kelamin: v }))} /></div>
+                  <div><Label>Jenis Kelamin *</Label><OptionSelect value={form.jenis_kelamin} placeholder="Pilih jenis kelamin" options={[["L", "LAKI-LAKI"], ["P", "PEREMPUAN"]]} onValueChange={(v) => setForm((f) => ({ ...f, jenis_kelamin: v, status_asrama: "" }))} /></div>
                   <div><Label>Tempat Lahir *</Label><Input value={form.tempat_lahir} onChange={set("tempat_lahir")} /></div>
                   <div><Label>Tanggal Lahir *</Label><Input type="date" value={form.tanggal_lahir} onChange={set("tanggal_lahir")} /></div>
                   <div><Label>Anak ke *</Label><Input type="number" min="1" max="99" value={form.anak_ke} onChange={set("anak_ke")} /></div>
