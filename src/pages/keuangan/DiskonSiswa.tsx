@@ -56,7 +56,7 @@ import {
   type SiswaDiskonRow,
 } from "@/hooks/useDiskon";
 
-const ROLE_PENGAJU = ["admin", "kepala_sekolah", "keuangan"];
+const ROLE_PENGAJU = ["admin", "keuangan"];
 const ROLE_PENYETUJU = ["admin", "sekretaris_yayasan"];
 
 const WARNA_STATUS: Record<StatusDiskon, string> = {

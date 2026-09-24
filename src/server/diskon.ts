@@ -15,11 +15,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
 
-const ROLE_PENGAJU = ["admin", "kepala_sekolah", "keuangan"];
+const ROLE_PENGAJU = ["admin", "keuangan"];
 const ROLE_PENYETUJU = ["admin", "sekretaris_yayasan"];
 const ROLE_LIHAT_KERINGANAN = [
   "admin",
-  "kepala_sekolah",
   "keuangan",
   "sekretaris_yayasan",
 ];

@@ -26,7 +26,7 @@ export default function DetailPegawai() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { role } = useAuth();
-  const canEdit = role === "admin" || role === "kepala_sekolah";
+  const canEdit = role === "admin";
 
   const { data: pegawai, isLoading } = useQuery({
     queryKey: ["pegawai_detail", id],

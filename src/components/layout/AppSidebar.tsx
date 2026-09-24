@@ -94,51 +94,51 @@ const menuItems: MenuItem[] = [
   },
   {
     title: "Keuangan", url: "/keuangan", icon: Wallet,
-    roles: ["admin", "kepala_sekolah", "keuangan", "kasir", "sekretaris_yayasan"],
+    roles: ["admin", "keuangan", "kasir", "sekretaris_yayasan"],
     subGroups: [
       {
         // Sekretaris yayasan hanya punya akses ke sub-grup ini (untuk
         // menyetujui pengajuan), bukan ke jurnal/laporan keuangan lainnya.
         title: "Keringanan & Beasiswa",
         icon: Users,
-        roles: ["admin", "kepala_sekolah", "keuangan", "sekretaris_yayasan"],
+        roles: ["admin", "keuangan", "sekretaris_yayasan"],
         items: [
-          { title: "Siswa Penerima Keringanan", url: "/keuangan/diskon-siswa", roles: ["admin", "kepala_sekolah", "keuangan", "sekretaris_yayasan"] },
+          { title: "Siswa Penerima Keringanan", url: "/keuangan/diskon-siswa", roles: ["admin", "keuangan", "sekretaris_yayasan"] },
         ],
       },
       {
         title: "Transaksi Harian",
         icon: Receipt,
-        roles: ["admin", "kepala_sekolah", "keuangan", "kasir"],
+        roles: ["admin", "keuangan", "kasir"],
         items: [
-          { title: "Input Pembayaran", url: "/keuangan/pembayaran", roles: ["admin", "kepala_sekolah", "keuangan", "kasir"] },
-          { title: "Pembayaran SPMB", url: "/keuangan/pembayaran-spmb", roles: ["admin", "kepala_sekolah", "keuangan"] },
-          { title: "Penerimaan Lain", url: "/keuangan/penerimaan-lain", roles: ["admin", "kepala_sekolah", "keuangan"] },
-          { title: "Pengeluaran", url: "/keuangan/pengeluaran", roles: ["admin", "kepala_sekolah", "keuangan"] },
-          { title: "Kas Kecil", url: "/keuangan/kas-kecil", roles: ["admin", "kepala_sekolah", "keuangan"] },
-          { title: "Online Payment", url: "/keuangan/online-payment", roles: ["admin", "kepala_sekolah", "keuangan"] },
-          { title: "Tabungan Siswa", url: "/keuangan/tabungan", roles: ["admin", "kepala_sekolah", "keuangan"] },
-          { title: "Tabungan Pegawai", url: "/keuangan/tabungan-pegawai", roles: ["admin", "kepala_sekolah", "keuangan"] },
+          { title: "Input Pembayaran", url: "/keuangan/pembayaran", roles: ["admin", "keuangan", "kasir"] },
+          { title: "Pembayaran SPMB", url: "/keuangan/pembayaran-spmb", roles: ["admin", "keuangan"] },
+          { title: "Penerimaan Lain", url: "/keuangan/penerimaan-lain", roles: ["admin", "keuangan"] },
+          { title: "Pengeluaran", url: "/keuangan/pengeluaran", roles: ["admin", "keuangan"] },
+          { title: "Kas Kecil", url: "/keuangan/kas-kecil", roles: ["admin", "keuangan"] },
+          { title: "Online Payment", url: "/keuangan/online-payment", roles: ["admin", "keuangan"] },
+          { title: "Tabungan Siswa", url: "/keuangan/tabungan", roles: ["admin", "keuangan"] },
+          { title: "Tabungan Pegawai", url: "/keuangan/tabungan-pegawai", roles: ["admin", "keuangan"] },
         ],
       },
       {
         title: "Laporan & Rekap",
         icon: BarChart3,
-        roles: ["admin", "kepala_sekolah", "keuangan", "kasir"],
+        roles: ["admin", "keuangan", "kasir"],
         items: [
-          { title: "Tunggakan", url: "/keuangan/tunggakan", roles: ["admin", "kepala_sekolah", "keuangan", "kasir"] },
-          { title: "Laporan Per Siswa", url: "/keuangan/laporan-siswa", roles: ["admin", "kepala_sekolah", "keuangan"] },
-          { title: "Laporan Per Kelas", url: "/keuangan/laporan-kelas", roles: ["admin", "kepala_sekolah", "keuangan"] },
-          { title: "Rekap Harian", url: "/keuangan/rekap-harian", roles: ["admin", "kepala_sekolah", "keuangan"] },
-          { title: "Lap. Pengeluaran", url: "/keuangan/laporan-pengeluaran", roles: ["admin", "kepala_sekolah", "keuangan"] },
-          { title: "Lap. Unit Pendidikan", url: "/keuangan/laporan", roles: ["admin", "kepala_sekolah", "keuangan"] },
-          { title: "Lap. Unit Usaha & Dana", url: "/keuangan/laporan-unit-usaha", roles: ["admin", "kepala_sekolah", "keuangan"] },
+          { title: "Tunggakan", url: "/keuangan/tunggakan", roles: ["admin", "keuangan", "kasir"] },
+          { title: "Laporan Per Siswa", url: "/keuangan/laporan-siswa", roles: ["admin", "keuangan"] },
+          { title: "Laporan Per Kelas", url: "/keuangan/laporan-kelas", roles: ["admin", "keuangan"] },
+          { title: "Rekap Harian", url: "/keuangan/rekap-harian", roles: ["admin", "keuangan"] },
+          { title: "Lap. Pengeluaran", url: "/keuangan/laporan-pengeluaran", roles: ["admin", "keuangan"] },
+          { title: "Lap. Unit Pendidikan", url: "/keuangan/laporan", roles: ["admin", "keuangan"] },
+          { title: "Lap. Unit Usaha & Dana", url: "/keuangan/laporan-unit-usaha", roles: ["admin", "keuangan"] },
         ],
       },
       {
         title: "Akuntansi",
         icon: BookMarked,
-        roles: ["admin", "kepala_sekolah", "keuangan"],
+        roles: ["admin", "keuangan"],
         items: [
           { title: "Jurnal Umum", url: "/keuangan/jurnal" },
           { title: "Buku Besar", url: "/keuangan/buku-besar" },
@@ -151,7 +151,7 @@ const menuItems: MenuItem[] = [
       {
         title: "Laporan ISAK 35",
         icon: FileSpreadsheet,
-        roles: ["admin", "kepala_sekolah", "keuangan"],
+        roles: ["admin", "keuangan"],
         items: [
           { title: "Ringkasan", url: "/keuangan/isak35" },
           { title: "Penghasilan Komprehensif", url: "/keuangan/isak35/komprehensif" },
@@ -163,7 +163,7 @@ const menuItems: MenuItem[] = [
       {
         title: "Pengaturan",
         icon: SlidersHorizontal,
-        roles: ["admin", "kepala_sekolah", "keuangan"],
+        roles: ["admin", "keuangan"],
         items: [
           { title: "Audit Trail", url: "/keuangan/audit-trail" },
           { title: "Audit Perubahan Data", url: "/keuangan/audit-perubahan" },
@@ -174,7 +174,7 @@ const menuItems: MenuItem[] = [
   },
   {
     title: "Kepegawaian", url: "/kepegawaian", icon: Users,
-    roles: ["admin", "kepala_sekolah"],
+    roles: ["admin"],
     subGroups: [
       {
         title: "Data & Informasi",

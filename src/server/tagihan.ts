@@ -70,7 +70,6 @@ export const generateTagihan = createServerFn({ method: "POST" })
     const { userId } = requireContext(context);
     await requireRole(admin, userId, [
       "admin",
-      "kepala_sekolah",
       "keuangan",
     ]);
 
@@ -331,7 +330,6 @@ export const batalkanTagihan = createServerFn({ method: "POST" })
     const { userId } = requireContext(context);
     await requireRole(admin, userId, [
       "admin",
-      "kepala_sekolah",
       "keuangan",
     ]);
 
@@ -405,7 +403,6 @@ export const batalkanTagihanBatch = createServerFn({ method: "POST" })
     const { userId } = requireContext(context);
     await requireRole(admin, userId, [
       "admin",
-      "kepala_sekolah",
       "keuangan",
     ]);
 

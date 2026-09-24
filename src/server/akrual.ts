@@ -53,7 +53,6 @@ export const jalankanAkrualJatuhTempo = createServerFn({ method: "POST" })
     const { userId } = requireContext(context);
     await requireRole(admin, userId, [
       "admin",
-      "kepala_sekolah",
       "keuangan",
     ]);
 

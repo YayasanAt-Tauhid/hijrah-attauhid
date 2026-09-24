@@ -41,7 +41,7 @@ interface PresensiRow {
 export default function PresensiPegawai() {
   const { role } = useAuth();
   const qc = useQueryClient();
-  const canInput = role === "admin" || role === "kepala_sekolah";
+  const canInput = role === "admin";
 
   const [deptId, setDeptId] = useState("");
   const [tanggal, setTanggal] = useState(format(new Date(), "yyyy-MM-dd"));

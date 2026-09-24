@@ -44,7 +44,7 @@ export default function DataPegawai() {
   const { role } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const canEdit = role === "admin" || role === "kepala_sekolah";
+  const canEdit = role === "admin";
   const canDelete = role === "admin";
 
   const [filterLembaga, setFilterLembaga] = useState("all");

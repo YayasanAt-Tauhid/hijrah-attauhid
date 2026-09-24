@@ -98,7 +98,7 @@ export const rekapTunggakan = createServerFn({ method: "POST" })
       .eq("id", userId)
       .single();
 
-    const staffRoles = ["admin", "kepala_sekolah", "keuangan", "kasir"];
+    const staffRoles = ["admin", "keuangan", "kasir"];
     const isStaff = profile && staffRoles.includes(profile.role);
 
     if (!isStaff) {
@@ -254,7 +254,6 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
     const admin = createAdminClient();
     await requireRole(admin, requireContext(context).userId, [
       "admin",
-      "kepala_sekolah",
       "keuangan",
       "kasir",
     ]);

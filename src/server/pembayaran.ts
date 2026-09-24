@@ -41,7 +41,6 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     const { userId } = requireContext(context);
     await requireRole(admin, userId, [
       "admin",
-      "kepala_sekolah",
       "keuangan",
       "kasir",
     ]);
@@ -364,7 +363,6 @@ export const batalkanPembayaran = createServerFn({ method: "POST" })
       // BUKAN kasir — hanya admin/kepala/keuangan
       await requireRole(admin, userId, [
         "admin",
-        "kepala_sekolah",
         "keuangan",
       ]);
 

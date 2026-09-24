@@ -290,7 +290,7 @@ export default function InputPembayaran() {
   const prosesMutation = useProsesPembayaran();
   const batalMutation  = useBatalkanPembayaran();
   const { role } = useAuth();
-  const canBatal = role === "admin" || role === "kepala_sekolah" || role === "keuangan";
+  const canBatal = role === "admin" || role === "keuangan";
   const [batalTarget, setBatalTarget] = useState<PembayaranWithJenis | null>(null);
   const [batalAlasan, setBatalAlasan] = useState("");
 
