@@ -24,7 +24,7 @@ describe("Admin SPMB registration parity", () => {
       "Data Sekolah Asal",
       "Data Kemampuan Dasar Murid",
       "Dokumen Persyaratan",
-      "Petugas / Inputer",
+      "Nama Pendaftar",
       "No. HP / WhatsApp yang Bisa Dihubungi",
       "Rentang Penghasilan",
       "Kartu Keluarga",
@@ -45,5 +45,9 @@ describe("Admin SPMB registration parity", () => {
     expect(server).toContain('spmb_sumber_pendaftaran: actor ? "admin" : "publik"');
     expect(page).toContain('label: "Petugas / Inputer"');
     expect(page).toContain("_spmbInputer");
+    expect(page).toContain("spmbAdminUpdateRegistrantName");
+    expect(page).toContain("Edit Nama Pendaftar");
+    expect(server).toContain("spmbAdminUpdateRegistrantName");
+    expect(server).toContain('requireAcademicDepartment(admin, actor.userId, departemenId, ["admin", "admin_tu"])');
   });
 });
