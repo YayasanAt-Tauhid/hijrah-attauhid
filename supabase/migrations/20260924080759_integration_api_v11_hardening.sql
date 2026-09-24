@@ -177,7 +177,8 @@ begin
     and a.active
     and new.object_type = any(w.event_types)
     and (
-      (new.object_type in ('pendaftaran','dokumen') and 'pendaftaran:read'=any(a.scopes))
+      (new.object_type='pendaftaran' and 'pendaftaran:read'=any(a.scopes))
+      or (new.object_type='dokumen' and 'pendaftaran:read'=any(a.scopes) and 'pendaftaran:documents:read'=any(a.scopes))
       or (new.object_type='siswa' and 'siswa:read'=any(a.scopes))
       or (new.object_type='kelas' and 'kelas:read'=any(a.scopes))
     )
