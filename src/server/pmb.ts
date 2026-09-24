@@ -87,6 +87,7 @@ export interface PmbDaftarInput {
   tanggal_lahir?: string;
   alamat?: string;
   telepon?: string;
+  email?: string;
   nisn?: string;
   nik?: string;
   no_kk?: string;
@@ -148,6 +149,13 @@ export interface PmbDaftarResult {
 function cleanText(value: unknown, maxLength: number): string | null {
   const text = typeof value === "string" ? value.trim() : "";
   return text ? text.slice(0, maxLength) : null;
+}
+
+function cleanOptionalEmail(value: unknown): string | null {
+  const email = cleanText(value, 254);
+  if (!email) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Format email tidak valid");
+  return email.toLowerCase();
 }
 
 function cleanChoice(value: unknown, allowed: readonly string[], label: string): string | null {
@@ -268,6 +276,7 @@ export const pmbDaftar = createServerFn({ method: "POST" })
     if (!departemen_id) throw new Error("Departemen/lembaga wajib dipilih");
     if (!cleanText(data.alamat, 500)) throw new Error("Alamat rumah wajib diisi");
     if (!cleanText(data.telepon, 20)) throw new Error("No. HP/WhatsApp yang bisa dihubungi wajib diisi");
+    const email = cleanOptionalEmail(data.email);
 
     const dokumenKkPath = validateDocumentPath(data.dokumen_kk_path, "kk", true);
     const dokumenAktaPath = validateDocumentPath(data.dokumen_akta_path, "akta", true);
@@ -352,7 +361,7 @@ export const pmbDaftar = createServerFn({ method: "POST" })
     let nisnOwner: any = null;
     if (nisn) {
       const lookup = await (admin.from("siswa") as any)
-        .select("id,nama,jenis_kelamin,tempat_lahir,tanggal_lahir,nisn,status,alamat,telepon,departemen_id,angkatan_id")
+        .select("id,nama,jenis_kelamin,tempat_lahir,tanggal_lahir,nisn,status,alamat,telepon,email,departemen_id,angkatan_id")
         .eq("nisn", nisn)
         .maybeSingle();
       if (lookup.error) throw new Error(lookup.error.message);
@@ -376,7 +385,7 @@ export const pmbDaftar = createServerFn({ method: "POST" })
     if (existingSiswaId) {
       if (!existingSiswa) {
         const lookup = await (admin.from("siswa") as any)
-          .select("id,nama,jenis_kelamin,tempat_lahir,tanggal_lahir,nisn,status,alamat,telepon,departemen_id,angkatan_id")
+          .select("id,nama,jenis_kelamin,tempat_lahir,tanggal_lahir,nisn,status,alamat,telepon,email,departemen_id,angkatan_id")
           .eq("id", existingSiswaId)
           .maybeSingle();
         if (lookup.error) throw new Error(lookup.error.message);
@@ -443,6 +452,7 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       if (!existingSiswa.nisn && nisn) studentPatch.nisn = nisn;
       if (!cleanText(existingSiswa.alamat, 500)) studentPatch.alamat = cleanText(data.alamat, 500);
       if (!cleanText(existingSiswa.telepon, 20)) studentPatch.telepon = cleanText(data.telepon, 20);
+      if (!cleanText(existingSiswa.email, 254) && email) studentPatch.email = email;
       if (!existingSiswa.tanggal_lahir && data.tanggal_lahir) studentPatch.tanggal_lahir = data.tanggal_lahir;
       if (!cleanText(existingSiswa.tempat_lahir, 100)) studentPatch.tempat_lahir = cleanText(data.tempat_lahir, 100);
       if (Object.keys(studentPatch).length) {
@@ -540,6 +550,7 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       nisn: perluNisn ? nisn : null,
       alamat: cleanText(data.alamat, 500),
       telepon: cleanText(data.telepon, 20),
+      email,
       agama: "Islam",
       status: "calon",
       departemen_id,
