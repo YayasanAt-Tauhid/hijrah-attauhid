@@ -265,9 +265,10 @@ export async function handlePegawaiImport(request:Request){
  const topKeys=Object.keys(body);if(topKeys.some(k=>!['update_existing','rows'].includes(k)))return done(ctx,route,err('invalid_payload','Field request tidak dikenali',400,ctx.requestId))
  const updateExisting=body.update_existing===true
  const allowedFields=new Set(['pegawai_id','nip','nama','jenis_kelamin','tempat_lahir','tanggal_lahir','agama','alamat','telepon','email','foto_url','jabatan','departemen_id','status','tanggal_masuk','tanggal_pensiun','golongan_terakhir'])
- const ids=[...new Set(body.rows.map((r:any)=>apiText(r?.pegawai_id)).filter(Boolean))]
+ const rawIds=[...new Set(body.rows.map((r:any)=>apiText(r?.pegawai_id)).filter(Boolean))]
+ const ids=rawIds.filter(x=>uuid(x))
  const nips=[...new Set(body.rows.map((r:any)=>apiText(r?.nip)).filter(Boolean))]
- const idCounts=new Map<string,number>(),nipCounts=new Map<string,number>();for(const x of ids)idCounts.set(x,body.rows.filter((r:any)=>apiText(r?.pegawai_id)===x).length);for(const x of nips)nipCounts.set(x,body.rows.filter((r:any)=>apiText(r?.nip)===x).length)
+ const idCounts=new Map<string,number>(),nipCounts=new Map<string,number>();for(const x of rawIds)idCounts.set(x,body.rows.filter((r:any)=>apiText(r?.pegawai_id)===x).length);for(const x of nips)nipCounts.set(x,body.rows.filter((r:any)=>apiText(r?.nip)===x).length)
  const byId=new Map<string,any>(),byNip=new Map<string,any>()
  if(ids.length){const {data,error}=await (ctx.admin.from('pegawai') as any).select(PEGAWAI_BASE).in('id',ids);if(error)return done(ctx,route,err('temporary_failure','Gagal mencocokkan pegawai existing',503,ctx.requestId));for(const p of data||[])byId.set(p.id,p)}
  if(nips.length){const {data,error}=await (ctx.admin.from('pegawai') as any).select(PEGAWAI_BASE).in('nip',nips);if(error)return done(ctx,route,err('temporary_failure','Gagal mencocokkan NIP existing',503,ctx.requestId));for(const p of data||[])if(p.nip)byNip.set(p.nip,p)}
