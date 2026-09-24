@@ -75,11 +75,11 @@ function labelStatusPendaftaran(status: string): string {
   return status || "Terdaftar";
 }
 
-function perluPilihanAsrama(dept?: Departemen): boolean {
-  if (!dept) return false;
+function perluPilihanAsrama(dept?: Departemen, jenisKelamin?: string): boolean {
+  if (!dept || jenisKelamin !== "L") return false;
   const kode = (dept.kode || "").trim().toUpperCase();
   const nama = dept.nama.trim().toUpperCase();
-  return ["SMP", "SMA", "MTA"].includes(kode) || /(^|\s)(SMP|SMA|MTA)(\s|$)/.test(nama);
+  return kode === "SMP" || /(^|\s)SMP(\s|$)/.test(nama);
 }
 
 function namaLembagaPromo(dept?: Departemen, fallback?: string | null): string {
@@ -228,7 +228,10 @@ export default function SPMBDaftarOnline() {
   }, [statusToken, currentPaymentStatus]);
 
   const selectedDept = useMemo(() => departemenList.find((d) => d.id === form.departemen_id), [departemenList, form.departemen_id]);
-  const wajibAsrama = useMemo(() => perluPilihanAsrama(selectedDept), [selectedDept]);
+  const wajibAsrama = useMemo(
+    () => perluPilihanAsrama(selectedDept, form.jenis_kelamin),
+    [selectedDept, form.jenis_kelamin],
+  );
   const angkatanList = useMemo(() => allAngkatan.filter((a) => !form.departemen_id || a.departemen_id === form.departemen_id), [allAngkatan, form.departemen_id]);
   const set = (key: keyof typeof initialForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
@@ -263,7 +266,7 @@ export default function SPMBDaftarOnline() {
       return;
     }
     if (wajibAsrama && !form.status_asrama) {
-      toast.error("Pilihan Asrama / Non Asrama wajib dipilih untuk SMP, SMA, atau MTA");
+      toast.error("Pilihan Asrama / Non Asrama hanya wajib untuk SMP Ikhwan");
       return;
     }
     if (!documents.kk || !documents.akta) {
