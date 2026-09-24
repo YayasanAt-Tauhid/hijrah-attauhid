@@ -127,6 +127,7 @@ describe('Integration API v1 contract', () => {
     expect(migration).toContain("net.http_post(")
     expect(migration).toContain("'select public.integration_webhook_tick();'")
     expect(migration).toContain("'object_id', new.object_id")
+    expect(migration).toContain("new.object_type='dokumen' and 'pendaftaran:read'=any(a.scopes) and 'pendaftaran:documents:read'=any(a.scopes)")
     expect(migration).not.toContain("'nik', new.")
     expect(openapi).toContain('webhooks:')
     expect(openapi).toContain('X-Hijrah-Signature')
@@ -138,6 +139,7 @@ describe('Integration API v1 contract', () => {
     expect(postman).toContain('List - Filter SPMB')
     expect(postman).toContain('status_tes=belum_tes')
     expect(postman).toContain('List - Filter Kelas')
+    expect(postman).toContain('/kelas/{{kelasId}}/siswa?tahun_ajaran_id={{tahunAjaranId}}')
   })
 
 })
