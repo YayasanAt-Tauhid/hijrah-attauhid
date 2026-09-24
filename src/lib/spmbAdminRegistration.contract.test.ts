@@ -37,6 +37,25 @@ describe("Admin SPMB registration parity", () => {
     expect(adminForm).toContain("SPMB_TRANSFER_CATEGORY_VALUE");
   });
 
+  it("keeps the full admin form scrollable inside the dialog viewport", () => {
+    expect(adminForm).toContain('h-[94dvh] max-h-[94dvh]');
+    expect(adminForm).toContain('className="flex min-h-0 flex-1 flex-col overflow-hidden"');
+    expect(adminForm).toContain("overflow-y-auto overscroll-contain");
+    expect(adminForm).toContain("touch-pan-y");
+    expect(adminForm).toContain("shrink-0 border-b");
+    expect(adminForm).toContain("shrink-0 flex-col-reverse");
+  });
+
+  it("classifies admin registration as offline and public registration as online", () => {
+    expect(adminForm).toContain('value="Offline — Admin / TU"');
+    expect(server).toContain('spmb_sumber_pendaftaran: actor ? "admin" : "publik"');
+    expect(page).toContain('"Pendaftaran Online"');
+    expect(page).toContain('"Pendaftaran Offline"');
+    expect(page).toContain('detail?.spmb_sumber_pendaftaran === "admin"');
+    expect(page).toContain('detail?.spmb_sumber_pendaftaran === "publik"');
+    expect(page).toContain('"Belum diklasifikasikan"');
+  });
+
   it("persists and exposes the authenticated inputer audit", () => {
     expect(migration).toContain("spmb_inputer_user_id");
     expect(migration).toContain("spmb_inputer_nama");
