@@ -478,6 +478,12 @@ export default function SPMB() {
   const belumSiapCount = calonList.filter(
     (s: any) => s.status === "calon" && !getKesiapanPenerimaan(s as Record<string, unknown>).siap,
   ).length;
+  const pendaftarPerLembaga = spmbDepartemenList.map((dept: any) => ({
+    id: dept.id as string,
+    kode: String(dept.kode || dept.nama || "Lembaga").trim().toUpperCase(),
+    nama: String(dept.nama || dept.kode || "Lembaga").trim(),
+    jumlah: calonList.filter((s: any) => s.departemen_id === dept.id).length,
+  }));
   const hasActiveFilters = Object.values(filters).some((value) => value !== "all");
   const filteredCalonList = calonList.filter((s: any) => {
     if (filters.departemen !== "all" && s.departemen_id !== filters.departemen) return false;
@@ -1514,6 +1520,30 @@ export default function SPMB() {
         <StatsCard title="Menunggu" value={calonCount} icon={Clock} color="warning" />
         <StatsCard title="Diterima" value={diterimaCount} icon={UserCheck} color="success" />
         {nisKosongCount > 0 && <StatsCard title="NIS Belum Dibuat" value={nisKosongCount} icon={AlertTriangle} color="destructive" />}
+      </div>
+
+      <div className="space-y-2">
+        <div>
+          <p className="text-sm font-semibold">Pendaftar per Lembaga/Jenjang</p>
+          <p className="text-xs text-muted-foreground">
+            {role === "admin_tu"
+              ? "Statistik hanya menampilkan lembaga yang menjadi cakupan Admin TU."
+              : "Statistik menampilkan seluruh lembaga SPMB yang dapat Anda akses."}
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {pendaftarPerLembaga.map((item) => (
+            <StatsCard
+              key={item.id}
+              title={`Pendaftar ${item.kode}`}
+              value={item.jumlah}
+              icon={Users}
+              color="info"
+              onClick={() => setFilter("departemen", item.id)}
+              active={filters.departemen === item.id}
+            />
+          ))}
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
