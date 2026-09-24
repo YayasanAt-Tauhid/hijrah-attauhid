@@ -609,7 +609,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
               <Card className="mb-4"><CardContent className="pt-6 space-y-4">
                 <p className="font-medium">Dokumen SPMB</p>
                 {isEdit && verificationState?.can_verify && (
-                  <p className="text-sm text-muted-foreground">Verifikasi wajib difokuskan pada data inti yang dapat dicocokkan dengan Kartu Keluarga. Data akademik, kontak, kemampuan, penghasilan, dan dokumen selain KK tetap dapat diperiksa tetapi bersifat opsional. Checklist disimpan bersama tombol Simpan Perubahan.</p>
+                  <p className="text-sm text-muted-foreground">Verifikasi wajib mencakup data inti yang dapat dicocokkan dengan Kartu Keluarga serta No. HP / WhatsApp yang Bisa Dihubungi. Data akademik, kemampuan, penghasilan, dan dokumen selain KK tetap dapat diperiksa tetapi bersifat opsional. Checklist disimpan bersama tombol Simpan Perubahan.</p>
                 )}
                 {dokumenSpmb.map(([kind, label]) => {
                   const name = `dokumen_${kind}_path` as keyof SiswaForm;
