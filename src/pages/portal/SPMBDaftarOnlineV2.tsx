@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@/lib/router-compat";
-import { pmbCreateDocumentUpload, pmbDaftar, pmbOptions } from "@/server/pmb";
+import { pmbCreateDocumentUpload, pmbCurrentRegistrant, pmbDaftar, pmbOptions } from "@/server/pmb";
 import {
   pmbCreatePayment,
   pmbGetStatus,
@@ -346,42 +346,31 @@ export default function SPMBDaftarOnlineV2() {
         return;
       }
 
-      const email = user.email?.trim() || "";
+      const sessionEmail = user.email?.trim() || "";
       const googleIdentity = user.identities?.find((identity) => identity.provider === "google");
       const identityData = (googleIdentity?.identity_data || {}) as Record<string, unknown>;
       const loginViaGoogle =
         user.app_metadata?.provider === "google" ||
         Boolean(googleIdentity);
 
-      const metadataName = String(
+      const fallbackName = String(
         user.user_metadata?.full_name ||
         user.user_metadata?.name ||
-        ""
-      ).trim();
-      const identityFullName = String(
         identityData.full_name ||
         identityData.name ||
+        [identityData.given_name, identityData.family_name].filter(Boolean).join(" ") ||
         ""
       ).trim();
-      const identityPartsName = [
-        String(identityData.given_name || "").trim(),
-        String(identityData.family_name || "").trim(),
-      ].filter(Boolean).join(" ").trim();
 
-      let namaPendaftar = metadataName || identityFullName || identityPartsName;
-
+      let namaPendaftar = fallbackName;
+      let inputerEmail = sessionEmail;
       try {
-        const { data: profile } = await (supabase as any)
-          .from("users_profile")
-          .select("pegawai:pegawai_id(nama)")
-          .eq("id", user.id)
-          .maybeSingle();
+        const current = await pmbCurrentRegistrant();
         if (!active) return;
-        const pegawai = Array.isArray(profile?.pegawai) ? profile.pegawai[0] : profile?.pegawai;
-        const pegawaiName = String(pegawai?.nama || "").trim();
-        if (pegawaiName) namaPendaftar = pegawaiName;
+        namaPendaftar = current.nama?.trim() || fallbackName;
+        inputerEmail = current.email?.trim() || sessionEmail;
       } catch {
-        // Nama dari metadata/identity Google tetap dipakai bila profile tidak dapat dibaca.
+        // Metadata akun tetap menjadi fallback bila server profil tidak dapat diakses.
       }
 
       if (!active) return;
@@ -389,8 +378,8 @@ export default function SPMBDaftarOnlineV2() {
       setForm((current) => ({
         ...current,
         pendaftar_nama: namaPendaftar || current.pendaftar_nama,
-        pendaftar_email: email || current.pendaftar_email,
-        email: loginViaGoogle && email && !current.email ? email : current.email,
+        pendaftar_email: inputerEmail || current.pendaftar_email,
+        email: loginViaGoogle && sessionEmail && !current.email ? sessionEmail : current.email,
       }));
     }).catch(() => {
       if (active) setPendaftarLocked(false);
