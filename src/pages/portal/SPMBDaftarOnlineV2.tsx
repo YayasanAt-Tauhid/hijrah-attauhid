@@ -67,6 +67,7 @@ const HAFALAN_OPTIONS = [
 ] as const;
 
 const initialForm = {
+  pendaftar_nama: "", pendaftar_email: "",
   nama: "", jenis_kelamin: "", tempat_lahir: "", tanggal_lahir: "", alamat: "", telepon: "", email: "", nisn: "",
   departemen_id: "", angkatan_id: "", tahun_ajaran_id: "", jenis_pendaftaran: "baru", kelas_terakhir: "", alasan_pindah: "",
   nik: "", no_kk: "", kategori: SPMB_CATEGORY_VALUE, status_asrama: "", anak_ke: "", jumlah_bersaudara: "",
@@ -324,6 +325,7 @@ export default function SPMBDaftarOnlineV2() {
   const [policyStatus, setPolicyStatus] = useState<SpmbPolicyStatusResult | null>(null);
   const [publicWave, setPublicWave] = useState<SpmbPublicWaveResult | null>(null);
   const [payment, setPayment] = useState<PmbPaymentResult | null>(null);
+  const [pendaftarLocked, setPendaftarLocked] = useState(false);
 
   useEffect(() => {
     const draft = readFormDraft();
@@ -336,16 +338,47 @@ export default function SPMBDaftarOnlineV2() {
 
   useEffect(() => {
     let active = true;
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!active) return;
       const user = session?.user;
-      const email = user?.email?.trim() || "";
+      if (!user) {
+        setPendaftarLocked(false);
+        return;
+      }
+
+      const email = user.email?.trim() || "";
       const loginViaGoogle =
-        user?.app_metadata?.provider === "google" ||
-        user?.identities?.some((identity) => identity.provider === "google") === true;
-      if (!email || !loginViaGoogle) return;
-      setForm((current) => current.email ? current : { ...current, email });
-    }).catch(() => undefined);
+        user.app_metadata?.provider === "google" ||
+        user.identities?.some((identity) => identity.provider === "google") === true;
+
+      let namaPendaftar =
+        String(user.user_metadata?.full_name || user.user_metadata?.name || "").trim() ||
+        email;
+
+      try {
+        const { data: profile } = await (supabase as any)
+          .from("users_profile")
+          .select("email,pegawai:pegawai_id(nama)")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (!active) return;
+        const pegawai = Array.isArray(profile?.pegawai) ? profile.pegawai[0] : profile?.pegawai;
+        namaPendaftar = String(pegawai?.nama || namaPendaftar || profile?.email || email).trim();
+      } catch {
+        // Metadata akun/email tetap dapat dipakai bila profile tidak dapat dibaca.
+      }
+
+      if (!active) return;
+      setPendaftarLocked(true);
+      setForm((current) => ({
+        ...current,
+        pendaftar_nama: namaPendaftar || current.pendaftar_nama,
+        pendaftar_email: email || current.pendaftar_email,
+        email: loginViaGoogle && email && !current.email ? email : current.email,
+      }));
+    }).catch(() => {
+      if (active) setPendaftarLocked(false);
+    });
     return () => { active = false; };
   }, []);
 
@@ -510,6 +543,7 @@ export default function SPMBDaftarOnlineV2() {
       return;
     }
     const requiredFields: Array<{ label: string; value: string; focusId?: string }> = [
+      { label: "Nama Pendaftar / Inputer", value: form.pendaftar_nama, focusId: "spmb-public-pendaftar" },
       { label: "Lembaga/Sekolah", value: form.departemen_id, focusId: "spmb-public-departemen" },
       { label: "Periode Tahun Ajaran", value: form.tahun_ajaran_id },
       { label: "Angkatan", value: form.angkatan_id, focusId: "spmb-public-angkatan" },
@@ -635,6 +669,8 @@ export default function SPMBDaftarOnlineV2() {
       ]);
       const result = await pmbDaftar({ data: {
         ...form,
+        pendaftar_nama: form.pendaftar_nama.trim(),
+        pendaftar_email: form.pendaftar_email.trim(),
         nama: form.nama.trim(),
         nik: form.nik,
         kategori: form.kategori,
@@ -856,6 +892,26 @@ export default function SPMBDaftarOnlineV2() {
               {submitError && <div id="spmb-submit-error" tabIndex={-1} className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 outline-none focus:ring-2 focus:ring-red-400" role="alert"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{submitError}</div>}
 
               <fieldset disabled={loading || optionsLoading || Boolean(optionsError) || !registrationOpen} className="space-y-6 disabled:opacity-70">
+                <FormSection title="Pendaftar / Inputer" description="Nama orang atau petugas yang mengisi formulir pendaftaran">
+                  <div>
+                    <Label htmlFor="spmb-public-pendaftar">Nama Pendaftar / Inputer *</Label>
+                    <Input
+                      id="spmb-public-pendaftar"
+                      className="min-h-11"
+                      value={form.pendaftar_nama}
+                      onChange={set("pendaftar_nama")}
+                      disabled={pendaftarLocked}
+                      autoComplete="name"
+                      placeholder="Contoh: Ahmad / Ustadz Fulan"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {pendaftarLocked
+                        ? "Terisi otomatis dari akun yang sedang login."
+                        : "Wajib diisi jika Anda mendaftar tanpa login."}
+                    </p>
+                  </div>
+                </FormSection>
+
                 <FormSection title="Data Diri Murid" description="Informasi pendaftaran dan identitas calon murid">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
