@@ -67,7 +67,7 @@ const HAFALAN_OPTIONS = [
 ] as const;
 
 const initialForm = {
-  nama: "", jenis_kelamin: "", tempat_lahir: "", tanggal_lahir: "", alamat: "", telepon: "", nisn: "",
+  nama: "", jenis_kelamin: "", tempat_lahir: "", tanggal_lahir: "", alamat: "", telepon: "", email: "", nisn: "",
   departemen_id: "", angkatan_id: "", tahun_ajaran_id: "", jenis_pendaftaran: "baru", kelas_terakhir: "", alasan_pindah: "",
   nik: "", no_kk: "", kategori: SPMB_CATEGORY_VALUE, status_asrama: "", anak_ke: "", jumlah_bersaudara: "",
   penyakit_pernah_diderita: "", jarak_rumah_km: "", waktu_perjalanan_menit: "", transportasi: "",
@@ -334,6 +334,21 @@ export default function SPMBDaftarOnlineV2() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!active) return;
+      const user = session?.user;
+      const email = user?.email?.trim() || "";
+      const loginViaGoogle =
+        user?.app_metadata?.provider === "google" ||
+        user?.identities?.some((identity) => identity.provider === "google") === true;
+      if (!email || !loginViaGoogle) return;
+      setForm((current) => current.email ? current : { ...current, email });
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     if (!draftReady || registration || statusToken || loading) return;
     const timer = window.setTimeout(() => saveFormDraft(form), 400);
     return () => window.clearTimeout(timer);
@@ -557,6 +572,12 @@ export default function SPMBDaftarOnlineV2() {
     }
     if (!/^(?:\+62|62|0)[0-9]{7,16}$/.test(form.telepon.replace(/[\s-]/g, ""))) {
       const message = "Masukkan No. HP / WhatsApp yang aktif dan bisa dihubungi.";
+      setSubmitError(message);
+      toast.error(message);
+      return;
+    }
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      const message = "Format email tidak valid. Kosongkan jika tidak ingin mengisi email.";
       setSubmitError(message);
       toast.error(message);
       return;
@@ -883,6 +904,11 @@ export default function SPMBDaftarOnlineV2() {
                       <Label>No. HP / WhatsApp yang Bisa Dihubungi *</Label>
                       <Input className="min-h-11" value={form.telepon} onChange={set("telepon")} inputMode="tel" autoComplete="tel" placeholder="08xxxxxxxxxx" />
                       <p className="mt-1 text-xs text-muted-foreground">Gunakan nomor aktif yang dapat dihubungi panitia SPMB.</p>
+                    </div>
+                    <div>
+                      <Label>Email (opsional)</Label>
+                      <Input className="min-h-11" type="email" value={form.email} onChange={set("email")} inputMode="email" autoComplete="email" placeholder="nama@gmail.com" />
+                      <p className="mt-1 text-xs text-muted-foreground">Jika Anda sudah masuk ke aplikasi dengan akun Google, email Google akan terisi otomatis.</p>
                     </div>
                     <div><Label htmlFor="spmb-public-nik">NIK Calon Murid *</Label><Input id="spmb-public-nik" className="min-h-11" value={form.nik} onChange={(event) => setForm((current) => ({ ...current, nik: event.target.value.replace(/\D/g, "").slice(0, 16) }))} inputMode="numeric" maxLength={16} placeholder="16 digit NIK" /></div>
                     <div><Label>No. KK *</Label><Input className="min-h-11" value={form.no_kk} onChange={set("no_kk")} inputMode="numeric" minLength={10} maxLength={20} /></div>
