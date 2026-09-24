@@ -70,10 +70,6 @@ function key(value: unknown): string {
   return text(value).toLocaleLowerCase("id-ID").replace(/\s+/g, " ");
 }
 
-function nullable(value: unknown): string | null {
-  const valueText = text(value);
-  return valueText || null;
-}
 
 function parseDate(value: unknown): string | null | "invalid" {
   if (value == null || text(value) === "") return null;
