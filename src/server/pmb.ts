@@ -89,6 +89,8 @@ export interface PmbDaftarInput {
   alamat?: string;
   telepon?: string;
   email?: string;
+  pendaftar_nama?: string;
+  pendaftar_email?: string;
   nisn?: string;
   nik?: string;
   no_kk?: string;
@@ -389,6 +391,12 @@ async function performPmbRegistration(
       const pegawai = Array.isArray(profile?.pegawai) ? profile.pegawai[0] : profile?.pegawai;
       inputerEmail = profile?.email || actor.userEmail || null;
       inputerNama = pegawai?.nama || inputerEmail || "Petugas";
+    } else {
+      inputerNama = cleanText(data.pendaftar_nama, 200);
+      inputerEmail = cleanOptionalEmail(data.pendaftar_email);
+      if (!inputerNama || inputerNama.length < 2) {
+        throw new Error("Nama Pendaftar / Inputer wajib diisi");
+      }
     }
 
     let nisnOwner: any = null;
