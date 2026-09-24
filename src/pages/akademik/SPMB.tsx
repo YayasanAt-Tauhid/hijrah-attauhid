@@ -46,6 +46,7 @@ import {
 import { fetchAllPages } from "@/lib/fetchAll";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { AdminSpmbRegistrationDialog } from "@/components/akademik/AdminSpmbRegistrationDialog";
 
 function diagnosaNIS(row: Record<string, unknown>): { alasan?: "no_dept_angkatan" | "no_kelas" } {
   const departemenId = row.departemen_id as string | null;
@@ -1118,252 +1119,19 @@ export default function SPMB() {
           <p className="text-sm text-muted-foreground">Pantau pendaftaran, seleksi, kelulusan, daftar ulang, dan penerimaan murid baru</p>
         </div>
 
-        <Dialog
-          open={dialogOpen}
-          onOpenChange={(open) => {
-            if (open) openRegistration();
-            else requestCloseRegistration();
+        <AdminSpmbRegistrationDialog
+          departments={spmbDepartemenList}
+          cohorts={angkatanList}
+          academicYears={tahunList}
+          disabled={optionsLoading || Boolean(optionsError)}
+          onRegistered={async () => {
+            await Promise.all([
+              qc.invalidateQueries({ queryKey: ["siswa"] }),
+              qc.invalidateQueries({ queryKey: ["siswa", "calon"] }),
+              qc.invalidateQueries({ queryKey: ["spmb_verification_overview"] }),
+            ]);
           }}
-        >
-          <DialogTrigger asChild>
-            <Button className="min-h-11 px-4"><UserPlus className="mr-2 h-4 w-4" />Daftarkan Calon Murid</Button>
-          </DialogTrigger>
-          <DialogContent
-            className="max-h-[92dvh] overflow-hidden p-0 sm:max-w-2xl"
-            onEscapeKeyDown={(event) => {
-              if (isSaving) event.preventDefault();
-            }}
-            onInteractOutside={(event) => {
-              if (isSaving) event.preventDefault();
-            }}
-          >
-            {registrationSuccess ? (
-              <div className="p-6 sm:p-7">
-                <div className="mx-auto flex max-w-xl flex-col items-center text-center">
-                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-success/10 text-success"><CheckCircle2 className="h-8 w-8" /></div>
-                  <DialogHeader className="items-center">
-                    <DialogTitle className="text-xl">Pendaftaran Penerimaan Murid Baru Berhasil</DialogTitle>
-                  </DialogHeader>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    <strong>{registrationSuccess.nama}</strong> sudah tercatat sebagai <strong>calon murid</strong>. Penyimpanan ini belum menyatakan lulus atau diterima.
-                  </p>
-
-                  <div className="mt-5 w-full space-y-3 rounded-lg border bg-muted/30 p-4 text-left text-sm">
-                    <p className="font-medium">Data yang masih perlu dilengkapi</p>
-                    <p className="text-muted-foreground">Lengkapi biodata, Kartu Keluarga dan Akta Kelahiran. Rapor serta Ijazah/SKHUN mengikuti ketentuan bila tersedia. Penempatan kelas dilakukan sebelum tahap penerimaan.</p>
-                    {hasActiveFilters && <p className="rounded-md border bg-background p-2 text-xs text-muted-foreground">Filter daftar pendaftar sedang aktif dan dapat menyembunyikan record baru. Tombol “Lengkapi Biodata & Dokumen” di bawah tetap membuka record yang baru dibuat melalui ID hasil penyimpanan.</p>}
-                    {registrationSuccess.gratis_pendaftaran ? (
-                      <p className="rounded-md border border-success/20 bg-success/5 p-3 text-success">
-                        Calon murid ini mendapatkan gratis biaya pendaftaran pada <strong>{registrationSuccess.gelombang_nama || "gelombang aktif"}</strong>.
-                      </p>
-                    ) : (
-                      <p className="rounded-md border border-warning/20 bg-warning/5 p-3 text-warning">
-                        Calon murid tercatat pada <strong>{registrationSuccess.gelombang_nama || "gelombang aktif"}</strong> dengan biaya pendaftaran normal.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="mt-6 flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                    <Button type="button" variant="outline" className="min-h-11" onClick={closeRegistration}>Kembali ke Daftar Pendaftar</Button>
-                    <Button type="button" className="min-h-11" onClick={() => navigate(`/akademik/siswa/${registrationSuccess.id}/edit`)}>Lengkapi Biodata & Dokumen</Button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleDaftar} className="flex max-h-[92dvh] flex-col" noValidate>
-                <div className="border-b bg-background px-6 py-5">
-                  <DialogHeader>
-                    <DialogTitle>Daftarkan Calon Murid</DialogTitle>
-                  </DialogHeader>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Catat data awal calon murid. Dokumen dan kelas dapat dilengkapi setelah penyimpanan; status tetap <strong>calon</strong> sampai seluruh syarat penerimaan terpenuhi.
-                  </p>
-                </div>
-
-                <fieldset disabled={isSaving} className="min-h-0 flex-1 overflow-y-auto px-6 py-5 disabled:opacity-70">
-                  <div className="space-y-6">
-                    {optionsError && (
-                      <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />Pilihan lembaga/tahun ajaran gagal dimuat. Tutup formulir lalu coba kembali.
-                      </div>
-                    )}
-
-                    <section className="space-y-4" aria-labelledby="spmb-section-calon">
-                      <div>
-                        <h3 id="spmb-section-calon" className="font-semibold">Data Calon Murid</h3>
-                        <p className="text-xs text-muted-foreground">Identitas dasar untuk membuat record pendaftaran.</p>
-                      </div>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-1.5 sm:col-span-2">
-                          <Label htmlFor="spmb-nama">Nama Lengkap *</Label>
-                          <Input
-                            id="spmb-nama"
-                            autoComplete="name"
-                            value={formData.nama}
-                            aria-invalid={Boolean(formErrors.nama)}
-                            onChange={(event) => {
-                              setFormData((current) => ({ ...current, nama: event.target.value }));
-                              if (formErrors.nama) setFormErrors((current) => ({ ...current, nama: undefined }));
-                            }}
-                          />
-                          {formErrors.nama && <p className="text-xs text-destructive" role="alert">{formErrors.nama}</p>}
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="spmb-nik">NIK Calon Murid *</Label>
-                          <Input
-                            id="spmb-nik"
-                            inputMode="numeric"
-                            autoComplete="off"
-                            maxLength={16}
-                            value={formData.nik}
-                            aria-invalid={Boolean(formErrors.nik)}
-                            onChange={(event) => {
-                              setFormData((current) => ({ ...current, nik: normalizeDigits(event.target.value).slice(0, 16) }));
-                              if (formErrors.nik) setFormErrors((current) => ({ ...current, nik: undefined }));
-                            }}
-                            placeholder="16 digit NIK"
-                          />
-                          {formErrors.nik && <p className="text-xs text-destructive" role="alert">{formErrors.nik}</p>}
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="spmb-jenis_kelamin">Jenis Kelamin *</Label>
-                          <Select value={formData.jenis_kelamin} onValueChange={(value: "L" | "P") => setFormData((current) => ({ ...current, jenis_kelamin: value }))}>
-                            <SelectTrigger id="spmb-jenis_kelamin" className="min-h-11"><SelectValue /></SelectTrigger>
-                            <SelectContent><SelectItem value="L">Laki-laki</SelectItem><SelectItem value="P">Perempuan</SelectItem></SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </section>
-
-                    <section className="space-y-4" aria-labelledby="spmb-section-tujuan">
-                      <div>
-                        <h3 id="spmb-section-tujuan" className="font-semibold">Tujuan Pendaftaran</h3>
-                        <p className="text-xs text-muted-foreground">Lembaga, periode dan angkatan mengikuti ketentuan SPMB saat ini.</p>
-                      </div>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-1.5 sm:col-span-2">
-                          <Label htmlFor="spmb-departemen_id">Lembaga / Sekolah *</Label>
-                          <Select
-                            value={formData.departemen_id}
-                            onValueChange={(value) => {
-                              const matching = angkatanList.find((a: any) => a.departemen_id === value && String(a.nama || "").trim() === SPMB_TARGET_COHORT && a.aktif !== false);
-                              setFormData((current) => ({ ...current, departemen_id: value, angkatan_id: matching?.id || "" }));
-                              setFormErrors((current) => ({ ...current, departemen_id: undefined, angkatan_id: undefined }));
-                            }}
-                          >
-                            <SelectTrigger id="spmb-departemen_id" className="min-h-11" aria-invalid={Boolean(formErrors.departemen_id)}>
-                              <SelectValue placeholder={optionsLoading ? "Memuat lembaga..." : "Pilih lembaga"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {spmbDepartemenList.length ? spmbDepartemenList.map((dept: any) => <SelectItem key={dept.id} value={dept.id}>{labelDepartemenSpmb(dept)}</SelectItem>) : <SelectItem value="__empty" disabled>Belum ada lembaga SPMB yang tersedia</SelectItem>}
-                            </SelectContent>
-                          </Select>
-                          {formErrors.departemen_id && <p className="text-xs text-destructive" role="alert">{formErrors.departemen_id}</p>}
-                          {selectedDept && !selectedDept.npsn && <p className="flex items-center gap-1.5 text-xs text-warning"><AlertTriangle className="h-3.5 w-3.5 shrink-0" />NPSN lembaga belum tersedia. Pendaftaran tetap dapat dicatat, tetapi NPSN harus dilengkapi sebelum pembuatan NIS/penerimaan.</p>}
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <Label htmlFor="spmb-tahun_ajaran_id">Periode Tahun Ajaran *</Label>
-                          <Input id="spmb-tahun_ajaran_id" value={targetYear ? "2027–2028" : "Belum dikonfigurasi"} disabled aria-invalid={Boolean(formErrors.tahun_ajaran_id)} />
-                          {formErrors.tahun_ajaran_id && <p className="text-xs text-destructive" role="alert">{formErrors.tahun_ajaran_id}</p>}
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="spmb-angkatan_id">Angkatan *</Label>
-                          <Input id="spmb-angkatan_id" value={!formData.departemen_id ? "Pilih lembaga terlebih dahulu" : targetAngkatan ? "2027" : "Belum dikonfigurasi untuk lembaga ini"} disabled aria-invalid={Boolean(formErrors.angkatan_id)} />
-                          {formErrors.angkatan_id && <p className="text-xs text-destructive" role="alert">{formErrors.angkatan_id}</p>}
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label>Kategori *</Label>
-                          <Select value={formData.kategori} onValueChange={(value) => setFormData((current) => ({ ...current, kategori: value }))}>
-                            <SelectTrigger className="min-h-11"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={SPMB_CATEGORY_VALUE}>{SPMB_CATEGORY_LABEL}</SelectItem>
-                              <SelectItem value={SPMB_TRANSFER_CATEGORY_VALUE}>{SPMB_TRANSFER_CATEGORY_LABEL}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {selectedDeptNeedsNisn && (
-                          <div className="space-y-1.5">
-                            <Label htmlFor="spmb-nisn">NISN *</Label>
-                            <Input
-                              id="spmb-nisn"
-                              inputMode="numeric"
-                              maxLength={10}
-                              value={formData.nisn}
-                              aria-invalid={Boolean(formErrors.nisn)}
-                              onChange={(event) => {
-                                setFormData((current) => ({ ...current, nisn: normalizeDigits(event.target.value).slice(0, 10) }));
-                                if (formErrors.nisn) setFormErrors((current) => ({ ...current, nisn: undefined }));
-                              }}
-                              placeholder="10 digit NISN"
-                            />
-                            {formErrors.nisn && <p className="text-xs text-destructive" role="alert">{formErrors.nisn}</p>}
-                          </div>
-                        )}
-                      </div>
-                    </section>
-
-                    <section className="space-y-4" aria-labelledby="spmb-section-kontak">
-                      <div>
-                        <h3 id="spmb-section-kontak" className="font-semibold">Kontak Orang Tua / Wali</h3>
-                        <p className="text-xs text-muted-foreground">Kontak awal untuk menghubungi keluarga terkait jadwal dan tahapan seleksi.</p>
-                      </div>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="spmb-telepon">No. HP / WhatsApp yang Bisa Dihubungi *</Label>
-                          <Input
-                            id="spmb-telepon"
-                            inputMode="tel"
-                            autoComplete="tel"
-                            value={formData.telepon}
-                            aria-invalid={Boolean(formErrors.telepon)}
-                            onChange={(event) => {
-                              setFormData((current) => ({ ...current, telepon: event.target.value }));
-                              if (formErrors.telepon) setFormErrors((current) => ({ ...current, telepon: undefined }));
-                            }}
-                            placeholder="08xxxxxxxxxx"
-                          />
-                          {formErrors.telepon && <p className="text-xs text-destructive" role="alert">{formErrors.telepon}</p>}
-                        </div>
-                        <div className="space-y-1.5 sm:col-span-2">
-                          <Label htmlFor="spmb-alamat">Alamat Rumah *</Label>
-                          <Textarea
-                            id="spmb-alamat"
-                            value={formData.alamat}
-                            aria-invalid={Boolean(formErrors.alamat)}
-                            onChange={(event) => {
-                              setFormData((current) => ({ ...current, alamat: event.target.value }));
-                              if (formErrors.alamat) setFormErrors((current) => ({ ...current, alamat: undefined }));
-                            }}
-                            rows={3}
-                          />
-                          {formErrors.alamat && <p className="text-xs text-destructive" role="alert">{formErrors.alamat}</p>}
-                        </div>
-                      </div>
-                    </section>
-
-                    <section className="space-y-3 rounded-lg border bg-muted/20 p-4" aria-labelledby="spmb-section-lanjutan">
-                      <div>
-                        <h3 id="spmb-section-lanjutan" className="font-semibold">Setelah Pendaftaran Disimpan</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">Jalur admin ini hanya mencatat data awal. KK dan Akta Kelahiran wajib dilengkapi sebelum penerimaan. Rapor dan Ijazah/SKHUN hanya diwajibkan untuk Siswa Pindahan. Tinggi badan, berat badan, lingkar kepala dan ukuran baju belum diisi pada tahap ini.</p>
-                      </div>
-                      <div className="rounded-md border border-warning/20 bg-warning/5 p-3 text-xs text-warning">
-                        Kelas tidak dipaksakan saat pendaftaran awal. Sistem tetap mewajibkan kelas, verifikasi, dokumen, biaya pendaftaran (atau hak gratis), angkatan dan NPSN sebelum calon murid dapat diterima.
-                      </div>
-                    </section>
-                  </div>
-                </fieldset>
-
-                <div className="flex flex-col-reverse gap-2 border-t bg-background px-6 py-4 sm:flex-row sm:justify-end">
-                  <Button type="button" variant="outline" className="min-h-11" disabled={isSaving} onClick={requestCloseRegistration}>Batal</Button>
-                  <Button type="submit" className="min-h-11" disabled={isSaving || optionsLoading || Boolean(optionsError)}>
-                    {isSaving ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Menyimpan…</> : <><UserPlus className="mr-2 h-4 w-4" />Simpan Pendaftaran</>}
-                  </Button>
-                </div>
-              </form>
-            )}
-          </DialogContent>
-        </Dialog>
+        />
       </div>
 
       <Dialog
