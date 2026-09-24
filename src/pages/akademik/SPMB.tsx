@@ -47,6 +47,7 @@ import { fetchAllPages } from "@/lib/fetchAll";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { AdminSpmbRegistrationDialog } from "@/components/akademik/AdminSpmbRegistrationDialog";
+import { spmbAdminUpdateRegistrantName } from "@/server/pmb";
 
 function diagnosaNIS(row: Record<string, unknown>): { alasan?: "no_dept_angkatan" | "no_kelas" } {
   const departemenId = row.departemen_id as string | null;
@@ -127,7 +128,7 @@ const SPMB_EXPORT_COLUMNS = [
   { key: "_exportVerifikasi", label: "Verifikasi" },
   { key: "_exportStatusPendaftaran", label: "Status Pendaftaran" },
   { key: "_exportSumber", label: "Sumber Pendaftar" },
-  { key: "_spmbInputer", label: "Petugas / Inputer" },
+  { key: "_spmbInputer", label: "Nama Pendaftar" },
 ];
 
 type RegistrationForm = {
@@ -230,6 +231,9 @@ export default function SPMB() {
   const [targetChangeAsrama, setTargetChangeAsrama] = useState("");
   const [targetChangeReason, setTargetChangeReason] = useState("");
   const [targetChangeLoading, setTargetChangeLoading] = useState(false);
+  const [registrantEditRow, setRegistrantEditRow] = useState<Record<string, unknown> | null>(null);
+  const [registrantEditName, setRegistrantEditName] = useState("");
+  const [registrantEditLoading, setRegistrantEditLoading] = useState(false);
   const [filters, setFilters] = useState<SpmbFilterState>(DEFAULT_FILTERS);
   const [sortMode, setSortMode] = useState("registration_desc");
 
@@ -423,7 +427,7 @@ export default function SPMB() {
           _spmbKelasTujuanId: detail?.spmb_kelas_tujuan_id || null,
           _spmbTanggalAktivasi: detail?.spmb_tanggal_aktivasi || null,
           _spmbRegisteredAt: detail?.spmb_registered_at || s.created_at || null,
-          _spmbInputer: detail?.spmb_inputer_nama || detail?.spmb_inputer_email || (detail?.spmb_sumber_pendaftaran === "admin" ? "Petugas" : "Orang Tua / Publik"),
+          _spmbInputer: detail?.spmb_inputer_nama || "",
           _biayaSort: biayaSort,
           _kesiapanSort: r?.siap ? "siap" : "belum",
           _verifikasiSort: s.terverifikasi ? "sudah" : "belum",
@@ -948,6 +952,50 @@ export default function SPMB() {
     }
   };
 
+  const openRegistrantEdit = (row: Record<string, unknown>) => {
+    setRegistrantEditRow(row);
+    setRegistrantEditName(String(row._spmbInputer || ""));
+  };
+
+  const closeRegistrantEdit = () => {
+    if (registrantEditLoading) return;
+    setRegistrantEditRow(null);
+    setRegistrantEditName("");
+  };
+
+  const handleRegistrantEdit = async () => {
+    if (!registrantEditRow) return;
+    const nama = registrantEditName.trim();
+    if (nama.length < 2) {
+      toast.error("Nama Pendaftar wajib diisi");
+      return;
+    }
+
+    setRegistrantEditLoading(true);
+    try {
+      const detail = registrantEditRow._spmbDetail as Record<string, any> | undefined;
+      await spmbAdminUpdateRegistrantName({
+        data: {
+          siswa_id: String(registrantEditRow.id || ""),
+          detail_id: detail?.id ? String(detail.id) : undefined,
+          nama,
+        },
+      });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["siswa", "calon"] }),
+        qc.invalidateQueries({ queryKey: ["siswa_detail"] }),
+      ]);
+      toast.success("Nama Pendaftar berhasil disimpan");
+      closeRegistrantEdit();
+    } catch (error: any) {
+      toast.error("Gagal menyimpan Nama Pendaftar", {
+        description: error?.message || "Terjadi kesalahan teknis",
+      });
+    } finally {
+      setRegistrantEditLoading(false);
+    }
+  };
+
   const columns: DataTableColumn<Record<string, unknown>>[] = [
     { key: "nama", label: "Nama", sortable: true },
     {
@@ -975,7 +1023,29 @@ export default function SPMB() {
     { key: "_spmbAsrama", label: "Asrama", sortable: true, render: (value) => (value as string) || "-" },
     { key: "_angkatanNama", label: "Angkatan", sortable: true, render: (value) => (value as string) || "-" },
     { key: "_spmbRegisteredAt", label: "Tgl Pendaftaran", sortable: true, render: (value) => formatTanggal(value) },
-    { key: "_spmbInputer", label: "Petugas / Inputer", sortable: true, render: (value) => (value as string) || "-" },
+    {
+      key: "_spmbInputer",
+      label: "Nama Pendaftar",
+      sortable: true,
+      render: (value, row) => (
+        <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+          <span className={(value as string) ? "text-xs" : "text-xs text-warning"}>
+            {(value as string) || "Belum diisi"}
+          </span>
+          {canChangeSpmbTarget && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0"
+              title="Edit Nama Pendaftar"
+              onClick={() => openRegistrantEdit(row)}
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      ),
+    },
     { key: "_pmbTanggalBayar", label: "Tgl Bayar Pendaftaran", sortable: true, render: (value) => formatTanggal(value) },
     { key: "_spmbTesStatus", label: "Status Tes", sortable: true, render: (value) => value === "sudah" ? <span className="text-xs text-success">Sudah Tes</span> : <span className="text-xs text-warning">Belum Tes</span> },
     { key: "_spmbTanggalTes", label: "Tgl Tes", sortable: true, render: (value) => formatTanggal(value) },
@@ -1140,6 +1210,49 @@ export default function SPMB() {
           }}
         />
       </div>
+
+      <Dialog
+        open={Boolean(registrantEditRow)}
+        onOpenChange={(open) => {
+          if (!open) closeRegistrantEdit();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Nama Pendaftar</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+              <p className="font-medium">{registrantEditRow?.nama as string || "-"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Nama ini adalah orang yang mengisi atau menyerahkan formulir SPMB.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="spmb-edit-registrant-name">Nama Pendaftar *</Label>
+              <Input
+                id="spmb-edit-registrant-name"
+                value={registrantEditName}
+                onChange={(event) => setRegistrantEditName(event.target.value)}
+                placeholder="Masukkan nama pendaftar"
+                disabled={registrantEditLoading}
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" disabled={registrantEditLoading} onClick={closeRegistrantEdit}>Batal</Button>
+              <Button
+                disabled={registrantEditLoading || registrantEditName.trim().length < 2}
+                onClick={handleRegistrantEdit}
+              >
+                {registrantEditLoading
+                  ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Menyimpan…</>
+                  : "Simpan Nama Pendaftar"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(activationRow)}
