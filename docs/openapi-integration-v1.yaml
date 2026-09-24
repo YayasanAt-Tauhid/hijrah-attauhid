@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: Hijrah At-Tauhid Integration API
-  version: 1.0.0
-  description: Read API and scoped milestone updates for SPMB registrations, students, classes, documents, and incremental synchronization.
+  version: 1.1.0
+  description: Backward-compatible v1.1 read API, scoped SPMB milestone updates, granular sensitive-data scopes, filters, webhooks, and incremental synchronization.
 servers:
   - url: https://app.hijrah-attauhid.or.id
     description: Production Cloudflare Worker
@@ -73,16 +73,18 @@ components:
             gratis_pendaftaran: { type: boolean }
             tanggal_mulai: { type: string, format: date-time }
             tanggal_selesai: { type: [string, 'null'], format: date-time }
+        status_tes: { type: string, enum: [sudah_tes, belum_tes] }
         tanggal_tes: { type: [string, 'null'], format: date-time }
         status_kelulusan: { type: [string, 'null'], enum: [lulus, tidak_lulus, null] }
         tanggal_kelulusan: { type: [string, 'null'], format: date-time }
         tanggal_keputusan: { type: [string, 'null'], format: date-time }
         tanggal_daftar_ulang: { type: [string, 'null'], format: date-time }
+        status_verifikasi: { type: [string, 'null'] }
         verifikasi: { type: object }
         pembayaran_pendaftaran: { $ref: '#/components/schemas/Payment' }
         data_sensitif:
           type: object
-          description: Omitted without pendaftaran:sensitive:read
+          description: Omitted without an allowed identity/contact/sensitive scope. Legacy pendaftaran:sensitive:read keeps the full v1 block.
           properties:
             nisn: { type: [string, 'null'] }
         dokumen:
@@ -145,7 +147,16 @@ paths:
   /api/v1/pendaftaran:
     get:
       summary: List registrations
-      parameters: [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Department' }, { $ref: '#/components/parameters/AcademicYear' }, { name: status, in: query, schema: { type: string } }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Department' }
+        - { $ref: '#/components/parameters/AcademicYear' }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: status_tes, in: query, schema: { type: string, enum: [sudah_tes, belum_tes] } }
+        - { name: status_kelulusan, in: query, schema: { type: string, enum: [lulus, tidak_lulus, belum_diputuskan] } }
+        - { name: gelombang_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status_verifikasi, in: query, schema: { type: string } }
       responses: { '200': { description: OK }, '401': { $ref: '#/components/responses/Unauthorized' }, '403': { $ref: '#/components/responses/Forbidden' }, '429': { $ref: '#/components/responses/RateLimited' } }
   /api/v1/pendaftaran/{id}:
     get:
@@ -157,7 +168,13 @@ paths:
   /api/v1/siswa:
     get:
       summary: List non-candidate students
-      parameters: [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Department' }, { $ref: '#/components/parameters/AcademicYear' }, { name: status, in: query, schema: { type: string } }, { name: kelas_id, in: query, schema: { type: string, format: uuid } }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Department' }
+        - { $ref: '#/components/parameters/AcademicYear' }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: kelas_id, in: query, schema: { type: string, format: uuid } }
       responses: { '200': { description: OK }, '401': { $ref: '#/components/responses/Unauthorized' }, '403': { $ref: '#/components/responses/Forbidden' } }
   /api/v1/siswa/{id}:
     get:
@@ -244,3 +261,40 @@ paths:
           description: Rate limit exceeded; obey Retry-After
         '503':
           description: Outcome unconfirmed; retry the same action safely
+
+webhooks:
+  integrationChange:
+    post:
+      summary: Outbound change notification configured by an administrator
+      description: Minimal event without PII. Verify X-Hijrah-Signature against the raw request body, then fetch details through the normal scoped API.
+      parameters:
+        - name: X-Hijrah-Event-ID
+          in: header
+          required: true
+          schema: { type: string }
+        - name: X-Hijrah-API-Version
+          in: header
+          required: true
+          schema: { type: string, const: '1.1' }
+        - name: X-Hijrah-Signature
+          in: header
+          required: true
+          schema: { type: string, pattern: '^sha256=[0-9a-f]{64}$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_id, type, api_version, changed_at]
+              properties:
+                event_id: { type: string }
+                type: { type: string, enum: [integration.change, integration.test] }
+                api_version: { type: string, const: '1.1' }
+                object_type: { type: string, enum: [pendaftaran, siswa, kelas, dokumen] }
+                object_id: { type: string, format: uuid }
+                change: { type: string, enum: [upsert, delete] }
+                version: { type: integer }
+                changed_at: { type: string, format: date-time }
+      responses:
+        '2XX': { description: Receiver accepted the event }
