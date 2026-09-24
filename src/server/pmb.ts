@@ -379,6 +379,18 @@ async function performPmbRegistration(
     if (!/^\d{16}$/.test(String(data.nik_ayah || "").replace(/\D/g, ""))) throw new Error("NIK Ayah harus 16 digit");
     if (!/^\d{16}$/.test(String(data.nik_ibu || "").replace(/\D/g, ""))) throw new Error("NIK Ibu harus 16 digit");
 
+    let inputerNama: string | null = null;
+    let inputerEmail: string | null = null;
+    if (actor) {
+      const { data: profile } = await (admin.from("users_profile") as any)
+        .select("email,pegawai:pegawai_id(nama)")
+        .eq("id", actor.userId)
+        .maybeSingle();
+      const pegawai = Array.isArray(profile?.pegawai) ? profile.pegawai[0] : profile?.pegawai;
+      inputerEmail = profile?.email || actor.userEmail || null;
+      inputerNama = pegawai?.nama || inputerEmail || "Petugas";
+    }
+
     let nisnOwner: any = null;
     if (nisn) {
       const lookup = await (admin.from("siswa") as any)
@@ -482,18 +494,6 @@ async function performPmbRegistration(
         const patchResult = await (admin.from("siswa") as any).update(studentPatch).eq("id", existingSiswaId);
         if (patchResult.error) throw registrationDbError(patchResult.error);
       }
-    }
-
-    let inputerNama: string | null = null;
-    let inputerEmail: string | null = null;
-    if (actor) {
-      const { data: profile } = await (admin.from("users_profile") as any)
-        .select("email,pegawai:pegawai_id(nama)")
-        .eq("id", actor.userId)
-        .maybeSingle();
-      const pegawai = Array.isArray(profile?.pegawai) ? profile.pegawai[0] : profile?.pegawai;
-      inputerEmail = profile?.email || actor.userEmail || null;
-      inputerNama = pegawai?.nama || inputerEmail || "Petugas";
     }
 
     const paymentToken = crypto.randomUUID();
