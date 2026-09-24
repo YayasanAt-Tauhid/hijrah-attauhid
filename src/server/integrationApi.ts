@@ -1,6 +1,6 @@
 import { createAdminClient } from './supabase'
 
-const SCOPES = ['pendaftaran:read','pendaftaran:identity:read','pendaftaran:contact:read','pendaftaran:sensitive:read','pendaftaran:documents:read','siswa:read','kelas:read','pendaftaran:milestone:update'] as const
+const SCOPES = ['pendaftaran:read','pendaftaran:identity:read','pendaftaran:contact:read','pendaftaran:sensitive:read','pendaftaran:documents:read','siswa:read','kelas:read','pegawai:read','pegawai:contact:read','pegawai:write','pendaftaran:milestone:update'] as const
 type Scope=(typeof SCOPES)[number]
 type Ctx={integration:any;token:any;admin:any;requestId:string;started:number;tokenHash:string}
 const MAX_PAGE=200, DEFAULT_PAGE=100
@@ -216,3 +216,107 @@ export async function handleSync(request:Request,type:'pendaftaran'|'siswa'|'kel
  try{const u=new URL(request.url),lim=page(u),filters=filterFingerprint(u),c=await readCursor(u.searchParams.get('cursor'),`sync:${type}`,ctx,filters);let checkpoint:number,after:number;if(!c){const {data:max}=await (ctx.admin.from('integration_change_log') as any).select('seq').order('seq',{ascending:false}).limit(1);checkpoint=max?.[0]?.seq||0;after=Number(u.searchParams.get('checkpoint')||0);if(!Number.isSafeInteger(after)||after<0)throw new Error('PARAM')}else{checkpoint=c.checkpoint;after=c.after}const minCut=new Date(Date.now()-90*86400000).toISOString();const {data:minRows}=await (ctx.admin.from('integration_change_log') as any).select('seq').gte('changed_at',minCut).order('seq').limit(1);const minSeq=minRows?.[0]?.seq||0;if(after&&after<minSeq)return done(ctx,route,err('checkpoint_expired','Checkpoint sudah melewati retensi change log; lakukan bootstrap ulang',410,ctx.requestId));const {data,error}=await (ctx.admin.from('integration_change_log') as any).select('seq,object_type,object_id,change_type,department_id,academic_year_id,previous_department_id,previous_academic_year_id,changed_at').gt('seq',after).lte('seq',checkpoint).in('object_type',type==='pendaftaran'?['pendaftaran','dokumen']:[type]).order('seq').limit(Math.min(1000,lim*5+1));if(error)throw error;const rows=(data||[]).filter((r:any)=>allowed(ctx,r.department_id,r.academic_year_id)||allowed(ctx,r.previous_department_id,r.previous_academic_year_id));const chosen=rows.slice(0,lim),changes=[];for(const r of chosen){let data:any=null,change=r.change_type;if(r.object_type==='pendaftaran'||r.object_type==='dokumen')data=await fetchRegistration(ctx,r.object_id);else if(r.object_type==='siswa'){const {data:s}=await ctx.admin.from('siswa').select(BASE).eq('id',r.object_id).maybeSingle();data=s&&s.status!=='calon'&&(!ctx.integration.department_ids?.length||ctx.integration.department_ids.includes(s.departemen_id))?s:null}else{const {data:k}=await ctx.admin.from('kelas').select('id,nama,tingkat_id,departemen_id,kapasitas,aktif').eq('id',r.object_id).maybeSingle();data=k&&(!ctx.integration.department_ids?.length||ctx.integration.department_ids.includes(k.departemen_id))?k:null}if(!data&&change==='upsert')change='scope_exit';changes.push({id:r.object_id,object_type:r.object_type,change,version:r.seq,changed_at:r.changed_at,data})}const last=chosen.at(-1),more=rows.length>lim;return done(ctx,route,json({data:changes,sync:{checkpoint,checkpoint_safe:!more,next_cursor:more&&last?await nextCursor(`sync:${type}`,ctx,filters,{checkpoint,after:last.seq}):null,has_more:more,retention_days:90}}))}catch(e){return done(ctx,route,err(e instanceof Error&&e.message==='LIMIT'?'invalid_limit':e instanceof Error&&e.message==='PARAM'?'invalid_parameter':'invalid_cursor','Cursor atau parameter sinkronisasi tidak valid',400,ctx.requestId))}}
 
 export async function handleDocument(request:Request,docId:string){const a=await authenticateIntegration(request);if(a instanceof Response)return a;const ctx=a,route='/api/v1/documents/:id',req=need(ctx,'pendaftaran:read')||need(ctx,'pendaftaran:documents:read');if(req)return done(ctx,route,req);const m=/^([0-9a-f-]{36})\.(kk|akta|rapor|ijazah)$/i.exec(docId);if(!m)return done(ctx,route,err('invalid_id','ID dokumen tidak valid',400,ctx.requestId));const pid=m[1],kind=m[2].toLowerCase();const {data:d}=await (ctx.admin.from('siswa_detail') as any).select(`siswa_id,pendaftaran_id,tahun_ajaran_id,spmb_departemen_tujuan_id,dokumen_${kind}_path`).eq('pendaftaran_id',pid).maybeSingle();const {data:s}=d?await ctx.admin.from('siswa').select('departemen_id').eq('id',d.siswa_id).maybeSingle():{data:null};const path=d?.[`dokumen_${kind}_path`];if(!d||!s||!path||!allowed(ctx,d.spmb_departemen_tujuan_id||s.departemen_id,d.tahun_ajaran_id))return done(ctx,route,err('not_found','Dokumen tidak ditemukan atau di luar cakupan',404,ctx.requestId));const {data:signed,error}=await ctx.admin.storage.from('pmb-dokumen').createSignedUrl(path,60);if(error||!signed?.signedUrl)return done(ctx,route,err('temporary_failure','Gagal menerbitkan akses dokumen',503,ctx.requestId));return done(ctx,route,json({data:{id:docId,version:await pathVersion(path),expires_in:60,url:signed.signedUrl}}))}
+
+
+const PEGAWAI_BASE='id,nip,nama,jenis_kelamin,tempat_lahir,tanggal_lahir,agama,alamat,telepon,email,foto_url,jabatan,departemen_id,status,tanggal_masuk,tanggal_pensiun,golongan_terakhir,created_at'
+function employeeAllowed(ctx:Ctx,dept?:string|null){const ds:string[]=ctx.integration.department_ids||[];return !ds.length||!!dept&&ds.includes(dept)}
+function employeeView(ctx:Ctx,p:any){const out:any={id:p.id,nip:p.nip,nama:p.nama,jenis_kelamin:p.jenis_kelamin,jabatan:p.jabatan,status:p.status,unit:{id:p.departemen_id},tanggal_masuk:p.tanggal_masuk,tanggal_pensiun:p.tanggal_pensiun,golongan_terakhir:p.golongan_terakhir,created_at:p.created_at};if(has(ctx,'pegawai:contact:read'))out.data_pribadi={tempat_lahir:p.tempat_lahir,tanggal_lahir:p.tanggal_lahir,agama:p.agama,alamat:p.alamat,telepon:p.telepon,email:p.email,foto_url:p.foto_url};return out}
+function apiText(v:unknown){return typeof v==='string'?v.trim():v==null?'':String(v).trim()}
+function validDate(v:unknown){const s=apiText(v);return !s||/^\d{4}-\d{2}-\d{2}$/.test(s)}
+function employeeError(row:number,code:string,message:string){return {row,status:'error',error:{code,message}}}
+
+export async function handlePegawaiList(request:Request){
+ const a=await authenticateIntegration(request);if(a instanceof Response)return a
+ const ctx=a,route='/api/v1/pegawai',req=need(ctx,'pegawai:read');if(req)return done(ctx,route,req)
+ try{
+  const u=new URL(request.url),lim=page(u),filters=filterFingerprint(u),cur=await readCursor(u.searchParams.get('cursor'),'list:pegawai',ctx,filters),after=cur?.after||''
+  const dept=u.searchParams.get('departemen_id'),status=u.searchParams.get('status')
+  if(dept){if(!uuid(dept))throw new Error('PARAM');if(ctx.integration.department_ids?.length&&!ctx.integration.department_ids.includes(dept))return done(ctx,route,err('filter_out_of_scope','Unit di luar cakupan token',403,ctx.requestId))}
+  if(status&&!['aktif','nonaktif'].includes(status))throw new Error('PARAM')
+  let q=(ctx.admin.from('pegawai') as any).select(PEGAWAI_BASE).order('id').limit(lim+1)
+  if(after)q=q.gt('id',after)
+  if(dept)q=q.eq('departemen_id',dept)
+  if(status)q=q.eq('status',status)
+  const {data,error}=await q;if(error)throw error
+  let rows=(data||[]).filter((p:any)=>employeeAllowed(ctx,p.departemen_id))
+  const more=rows.length>lim;rows=rows.slice(0,lim);const last=rows.at(-1)
+  return done(ctx,route,json({data:rows.map((p:any)=>employeeView(ctx,p)),pagination:{limit:lim,has_more:more,next_cursor:more&&last?await nextCursor('list:pegawai',ctx,filters,{after:last.id}):null}}))
+ }catch(e){return done(ctx,route,err(e instanceof Error&&e.message==='LIMIT'?'invalid_limit':e instanceof Error&&e.message==='PARAM'?'invalid_parameter':'invalid_cursor','Parameter request tidak valid',400,ctx.requestId))}
+}
+
+export async function handlePegawaiDetail(request:Request,id:string){
+ const a=await authenticateIntegration(request);if(a instanceof Response)return a
+ const ctx=a,route='/api/v1/pegawai/:id',req=need(ctx,'pegawai:read');if(req)return done(ctx,route,req)
+ if(!uuid(id))return done(ctx,route,err('invalid_id','ID pegawai tidak valid',400,ctx.requestId))
+ const {data:p,error}=await (ctx.admin.from('pegawai') as any).select(PEGAWAI_BASE).eq('id',id).maybeSingle()
+ if(error)return done(ctx,route,err('temporary_failure','Gagal membaca data pegawai',503,ctx.requestId))
+ if(!p||!employeeAllowed(ctx,p.departemen_id))return done(ctx,route,err('not_found','Pegawai tidak ditemukan atau di luar cakupan',404,ctx.requestId))
+ return done(ctx,route,json({data:employeeView(ctx,p)}))
+}
+
+export async function handlePegawaiImport(request:Request){
+ const a=await authenticateIntegration(request);if(a instanceof Response)return a
+ const ctx=a,route='/api/v1/pegawai/import',req=need(ctx,'pegawai:write');if(req)return done(ctx,route,req)
+ let body:any
+ try{body=await request.json()}catch{return done(ctx,route,err('invalid_json','Body harus JSON yang valid',400,ctx.requestId))}
+ if(!body||typeof body!=='object'||Array.isArray(body)||!Array.isArray(body.rows)||body.rows.length<1||body.rows.length>200)return done(ctx,route,err('invalid_payload','rows wajib berupa array 1-200 baris',400,ctx.requestId))
+ const topKeys=Object.keys(body);if(topKeys.some(k=>!['update_existing','rows'].includes(k)))return done(ctx,route,err('invalid_payload','Field request tidak dikenali',400,ctx.requestId))
+ const updateExisting=body.update_existing===true
+ const allowedFields=new Set(['pegawai_id','nip','nama','jenis_kelamin','tempat_lahir','tanggal_lahir','agama','alamat','telepon','email','foto_url','jabatan','departemen_id','status','tanggal_masuk','tanggal_pensiun','golongan_terakhir'])
+ const ids=[...new Set(body.rows.map((r:any)=>apiText(r?.pegawai_id)).filter(Boolean))]
+ const nips=[...new Set(body.rows.map((r:any)=>apiText(r?.nip)).filter(Boolean))]
+ const idCounts=new Map<string,number>(),nipCounts=new Map<string,number>();for(const x of ids)idCounts.set(x,body.rows.filter((r:any)=>apiText(r?.pegawai_id)===x).length);for(const x of nips)nipCounts.set(x,body.rows.filter((r:any)=>apiText(r?.nip)===x).length)
+ const byId=new Map<string,any>(),byNip=new Map<string,any>()
+ if(ids.length){const {data,error}=await (ctx.admin.from('pegawai') as any).select(PEGAWAI_BASE).in('id',ids);if(error)return done(ctx,route,err('temporary_failure','Gagal mencocokkan pegawai existing',503,ctx.requestId));for(const p of data||[])byId.set(p.id,p)}
+ if(nips.length){const {data,error}=await (ctx.admin.from('pegawai') as any).select(PEGAWAI_BASE).in('nip',nips);if(error)return done(ctx,route,err('temporary_failure','Gagal mencocokkan NIP existing',503,ctx.requestId));for(const p of data||[])if(p.nip)byNip.set(p.nip,p)}
+ const results:any[]=[];let created=0,updated=0,failed=0
+ for(let i=0;i<body.rows.length;i++){
+  const row=body.rows[i],rowNo=i+1
+  if(!row||typeof row!=='object'||Array.isArray(row)){results.push(employeeError(rowNo,'invalid_row','Baris harus object JSON'));failed++;continue}
+  const unknown=Object.keys(row).filter(k=>!allowedFields.has(k));if(unknown.length){results.push(employeeError(rowNo,'unknown_field',`Field tidak diizinkan: ${unknown.join(', ')}`));failed++;continue}
+  const employeeId=apiText(row.pegawai_id),nip=apiText(row.nip)
+  if(employeeId&&!uuid(employeeId)){results.push(employeeError(rowNo,'invalid_employee_id','pegawai_id harus UUID'));failed++;continue}
+  if(employeeId&&(idCounts.get(employeeId)||0)>1){results.push(employeeError(rowNo,'duplicate_employee_id','pegawai_id duplikat dalam request'));failed++;continue}
+  if(nip&&(nipCounts.get(nip)||0)>1){results.push(employeeError(rowNo,'duplicate_nip','NIP duplikat dalam request'));failed++;continue}
+  const idMatch=employeeId?byId.get(employeeId):null,nipMatch=nip?byNip.get(nip):null
+  if(employeeId&&!idMatch){results.push(employeeError(rowNo,'employee_not_found','pegawai_id tidak ditemukan'));failed++;continue}
+  if(idMatch&&nipMatch&&idMatch.id!==nipMatch.id){results.push(employeeError(rowNo,'identity_conflict','pegawai_id dan NIP mengarah ke pegawai berbeda'));failed++;continue}
+  const existing=idMatch||nipMatch
+  if(existing&&!employeeAllowed(ctx,existing.departemen_id)){results.push(employeeError(rowNo,'out_of_scope','Pegawai existing di luar cakupan unit token'));failed++;continue}
+  if(existing&&!updateExisting){results.push(employeeError(rowNo,'already_exists','Pegawai sudah ada; set update_existing=true untuk memperbarui'));failed++;continue}
+  const hasDept=Object.prototype.hasOwnProperty.call(row,'departemen_id')
+  let dept:any=hasDept?row.departemen_id:undefined
+  if(hasDept&&dept!==null){dept=apiText(dept);if(!uuid(dept)){results.push(employeeError(rowNo,'invalid_department','departemen_id harus UUID atau null'));failed++;continue}}
+  const targetDept=hasDept?dept:(existing?.departemen_id??null)
+  if(!employeeAllowed(ctx,targetDept)){results.push(employeeError(rowNo,'out_of_scope','Departemen target di luar cakupan unit token'));failed++;continue}
+  const gender=apiText(row.jenis_kelamin).toUpperCase();if(gender&&!['L','P'].includes(gender)){results.push(employeeError(rowNo,'invalid_gender','jenis_kelamin harus L atau P'));failed++;continue}
+  const status=apiText(row.status).toLowerCase();if(status&&!['aktif','nonaktif'].includes(status)){results.push(employeeError(rowNo,'invalid_status','status harus aktif atau nonaktif'));failed++;continue}
+  if(!validDate(row.tanggal_lahir)||!validDate(row.tanggal_masuk)||!validDate(row.tanggal_pensiun)){results.push(employeeError(rowNo,'invalid_date','Tanggal harus berformat YYYY-MM-DD'));failed++;continue}
+  if(!existing&&(!apiText(row.nama)||!apiText(row.jabatan))){results.push(employeeError(rowNo,'required_field','Pegawai baru wajib memiliki nama dan jabatan'));failed++;continue}
+  if(existing&&Object.prototype.hasOwnProperty.call(row,'nama')&&!apiText(row.nama)){results.push(employeeError(rowNo,'invalid_name','Nama tidak boleh dikosongkan saat update'));failed++;continue}
+  if(existing&&Object.prototype.hasOwnProperty.call(row,'jabatan')&&!apiText(row.jabatan)){results.push(employeeError(rowNo,'invalid_position','Jabatan tidak boleh dikosongkan saat update'));failed++;continue}
+  const payload:any={}
+  const stringFields=['nip','nama','jenis_kelamin','tempat_lahir','tanggal_lahir','agama','alamat','telepon','email','foto_url','jabatan','status','tanggal_masuk','tanggal_pensiun','golongan_terakhir']
+  for(const field of stringFields){
+   if(!Object.prototype.hasOwnProperty.call(row,field))continue
+   const value=apiText(row[field])
+   if(existing&&!value)continue
+   payload[field]=value||null
+  }
+  if(payload.jenis_kelamin)payload.jenis_kelamin=gender
+  if(payload.status)payload.status=status
+  if(hasDept)payload.departemen_id=dept
+  if(!existing){if(!Object.prototype.hasOwnProperty.call(payload,'status'))payload.status='aktif';if(!hasDept)payload.departemen_id=null}
+  try{
+   if(existing){
+    if(!Object.keys(payload).length){results.push(employeeError(rowNo,'no_changes','Tidak ada field yang dapat diperbarui'));failed++;continue}
+    const {error}=await (ctx.admin.from('pegawai') as any).update(payload).eq('id',existing.id);if(error)throw error
+    results.push({row:rowNo,status:'updated',pegawai_id:existing.id});updated++
+   }else{
+    const {data:newRow,error}=await (ctx.admin.from('pegawai') as any).insert(payload).select('id').single();if(error)throw error
+    results.push({row:rowNo,status:'created',pegawai_id:newRow.id});created++
+   }
+  }catch(e:any){results.push(employeeError(rowNo,'save_failed',e?.code==='23505'?'NIP sudah digunakan pegawai lain':'Gagal menyimpan pegawai'));failed++}
+ }
+ return done(ctx,route,json({data:{summary:{created,updated,failed,total:body.rows.length},rows:results}}))
+}
