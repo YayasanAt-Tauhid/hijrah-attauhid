@@ -31,11 +31,10 @@ Respons v1.1 mengirim `X-Hijrah-API-Version: 1.1`, `X-Hijrah-API-Major: 1`, dan 
 | `pendaftaran:milestone:update` | Update Status SPMB (Tes, Lulus, dan Tidak Lulus) |
 | `siswa:read` | siswa non-calon dan relasi kelas |
 | `kelas:read` | kelas; anggota kelas juga membutuhkan `siswa:read` |
-| `pegawai:read` | data dasar pegawai: ID, NIP, nama, jenis kelamin, jabatan, status, unit, tanggal masuk/pensiun, golongan |
-| `pegawai:contact:read` | biodata dan kontak pegawai: TTL, agama, alamat, telepon, email, foto; memerlukan `pegawai:read` |
+| `pegawai:read` | data operasional pegawai: ID, NIP, nama, jenis kelamin, jabatan, status, unit, tanggal masuk/pensiun, golongan |
 | `pegawai:write` | bulk import dan update data pegawai; tidak memberi akses role/login, presensi, tabungan, atau keuangan |
 
-Scope `identity`, `contact`, `sensitive`, dan `documents` pendaftaran memerlukan `pendaftaran:read`. `pegawai:contact:read` memerlukan `pegawai:read`. Scope write tidak otomatis memberikan scope read. Scope `pendaftaran:sensitive:read` tetap dipertahankan agar token lama tidak rusak; integrasi baru dianjurkan memakai scope paling sempit.
+Scope `identity`, `contact`, `sensitive`, dan `documents` pendaftaran memerlukan `pendaftaran:read`. Scope write tidak otomatis memberikan scope read. Scope `pendaftaran:sensitive:read` tetap dipertahankan agar token lama tidak rusak; integrasi baru dianjurkan memakai scope paling sempit.
 
 `department_ids` dan `academic_year_ids` pada integrasi adalah batas maksimum. Filter request tidak pernah memperluas akses. Cursor ditandatangani HMAC dan terikat pada integration ID, scope, unit/tahun ajaran, endpoint, dan filter.
 
@@ -88,7 +87,7 @@ GET /api/v1/siswa?departemen_id=<UUID_SMP>&kelas_id=<UUID_KELAS_7A>
 
 ### Pegawai
 
-`GET /api/v1/pegawai` mendukung `departemen_id` dan `status` (`aktif` / `nonaktif`). Data dasar membutuhkan scope `pegawai:read`. Blok `data_pribadi` hanya dikirim bila token juga memiliki `pegawai:contact:read`.
+`GET /api/v1/pegawai` mendukung `departemen_id` dan `status` (`aktif` / `nonaktif`). Data pegawai membutuhkan scope `pegawai:read` dan sengaja dibatasi pada data operasional. Alamat, telepon, email, tempat/tanggal lahir, agama, foto, dokumen pribadi, data keluarga, serta data sensitif pegawai tidak diekspos melalui Integration API.
 
 Jika filter unit/tahun ajaran berada di luar scope token, server mengembalikan `403 filter_out_of_scope`. Untuk pegawai, pembatasan `department_ids` tetap berlaku; `academic_year_ids` tidak digunakan karena pegawai tidak terikat tahun ajaran.
 
@@ -144,14 +143,14 @@ Payload hanya menerima satu field `action`: `tes`, `lulus`, atau `tidak_lulus`. 
 
 ## Integrasi data pegawai
 
-Endpoint baca:
+Endpoint baca (data operasional saja):
 
 ```http
 GET /api/v1/pegawai?limit=100&departemen_id=<UUID>&status=aktif
 GET /api/v1/pegawai/{pegawai_id}
 ```
 
-Dengan `pegawai:read`, respons berisi data dasar. Dengan tambahan `pegawai:contact:read`, respons juga memiliki blok `data_pribadi` berisi tempat/tanggal lahir, agama, alamat, telepon, email, dan foto.
+Dengan `pegawai:read`, respons hanya berisi data operasional: ID, NIP, nama, jenis kelamin, jabatan, unit/lembaga, status, tanggal masuk, tanggal pensiun, golongan terakhir, dan waktu pembuatan record. Data pribadi seperti alamat, nomor HP, email, TTL, agama, foto, dokumen, serta data keluarga tidak tersedia melalui API.
 
 Bulk import/update membutuhkan scope `pegawai:write`:
 
@@ -179,7 +178,7 @@ Aturan pencocokan sama dengan import pada halaman kepegawaian: `pegawai_id` dipr
 
 `update_existing=false` (default) menolak record yang sudah ada. Dengan `update_existing=true`, record lama diperbarui pada ID yang sama sehingga relasi akun pengguna, presensi, riwayat jabatan, tabungan, dan data terkait tidak dibuat ulang atau diputus. Field kosong pada update diabaikan; untuk memindahkan pegawai menjadi pegawai Yayasan/lintas lembaga, kirim `"departemen_id": null`.
 
-Field yang diterima: `pegawai_id`, `nip`, `nama`, `jenis_kelamin`, `tempat_lahir`, `tanggal_lahir`, `agama`, `alamat`, `telepon`, `email`, `foto_url`, `jabatan`, `departemen_id`, `status`, `tanggal_masuk`, `tanggal_pensiun`, dan `golongan_terakhir`. Field lain ditolak. Endpoint ini **tidak dapat** mengubah role/login pengguna, `users_profile`, presensi, tabungan, jurnal, pembayaran, atau tabel keuangan.
+Field yang diterima: `pegawai_id`, `nip`, `nama`, `jenis_kelamin`, `jabatan`, `departemen_id`, `status`, `tanggal_masuk`, `tanggal_pensiun`, dan `golongan_terakhir`. Field lain ditolak. Endpoint ini **tidak dapat** membaca/menulis alamat, telepon, email, TTL, agama, foto, dokumen pribadi, data keluarga, role/login pengguna, `users_profile`, presensi, tabungan, jurnal, pembayaran, atau tabel keuangan.
 
 Tanggal menggunakan `YYYY-MM-DD`, `jenis_kelamin` menggunakan `L` / `P`, dan `status` menggunakan `aktif` / `nonaktif`. Maksimum 200 baris per request dan bulk write dibatasi 30 request/menit per integrasi.
 
