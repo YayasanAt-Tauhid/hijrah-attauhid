@@ -125,6 +125,8 @@ describe('Integration API v1 contract', () => {
     expect(migration).toContain('create table if not exists public.integration_webhook_outbox')
     expect(migration).toContain("vault.create_secret(")
     expect(migration).toContain("net.http_post(")
+    expect(migration).toContain('revoke usage on schema net from public, anon, authenticated')
+    expect(migration).toContain('revoke execute on function net.http_post(text,jsonb,jsonb,jsonb,integer) from public, anon, authenticated')
     expect(migration).toContain("'select public.integration_webhook_tick();'")
     expect(migration).toContain("'object_id', new.object_id")
     expect(migration).toContain("new.object_type='dokumen' and 'pendaftaran:read'=any(a.scopes) and 'pendaftaran:documents:read'=any(a.scopes)")
