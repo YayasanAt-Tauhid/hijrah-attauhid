@@ -165,7 +165,6 @@ function getKesiapanPenerimaan(row: Record<string, unknown>): KesiapanPenerimaan
   if (!row.departemen_id) kekurangan.push("lembaga");
   if (!row.angkatan_id) kekurangan.push("angkatan");
   if (!row._punyaKelas) kekurangan.push("kelas");
-  if (!departemen?.npsn) kekurangan.push("NPSN lembaga");
   if (!detail?.dokumen_kk_path) kekurangan.push("Kartu Keluarga");
   if (!detail?.dokumen_akta_path) kekurangan.push("Akta Kelahiran");
   if (departemenPerluAsrama(departemen) && !detail?.status_asrama) kekurangan.push("pilihan asrama");
@@ -705,32 +704,18 @@ export default function SPMB() {
   };
 
   const generateNIS = async (siswaId: string, departemenId: string, angkatanId: string, namaSiswa: string): Promise<boolean> => {
-    const { data: kelasSiswa } = await supabase
-      .from("kelas_siswa")
-      .select("kelas_id")
-      .eq("siswa_id", siswaId)
-      .eq("aktif", true)
-      .maybeSingle();
-    if (!kelasSiswa?.kelas_id) {
-      toast.warning(`NIS belum dibuat untuk ${namaSiswa}`, {
-        description: "Siswa belum dimasukkan ke kelas. Atur kelas melalui Data Siswa lalu buat NIS.",
-        duration: 8000,
-      });
-      return false;
-    }
     try {
       const { nis } = await generateNISViaEdgeFunction({
         siswa_id: siswaId,
         departemen_id: departemenId,
         angkatan_id: angkatanId,
-        kelas_id: kelasSiswa.kelas_id,
       });
       toast.success(`NIS berhasil dibuat: ${nis}`, { description: namaSiswa });
       return true;
     } catch (error: any) {
       const pesan: string = error.message || "Terjadi kesalahan teknis";
       toast.error(`NIS gagal dibuat untuk ${namaSiswa}`, {
-        description: pesan.toLowerCase().includes("npsn") ? "NPSN belum diisi pada data lembaga. Hubungi admin." : pesan,
+        description: pesan,
         duration: 10000,
       });
       return false;
@@ -763,15 +748,19 @@ export default function SPMB() {
         });
         return;
       }
-      if (!row.nis) {
-        const nisBerhasil = await generateNIS(id, departemenId, angkatanId, namaSiswa);
-        if (!nisBerhasil) return;
-      }
       const { error } = await supabase.from("siswa").update({ status: "diterima" } as any).eq("id", id);
       if (error) throw error;
+
+      let nisBerhasil = Boolean(row.nis);
+      if (!row.nis) {
+        nisBerhasil = await generateNIS(id, departemenId, angkatanId, namaSiswa);
+      }
+
       await qc.invalidateQueries({ queryKey: ["siswa"] });
       toast.success(`${namaSiswa} berhasil diterima`, {
-        description: "Verifikasi, dokumen, biaya pendaftaran, angkatan, kelas, dan NIS sudah lengkap.",
+        description: nisBerhasil
+          ? "Calon sudah lulus dan diterima. NIS lembaga berhasil ditetapkan."
+          : "Calon sudah diterima, tetapi NIS belum berhasil dibuat. Gunakan tombol Buat NIS sebelum aktivasi.",
       });
     } catch (error: any) {
       toast.error("Gagal menerima murid", { description: error?.message || "Terjadi kesalahan teknis" });
