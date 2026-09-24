@@ -129,9 +129,8 @@ const labelDepartemenSpmb = (d: any) => {
   const filteredKelas = kelasList.filter((k: any) => !formData.departemen_id || k.departemen_id === formData.departemen_id);
   const filteredAngkatan = angkatanList.filter((a: any) => !formData.departemen_id || a.departemen_id === formData.departemen_id);
   const selectedDept = departemenList.find((d: any) => d.id === formData.departemen_id);
-  const selectedKelas = kelasList.find((k: any) => k.id === formData.kelas_id);
   const selectedAngkatan = angkatanList.find((a: any) => a.id === formData.angkatan_id);
-  const canPreviewNIS = modePendaftaran === "lengkap" && selectedDept?.npsn && selectedKelas && selectedAngkatan;
+  const canPreviewNIS = modePendaftaran === "lengkap" && selectedDept && selectedAngkatan;
 
   const { data: calonList = [], isLoading } = useQuery({
     queryKey: ["siswa", "calon"],
@@ -415,11 +414,10 @@ const labelDepartemenSpmb = (d: any) => {
                   <SelectTrigger><SelectValue placeholder="Pilih lembaga" /></SelectTrigger>
                   <SelectContent>{spmbDepartemenList.map((d: any) => <SelectItem key={d.id} value={d.id}>{labelDepartemenSpmb(d)}</SelectItem>)}</SelectContent>
                 </Select>
-                {selectedDept && !selectedDept.npsn && <p className="text-xs text-warning flex items-center gap-1.5 mt-1"><AlertTriangle className="h-3.5 w-3.5 shrink-0" />Lembaga ini belum memiliki NPSN — NIS tidak bisa dibuat otomatis.</p>}
               </div>
               <div><Label>Kelas {modePendaftaran === "lengkap" ? "*" : "(opsional)"}</Label><Select value={formData.kelas_id} onValueChange={(v) => setFormData({ ...formData, kelas_id: v })} disabled={!formData.departemen_id}><SelectTrigger><SelectValue placeholder="Pilih kelas" /></SelectTrigger><SelectContent>{filteredKelas.map((k: any) => <SelectItem key={k.id} value={k.id}>{k.nama}</SelectItem>)}</SelectContent></Select></div>
               <div><Label>Angkatan {modePendaftaran === "lengkap" ? "*" : "(opsional)"}</Label><Select value={formData.angkatan_id} onValueChange={(v) => setFormData({ ...formData, angkatan_id: v })} disabled={!formData.departemen_id}><SelectTrigger><SelectValue placeholder="Pilih angkatan" /></SelectTrigger><SelectContent>{filteredAngkatan.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.nama}</SelectItem>)}</SelectContent></Select></div>
-              {canPreviewNIS && <NISPreview npsn={selectedDept!.npsn} namaKelas={selectedKelas!.nama} namaAngkatan={selectedAngkatan!.nama} estimasiUrut={1} />}
+              {canPreviewNIS && <NISPreview kodeLembaga={selectedDept!.kode || selectedDept!.nama} namaAngkatan={selectedAngkatan!.nama} estimasiUrut={1} />}
               <div><Label>Telepon</Label><Input value={formData.telepon} onChange={(e) => setFormData({ ...formData, telepon: e.target.value })} /></div>
               <div><Label>Alamat</Label><Textarea value={formData.alamat} onChange={(e) => setFormData({ ...formData, alamat: e.target.value })} /></div>
               <div><Label>Tahun Ajaran {formData.kelas_id ? "*" : "(opsional)"}</Label><Select value={formData.tahun_ajaran_id} onValueChange={(v) => setFormData({ ...formData, tahun_ajaran_id: v })}><SelectTrigger><SelectValue placeholder="Pilih tahun ajaran" /></SelectTrigger><SelectContent>{tahunList.map((t) => <SelectItem key={t.id} value={t.id}>{t.nama}</SelectItem>)}</SelectContent></Select></div>
