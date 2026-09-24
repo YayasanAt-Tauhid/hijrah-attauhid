@@ -121,7 +121,7 @@ export function SpmbVerificationPanel({ siswaId, isDirty = false }: { siswaId: s
               <ShieldCheck className="h-5 w-5" />Pemeriksaan Data SPMB
             </CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
-              Checklist wajib hanya untuk data inti yang dapat dicocokkan dengan Kartu Keluarga. Data dan dokumen lainnya tetap dapat diperiksa sebagai informasi opsional.
+              Checklist wajib mencakup data inti yang dapat dicocokkan dengan Kartu Keluarga serta No. HP / WhatsApp yang Bisa Dihubungi. Data dan dokumen lainnya tetap dapat diperiksa sebagai informasi opsional.
             </p>
           </div>
           <div className="shrink-0 rounded-md border bg-background/70 px-3 py-2 text-sm">
@@ -162,7 +162,7 @@ export function SpmbVerificationPanel({ siswaId, isDirty = false }: { siswaId: s
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">
-            Aksi ini memverifikasi kesesuaian data inti dengan Kartu Keluarga, bukan menyatakan lulus, membuktikan pembayaran, atau mengaktifkan siswa.
+            Aksi ini memverifikasi kesesuaian data inti dengan Kartu Keluarga dan memastikan nomor kontak yang bisa dihubungi tersedia, bukan menyatakan lulus, membuktikan pembayaran, atau mengaktifkan siswa.
           </p>
           <Button
             type="button"
@@ -199,7 +199,7 @@ export function SpmbVerificationPanel({ siswaId, isDirty = false }: { siswaId: s
           <AlertDialogHeader>
             <AlertDialogTitle>Verifikasi Data SPMB?</AlertDialogTitle>
             <AlertDialogDescription>
-              Pastikan semua perubahan sudah disimpan dan seluruh checklist wajib berdasarkan Kartu Keluarga sudah selesai. Data lain boleh dilengkapi kemudian dan tidak menghalangi verifikasi.
+              Pastikan semua perubahan sudah disimpan, checklist data inti berdasarkan Kartu Keluarga selesai, dan No. HP / WhatsApp yang Bisa Dihubungi sudah diperiksa. Data lain boleh dilengkapi kemudian dan tidak menghalangi verifikasi.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
