@@ -1,6 +1,6 @@
 # API Integrasi Hijrah v1.1
 
-API untuk sinkronisasi **Hijrah → backend aplikasi penerima**. Prefix tetap `/api/v1`; v1.1 adalah pengembangan backward-compatible sehingga endpoint, token, dan scope lama tetap berlaku. Hak write pihak ketiga tetap dibatasi pada milestone SPMB.
+API untuk sinkronisasi **Hijrah ↔ backend aplikasi penerima**. Prefix tetap `/api/v1`; v1.1 bersifat backward-compatible sehingga endpoint, token, dan scope lama tetap berlaku. Write pihak ketiga tetap berbasis scope eksplisit: milestone SPMB dan, bila diizinkan admin, import/update data pegawai.
 
 ## Base URL produksi
 
@@ -31,8 +31,11 @@ Respons v1.1 mengirim `X-Hijrah-API-Version: 1.1`, `X-Hijrah-API-Major: 1`, dan 
 | `pendaftaran:milestone:update` | Update Status SPMB (Tes, Lulus, dan Tidak Lulus) |
 | `siswa:read` | siswa non-calon dan relasi kelas |
 | `kelas:read` | kelas; anggota kelas juga membutuhkan `siswa:read` |
+| `pegawai:read` | data dasar pegawai: ID, NIP, nama, jenis kelamin, jabatan, status, unit, tanggal masuk/pensiun, golongan |
+| `pegawai:contact:read` | biodata dan kontak pegawai: TTL, agama, alamat, telepon, email, foto; memerlukan `pegawai:read` |
+| `pegawai:write` | bulk import dan update data pegawai; tidak memberi akses role/login, presensi, tabungan, atau keuangan |
 
-Scope `identity`, `contact`, `sensitive`, dan `documents` memerlukan `pendaftaran:read`. Scope `pendaftaran:sensitive:read` tetap dipertahankan agar token lama tidak rusak; integrasi baru dianjurkan memakai scope paling sempit.
+Scope `identity`, `contact`, `sensitive`, dan `documents` pendaftaran memerlukan `pendaftaran:read`. `pegawai:contact:read` memerlukan `pegawai:read`. Scope write tidak otomatis memberikan scope read. Scope `pendaftaran:sensitive:read` tetap dipertahankan agar token lama tidak rusak; integrasi baru dianjurkan memakai scope paling sempit.
 
 `department_ids` dan `academic_year_ids` pada integrasi adalah batas maksimum. Filter request tidak pernah memperluas akses. Cursor ditandatangani HMAC dan terikat pada integration ID, scope, unit/tahun ajaran, endpoint, dan filter.
 
@@ -41,6 +44,8 @@ Scope `identity`, `contact`, `sensitive`, dan `documents` memerlukan `pendaftara
 - `GET /pendaftaran` dan `GET /pendaftaran/{pendaftaran_id}`
 - `GET /siswa` dan `GET /siswa/{siswa_id}`
 - `GET /kelas` dan `GET /kelas/{kelas_id}/siswa`
+- `GET /pegawai` dan `GET /pegawai/{pegawai_id}`
+- `POST /pegawai/import` untuk bulk insert/update JSON (maksimum 200 baris/request)
 - `GET /sync/pendaftaran`, `/sync/siswa`, `/sync/kelas`
 - `GET /documents/{pendaftaran_id}.{jenis}` dengan `jenis`: `kk`, `akta`, `rapor`, `ijazah`
 - `POST /pendaftaran/{pendaftaran_id}/milestone`
@@ -81,7 +86,11 @@ GET /api/v1/siswa?departemen_id=<UUID_SMP>&kelas_id=<UUID_KELAS_7A>
 
 `GET /api/v1/kelas` mendukung `departemen_id` dan `tahun_ajaran_id`.
 
-Jika filter unit/tahun ajaran berada di luar scope token, server mengembalikan `403 filter_out_of_scope`.
+### Pegawai
+
+`GET /api/v1/pegawai` mendukung `departemen_id` dan `status` (`aktif` / `nonaktif`). Data dasar membutuhkan scope `pegawai:read`. Blok `data_pribadi` hanya dikirim bila token juga memiliki `pegawai:contact:read`.
+
+Jika filter unit/tahun ajaran berada di luar scope token, server mengembalikan `403 filter_out_of_scope`. Untuk pegawai, pembatasan `department_ids` tetap berlaku; `academic_year_ids` tidak digunakan karena pegawai tidak terikat tahun ajaran.
 
 ## Payload pendaftaran
 
@@ -131,6 +140,64 @@ Payload hanya menerima satu field `action`: `tes`, `lulus`, atau `tidak_lulus`. 
 | Payload tambahan/tidak valid | `400` |
 
 `daftar_ulang` tetap tidak tersedia melalui API pihak ketiga.
+
+
+## Integrasi data pegawai
+
+Endpoint baca:
+
+```http
+GET /api/v1/pegawai?limit=100&departemen_id=<UUID>&status=aktif
+GET /api/v1/pegawai/{pegawai_id}
+```
+
+Dengan `pegawai:read`, respons berisi data dasar. Dengan tambahan `pegawai:contact:read`, respons juga memiliki blok `data_pribadi` berisi tempat/tanggal lahir, agama, alamat, telepon, email, dan foto.
+
+Bulk import/update membutuhkan scope `pegawai:write`:
+
+```http
+POST /api/v1/pegawai/import
+Authorization: Bearer TOKEN
+Content-Type: application/json
+
+{
+  "update_existing": true,
+  "rows": [
+    {
+      "pegawai_id": "00000000-0000-4000-8000-000000000001",
+      "nip": "19870001",
+      "nama": "Ahmad Fulan",
+      "jabatan": "Guru",
+      "departemen_id": "00000000-0000-4000-8000-000000000010",
+      "status": "aktif"
+    }
+  ]
+}
+```
+
+Aturan pencocokan sama dengan import pada halaman kepegawaian: `pegawai_id` diprioritaskan, lalu NIP. Nama, email, dan telepon **tidak** dipakai sebagai kunci update otomatis. Bila `pegawai_id` dan NIP menunjuk dua pegawai berbeda, baris ditolak.
+
+`update_existing=false` (default) menolak record yang sudah ada. Dengan `update_existing=true`, record lama diperbarui pada ID yang sama sehingga relasi akun pengguna, presensi, riwayat jabatan, tabungan, dan data terkait tidak dibuat ulang atau diputus. Field kosong pada update diabaikan; untuk memindahkan pegawai menjadi pegawai Yayasan/lintas lembaga, kirim `"departemen_id": null`.
+
+Field yang diterima: `pegawai_id`, `nip`, `nama`, `jenis_kelamin`, `tempat_lahir`, `tanggal_lahir`, `agama`, `alamat`, `telepon`, `email`, `foto_url`, `jabatan`, `departemen_id`, `status`, `tanggal_masuk`, `tanggal_pensiun`, dan `golongan_terakhir`. Field lain ditolak. Endpoint ini **tidak dapat** mengubah role/login pengguna, `users_profile`, presensi, tabungan, jurnal, pembayaran, atau tabel keuangan.
+
+Tanggal menggunakan `YYYY-MM-DD`, `jenis_kelamin` menggunakan `L` / `P`, dan `status` menggunakan `aktif` / `nonaktif`. Maksimum 200 baris per request dan bulk write dibatasi 30 request/menit per integrasi.
+
+Contoh hasil:
+
+```json
+{
+  "data": {
+    "summary": {"created": 1, "updated": 2, "failed": 1, "total": 4},
+    "rows": [
+      {"row": 1, "status": "updated", "pegawai_id": "00000000-0000-4000-8000-000000000001"},
+      {"row": 2, "status": "error", "error": {"code": "already_exists", "message": "Pegawai sudah ada; set update_existing=true untuk memperbarui"}}
+    ]
+  }
+}
+```
+
+Endpoint pegawai saat ini memakai list/detail dan bulk import. Belum ada incremental sync/webhook khusus pegawai; webhook yang tersedia tetap untuk `pendaftaran`, `siswa`, `kelas`, dan `dokumen`.
 
 ## Webhook event v1.1
 
@@ -202,6 +269,6 @@ Status utama: `400`, `401`, `403`, `404`, `410`, `429`, dan `503`. Limit default
 - Field lama tidak akan dihapus atau diganti tipe di v1 tanpa masa deprecation.
 - Jika suatu saat field v1 perlu dihentikan, dokumentasi akan mencantumkan tanggal deprecation/sunset terlebih dahulu.
 - Breaking change menggunakan path versi baru, misalnya `/api/v2`.
-- Token v1 lama tidak perlu dirotasi hanya karena upgrade ke v1.1.
+- Token v1 lama tidak perlu dirotasi hanya karena penambahan endpoint pegawai. Scope pegawai harus diberikan eksplisit oleh administrator.
 
 Spesifikasi mesin: `docs/openapi-integration-v1.yaml`. Koleksi uji: `docs/postman/Hijrah-Integration-v1.postman_collection.json`.
