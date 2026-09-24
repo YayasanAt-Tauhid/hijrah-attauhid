@@ -1,5 +1,4 @@
--- Production follow-up for databases that already installed pg_net via the v1.1 base migration.
--- Integration webhooks are server-side only; browser-facing database roles cannot make outbound HTTP.
+-- Production follow-up originally attempted to narrow pg_net ACLs. On hosted Supabase the net schema/functions are owned by supabase_admin and platform-managed, so these REVOKE statements may be no-ops. The actual application security boundary is: keep net out of Data API Exposed schemas and expose only service-role application wrappers.
 revoke usage on schema net from public, anon, authenticated;
 grant usage on schema net to postgres, service_role;
 
