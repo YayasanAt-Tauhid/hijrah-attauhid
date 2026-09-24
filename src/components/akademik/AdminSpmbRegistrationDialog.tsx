@@ -268,8 +268,8 @@ export function AdminSpmbRegistrationDialog({
         dokumen_ijazah_path: ijazah,
       } });
       await onRegistered(result.siswa_id);
-      setSuccess({ id: result.siswa_id, nama: form.nama.trim(), inputer: result.inputer_nama || result.inputer_email });
-      toast.success("Pendaftaran SPMB berhasil disimpan", { description: `Petugas: ${result.inputer_nama || result.inputer_email || inputer}` });
+      setSuccess({ id: result.siswa_id, nama: form.nama.trim(), inputer: result.inputer_nama || inputer });
+      toast.success("Pendaftaran SPMB berhasil disimpan", { description: `Nama Pendaftar: ${result.inputer_nama || inputer}` });
     } catch (error: any) {
       toast.error("Gagal menyimpan pendaftaran", { description: error?.message || "Terjadi kesalahan teknis" });
     } finally {
@@ -308,7 +308,7 @@ export function AdminSpmbRegistrationDialog({
             <fieldset disabled={saving} className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5 disabled:opacity-70">
               <FormSection title="Nama Pendaftar" description="Dicatat otomatis dari akun yang sedang login">
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div><Label>Petugas yang Menginput *</Label><Input value={inputer} disabled /></div>
+                  <div><Label>Nama Pendaftar *</Label><Input value={inputer} disabled /></div>
                   <div><Label>Sumber Pendaftaran</Label><Input value="Admin / TU — /akademik/spmb" disabled /></div>
                 </div>
               </FormSection>
