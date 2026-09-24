@@ -272,10 +272,13 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
   const siswaPindahan = watchKategori === "MURID PINDAHAN" || watchJenisPendaftaran === "pindahan";
   const nisParamsComplete = !!(watchDept && watchAngkatan && watchKelas);
   const dokumenSpmb: Array<readonly ["kk" | "akta" | "rapor" | "ijazah", string]> = [
-    ["kk", "Kartu Keluarga (wajib)"],
-    ["akta", "Akta Kelahiran (wajib)"],
+    ["kk", isEdit ? "Kartu Keluarga (wajib untuk verifikasi)" : "Kartu Keluarga (wajib)"],
+    ["akta", isEdit ? "Akta Kelahiran (opsional untuk verifikasi)" : "Akta Kelahiran (wajib)"],
     ...(siswaPindahan
-      ? ([["rapor", "Rapor Siswa Pindahan (wajib)"], ["ijazah", "Ijazah/SKHUN Siswa Pindahan (wajib)"]] as const)
+      ? ([
+          ["rapor", isEdit ? "Rapor Siswa Pindahan (opsional untuk verifikasi)" : "Rapor Siswa Pindahan (wajib)"],
+          ["ijazah", isEdit ? "Ijazah/SKHUN Siswa Pindahan (opsional untuk verifikasi)" : "Ijazah/SKHUN Siswa Pindahan (wajib)"],
+        ] as const)
       : []),
   ];
 
@@ -396,8 +399,12 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
     if (isEdit && ["calon", "diterima"].includes(siswa?.status || "") && values.status !== siswa?.status) {
       toast.error("Ubah status penerimaan melalui halaman SPMB"); return;
     }
-    if (wajibNisn && !/^\d{10}$/.test(values.nisn || "")) {
+    if (!isEdit && wajibNisn && !/^\d{10}$/.test(values.nisn || "")) {
       toast.error("NISN wajib diisi 10 digit untuk SMP, SMA, dan MTA");
+      return;
+    }
+    if (isEdit && values.nisn && !/^\d{10}$/.test(values.nisn)) {
+      toast.error("Jika NISN diisi, formatnya harus 10 digit");
       return;
     }
     if (values.nik_dapodik && !/^\d{16}$/.test(values.nik_dapodik)) {
@@ -552,7 +559,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                         <FormField control={form.control} name="nis" render={({ field }) => (
                           <FormItem><FormLabel>NIS</FormLabel><FormControl><Input {...field} maxLength={13} disabled={nisMode !== "ketik"} placeholder={nisMode === "otomatis" ? "Dibuat otomatis saat simpan" : nisMode === "manual" ? "Gunakan tombol Generate NIS" : "Ketik NIS (maks. 13 karakter)"} /></FormControl><FormMessage /></FormItem>
                         )} />
-                        <TextField form={form} name="nisn" label={wajibNisn ? "NISN *" : "NISN"} inputMode="numeric" onValueChange={() => resetVerification("nisn")} after={verificationControl("nisn")} />
+                        <TextField form={form} name="nisn" label={!isEdit && wajibNisn ? "NISN *" : "NISN"} inputMode="numeric" onValueChange={() => resetVerification("nisn")} after={verificationControl("nisn")} />
                         {nisMode === "manual" && (
                           <Button type="button" size="sm" variant="outline" disabled={!canGenerateManual || isGeneratingNis} onClick={handleGenerateNisClick}>
                             {isGeneratingNis ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Wand2 className="h-3 w-3 mr-1" />}Generate NIS
@@ -602,7 +609,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
               <Card className="mb-4"><CardContent className="pt-6 space-y-4">
                 <p className="font-medium">Dokumen SPMB</p>
                 {isEdit && verificationState?.can_verify && (
-                  <p className="text-sm text-muted-foreground">Centang “Sudah diperiksa” setelah memeriksa nilai atau dokumen. Checklist bertanda opsional boleh dibiarkan kosong dan tidak menghalangi Verifikasi Data SPMB. Checklist disimpan bersama tombol Simpan Perubahan.</p>
+                  <p className="text-sm text-muted-foreground">Verifikasi wajib difokuskan pada data inti yang dapat dicocokkan dengan Kartu Keluarga. Data akademik, kontak, kemampuan, penghasilan, dan dokumen selain KK tetap dapat diperiksa tetapi bersifat opsional. Checklist disimpan bersama tombol Simpan Perubahan.</p>
                 )}
                 {dokumenSpmb.map(([kind, label]) => {
                   const name = `dokumen_${kind}_path` as keyof SiswaForm;
