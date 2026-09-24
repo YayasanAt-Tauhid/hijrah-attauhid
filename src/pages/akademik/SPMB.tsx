@@ -338,7 +338,7 @@ export default function SPMB() {
         const chunk = visibleIds.slice(i, i + 150);
         const rows = await fetchAllPages<any>((from, to) => (supabase as any)
           .from("siswa_detail")
-          .select("siswa_id,tahun_ajaran_id,nik,status_asrama,kategori,dokumen_kk_path,dokumen_akta_path,spmb_tanggal_tes,spmb_tanggal_lulus,spmb_tanggal_daftar_ulang,spmb_status_kelulusan,spmb_tanggal_keputusan,spmb_departemen_tujuan_id,spmb_angkatan_tujuan_id,spmb_status_pendaftaran,spmb_siswa_internal,spmb_kelas_tujuan_id,spmb_tanggal_aktivasi,spmb_gelombang_id,spmb_registered_at,spmb_inputer_nama,spmb_inputer_email,spmb_sumber_pendaftaran")
+          .select("id,siswa_id,tahun_ajaran_id,nik,status_asrama,kategori,dokumen_kk_path,dokumen_akta_path,spmb_tanggal_tes,spmb_tanggal_lulus,spmb_tanggal_daftar_ulang,spmb_status_kelulusan,spmb_tanggal_keputusan,spmb_departemen_tujuan_id,spmb_angkatan_tujuan_id,spmb_status_pendaftaran,spmb_siswa_internal,spmb_kelas_tujuan_id,spmb_tanggal_aktivasi,spmb_gelombang_id,spmb_registered_at,spmb_inputer_nama,spmb_inputer_email,spmb_sumber_pendaftaran")
           .in("siswa_id", chunk)
           .not("spmb_gelombang_id", "is", null)
           .order("siswa_id")
