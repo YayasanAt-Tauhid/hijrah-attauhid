@@ -43,7 +43,7 @@ describe("Admin SPMB registration parity", () => {
     expect(migration).toContain("spmb_inputer_email");
     expect(migration).toContain("spmb_sumber_pendaftaran");
     expect(server).toContain('spmb_sumber_pendaftaran: actor ? "admin" : "publik"');
-    expect(page).toContain('label: "Petugas / Inputer"');
+    expect(page).toContain('label: "Nama Pendaftar"');
     expect(page).toContain("_spmbInputer");
     expect(page).toContain("spmbAdminUpdateRegistrantName");
     expect(page).toContain("Edit Nama Pendaftar");
