@@ -749,7 +749,12 @@ export default function SPMBDaftarOnlineV2() {
     setPaymentReturn(null);
     setPayment(null);
     setSubmitError(null);
-    setForm({ ...initialForm, tahun_ajaran_id: tahunAjaranList[0]?.id || "" });
+    setForm((current) => ({
+      ...initialForm,
+      tahun_ajaran_id: tahunAjaranList[0]?.id || "",
+      pendaftar_nama: pendaftarLocked ? current.pendaftar_nama : "",
+      pendaftar_email: pendaftarLocked ? current.pendaftar_email : "",
+    }));
     setDocuments(emptyDocuments());
     window.history.replaceState({}, "", "/spmb");
   }
