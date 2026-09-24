@@ -466,7 +466,7 @@ async function performPmbRegistration(
       inputerNama = cleanText(data.pendaftar_nama, 200);
       inputerEmail = cleanOptionalEmail(data.pendaftar_email);
       if (!inputerNama || inputerNama.length < 2) {
-        throw new Error("Nama Pendaftar / Inputer wajib diisi");
+        throw new Error("Nama Pendaftar wajib diisi");
       }
     }
 
@@ -699,4 +699,48 @@ export const spmbAdminDaftar = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<PmbDaftarResult> => {
     const actor = requireContext(context);
     return performPmbRegistration(data, { userId: actor.userId, userEmail: actor.userEmail });
+  });
+
+export const spmbAdminUpdateRegistrantName = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: { siswa_id: string; nama: string }) => d)
+  .handler(async ({ data, context }): Promise<{ success: true; nama: string }> => {
+    const actor = requireContext(context);
+    const admin = createAdminClient();
+    const siswaId = cleanText(data.siswa_id, 100);
+    const nama = cleanText(data.nama, 200);
+
+    if (!siswaId) throw new Error("Data siswa tidak valid");
+    if (!nama || nama.length < 2) throw new Error("Nama Pendaftar wajib diisi");
+
+    const { data: detail, error: detailError } = await (admin.from("siswa_detail") as any)
+      .select("id,spmb_departemen_tujuan_id,spmb_gelombang_id")
+      .eq("siswa_id", siswaId)
+      .not("spmb_gelombang_id", "is", null)
+      .order("spmb_registered_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (detailError) throw new Error(detailError.message);
+    if (!detail?.id) throw new Error("Pendaftaran SPMB tidak ditemukan");
+
+    let departemenId = detail.spmb_departemen_tujuan_id as string | null;
+    if (!departemenId) {
+      const { data: siswa, error: siswaError } = await admin
+        .from("siswa")
+        .select("departemen_id")
+        .eq("id", siswaId)
+        .maybeSingle();
+      if (siswaError) throw new Error(siswaError.message);
+      departemenId = siswa?.departemen_id || null;
+    }
+
+    await requireAcademicDepartment(admin, actor.userId, departemenId, ["admin", "admin_tu"]);
+
+    const { error: updateError } = await (admin.from("siswa_detail") as any)
+      .update({ spmb_inputer_nama: nama })
+      .eq("id", detail.id);
+    if (updateError) throw new Error(updateError.message);
+
+    return { success: true, nama };
   });
