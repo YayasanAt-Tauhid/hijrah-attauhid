@@ -47,9 +47,6 @@ function validateScopes(scopes: string[]) {
   if (registrationReadDependent.some(scope => scopes.includes(scope)) && !scopes.includes('pendaftaran:read')) {
     throw new Error('Scope identitas/kontak/sensitif/dokumen memerlukan pendaftaran:read')
   }
-  if (scopes.includes('pegawai:contact:read') && !scopes.includes('pegawai:read')) {
-    throw new Error('Scope biodata/kontak pegawai memerlukan pegawai:read')
-  }
 }
 
 function validateWebhookUrl(raw: string) {
