@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Hijrah Integration API v1.1",
-    "description": "Backward-compatible Hijrah /api/v1 integration: read/sync, granular scopes, SPMB filters, and optional scoped milestone updates. Never place the bearer token in browser/mobile code.",
+    "description": "Backward-compatible Hijrah /api/v1 integration: scoped read/sync, granular scopes, employee read/import/update, SPMB filters, and optional scoped milestone updates. Never place the bearer token in browser/mobile code.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -24,6 +24,10 @@
     },
     {
       "key": "kelasId",
+      "value": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "key": "pegawaiId",
       "value": "00000000-0000-4000-8000-000000000001"
     },
     {
@@ -132,6 +136,53 @@
             "url": "{{baseUrl}}/api/v1/kelas/{{kelasId}}/siswa?tahun_ajaran_id={{tahunAjaranId}}",
             "description": "Filter tahun_ajaran_id benar-benar diterapkan server-side dan tetap dibatasi oleh scope token."
           }
+        }
+      ]
+    },
+    {
+      "name": "Pegawai",
+      "description": "GET requires pegawai:read. Biodata/contact requires pegawai:contact:read. Bulk import/update requires pegawai:write. Department restrictions apply.",
+      "item": [
+        {
+          "name": "List",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/pegawai?limit=100&departemen_id={{departemenId}}&status=aktif",
+            "description": "Data dasar pegawai. Tambahkan scope pegawai:contact:read bila memerlukan blok data_pribadi."
+          },
+          "response": []
+        },
+        {
+          "name": "Detail",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/pegawai/{{pegawaiId}}"
+          },
+          "response": []
+        },
+        {
+          "name": "Import / Update",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/pegawai/import",
+            "description": "Requires pegawai:write. Max 200 rows. Match existing by pegawai_id first, then NIP. This endpoint does not change roles/login, attendance, savings, journals, payments, or finance tables.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"update_existing\": true,\n  \"rows\": [\n    {\n      \"pegawai_id\": \"{{pegawaiId}}\",\n      \"nip\": \"19870001\",\n      \"nama\": \"Ahmad Fulan\",\n      \"jabatan\": \"Guru\",\n      \"departemen_id\": \"{{departemenId}}\",\n      \"status\": \"aktif\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
         }
       ]
     },
