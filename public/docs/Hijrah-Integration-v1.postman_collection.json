@@ -129,7 +129,8 @@
           "name": "Siswa Kelas",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/v1/kelas/{{kelasId}}/siswa?limit=100"
+            "url": "{{baseUrl}}/api/v1/kelas/{{kelasId}}/siswa?tahun_ajaran_id={{tahunAjaranId}}",
+            "description": "Filter tahun_ajaran_id benar-benar diterapkan server-side dan tetap dibatasi oleh scope token."
           }
         }
       ]
