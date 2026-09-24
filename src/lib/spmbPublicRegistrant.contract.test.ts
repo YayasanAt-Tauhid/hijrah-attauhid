@@ -16,8 +16,10 @@ describe("Public SPMB registrant/inputer", () => {
 
   it("autofills and locks the registrant for logged-in users", () => {
     expect(page).toContain("supabase.auth.getSession()");
-    expect(page).toContain('pegawai:pegawai_id(nama)');
+    expect(page).toContain("pmbCurrentRegistrant()");
     expect(page).toContain("identity_data");
+    expect(server).toContain('select("email,pegawai:pegawai_id(nama)")');
+    expect(server).toContain('sumber_nama: "pegawai"');
     expect(page).toContain("setPendaftarLocked(Boolean(namaPendaftar))");
     expect(page).toContain("disabled={pendaftarLocked}");
     expect(page).toContain("Terisi otomatis dari nama akun yang sedang login.");
