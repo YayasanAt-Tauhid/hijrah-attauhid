@@ -134,6 +134,7 @@ export function AdminSpmbRegistrationDialog({
   const [documents, setDocuments] = useState<Documents>({ kk: null, akta: null, rapor: null, ijazah: null });
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState<{ id: string; nama: string; inputer?: string | null } | null>(null);
+  const [inputerName, setInputerName] = useState("Petugas");
 
   const targetYear = useMemo(
     () => academicYears.find((item) => String(item.nama || "").trim() === SPMB_TARGET_ACADEMIC_YEAR),
@@ -150,7 +151,43 @@ export function AdminSpmbRegistrationDialog({
   const akhwatNonBoarding = ["SMP", "SMA"].includes(code) && form.jenis_kelamin === "P";
   const ikhwanBoardingChoice = ["SMP", "SMA"].includes(code) && form.jenis_kelamin === "L";
   const isTransfer = form.kategori === SPMB_TRANSFER_CATEGORY_VALUE;
-  const inputer = String(user?.user_metadata?.full_name || user?.email || "Akun petugas aktif");
+  const inputer = inputerName;
+
+  useEffect(() => {
+    let active = true;
+    const resolveName = async () => {
+      if (!user) {
+        setInputerName("Petugas");
+        return;
+      }
+      const googleIdentity = user.identities?.find((identity) => identity.provider === "google");
+      const identityData = (googleIdentity?.identity_data || {}) as Record<string, unknown>;
+      const metadataName = String(user.user_metadata?.full_name || user.user_metadata?.name || "").trim();
+      const identityName = String(identityData.full_name || identityData.name || "").trim();
+      const partsName = [
+        String(identityData.given_name || "").trim(),
+        String(identityData.family_name || "").trim(),
+      ].filter(Boolean).join(" ").trim();
+
+      let resolved = metadataName || identityName || partsName || "Petugas";
+      try {
+        const { data: profile } = await (supabase as any)
+          .from("users_profile")
+          .select("pegawai:pegawai_id(nama)")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (!active) return;
+        const pegawai = Array.isArray(profile?.pegawai) ? profile.pegawai[0] : profile?.pegawai;
+        const pegawaiName = String(pegawai?.nama || "").trim();
+        if (pegawaiName) resolved = pegawaiName;
+      } catch {
+        // Nama dari metadata/identity akun tetap dipakai.
+      }
+      if (active) setInputerName(resolved);
+    };
+    void resolveName();
+    return () => { active = false; };
+  }, [user]);
 
   useEffect(() => {
     if (!open) return;
