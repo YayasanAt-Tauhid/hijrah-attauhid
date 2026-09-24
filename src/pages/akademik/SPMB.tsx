@@ -986,7 +986,8 @@ export default function SPMB() {
         qc.invalidateQueries({ queryKey: ["siswa_detail"] }),
       ]);
       toast.success("Nama Pendaftar berhasil disimpan");
-      closeRegistrantEdit();
+      setRegistrantEditRow(null);
+      setRegistrantEditName("");
     } catch (error: any) {
       toast.error("Gagal menyimpan Nama Pendaftar", {
         description: error?.message || "Terjadi kesalahan teknis",
