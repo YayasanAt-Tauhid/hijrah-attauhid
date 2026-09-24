@@ -4,6 +4,17 @@
 create extension if not exists pg_net;
 create extension if not exists pg_cron with schema pg_catalog;
 
+-- pg_net is server-side infrastructure only. Browser-facing roles must not
+-- be able to initiate arbitrary outbound HTTP requests.
+revoke usage on schema net from public, anon, authenticated;
+grant usage on schema net to postgres, service_role;
+revoke execute on function net.http_get(text,jsonb,jsonb,integer) from public, anon, authenticated;
+revoke execute on function net.http_post(text,jsonb,jsonb,jsonb,integer) from public, anon, authenticated;
+revoke execute on function net.http_delete(text,jsonb,jsonb,integer,jsonb) from public, anon, authenticated;
+grant execute on function net.http_get(text,jsonb,jsonb,integer) to postgres, service_role;
+grant execute on function net.http_post(text,jsonb,jsonb,jsonb,integer) to postgres, service_role;
+grant execute on function net.http_delete(text,jsonb,jsonb,integer,jsonb) to postgres, service_role;
+
 create or replace function public.integration_usage_summary(p_integration_id uuid)
 returns table(
   requests_24h bigint,
