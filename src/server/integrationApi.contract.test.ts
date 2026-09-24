@@ -7,6 +7,8 @@ const api = readRepoFile('src/server/integrationApi.ts')
 const docs = readRepoFile('docs/integration-api.md')
 const openapi = readRepoFile('docs/openapi-integration-v1.yaml')
 const postman = readRepoFile('docs/postman/Hijrah-Integration-v1.postman_collection.json')
+const admin = readRepoFile('src/server/integrationsAdmin.ts')
+const migration = readRepoFile('supabase/migrations/20260924080759_integration_api_v11_hardening.sql')
 
 describe('Integration API v1 contract', () => {
   it('limits third-party milestone writes to tes, lulus, and tidak_lulus', () => {
@@ -76,4 +78,64 @@ describe('Integration API v1 contract', () => {
     expect(docs).toContain('mulai incremental dari checkpoint tersebut')
     expect(docs).toContain('Jangan mengambil checkpoint baru setelah snapshot')
   })
+  it('keeps v1 backward compatible while exposing the v1.1 response version', () => {
+    expect(api).toContain("response.headers.set('X-Hijrah-API-Version','1.1')")
+    expect(api).toContain("response.headers.set('X-Hijrah-API-Major','1')")
+    expect(openapi).toContain('version: 1.1.0')
+    expect(docs).toContain('Prefix tetap `/api/v1`')
+  })
+
+  it('supports granular registration scopes without removing the legacy sensitive scope', () => {
+    expect(api).toContain("'pendaftaran:identity:read'")
+    expect(api).toContain("'pendaftaran:contact:read'")
+    expect(api).toContain("'pendaftaran:sensitive:read'")
+    expect(admin).toContain("'pendaftaran:identity:read'")
+    expect(admin).toContain("'pendaftaran:contact:read'")
+    expect(admin).toContain("'pendaftaran:sensitive:read'")
+    expect(api).toContain("legacySensitive=has(ctx,'pendaftaran:sensitive:read')")
+  })
+
+  it('serializes explicit test and verification statuses while retaining legacy timestamps', () => {
+    expect(api).toContain("statusTes=d.spmb_tanggal_tes?'sudah_tes':'belum_tes'")
+    expect(api).toContain('status_tes:statusTes')
+    expect(api).toContain('tanggal_tes:d.spmb_tanggal_tes')
+    expect(api).toContain('status_verifikasi:d.spmb_verifikasi_status')
+    expect(openapi).toContain('status_tes:')
+    expect(openapi).toContain('status_verifikasi:')
+  })
+
+  it('implements every documented v1.1 list filter', () => {
+    for (const filter of [
+      "u.searchParams.get('departemen_id')",
+      "u.searchParams.get('tahun_ajaran_id')",
+      "u.searchParams.get('status_tes')",
+      "u.searchParams.get('status_kelulusan')",
+      "u.searchParams.get('gelombang_id')",
+      "u.searchParams.get('status_verifikasi')",
+      "u.searchParams.get('kelas_id')",
+    ]) expect(api).toContain(filter)
+    expect(api).toContain("rq=rq.eq('tahun_ajaran_id',year)")
+    expect(api).toContain("rq=rq.eq('kelas_id',classId)")
+    expect(docs).toContain('## Filter list v1.1')
+  })
+
+  it('adds monitored asynchronous webhooks without exposing PII in the event payload', () => {
+    expect(migration).toContain('create table if not exists public.integration_webhook_outbox')
+    expect(migration).toContain("vault.create_secret(")
+    expect(migration).toContain("net.http_post(")
+    expect(migration).toContain("'select public.integration_webhook_tick();'")
+    expect(migration).toContain("'object_id', new.object_id")
+    expect(migration).not.toContain("'nik', new.")
+    expect(openapi).toContain('webhooks:')
+    expect(openapi).toContain('X-Hijrah-Signature')
+    expect(docs).toContain('Webhook sengaja tidak membawa biodata/PII')
+  })
+
+  it('documents the v1.1 filters in Postman', () => {
+    expect(postman).toContain('Hijrah Integration API v1.1')
+    expect(postman).toContain('List - Filter SPMB')
+    expect(postman).toContain('status_tes=belum_tes')
+    expect(postman).toContain('List - Filter Kelas')
+  })
+
 })
