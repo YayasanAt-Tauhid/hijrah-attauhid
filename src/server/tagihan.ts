@@ -1,7 +1,7 @@
 /**
  * Server function: generateTagihan
  * Migrasi dari supabase/functions/generate-tagihan.
- * Generate tagihan (piutang) + jurnal untuk sekelompok siswa. Hanya admin/kepala/keuangan.
+ * Generate tagihan (piutang) + jurnal untuk sekelompok siswa. Hanya admin/keuangan.
  *
  * CATATAN PERBAIKAN (2026-07-14): Sebelumnya proses ini melakukan ~5 subrequest
  * Supabase PER SISWA PER BULAN (RPC tarif, RPC nomor jurnal, insert jurnal,

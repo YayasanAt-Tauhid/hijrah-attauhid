@@ -360,7 +360,7 @@ export const batalkanPembayaran = createServerFn({ method: "POST" })
     }): Promise<{ success: true; jurnal_pembalik_id: string | null }> => {
       const admin = createAdminClient();
       const { userId } = requireContext(context);
-      // BUKAN kasir — hanya admin/kepala/keuangan
+      // BUKAN kasir — hanya admin/keuangan
       await requireRole(admin, userId, [
         "admin",
         "keuangan",
