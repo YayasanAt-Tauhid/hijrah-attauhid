@@ -24,6 +24,9 @@ const scopes = [
   'pendaftaran:documents:read',
   'siswa:read',
   'kelas:read',
+  'pegawai:read',
+  'pegawai:contact:read',
+  'pegawai:write',
   'pendaftaran:milestone:update',
 ]
 
@@ -35,6 +38,9 @@ const scopeLabels: Record<string, string> = {
   'pendaftaran:documents:read': 'Dokumen pendaftaran',
   'siswa:read': 'Baca data siswa',
   'kelas:read': 'Baca data kelas',
+  'pegawai:read': 'Baca data dasar pegawai',
+  'pegawai:contact:read': 'Baca biodata & kontak pegawai',
+  'pegawai:write': 'Import dan update data pegawai',
   'pendaftaran:milestone:update': 'Update Status SPMB (Tes, Lulus, Tidak Lulus)',
 }
 
@@ -44,6 +50,8 @@ const dependentRegistrationScopes = [
   'pendaftaran:sensitive:read',
   'pendaftaran:documents:read',
 ]
+
+const dependentPegawaiScopes = ['pegawai:contact:read']
 
 const webhookEvents = ['pendaftaran', 'siswa', 'kelas', 'dokumen']
 
@@ -57,6 +65,12 @@ function toggleScope(xs: string[], id: string, on: boolean) {
   }
   if (!on && id === 'pendaftaran:read') {
     next = next.filter(x => !dependentRegistrationScopes.includes(x))
+  }
+  if (on && dependentPegawaiScopes.includes(id) && !next.includes('pegawai:read')) {
+    next = ['pegawai:read', ...next]
+  }
+  if (!on && id === 'pegawai:read') {
+    next = next.filter(x => !dependentPegawaiScopes.includes(x))
   }
   return [...new Set(next)]
 }
@@ -252,7 +266,7 @@ export default function IntegrasiApi() {
         <h1 className="text-2xl font-bold">Integrasi API</h1>
         <p className="text-sm text-muted-foreground">
           API v1.1 tetap kompatibel dengan token v1 lama. Atur akses backend pihak ketiga,
-          monitoring penggunaan, dan webhook event SPMB.
+          monitoring penggunaan, data pegawai, dan webhook event SPMB.
         </p>
       </div>
 
@@ -310,7 +324,7 @@ export default function IntegrasiApi() {
             <Input className="mt-2" type="datetime-local" value={expires} onChange={e => setExpires(e.target.value)} />
           </label>
           <p className="text-xs text-muted-foreground">
-            Gunakan cakupan paling sempit. Scope identity/contact dapat menggantikan scope sensitive legacy untuk integrasi baru.
+            Gunakan cakupan paling sempit. Scope identity/contact dapat menggantikan scope sensitive legacy untuk integrasi baru. Akses tulis pegawai berdiri sendiri dan tidak memberikan akses role/login pengguna.
           </p>
           <Button disabled={busy || name.trim().length < 2} onClick={create}>
             Buat dan terbitkan token
