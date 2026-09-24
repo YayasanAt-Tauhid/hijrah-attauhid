@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
 
-const ROLE_CARI_SISWA = ["admin", "kepala_sekolah", "keuangan"];
+const ROLE_CARI_SISWA = ["admin", "keuangan"];
 
 export interface SiswaRingkasServer {
   id: string;

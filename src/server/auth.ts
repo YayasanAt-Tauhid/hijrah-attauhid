@@ -105,7 +105,7 @@ export interface AcademicAccessProfile {
 
 /**
  * Otorisasi akademik yang sadar lembaga.
- * Admin/kepala_sekolah dapat lintas lembaga; admin_tu hanya pada lembaga yang ada di scope-nya.
+ * Admin dapat lintas lembaga; kepala_sekolah hanya lembaga sendiri; admin_tu mengikuti scope lembaganya.
  */
 export async function requireAcademicDepartment(
   admin: SupabaseClient<Database>,
@@ -122,16 +122,18 @@ export async function requireAcademicDepartment(
   if (!profile || profile.aktif === false || !roles.includes(profile.role)) {
     throw new ForbiddenError();
   }
-  if (profile.role === "admin_tu") {
+  if (profile.role === "kepala_sekolah" || profile.role === "admin_tu") {
+    const roleLabel =
+      profile.role === "kepala_sekolah" ? "Kepala Sekolah" : "Admin TU";
     if (!departemenId) {
-      throw new ForbiddenError("Forbidden: lembaga di luar kewenangan Admin TU");
+      throw new ForbiddenError("Forbidden: lembaga di luar kewenangan " + roleLabel);
     }
     const { data: allowed, error: accessError } = await admin.rpc(
       "can_manage_akademik_departemen",
       { _user_id: userId, _departemen_id: departemenId },
     );
     if (accessError || !allowed) {
-      throw new ForbiddenError("Forbidden: lembaga di luar kewenangan Admin TU");
+      throw new ForbiddenError("Forbidden: lembaga di luar kewenangan " + roleLabel);
     }
   }
   return { role: profile.role, departemen_id: profile.departemen_id };

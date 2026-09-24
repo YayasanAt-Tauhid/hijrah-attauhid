@@ -44,30 +44,33 @@ export const hitungNilaiAkhir = createServerFn({ method: "POST" })
         .single();
       if (profileError || !profile) throw new ForbiddenError();
 
-      // Admin/kepala sekolah/keuangan memang punya cakupan lintas kelas.
-      // Guru TIDAK boleh diperlakukan sebagai staff global karena query di bawah
-      // memakai service-role dan dengan demikian melewati RLS. Pastikan guru
-      // benar-benar ditugaskan pada kombinasi kelas + mapel + periode yang diminta.
-      const privilegedRoles = ["admin", "kepala_sekolah", "keuangan"];
-      const isPrivileged = privilegedRoles.includes(profile.role);
+      // Hanya admin yang memiliki cakupan akademik lintas lembaga.
+      // Kepala Sekolah dan Admin TU harus lolos scope departemen. Guru TIDAK
+      // boleh diperlakukan sebagai staff global karena query di bawah memakai
+      // service-role dan dengan demikian melewati RLS.
+      const isPrivileged = profile.role === "admin";
 
-      if (profile.role === "admin_tu") {
+      if (profile.role === "admin_tu" || profile.role === "kepala_sekolah") {
         const [{ data: scopedClass }, { data: scopedStudent }] = await Promise.all([
           admin.from("kelas").select("id,departemen_id").eq("id", kelas_id).maybeSingle(),
           admin.from("siswa").select("id,departemen_id").eq("id", siswa_id).maybeSingle(),
         ]);
+        const roleLabel =
+          profile.role === "kepala_sekolah" ? "Kepala Sekolah" : "Admin TU";
         if (
           !scopedClass?.departemen_id
           || !scopedStudent?.departemen_id
           || scopedClass.departemen_id !== scopedStudent.departemen_id
         ) {
-          throw new ForbiddenError("Forbidden: data akademik di luar lembaga Admin TU");
+          throw new ForbiddenError(
+            "Forbidden: data akademik di luar lembaga " + roleLabel,
+          );
         }
         await requireAcademicDepartment(
           admin,
           userId,
           scopedClass.departemen_id,
-          ["admin_tu"],
+          [profile.role],
         );
       } else if (profile.role === "guru") {
         if (!profile.pegawai_id) throw new ForbiddenError();
