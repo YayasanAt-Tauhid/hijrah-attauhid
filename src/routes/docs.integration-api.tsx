@@ -10,7 +10,7 @@ function IntegrationApiDocs() {
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-10">
           <div className="mb-8 border-b border-slate-200 pb-8">
             <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-blue-700">Hijrah At-Tauhid</p>
-            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Integration API v1</h1>
+            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Integration API v1.1</h1>
             <p className="mt-4 max-w-3xl text-slate-600">
               Dokumentasi resmi API baca dan update terbatas status SPMB untuk backend aplikasi pihak ketiga.
             </p>
@@ -35,7 +35,9 @@ function IntegrationApiDocs() {
                 <thead className="bg-slate-50"><tr><th className="px-4 py-3">Scope</th><th className="px-4 py-3">Akses</th></tr></thead>
                 <tbody className="divide-y divide-slate-200">
                   <tr><td className="px-4 py-3 font-mono">pendaftaran:read</td><td className="px-4 py-3">Data dasar SPMB dan status pembayaran pendaftaran</td></tr>
-                  <tr><td className="px-4 py-3 font-mono">pendaftaran:sensitive:read</td><td className="px-4 py-3">Data sensitif pendaftaran sesuai izin</td></tr>
+                  <tr><td className="px-4 py-3 font-mono">pendaftaran:identity:read</td><td className="px-4 py-3">Identitas pendaftaran: NISN/NIK/KK/TTL</td></tr>
+                  <tr><td className="px-4 py-3 font-mono">pendaftaran:contact:read</td><td className="px-4 py-3">Alamat, telepon/email, dan kontak dasar orang tua</td></tr>
+                  <tr><td className="px-4 py-3 font-mono">pendaftaran:sensitive:read</td><td className="px-4 py-3">Legacy compatibility — seluruh blok sensitif v1 lama</td></tr>
                   <tr><td className="px-4 py-3 font-mono">pendaftaran:documents:read</td><td className="px-4 py-3">Metadata dan signed URL dokumen privat</td></tr>
                   <tr><td className="px-4 py-3 font-mono">siswa:read</td><td className="px-4 py-3">Data siswa dan relasi kelas</td></tr>
                   <tr><td className="px-4 py-3 font-mono">kelas:read</td><td className="px-4 py-3">Data kelas</td></tr>
@@ -43,7 +45,7 @@ function IntegrationApiDocs() {
                 </tbody>
               </table>
             </div>
-            <p className="mt-3 text-sm text-slate-500">Pembatasan unit/departemen dan tahun ajaran diterapkan server-side sesuai konfigurasi token.</p>
+            <p className="mt-3 text-sm text-slate-500">Pembatasan unit/departemen dan tahun ajaran diterapkan server-side sesuai konfigurasi token. Token lama dengan scope sensitive tetap kompatibel; integrasi baru dianjurkan memakai scope identity/contact yang lebih sempit.</p>
           </section>
 
           <section className="mt-9 rounded-xl border border-blue-200 bg-blue-50 p-5">
@@ -65,6 +67,17 @@ Content-Type: application/json
             </div>
           </section>
 
+          <section className="mt-9 rounded-xl border border-emerald-200 bg-emerald-50 p-5">
+            <h2 className="font-bold text-emerald-950">Filter & webhook v1.1</h2>
+            <p className="mt-2 text-sm text-emerald-900">
+              Pendaftaran dapat difilter berdasarkan lembaga, tahun ajaran, status, status tes, status kelulusan, gelombang, dan verifikasi.
+              Siswa mendukung filter lembaga, tahun ajaran, status, dan kelas. Webhook opsional mengirim event minimal tanpa PII dan ditandatangani HMAC-SHA256.
+            </p>
+            <p className="mt-2 text-sm text-emerald-900">
+              Respons tetap memakai path <code className="rounded bg-white px-1">/api/v1</code> dan menambahkan header <code className="rounded bg-white px-1">X-Hijrah-API-Version: 1.1</code>.
+            </p>
+          </section>
+
           <section className="mt-9 rounded-xl border border-amber-200 bg-amber-50 p-5">
             <h2 className="font-bold text-amber-950">Keamanan token</h2>
             <p className="mt-2 text-sm text-amber-900">Token bersifat rahasia dan hanya ditampilkan saat diterbitkan. Jangan kirim token melalui dokumentasi publik. Simpan sebagai secret/environment variable pada backend penerima. Jika token terpapar, minta administrator melakukan revoke/rotate.</p>
@@ -76,7 +89,7 @@ Content-Type: application/json
             <p className="mt-3 text-slate-600">Dokumen privat diakses melalui endpoint dokumen dan menghasilkan signed URL sementara. Untuk sinkronisasi berkelanjutan gunakan endpoint <code className="rounded bg-slate-100 px-1">/sync/*</code> dan simpan checkpoint terakhir di backend penerima.</p>
           </section>
 
-          <footer className="mt-10 border-t border-slate-200 pt-6 text-sm text-slate-500">Integration API v1 · Read + scoped SPMB milestone write · Backend-to-backend</footer>
+          <footer className="mt-10 border-t border-slate-200 pt-6 text-sm text-slate-500">Integration API v1.1 · Backward-compatible /api/v1 · Read + scoped SPMB milestone write + optional webhook</footer>
         </div>
       </div>
     </main>
@@ -86,7 +99,7 @@ Content-Type: application/json
 export const Route = createFileRoute("/docs/integration-api")({
   head: () => ({
     meta: [
-      { title: "Integration API v1 | Hijrah At-Tauhid" },
+      { title: "Integration API v1.1 | Hijrah At-Tauhid" },
       { name: "robots", content: "noindex, nofollow, noarchive" },
     ],
   }),
