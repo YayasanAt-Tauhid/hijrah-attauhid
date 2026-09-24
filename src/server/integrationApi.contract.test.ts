@@ -142,4 +142,32 @@ describe('Integration API v1 contract', () => {
     expect(postman).toContain('/kelas/{{kelasId}}/siswa?tahun_ajaran_id={{tahunAjaranId}}')
   })
 
+
+  it('exposes employee read/import behind explicit scopes without role or finance writes', () => {
+    const employeeListRoute = readRepoFile('src/routes/api.v1.pegawai.ts')
+    const employeeDetailRoute = readRepoFile('src/routes/api.v1.pegawai.$id.ts')
+    const employeeImportRoute = readRepoFile('src/routes/api.v1.pegawai.import.ts')
+
+    expect(api).toContain("'pegawai:read'")
+    expect(api).toContain("'pegawai:contact:read'")
+    expect(api).toContain("'pegawai:write'")
+    expect(admin).toContain("'pegawai:read'")
+    expect(admin).toContain("'pegawai:contact:read'")
+    expect(admin).toContain("'pegawai:write'")
+    expect(api).toContain("need(ctx,'pegawai:read')")
+    expect(api).toContain("need(ctx,'pegawai:write')")
+    expect(api).toContain("const allowedFields=new Set(['pegawai_id','nip','nama'")
+    expect(api).not.toContain("allowedFields=new Set(['role'")
+    expect(api).toContain("integration:${ctx.integration.id}:pegawai-write")
+    expect(employeeListRoute).toContain("handlePegawaiList")
+    expect(employeeDetailRoute).toContain("handlePegawaiDetail")
+    expect(employeeImportRoute).toContain("handlePegawaiImport")
+    expect(openapi).toContain('/api/v1/pegawai/import:')
+    expect(openapi).toContain('pegawaI:write'.replace('I', 'i'))
+    expect(postman).toContain('Import / Update')
+    expect(postman).toContain('/api/v1/pegawai/import')
+    expect(docs).toContain('## Integrasi data pegawai')
+    expect(docs).toContain('tidak dapat mengubah role/login')
+  })
+
 })
