@@ -16,6 +16,7 @@ const UKURAN_BAJU_OPTIONS = ["S", "M", "L", "XL", "XXL", "X3L", "X4L", "X5L"] as
 const TRANSPORTASI_OPTIONS = ["Mobil Pribadi", "Sepeda Motor", "Mobil/Bus Antar Jemput", "Sepeda", "Jalan Kaki", "Lainnya"] as const;
 const PENDIDIKAN_OPTIONS = ["SD", "SMP", "SMA", "D3", "S1", "S2", "S3"] as const;
 const PEKERJAAN_OPTIONS = ["PNS/TNI/POLRI", "KARYAWAN BUMN", "KARYAWAN SWASTA", "WIRASWASTA", "LAINNYA", "SUDAH MENINGGAL"] as const;
+const PENGHASILAN_OPTIONS = [1000000, 2000000, 5000000, 20000000, 30000000] as const;
 const KATEGORI_OPTIONS = ["MURID BARU", "MURID PINDAHAN"] as const;
 const IQRO_OPTIONS = ["0", "1", "2", "3", "4", "5", "6", "7"] as const;
 const LATIN_OPTIONS = ["BAIK", "CUKUP", "KURANG"] as const;
@@ -167,6 +168,15 @@ function cleanInteger(value: unknown): number | null {
   return number === null ? null : Math.trunc(number);
 }
 
+function cleanIncomeRange(value: unknown, label: string): number | null {
+  const number = cleanNumber(value);
+  if (number === null) return null;
+  if (!PENGHASILAN_OPTIONS.includes(number as (typeof PENGHASILAN_OPTIONS)[number])) {
+    throw new Error(`${label} harus dipilih dari rentang yang tersedia`);
+  }
+  return number;
+}
+
 function normalizeDigits(value: unknown): string {
   return String(value ?? "").replace(/\D/g, "");
 }
@@ -307,6 +317,8 @@ export const pmbDaftar = createServerFn({ method: "POST" })
     const pendidikanIbu = cleanChoice(data.pendidikan_ibu, PENDIDIKAN_OPTIONS, "Pendidikan ibu");
     const pekerjaanAyah = cleanChoice(data.pekerjaan_ayah, PEKERJAAN_OPTIONS, "Pekerjaan ayah");
     const pekerjaanIbu = cleanChoice(data.pekerjaan_ibu, PEKERJAAN_OPTIONS, "Pekerjaan ibu");
+    const penghasilanAyah = cleanIncomeRange(data.penghasilan_ayah, "Penghasilan ayah");
+    const penghasilanIbu = cleanIncomeRange(data.penghasilan_ibu, "Penghasilan ibu");
     const kemampuanIqro = cleanChoice(data.kemampuan_iqro, IQRO_OPTIONS, "Kemampuan Iqro");
     const membacaLatin = cleanChoice(data.membaca_latin, LATIN_OPTIONS, "Kemampuan membaca Latin");
     const menulisLatin = cleanChoice(data.menulis_latin, LATIN_OPTIONS, "Kemampuan menulis Latin");
@@ -463,7 +475,7 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       tanggal_lahir_ayah: data.tanggal_lahir_ayah || null,
       pendidikan_ayah: pendidikanAyah,
       pekerjaan_ayah: pekerjaanAyah,
-      penghasilan_ayah: cleanNumber(data.penghasilan_ayah),
+      penghasilan_ayah: penghasilanAyah,
       telepon_ayah: cleanText(data.telepon_ayah, 20),
       alamat_ayah: cleanText(data.alamat_ayah, 500),
       nama_ibu: cleanText(data.nama_ibu, 200),
@@ -472,7 +484,7 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       tanggal_lahir_ibu: data.tanggal_lahir_ibu || null,
       pendidikan_ibu: pendidikanIbu,
       pekerjaan_ibu: pekerjaanIbu,
-      penghasilan_ibu: cleanNumber(data.penghasilan_ibu),
+      penghasilan_ibu: penghasilanIbu,
       telepon_ibu: cleanText(data.telepon_ibu, 20),
       alamat_ibu: cleanText(data.alamat_ibu, 500),
       telepon_ortu: cleanText(data.telepon_ortu, 20),
