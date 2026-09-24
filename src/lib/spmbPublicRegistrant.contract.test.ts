@@ -9,7 +9,7 @@ const monitoring = readFileSync(resolve(process.cwd(), "src/pages/akademik/SPMB.
 describe("Public SPMB registrant/inputer", () => {
   it("requires a registrant name on /spmb", () => {
     expect(page).toContain('pendaftar_nama: ""');
-    expect(page).toContain('label: "Nama Pendaftar / Inputer"');
+    expect(page).toContain('label: "Nama Pendaftar"');
     expect(page).toContain('id="spmb-public-pendaftar"');
     expect(page).toContain('Nama akun tidak tersedia otomatis. Silakan isi nama pendaftar secara manual; kolom ini wajib.');
   });
@@ -28,14 +28,14 @@ describe("Public SPMB registrant/inputer", () => {
 
   it("validates and persists the registrant on the server", () => {
     expect(server).toContain("pendaftar_nama?: string");
-    expect(server).toContain('throw new Error("Nama Pendaftar / Inputer wajib diisi")');
+    expect(server).toContain('throw new Error("Nama Pendaftar wajib diisi")');
     expect(server).toContain("spmb_inputer_nama: inputerNama");
     expect(server).toContain('spmb_sumber_pendaftaran: actor ? "admin" : "publik"');
     expect(server).not.toContain("inputerNama = pegawai?.nama || inputerEmail");
   });
 
   it("keeps the inputer visible in SPMB monitoring/export", () => {
-    expect(monitoring).toContain('label: "Petugas / Inputer"');
+    expect(monitoring).toContain('label: "Nama Pendaftar"');
     expect(monitoring).toContain("_spmbInputer");
   });
 });
