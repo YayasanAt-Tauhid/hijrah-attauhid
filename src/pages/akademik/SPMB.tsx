@@ -127,7 +127,7 @@ const SPMB_EXPORT_COLUMNS = [
   { key: "_exportKekurangan", label: "Kekurangan Data" },
   { key: "_exportVerifikasi", label: "Verifikasi" },
   { key: "_exportStatusPendaftaran", label: "Status Pendaftaran" },
-  { key: "_exportSumber", label: "Sumber Pendaftar" },
+  { key: "_exportSumber", label: "Sumber Pendaftaran" },
   { key: "_spmbInputer", label: "Nama Pendaftar" },
 ];
 
@@ -428,6 +428,7 @@ export default function SPMB() {
           _spmbTanggalAktivasi: detail?.spmb_tanggal_aktivasi || null,
           _spmbRegisteredAt: detail?.spmb_registered_at || s.created_at || null,
           _spmbInputer: detail?.spmb_inputer_nama || "",
+          _spmbSource: detail?.spmb_sumber_pendaftaran === "admin" ? "offline" : "online",
           _biayaSort: biayaSort,
           _kesiapanSort: r?.siap ? "siap" : "belum",
           _verifikasiSort: s.terverifikasi ? "sudah" : "belum",
@@ -465,10 +466,8 @@ export default function SPMB() {
                 ? "Selesai"
                 : registrationStatus,
           _exportSumber: detail?.spmb_sumber_pendaftaran === "admin"
-            ? "Input Admin/TU"
-            : detail.spmb_siswa_internal === true
-              ? "Siswa internal via publik"
-              : "Pendaftaran publik",
+            ? "Offline — Admin/TU"
+            : "Online — /spmb",
         }];
       });
     },
@@ -558,6 +557,8 @@ export default function SPMB() {
   const nonAsramaCount = statistikCalonList.filter((s: any) => s._spmbDetail?.status_asrama === "non_asrama").length;
   const lakiCount = statistikCalonList.filter((s: any) => s.jenis_kelamin === "L").length;
   const perempuanCount = statistikCalonList.filter((s: any) => s.jenis_kelamin === "P").length;
+  const onlineCount = statistikCalonList.filter((s: any) => s._spmbSource === "online").length;
+  const offlineCount = statistikCalonList.filter((s: any) => s._spmbSource === "offline").length;
   const belumSiapCount = statistikCalonList.filter(
     (s: any) => s.status === "calon" && !getKesiapanPenerimaan(s as Record<string, unknown>).siap,
   ).length;
@@ -1024,6 +1025,14 @@ export default function SPMB() {
     { key: "_spmbAsrama", label: "Asrama", sortable: true, render: (value) => (value as string) || "-" },
     { key: "_angkatanNama", label: "Angkatan", sortable: true, render: (value) => (value as string) || "-" },
     { key: "_spmbRegisteredAt", label: "Tgl Pendaftaran", sortable: true, render: (value) => formatTanggal(value) },
+    {
+      key: "_spmbSource",
+      label: "Sumber",
+      sortable: true,
+      render: (value) => value === "offline"
+        ? <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs text-warning">Offline</span>
+        : <span className="rounded-full border border-info/30 bg-info/10 px-2 py-0.5 text-xs text-info">Online</span>,
+    },
     {
       key: "_spmbInputer",
       label: "Nama Pendaftar",
@@ -1506,6 +1515,19 @@ export default function SPMB() {
         <StatsCard title="Menunggu" value={calonCount} icon={Clock} color="warning" />
         <StatsCard title="Diterima" value={diterimaCount} icon={UserCheck} color="success" />
         {nisKosongCount > 0 && <StatsCard title="NIS Belum Dibuat" value={nisKosongCount} icon={AlertTriangle} color="destructive" />}
+      </div>
+
+      <div className="space-y-2">
+        <div>
+          <p className="text-sm font-semibold">Sumber Pendaftaran</p>
+          <p className="text-xs text-muted-foreground">
+            Online berasal dari halaman /spmb. Offline berasal dari input Admin/TU melalui tombol Daftarkan Calon Murid.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <StatsCard title="Pendaftaran Online" value={onlineCount} icon={Users} color="info" />
+          <StatsCard title="Pendaftaran Offline" value={offlineCount} icon={UserPlus} color="warning" />
+        </div>
       </div>
 
       <div className="space-y-2">
