@@ -428,7 +428,11 @@ export default function SPMB() {
           _spmbTanggalAktivasi: detail?.spmb_tanggal_aktivasi || null,
           _spmbRegisteredAt: detail?.spmb_registered_at || s.created_at || null,
           _spmbInputer: detail?.spmb_inputer_nama || "",
-          _spmbSource: detail?.spmb_sumber_pendaftaran === "admin" ? "offline" : "online",
+          _spmbSource: detail?.spmb_sumber_pendaftaran === "admin"
+            ? "offline"
+            : detail?.spmb_sumber_pendaftaran === "publik"
+              ? "online"
+              : "unknown",
           _biayaSort: biayaSort,
           _kesiapanSort: r?.siap ? "siap" : "belum",
           _verifikasiSort: s.terverifikasi ? "sudah" : "belum",
@@ -467,7 +471,9 @@ export default function SPMB() {
                 : registrationStatus,
           _exportSumber: detail?.spmb_sumber_pendaftaran === "admin"
             ? "Offline — Admin/TU"
-            : "Online — /spmb",
+            : detail?.spmb_sumber_pendaftaran === "publik"
+              ? "Online — /spmb"
+              : "Belum diklasifikasikan",
         }];
       });
     },
@@ -559,6 +565,7 @@ export default function SPMB() {
   const perempuanCount = statistikCalonList.filter((s: any) => s.jenis_kelamin === "P").length;
   const onlineCount = statistikCalonList.filter((s: any) => s._spmbSource === "online").length;
   const offlineCount = statistikCalonList.filter((s: any) => s._spmbSource === "offline").length;
+  const unknownSourceCount = statistikCalonList.filter((s: any) => s._spmbSource === "unknown").length;
   const belumSiapCount = statistikCalonList.filter(
     (s: any) => s.status === "calon" && !getKesiapanPenerimaan(s as Record<string, unknown>).siap,
   ).length;
@@ -1031,7 +1038,9 @@ export default function SPMB() {
       sortable: true,
       render: (value) => value === "offline"
         ? <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs text-warning">Offline</span>
-        : <span className="rounded-full border border-info/30 bg-info/10 px-2 py-0.5 text-xs text-info">Online</span>,
+        : value === "online"
+          ? <span className="rounded-full border border-info/30 bg-info/10 px-2 py-0.5 text-xs text-info">Online</span>
+          : <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">Belum diketahui</span>,
     },
     {
       key: "_spmbInputer",
@@ -1524,9 +1533,12 @@ export default function SPMB() {
             Online berasal dari halaman /spmb. Offline berasal dari input Admin/TU melalui tombol Daftarkan Calon Murid.
           </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className={`grid gap-4 ${unknownSourceCount > 0 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
           <StatsCard title="Pendaftaran Online" value={onlineCount} icon={Users} color="info" />
           <StatsCard title="Pendaftaran Offline" value={offlineCount} icon={UserPlus} color="warning" />
+          {unknownSourceCount > 0 && (
+            <StatsCard title="Sumber Belum Diketahui" value={unknownSourceCount} icon={AlertTriangle} color="destructive" />
+          )}
         </div>
       </div>
 
