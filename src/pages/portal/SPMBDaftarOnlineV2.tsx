@@ -55,7 +55,7 @@ const PENGHASILAN_OPTIONS = [
   ["20000000", "Rp 5.000.000 s.d Rp 20.000.000"],
   ["30000000", "> Rp 20.000.000"],
 ] as const;
-const PENGHASILAN_VALUES = new Set(PENGHASILAN_OPTIONS.map(([value]) => value));
+const PENGHASILAN_VALUES = new Set<string>(PENGHASILAN_OPTIONS.map(([value]) => value));
 const IQRO_OPTIONS = [
   ["0", "BELUM PERNAH BELAJAR IQRO"], ["1", "1"], ["2", "2"], ["3", "3"],
   ["4", "4"], ["5", "5"], ["6", "6"], ["7", "SUDAH MENAMATKAN IQRO"],
