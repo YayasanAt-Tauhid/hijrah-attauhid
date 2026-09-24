@@ -116,6 +116,8 @@ describe('Integration API v1 contract', () => {
     ]) expect(api).toContain(filter)
     expect(api).toContain("rq=rq.eq('tahun_ajaran_id',year)")
     expect(api).toContain("rq=rq.eq('kelas_id',classId)")
+    expect(api).toContain("const u=new URL(request.url),year=u.searchParams.get('tahun_ajaran_id')")
+    expect(api).toContain("if(year)q=q.eq('tahun_ajaran_id',year)")
     expect(docs).toContain('## Filter list v1.1')
   })
 
