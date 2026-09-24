@@ -347,29 +347,45 @@ export default function SPMBDaftarOnlineV2() {
       }
 
       const email = user.email?.trim() || "";
+      const googleIdentity = user.identities?.find((identity) => identity.provider === "google");
+      const identityData = (googleIdentity?.identity_data || {}) as Record<string, unknown>;
       const loginViaGoogle =
         user.app_metadata?.provider === "google" ||
-        user.identities?.some((identity) => identity.provider === "google") === true;
+        Boolean(googleIdentity);
 
-      let namaPendaftar =
-        String(user.user_metadata?.full_name || user.user_metadata?.name || "").trim() ||
-        email;
+      const metadataName = String(
+        user.user_metadata?.full_name ||
+        user.user_metadata?.name ||
+        ""
+      ).trim();
+      const identityFullName = String(
+        identityData.full_name ||
+        identityData.name ||
+        ""
+      ).trim();
+      const identityPartsName = [
+        String(identityData.given_name || "").trim(),
+        String(identityData.family_name || "").trim(),
+      ].filter(Boolean).join(" ").trim();
+
+      let namaPendaftar = metadataName || identityFullName || identityPartsName;
 
       try {
         const { data: profile } = await (supabase as any)
           .from("users_profile")
-          .select("email,pegawai:pegawai_id(nama)")
+          .select("pegawai:pegawai_id(nama)")
           .eq("id", user.id)
           .maybeSingle();
         if (!active) return;
         const pegawai = Array.isArray(profile?.pegawai) ? profile.pegawai[0] : profile?.pegawai;
-        namaPendaftar = String(pegawai?.nama || namaPendaftar || profile?.email || email).trim();
+        const pegawaiName = String(pegawai?.nama || "").trim();
+        if (pegawaiName) namaPendaftar = pegawaiName;
       } catch {
-        // Metadata akun/email tetap dapat dipakai bila profile tidak dapat dibaca.
+        // Nama dari metadata/identity Google tetap dipakai bila profile tidak dapat dibaca.
       }
 
       if (!active) return;
-      setPendaftarLocked(true);
+      setPendaftarLocked(Boolean(namaPendaftar));
       setForm((current) => ({
         ...current,
         pendaftar_nama: namaPendaftar || current.pendaftar_nama,
@@ -911,8 +927,8 @@ export default function SPMBDaftarOnlineV2() {
                     />
                     <p className="mt-1 text-xs text-muted-foreground">
                       {pendaftarLocked
-                        ? "Terisi otomatis dari akun yang sedang login."
-                        : "Wajib diisi jika Anda mendaftar tanpa login."}
+                        ? "Terisi otomatis dari nama akun yang sedang login."
+                        : "Nama akun tidak tersedia otomatis. Silakan isi nama pendaftar secara manual; kolom ini wajib."}
                     </p>
                   </div>
                 </FormSection>
