@@ -241,7 +241,7 @@ function departemenPerluAsrama(
   jenisKelamin: string,
 ): boolean {
   const code = kodeDepartemen(dept);
-  return code === "MTA" || code === "SMA" || (code === "SMP" && jenisKelamin === "L");
+  return code === "MTA" || (["SMP", "SMA"].includes(code) && jenisKelamin === "L");
 }
 
 function departemenPerluNisn(dept: { kode?: string | null; nama?: string | null }): boolean {
@@ -312,10 +312,10 @@ export const pmbDaftar = createServerFn({ method: "POST" })
     let statusAsrama: string | null = null;
     if (deptCode === "MTA") {
       statusAsrama = "asrama";
-    } else if (deptCode === "SMA" || (deptCode === "SMP" && jenisKelamin === "L")) {
+    } else if (["SMP", "SMA"].includes(deptCode) && jenisKelamin === "L") {
       statusAsrama = cleanChoice(data.status_asrama, STATUS_ASRAMA_OPTIONS, "Pilihan asrama");
-      if (!statusAsrama) throw new Error("Pilihan Asrama / Non Asrama wajib dipilih untuk SMA dan SMP Ikhwan");
-    } else if (deptCode === "SMP" && jenisKelamin === "P") {
+      if (!statusAsrama) throw new Error("Pilihan Asrama / Non Asrama wajib dipilih untuk SMP dan SMA Ikhwan");
+    } else if (["SMP", "SMA"].includes(deptCode) && jenisKelamin === "P") {
       statusAsrama = "non_asrama";
     }
 
