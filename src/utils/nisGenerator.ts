@@ -1,57 +1,65 @@
 import { generateNis } from "@/server/nis";
-import { getKodeRombel } from "@/lib/nisRombel";
-
-export { getKodeRombel } from "@/lib/nisRombel";
 
 export interface NISComponents {
-  npsn4: string;
-  nomorUrut: string;
-  kodeRombel: string;
   tahun2: string;
+  kodeLembaga: string;
+  nomorUrut: string;
+}
+
+export function getKodeLembagaNIS(kodeAtauNama: string): string {
+  const value = String(kodeAtauNama || "").trim().toUpperCase();
+
+  if (value === "TK" || /(^|\s)TK(\s|$)/.test(value)) return "01";
+  if (value === "SD" || /(^|\s)SD(\s|$)/.test(value)) return "02";
+  if (value === "SMP" || /(^|\s)SMP(\s|$)/.test(value)) return "03";
+  if (value === "SMA" || /(^|\s)SMA(\s|$)/.test(value)) return "04";
+  if (
+    value === "MTA"
+    || value === "MTQ"
+    || /(^|\s)(MTA|MTQ)(\s|$)/.test(value)
+  ) return "05";
+
+  return "--";
 }
 
 /**
- * Parse komponen NIS dari data mentah.
+ * Parse komponen preview NIS baru: YY-KK-NNN.
  */
 export function parseNISComponents(
-  npsn: string,
-  namaKelas: string,
+  kodeLembaga: string,
   namaAngkatan: string,
-  nomorUrut: number
+  nomorUrut: number,
 ): NISComponents {
-  const npsn4 = npsn.slice(-4);
-  const tahunMatch = namaAngkatan.trim().match(/\d{4}/);
-  const tahun2 = tahunMatch ? tahunMatch[0].slice(-2) : namaAngkatan.trim().slice(-2);
-  const rombel = getKodeRombel(namaKelas);
+  const tahunMatch = String(namaAngkatan || "").trim().match(/\d{4}/);
+  const tahun2 = tahunMatch ? tahunMatch[0].slice(-2) : "--";
+
   return {
-    npsn4,
-    nomorUrut: String(nomorUrut).padStart(3, "0"),
-    kodeRombel: String(rombel ?? 0),
     tahun2,
+    kodeLembaga: getKodeLembagaNIS(kodeLembaga),
+    nomorUrut: String(nomorUrut).padStart(3, "0"),
   };
 }
 
 /**
- * Generate preview string NIS 10 digit.
+ * Generate preview NIS. Nomor urut sebenarnya ditentukan atomik oleh database.
  */
 export function generateNISPreview(
-  npsn: string,
-  namaKelas: string,
+  kodeLembaga: string,
   namaAngkatan: string,
-  nomorUrut: number
+  nomorUrut: number,
 ): string {
-  const c = parseNISComponents(npsn, namaKelas, namaAngkatan, nomorUrut);
-  return `${c.npsn4}${c.nomorUrut}${c.kodeRombel}${c.tahun2}`;
+  const c = parseNISComponents(kodeLembaga, namaAngkatan, nomorUrut);
+  return `${c.tahun2}-${c.kodeLembaga}-${c.nomorUrut}`;
 }
 
 /**
- * Panggil server function generateNis untuk generate & simpan NIS.
+ * Panggil server function untuk generate & simpan NIS lembaga aktif.
  */
 export async function generateNISViaEdgeFunction(payload: {
   siswa_id: string;
   departemen_id: string;
   angkatan_id: string;
-  kelas_id: string;
+  kelas_id?: string;
 }): Promise<{ nis: string }> {
   const data = await generateNis({ data: payload });
   return { nis: data.nis };
