@@ -199,7 +199,8 @@ function kodeDepartemen(dept?: Departemen): string {
 }
 
 function perluPilihanAsrama(dept?: Departemen, jenisKelamin?: string): boolean {
-  return kodeDepartemen(dept) === "SMP" && jenisKelamin === "L";
+  const kode = kodeDepartemen(dept);
+  return kode === "SMA" || (kode === "SMP" && jenisKelamin === "L");
 }
 
 function perluNisn(dept?: Departemen): boolean {
@@ -599,7 +600,7 @@ export default function SPMBDaftarOnlineV2() {
       return;
     }
     if (wajibAsrama && !form.status_asrama) {
-      const message = "Pilihan Asrama / Non Asrama hanya wajib untuk SMP Ikhwan. SMA dan SMP Akhwat tidak berasrama; MTA otomatis Asrama.";
+      const message = "Pilihan Asrama / Non Asrama wajib dipilih untuk SMA dan SMP Ikhwan. SMP Akhwat tidak berasrama; MTA otomatis Asrama.";
       setSubmitError(message);
       toast.error(message);
       return;
