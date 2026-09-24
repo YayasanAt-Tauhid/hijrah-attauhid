@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Hijrah Integration API v1",
-    "description": "Hijrah read integration and optional SPMB milestone updates. Never place the bearer token in browser/mobile code.",
+    "name": "Hijrah Integration API v1.1",
+    "description": "Backward-compatible Hijrah /api/v1 integration: read/sync, granular scopes, SPMB filters, and optional scoped milestone updates. Never place the bearer token in browser/mobile code.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -29,6 +29,18 @@
     {
       "key": "checkpoint",
       "value": "0"
+    },
+    {
+      "key": "departemenId",
+      "value": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "key": "tahunAjaranId",
+      "value": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "key": "gelombangId",
+      "value": "00000000-0000-4000-8000-000000000001"
     }
   ],
   "auth": {
@@ -49,8 +61,19 @@
           "name": "List",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/v1/pendaftaran?limit=100"
+            "url": "{{baseUrl}}/api/v1/pendaftaran?limit=100",
+            "description": "Filters: departemen_id, tahun_ajaran_id, status, status_tes, status_kelulusan, gelombang_id, status_verifikasi. Token scope remains the maximum boundary."
           }
+        },
+        {
+          "name": "List - Filter SPMB",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/pendaftaran?limit=100&departemen_id={{departemenId}}&tahun_ajaran_id={{tahunAjaranId}}&gelombang_id={{gelombangId}}&status_tes=belum_tes",
+            "description": "Example v1.1 filter. Replace UUID variables with values allowed by this token."
+          },
+          "response": []
         },
         {
           "name": "Detail",
@@ -68,8 +91,19 @@
           "name": "List",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/v1/siswa?limit=100"
+            "url": "{{baseUrl}}/api/v1/siswa?limit=100",
+            "description": "Filters: departemen_id, tahun_ajaran_id, status, kelas_id."
           }
+        },
+        {
+          "name": "List - Filter Kelas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/siswa?limit=100&departemen_id={{departemenId}}&tahun_ajaran_id={{tahunAjaranId}}&kelas_id={{kelasId}}",
+            "description": "Returns students matching the requested class/year while respecting token scopes."
+          },
+          "response": []
         },
         {
           "name": "Detail",
@@ -87,7 +121,8 @@
           "name": "List",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/v1/kelas?limit=100"
+            "url": "{{baseUrl}}/api/v1/kelas?limit=100",
+            "description": "Filters: departemen_id and tahun_ajaran_id."
           }
         },
         {
