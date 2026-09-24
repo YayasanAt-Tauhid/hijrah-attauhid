@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExportButton } from "@/components/shared/ExportButton";
+import { ExportButton, type ExportColumn } from "@/components/shared/ExportButton";
 import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   Search, ArrowUpDown, ArrowUp, ArrowDown, Inbox,
@@ -28,6 +28,8 @@ interface DataTableProps<T> {
   searchPlaceholder?: string;
   exportable?: boolean;
   exportFilename?: string;
+  exportColumns?: ExportColumn[];
+  exportSheetName?: string;
   selectable?: boolean;
   loading?: boolean;
   pageSize?: number;
@@ -41,7 +43,7 @@ type SortDir = "asc" | "desc" | null;
 
 export function DataTable<T extends Record<string, unknown>>({
   columns, data, searchable = true, searchPlaceholder = "Cari...",
-  exportable = false, exportFilename = "data", selectable = false,
+  exportable = false, exportFilename = "data", exportColumns, exportSheetName = "Data", selectable = false,
   loading = false, pageSize = 10, onRowClick, onSelectionChange,
   actions, emptyMessage = "Tidak ada data",
 }: DataTableProps<T>) {
@@ -135,7 +137,8 @@ export function DataTable<T extends Record<string, unknown>>({
             <ExportButton
               data={filtered as Record<string, unknown>[]}
               filename={exportFilename}
-              columns={columns.map((c) => ({ key: c.key, label: c.label }))}
+              columns={exportColumns || columns.map((c) => ({ key: c.key, label: c.label }))}
+              sheetName={exportSheetName}
             />
           )}
           {actions}
