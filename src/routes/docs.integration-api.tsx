@@ -41,9 +41,7 @@ function IntegrationApiDocs() {
                   <tr><td className="px-4 py-3 font-mono">pendaftaran:documents:read</td><td className="px-4 py-3">Metadata dan signed URL dokumen privat</td></tr>
                   <tr><td className="px-4 py-3 font-mono">siswa:read</td><td className="px-4 py-3">Data siswa dan relasi kelas</td></tr>
                   <tr><td className="px-4 py-3 font-mono">kelas:read</td><td className="px-4 py-3">Data kelas</td></tr>
-                  <tr><td className="px-4 py-3 font-mono">pegawai:read</td><td className="px-4 py-3">Data dasar pegawai</td></tr>
-                  <tr><td className="px-4 py-3 font-mono">pegawai:contact:read</td><td className="px-4 py-3">Biodata & kontak pegawai; memerlukan pegawai:read</td></tr>
-                  <tr className="bg-amber-50"><td className="px-4 py-3 font-mono">pegawai:write</td><td className="px-4 py-3 font-semibold">Bulk import dan update data pegawai</td></tr>
+                  <tr><td className="px-4 py-3 font-mono">pegawai:read</td><td className="px-4 py-3">Data operasional pegawai</td></tr>                  <tr className="bg-amber-50"><td className="px-4 py-3 font-mono">pegawai:write</td><td className="px-4 py-3 font-semibold">Bulk import dan update data pegawai</td></tr>
                   <tr className="bg-amber-50"><td className="px-4 py-3 font-mono">pendaftaran:milestone:update</td><td className="px-4 py-3 font-semibold">Update Status SPMB (Tes, Lulus, dan Tidak Lulus)</td></tr>
                 </tbody>
               </table>
@@ -65,7 +63,7 @@ Content-Type: application/json
 
           <section className="mt-9 rounded-xl border border-violet-200 bg-violet-50 p-5">
             <h2 className="text-xl font-bold text-violet-950">Integrasi Data Pegawai</h2>
-            <p className="mt-2 text-sm text-violet-900">Baca data pegawai menggunakan <code className="rounded bg-white px-1">pegawai:read</code>. Biodata/kontak membutuhkan <code className="rounded bg-white px-1">pegawai:contact:read</code>. Import/update membutuhkan <code className="rounded bg-white px-1">pegawai:write</code>.</p>
+            <p className="mt-2 text-sm text-violet-900">Baca data operasional pegawai menggunakan <code className="rounded bg-white px-1">pegawai:read</code>. Alamat, telepon, email, TTL, agama, foto, dokumen pribadi, dan data keluarga tidak tersedia melalui API. Import/update operasional membutuhkan <code className="rounded bg-white px-1">pegawai:write</code>.</p>
             <div className="mt-4 grid gap-2">
               <code className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm">GET {BASE_URL}/pegawai</code>
               <code className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm">GET {BASE_URL}/pegawai/{'{pegawai_id}'}</code>
@@ -82,7 +80,7 @@ Content-Type: application/json
     "status": "aktif"
   }]
 }`}</pre>
-            <p className="mt-3 text-sm text-violet-900">Update dicocokkan berdasarkan <code className="rounded bg-white px-1">pegawai_id</code> lalu NIP. Nama/email/telepon tidak dijadikan kunci otomatis. Endpoint ini tidak dapat mengubah role/login, presensi, tabungan, jurnal, pembayaran, atau tabel keuangan.</p>
+            <p className="mt-3 text-sm text-violet-900">Update dicocokkan berdasarkan <code className="rounded bg-white px-1">pegawai_id</code> lalu NIP. Nama tidak dijadikan kunci otomatis. Endpoint ini tidak dapat membaca atau mengubah alamat, telepon, email, TTL, agama, foto, dokumen pribadi, data keluarga, role/login, presensi, tabungan, jurnal, pembayaran, atau tabel keuangan.</p>
           </section>
 
           <section className="mt-9">
