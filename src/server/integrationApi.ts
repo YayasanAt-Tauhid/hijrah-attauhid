@@ -236,6 +236,7 @@ export async function handlePegawaiList(request:Request){
   let q=(ctx.admin.from('pegawai') as any).select(PEGAWAI_BASE).order('id').limit(lim+1)
   if(after)q=q.gt('id',after)
   if(dept)q=q.eq('departemen_id',dept)
+  else if(ctx.integration.department_ids?.length)q=q.in('departemen_id',ctx.integration.department_ids)
   if(status)q=q.eq('status',status)
   const {data,error}=await q;if(error)throw error
   let rows=(data||[]).filter((p:any)=>employeeAllowed(ctx,p.departemen_id))
@@ -257,6 +258,7 @@ export async function handlePegawaiDetail(request:Request,id:string){
 export async function handlePegawaiImport(request:Request){
  const a=await authenticateIntegration(request);if(a instanceof Response)return a
  const ctx=a,route='/api/v1/pegawai/import',req=need(ctx,'pegawai:write');if(req)return done(ctx,route,req)
+ const writeRate=await rate(ctx.admin,`integration:${ctx.integration.id}:pegawai-write`,30,60);if(!writeRate.allowed)return done(ctx,route,err('rate_limited','Batas bulk import pegawai terlampaui',429,ctx.requestId,{retry_after:writeRate.retry_after},{'Retry-After':String(writeRate.retry_after)}))
  let body:any
  try{body=await request.json()}catch{return done(ctx,route,err('invalid_json','Body harus JSON yang valid',400,ctx.requestId))}
  if(!body||typeof body!=='object'||Array.isArray(body)||!Array.isArray(body.rows)||body.rows.length<1||body.rows.length>200)return done(ctx,route,err('invalid_payload','rows wajib berupa array 1-200 baris',400,ctx.requestId))
