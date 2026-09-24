@@ -166,7 +166,7 @@ X-Hijrah-Signature: sha256=<hex_hmac_sha256>
 
 Verifikasi `X-Hijrah-Signature` dengan HMAC-SHA256 terhadap **raw request body** menggunakan signing secret. Jangan melakukan parse lalu serialize ulang sebelum verifikasi.
 
-Event yang tersedia: `pendaftaran`, `siswa`, `kelas`, dan `dokumen`. Tombol **Kirim tes** menghasilkan event `integration.test`.
+Event yang tersedia: `pendaftaran`, `siswa`, `kelas`, dan `dokumen`. Event `dokumen` hanya dikirim bila integrasi memiliki `pendaftaran:read` **dan** `pendaftaran:documents:read`. Tombol **Kirim tes** menghasilkan event `integration.test`.
 
 ## Identitas stabil
 
