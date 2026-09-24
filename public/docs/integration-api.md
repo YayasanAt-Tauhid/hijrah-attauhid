@@ -1,6 +1,6 @@
-# API Integrasi Hijrah v1
+# API Integrasi Hijrah v1.1
 
-API baca untuk sinkronisasi **Hijrah → backend aplikasi penerima**. Kontrak eksternal berada pada TanStack Start server routes; pihak ketiga tidak memerlukan akses Supabase. Hak write opsional terbatas pada milestone SPMB.
+API untuk sinkronisasi **Hijrah → backend aplikasi penerima**. Prefix tetap `/api/v1`; v1.1 adalah pengembangan backward-compatible sehingga endpoint, token, dan scope lama tetap berlaku. Hak write pihak ketiga tetap dibatasi pada milestone SPMB.
 
 ## Base URL produksi
 
@@ -8,7 +8,7 @@ API baca untuk sinkronisasi **Hijrah → backend aplikasi penerima**. Kontrak ek
 
 Prefix endpoint: `/api/v1`.
 
-Gunakan header berikut pada setiap request:
+Gunakan header pada setiap request:
 
 ```http
 Authorization: Bearer <token_integrasi>
@@ -17,18 +17,24 @@ Accept: application/json
 
 Token hanya boleh disimpan di backend penerima, bukan browser/APK, URL, analytics, atau source control. Token mentah hanya ditampilkan sekali saat dibuat di **Pengaturan → Integrasi API** (`/pengaturan/integrasi-api`). Hijrah menyimpan hash SHA-256 dan prefix token. Rotasi mencabut token lama.
 
+Respons v1.1 mengirim `X-Hijrah-API-Version: 1.1`, `X-Hijrah-API-Major: 1`, dan `X-Request-ID`. Prefix URL tetap `/api/v1`.
+
 ## Scope dan pembatasan
 
 | Scope | Akses |
 |---|---|
 | `pendaftaran:read` | data dasar pendaftaran, proses SPMB, status pembayaran pendaftaran |
-| `pendaftaran:sensitive:read` | NIK/KK, kontak/alamat, orang tua, kesehatan/fisik, sekolah asal, kemampuan |
+| `pendaftaran:identity:read` | NISN, NIK/KK, tempat dan tanggal lahir |
+| `pendaftaran:contact:read` | alamat, telepon/email, serta kontak dasar orang tua |
+| `pendaftaran:sensitive:read` | **legacy compatibility**: seluruh blok sensitif lama, termasuk identitas, kontak, orang tua, kesehatan/fisik, sekolah asal, kemampuan |
 | `pendaftaran:documents:read` | metadata dokumen dan signed URL 60 detik |
 | `pendaftaran:milestone:update` | Update Status SPMB (Tes, Lulus, dan Tidak Lulus) |
 | `siswa:read` | siswa non-calon dan relasi kelas |
 | `kelas:read` | kelas; anggota kelas juga membutuhkan `siswa:read` |
 
-`department_ids` dan `academic_year_ids` pada integrasi adalah batas maksimum. Filter request tidak dapat memperluas akses. Cursor ditandatangani HMAC dan terikat pada token, integration ID, scope/unit/tahun ajaran, endpoint, serta filter; perubahan izin membuat cursor lama tidak valid sehingga consumer harus melakukan reconciliation/bootstrap baru.
+Scope `identity`, `contact`, `sensitive`, dan `documents` memerlukan `pendaftaran:read`. Scope `pendaftaran:sensitive:read` tetap dipertahankan agar token lama tidak rusak; integrasi baru dianjurkan memakai scope paling sempit.
+
+`department_ids` dan `academic_year_ids` pada integrasi adalah batas maksimum. Filter request tidak pernah memperluas akses. Cursor ditandatangani HMAC dan terikat pada integration ID, scope, unit/tahun ajaran, endpoint, dan filter.
 
 ## Endpoint
 
@@ -37,69 +43,53 @@ Token hanya boleh disimpan di backend penerima, bukan browser/APK, URL, analytic
 - `GET /kelas` dan `GET /kelas/{kelas_id}/siswa`
 - `GET /sync/pendaftaran`, `/sync/siswa`, `/sync/kelas`
 - `GET /documents/{pendaftaran_id}.{jenis}` dengan `jenis`: `kk`, `akta`, `rapor`, `ijazah`
+- `POST /pendaftaran/{pendaftaran_id}/milestone`
 
-List menggunakan `limit` default 100, maksimum 200, dan `cursor` opaque. Filter yang relevan meliputi `departemen_id`, `tahun_ajaran_id`, `status`, dan relasi kelas sesuai endpoint. UUID harus valid. Timestamp menggunakan ISO-8601. Nilai database yang kosong dikirim `null`; blok sensitif/dokumen yang tidak diizinkan tidak dikirim sama sekali.
+List menggunakan `limit` default 100, maksimum 200, dan `cursor` opaque. UUID harus valid. Timestamp menggunakan ISO-8601. Nilai kosong dikirim `null`; blok sensitif/dokumen yang tidak diizinkan tidak dikirim.
 
-## Write milestone SPMB
+## Filter list v1.1
 
-Admin memilih **Update Status SPMB (Tes, Lulus, dan Tidak Lulus)** di **Pengaturan → Integrasi API**, saat membuat token atau mengubah izin integrasi. Token read-only tetap tidak memiliki akses write. Scope write tidak otomatis memberikan izin baca atau data sensitif.
+### Pendaftaran
+
+`GET /api/v1/pendaftaran` mendukung:
+
+| Filter | Nilai |
+|---|---|
+| `departemen_id` | UUID lembaga tujuan |
+| `tahun_ajaran_id` | UUID tahun ajaran |
+| `status` | status pendaftaran |
+| `status_tes` | `sudah_tes` atau `belum_tes` |
+| `status_kelulusan` | `lulus`, `tidak_lulus`, atau `belum_diputuskan` |
+| `gelombang_id` | UUID gelombang SPMB |
+| `status_verifikasi` | status verifikasi SPMB |
+
+Contoh:
 
 ```http
-POST /api/v1/pendaftaran/{id}/milestone
-Authorization: Bearer TOKEN
-Content-Type: application/json
-
-{"action":"tes"}
+GET /api/v1/pendaftaran?departemen_id=<UUID_SMP>&tahun_ajaran_id=<UUID_TA>&status_tes=belum_tes
 ```
 
-Gunakan `id` dari respons API pendaftaran, bukan ID siswa. Payload hanya menerima satu field `action`: `tes`, `lulus`, atau `tidak_lulus`. Biodata, NIK, orang tua, pembayaran, dan kelas tidak dapat diubah; field tambahan ditolak.
+### Siswa
 
-```sh
-curl -X POST "https://app.hijrah-attauhid.or.id/api/v1/pendaftaran/PENDAFTARAN_ID/milestone" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  --data '{"action":"tes"}'
+`GET /api/v1/siswa` mendukung `departemen_id`, `tahun_ajaran_id`, `status`, dan `kelas_id`.
+
+```http
+GET /api/v1/siswa?departemen_id=<UUID_SMP>&kelas_id=<UUID_KELAS_7A>
 ```
 
-Contoh keputusan tidak lulus:
+### Kelas
 
-```json
-{"action":"tidak_lulus"}
-```
+`GET /api/v1/kelas` mendukung `departemen_id` dan `tahun_ajaran_id`.
 
-Scope wajib: `pendaftaran:milestone:update`. Batas unit dan tahun ajaran token tetap berlaku. API memanggil workflow `spmb_mark_milestone()` existing; tidak menjalankan update biodata atau proses penerimaan/aktivasi siswa.
-
-| Permintaan | Hasil |
-|---|---|
-| Token read-only | `403 forbidden` |
-| Token tidak valid, kedaluwarsa, atau dicabut | `401 unauthorized` |
-| ID tidak ditemukan atau di luar unit/tahun ajaran | `404 not_found` |
-| Lulus/Tidak Lulus sebelum Tes | `400 business_rule_failed` |
-| Action valid dengan prasyarat terpenuhi | `200` |
-| Request ulang action yang sama | `200`, `marked_at` tetap sama |
-| Payload tidak valid/field tambahan | `400` |
-
-Contoh respons sukses:
-
-```json
-{"data":{"pendaftaran_id":"00000000-0000-4000-8000-000000000001","action":"tes","marked_at":"2026-09-17T04:00:00+00:00"},"request_id":"00000000-0000-4000-8000-000000000002"}
-```
-
-`tes`, `lulus`, dan `tidak_lulus` bersifat idempotent berdasarkan pendaftaran dan action, termasuk request bersamaan. `daftar_ulang` tetap tidak tersedia melalui API pihak ketiga. Tidak perlu `Idempotency-Key`. Waktu milestone ditentukan workflow dan tidak dapat dikirim atau direset oleh pihak ketiga. Audit mencatat integration ID, token ID, request ID, action dan hasil tanpa token mentah/biodata. Setiap request ulang tetap dicatat sebagai akses.
-
-Jika terjadi `503` atau respons terputus, ulangi **action yang sama**: workflow mengembalikan timestamp existing jika operasi sebelumnya sudah berhasil. Audit intent disimpan sebelum workflow; bila pencatatan hasil gagal, API mengembalikan `503` agar tidak mengklaim hasil yang belum terkonfirmasi.
-
-## Identitas stabil
-
-`pendaftaran.id` berasal dari `siswa_detail.pendaftaran_id` dan **berbeda** dari `siswa.id`. `pendaftaran.siswa_id` bernilai `null` selama status `calon`, lalu menunjuk ID siswa setelah diterima. Jangan gunakan nama, NIK, NISN, nomor urut, atau path dokumen sebagai primary key sinkronisasi.
-
-Dokumen memakai ID stabil `<pendaftaran_id>.<jenis>`. Signed URL bukan identitas permanen dan hanya berlaku 60 detik.
+Jika filter unit/tahun ajaran berada di luar scope token, server mengembalikan `403 filter_out_of_scope`.
 
 ## Payload pendaftaran
 
-`status_kelulusan` bernilai `lulus`, `tidak_lulus`, atau `null` bila keputusan belum dibuat. `tanggal_keputusan` diisi saat keputusan Lulus/Tidak Lulus ditetapkan. `gelombang` berisi ID/nama gelombang, periode, dan apakah biaya pendaftarannya gratis.
+Field dasar mencakup `id`, `siswa_id`, `status`, `tanggal_pendaftaran`, `unit`, `tahun_ajaran`, `angkatan`, `identitas`, `jenis_pendaftaran`, `kategori`, `status_asrama`, `gelombang`, `status_tes`, `tanggal_tes`, `status_kelulusan`, `tanggal_kelulusan`, `tanggal_keputusan`, `tanggal_daftar_ulang`, `status_verifikasi`, `verifikasi`, dan `pembayaran_pendaftaran`.
 
-Field dasar mencakup `id`, `siswa_id`, `status`, `tanggal_pendaftaran`, `unit`, `tahun_ajaran`, `angkatan`, `identitas`, `jenis_pendaftaran`, `kategori`, `status_asrama`, `gelombang`, `tanggal_tes`, `status_kelulusan`, `tanggal_kelulusan`, `tanggal_keputusan`, `tanggal_daftar_ulang`, `verifikasi`, dan `pembayaran_pendaftaran`.
+`status_tes` bernilai `sudah_tes` bila `tanggal_tes` sudah ada dan `belum_tes` bila belum. Field `tanggal_tes` lama tetap dipertahankan.
+
+`status_kelulusan` bernilai `lulus`, `tidak_lulus`, atau `null` bila keputusan belum dibuat. `tanggal_keputusan` diisi saat keputusan Lulus/Tidak Lulus ditetapkan.
 
 `pembayaran_pendaftaran` berbentuk:
 
@@ -112,21 +102,89 @@ Field dasar mencakup `id`, `siswa_id`, `status`, `tanggal_pendaftaran`, `unit`, 
 }
 ```
 
-Status berasal dari resolver server-side Hijrah yang menggabungkan pencatatan pembayaran internal dan transaksi pembayaran SPMB. Detail provider, token pembayaran, Snap token, metadata gateway, dan secret tidak pernah diekspor. Consumer harus memperlakukan nilai status baru sebagai enum yang mungkin berkembang.
+Detail provider, token pembayaran, Snap token, metadata gateway, dan secret tidak pernah diekspor.
 
-Dengan `pendaftaran:sensitive:read`, `data_sensitif` mencakup NISN, NIK/KK, TTL, agama, alamat, telepon/email, data fisik, penyakit/perjalanan, ayah/ibu, kontak orang tua, sekolah asal, dan kemampuan Iqro/Latin/hafalan. Field yang UI SPMB sedang sembunyikan tetap ada dalam kontrak tetapi dapat `null`.
+Dengan `pendaftaran:identity:read`, blok `data_sensitif` hanya berisi identitas yang diizinkan. Dengan `pendaftaran:contact:read`, blok tersebut hanya menambah data kontak yang diizinkan. Token lama dengan `pendaftaran:sensitive:read` tetap menerima bentuk lengkap seperti v1 sebelumnya.
 
-Dengan `pendaftaran:documents:read`, `dokumen` berisi metadata `id`, `jenis`, `nama_file`, `mime_type`, `ukuran`, `version`, dan `download_path`. `version` berubah bila path objek sumber berubah. Path storage privat tidak diekspor.
+## Write milestone SPMB
+
+Admin memilih **Update Status SPMB (Tes, Lulus, dan Tidak Lulus)** saat membuat atau mengubah izin integrasi. Scope write tidak otomatis memberikan izin baca atau data sensitif.
+
+```http
+POST /api/v1/pendaftaran/{id}/milestone
+Authorization: Bearer TOKEN
+Content-Type: application/json
+
+{"action":"tes"}
+```
+
+Payload hanya menerima satu field `action`: `tes`, `lulus`, atau `tidak_lulus`. Biodata, NIK, orang tua, pembayaran, kelas, NIS, dan aktivasi siswa tidak dapat diubah; field tambahan ditolak.
+
+| Permintaan | Hasil |
+|---|---|
+| Token read-only | `403 forbidden` |
+| Token tidak valid/kedaluwarsa/dicabut | `401 unauthorized` |
+| ID tidak ditemukan atau di luar unit/tahun ajaran | `404 not_found` |
+| Lulus/Tidak Lulus sebelum Tes | `400 business_rule_failed` |
+| Action valid | `200` |
+| Request ulang action yang sama | `200`, timestamp tetap |
+| Payload tambahan/tidak valid | `400` |
+
+`daftar_ulang` tetap tidak tersedia melalui API pihak ketiga.
+
+## Webhook event v1.1
+
+Webhook bersifat opsional dan dikonfigurasi administrator pada **Pengaturan → Integrasi API**. URL wajib HTTPS. Signing secret webhook berbeda dari Bearer token dan hanya ditampilkan saat webhook pertama dibuat atau secret dirotasi.
+
+Event dikirim asinkron sehingga kegagalan server penerima **tidak menggagalkan transaksi SPMB**. Hijrah menggunakan outbox, retry bertahap, dan dispatcher terjadwal. Event hanya dikirim bila objek berada dalam scope unit/tahun ajaran integrasi.
+
+Contoh body:
+
+```json
+{
+  "event_id": "chg_12345",
+  "type": "integration.change",
+  "api_version": "1.1",
+  "object_type": "pendaftaran",
+  "object_id": "00000000-0000-4000-8000-000000000001",
+  "change": "upsert",
+  "version": 12345,
+  "changed_at": "2026-09-24T08:10:00+00:00"
+}
+```
+
+Webhook sengaja tidak membawa biodata/PII. Setelah menerima event, backend penerima mengambil objek melalui endpoint API biasa sehingga scope tetap berlaku.
+
+Header webhook:
+
+```http
+Content-Type: application/json
+X-Hijrah-Event-ID: chg_12345
+X-Hijrah-API-Version: 1.1
+X-Hijrah-Signature: sha256=<hex_hmac_sha256>
+```
+
+Verifikasi `X-Hijrah-Signature` dengan HMAC-SHA256 terhadap **raw request body** menggunakan signing secret. Jangan melakukan parse lalu serialize ulang sebelum verifikasi.
+
+Event yang tersedia: `pendaftaran`, `siswa`, `kelas`, dan `dokumen`. Tombol **Kirim tes** menghasilkan event `integration.test`.
+
+## Identitas stabil
+
+`pendaftaran.id` berasal dari `siswa_detail.pendaftaran_id` dan berbeda dari `siswa.id`. `pendaftaran.siswa_id` dapat `null` selama status calon. Jangan gunakan nama, NIK, NISN, NIS, nomor urut, atau path dokumen sebagai primary key sinkronisasi.
+
+Dokumen memakai ID stabil `<pendaftaran_id>.<jenis>`. Signed URL bukan identitas permanen dan hanya berlaku 60 detik.
 
 ## Bootstrap dan incremental sync
 
-Untuk bootstrap yang aman: ambil checkpoint awal dari endpoint sync (`checkpoint` pada respons pertama), simpan nilainya, selesaikan seluruh snapshot melalui endpoint list, lalu mulai incremental dari checkpoint tersebut. Perubahan setelah high-water mark akan muncul pada incremental. Jangan mengambil checkpoint baru setelah snapshot karena dapat melewatkan perubahan yang terjadi selama snapshot.
+Untuk bootstrap: ambil checkpoint awal dari endpoint sync, simpan nilainya, selesaikan snapshot melalui endpoint list, lalu mulai incremental dari checkpoint tersebut. Jangan mengambil checkpoint baru setelah snapshot karena perubahan yang terjadi selama snapshot bisa terlewat.
 
-Setiap event incremental memiliki `id`, `change`, `version`, `changed_at`, dan `data`. `version` adalah sequence monoton server. `change` dapat berupa `upsert`, `delete`, atau `scope_exit`. Consumer harus idempotent: simpan objek berdasarkan `(source='hijrah', object_type, external_id)`, abaikan event dengan version lebih lama/sama, dan commit data + cursor/checkpoint dalam transaksi lokal yang sama.
+Setiap event incremental memiliki `id`, `change`, `version`, `changed_at`, dan `data`. `change` dapat berupa `upsert`, `delete`, atau `scope_exit`. Consumer harus idempotent dan menyimpan cursor/checkpoint bersama perubahan data secara atomik.
 
-`scope_exit` berarti objek pernah berada dalam cakupan consumer tetapi kini tidak boleh dibaca. Arsipkan salinan sinkronisasi; jangan otomatis menghapus data transaksi lokal seperti absensi/peminjaman. Retensi change log adalah 90 hari. Checkpoint yang terlalu lama menghasilkan HTTP `410 checkpoint_expired` dan membutuhkan bootstrap/reconciliation ulang.
+Retensi change log adalah 90 hari. Checkpoint terlalu lama menghasilkan `410 checkpoint_expired` dan membutuhkan bootstrap ulang.
 
-## Error dan rate limit
+## Monitoring dan error
+
+Administrator dapat melihat jumlah request/error 24 jam, rata-rata durasi 24 jam, request/error 7 hari, pemakaian terakhir, serta status webhook terakhir dari halaman Integrasi API.
 
 Format error:
 
@@ -134,14 +192,16 @@ Format error:
 {"error":{"code":"...","message":"...","request_id":"uuid"}}
 ```
 
-Status utama: `400` parameter/cursor, `401` token, `403` scope/filter di luar izin, `404` objek tidak ada/di luar scope, `410` checkpoint expired, `429` rate limit, dan `503` gangguan sementara. Limit default 300 request/menit per integrasi; autentikasi token invalid dibatasi 20 percobaan/menit per prefix. Respons 429 mengirim header `Retry-After`; gunakan exponential backoff + jitter.
+Status utama: `400`, `401`, `403`, `404`, `410`, `429`, dan `503`. Limit default 300 request/menit per integrasi. Respons `429` mengirim `Retry-After`; gunakan exponential backoff + jitter.
 
-## Pola consumer
+## Kompatibilitas dan deprecation
 
-Simpan token di secret manager backend. Jalankan hanya satu worker per kombinasi integrasi+jenis data. Untuk setiap halaman: verifikasi HTTP status, proses event secara idempotent, lalu simpan cursor/checkpoint bersama perubahan data dalam satu transaksi. Tombol manual **Sinkronkan** dan scheduler sebaiknya memakai engine yang sama agar klik ulang aman.
-
-## Kompatibilitas
-
-Breaking change memakai path versi baru (`/api/v2`). Dalam `/api/v1`, field atau enum baru dapat ditambahkan; consumer harus mengabaikan field yang tidak dikenal dan tidak crash pada enum baru.
+- `/api/v1` mempertahankan kompatibilitas field dan endpoint lama.
+- Field baru boleh ditambahkan di v1; consumer harus mengabaikan field yang tidak dikenal.
+- Enum baru dapat ditambahkan bila tidak mengubah arti nilai lama.
+- Field lama tidak akan dihapus atau diganti tipe di v1 tanpa masa deprecation.
+- Jika suatu saat field v1 perlu dihentikan, dokumentasi akan mencantumkan tanggal deprecation/sunset terlebih dahulu.
+- Breaking change menggunakan path versi baru, misalnya `/api/v2`.
+- Token v1 lama tidak perlu dirotasi hanya karena upgrade ke v1.1.
 
 Spesifikasi mesin: `docs/openapi-integration-v1.yaml`. Koleksi uji: `docs/postman/Hijrah-Integration-v1.postman_collection.json`.
