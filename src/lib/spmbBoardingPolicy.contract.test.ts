@@ -5,34 +5,33 @@ import { resolve } from "node:path";
 const page = readFileSync(resolve(process.cwd(), "src/pages/portal/SPMBDaftarOnlineV2.tsx"), "utf8");
 const server = readFileSync(resolve(process.cwd(), "src/server/pmb.ts"), "utf8");
 const migration = readFileSync(
-  resolve(process.cwd(), "supabase/migrations/20260924094500_correct_spmb_boarding_policy.sql"),
+  resolve(process.cwd(), "supabase/migrations/20260924100000_spmb_akhwat_non_boarding.sql"),
   "utf8",
 );
 
 describe("SPMB boarding policy", () => {
-  it("shows boarding selection for SMA and SMP Ikhwan while keeping MTA automatic", () => {
-    expect(page).toContain('kode === "SMA" || (kode === "SMP" && jenisKelamin === "L")');
-    expect(page).toContain("mtaWajibAsrama || perluPilihanAsrama(selectedDept, form.jenis_kelamin)");
-    expect(page).toContain("wajib dipilih untuk SMA dan SMP Ikhwan");
-    expect(page).toContain("SMP Akhwat tidak berasrama");
+  it("lets SMP/SMA Ikhwan choose and makes SMP/SMA Akhwat non-boarding only", () => {
+    expect(page).toContain('["SMP", "SMA"].includes(kode) && jenisKelamin === "L"');
+    expect(page).toContain('akhwatNonAsrama = ["SMP", "SMA"].includes(deptCode) && form.jenis_kelamin === "P"');
+    expect(page).toContain("NON ASRAMA — khusus Akhwat SMP/SMA");
+    expect(page).toContain("SMP dan SMA Akhwat hanya Non Asrama");
+    expect(page).toContain("ASRAMA — wajib untuk pendaftar MTA");
   });
 
-  it("validates SMA and SMP Ikhwan choices and normalizes SMP Akhwat", () => {
-    expect(server).toContain('deptCode === "SMA" || (deptCode === "SMP" && jenisKelamin === "L")');
-    expect(server).toContain("wajib dipilih untuk SMA dan SMP Ikhwan");
-    expect(server).toContain('deptCode === "SMP" && jenisKelamin === "P"');
+  it("enforces the same rule on the server", () => {
+    expect(server).toContain('["SMP", "SMA"].includes(deptCode) && jenisKelamin === "L"');
+    expect(server).toContain("wajib dipilih untuk SMP dan SMA Ikhwan");
+    expect(server).toContain('["SMP", "SMA"].includes(deptCode) && jenisKelamin === "P"');
     expect(server).toContain('statusAsrama = "non_asrama"');
     expect(server).toContain('deptCode === "MTA"');
     expect(server).toContain('statusAsrama = "asrama"');
   });
 
-  it("enforces the corrected policy in the database without rewriting existing SMA rows", () => {
-    expect(migration).toContain("code = 'SMA'");
-    expect(migration).toContain("wajib dipilih untuk SMA");
-    expect(migration).toContain("code = 'SMP' AND s.jenis_kelamin = 'P'");
+  it("forces Akhwat non_asrama in the database", () => {
+    expect(migration).toContain("code IN ('SMP','SMA') AND s.jenis_kelamin = 'P'");
     expect(migration).toContain("NEW.status_asrama := 'non_asrama'");
-    expect(migration).toContain("code = 'SMP' AND s.jenis_kelamin = 'L'");
+    expect(migration).toContain("code IN ('SMP','SMA') AND s.jenis_kelamin = 'L'");
     expect(migration).toContain("code = 'MTA'");
-    expect(migration).not.toContain("UPDATE public.siswa_detail");
+    expect(migration).toContain("UPDATE public.siswa_detail");
   });
 });
