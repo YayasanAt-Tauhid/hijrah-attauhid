@@ -98,6 +98,36 @@ const DEFAULT_FILTERS: SpmbFilterState = {
   verifikasi: "all",
 };
 
+const SPMB_EXPORT_COLUMNS = [
+  { key: "nama", label: "Nama Siswa" },
+  { key: "nis", label: "NIS" },
+  { key: "nisn", label: "NISN" },
+  { key: "_exportNik", label: "NIK" },
+  { key: "_exportJenisKelamin", label: "Jenis Kelamin" },
+  { key: "telepon", label: "No. HP / WhatsApp" },
+  { key: "email", label: "Email" },
+  { key: "alamat", label: "Alamat" },
+  { key: "_lembagaNama", label: "Lembaga Tujuan" },
+  { key: "_angkatanNama", label: "Angkatan" },
+  { key: "_exportKategori", label: "Kategori" },
+  { key: "_spmbAsrama", label: "Status Asrama" },
+  { key: "_exportTanggalPendaftaran", label: "Tanggal Pendaftaran" },
+  { key: "_exportBiaya", label: "Biaya Pendaftaran" },
+  { key: "_exportTanggalBayar", label: "Tanggal Bayar" },
+  { key: "_exportStatusTes", label: "Status Tes" },
+  { key: "_exportTanggalTes", label: "Tanggal Tes" },
+  { key: "_exportStatusKelulusan", label: "Status Kelulusan" },
+  { key: "_exportTanggalKeputusan", label: "Tanggal Keputusan" },
+  { key: "_exportTanggalLulus", label: "Tanggal Lulus" },
+  { key: "_exportStatusDaftarUlang", label: "Status Daftar Ulang" },
+  { key: "_exportTanggalDaftarUlang", label: "Tanggal Daftar Ulang" },
+  { key: "_exportKesiapan", label: "Kesiapan Penerimaan" },
+  { key: "_exportKekurangan", label: "Kekurangan Data" },
+  { key: "_exportVerifikasi", label: "Verifikasi" },
+  { key: "_exportStatusPendaftaran", label: "Status Pendaftaran" },
+  { key: "_exportSumber", label: "Sumber Pendaftar" },
+];
+
 type RegistrationForm = {
   nama: string;
   nik: string;
@@ -302,7 +332,7 @@ export default function SPMB() {
         const chunk = visibleIds.slice(i, i + 150);
         const rows = await fetchAllPages<any>((from, to) => (supabase as any)
           .from("siswa_detail")
-          .select("siswa_id,tahun_ajaran_id,status_asrama,kategori,dokumen_kk_path,dokumen_akta_path,spmb_tanggal_tes,spmb_tanggal_lulus,spmb_tanggal_daftar_ulang,spmb_status_kelulusan,spmb_tanggal_keputusan,spmb_departemen_tujuan_id,spmb_angkatan_tujuan_id,spmb_status_pendaftaran,spmb_siswa_internal,spmb_kelas_tujuan_id,spmb_tanggal_aktivasi,spmb_gelombang_id,spmb_registered_at")
+          .select("siswa_id,tahun_ajaran_id,nik,status_asrama,kategori,dokumen_kk_path,dokumen_akta_path,spmb_tanggal_tes,spmb_tanggal_lulus,spmb_tanggal_daftar_ulang,spmb_status_kelulusan,spmb_tanggal_keputusan,spmb_departemen_tujuan_id,spmb_angkatan_tujuan_id,spmb_status_pendaftaran,spmb_siswa_internal,spmb_kelas_tujuan_id,spmb_tanggal_aktivasi,spmb_gelombang_id,spmb_registered_at")
           .in("siswa_id", chunk)
           .not("spmb_gelombang_id", "is", null)
           .order("siswa_id")
@@ -394,6 +424,40 @@ export default function SPMB() {
           _biayaSort: biayaSort,
           _kesiapanSort: r?.siap ? "siap" : "belum",
           _verifikasiSort: s.terverifikasi ? "sudah" : "belum",
+          _exportNik: detail?.nik || "",
+          _exportJenisKelamin: s.jenis_kelamin === "L" ? "Laki-laki" : s.jenis_kelamin === "P" ? "Perempuan" : "",
+          _exportKategori: detail?.kategori || "",
+          _exportTanggalPendaftaran: formatTanggal(detail?.spmb_registered_at || s.created_at),
+          _exportBiaya: r?.gratis_pendaftaran
+            ? "Gratis"
+            : !r?.configured
+              ? "Belum diatur"
+              : r?.lunas
+                ? "Lunas"
+                : "Belum bayar",
+          _exportTanggalBayar: formatTanggal(r?.tanggal_pembayaran),
+          _exportStatusTes: detail?.spmb_tanggal_tes ? "Sudah Tes" : "Belum Tes",
+          _exportTanggalTes: formatTanggal(detail?.spmb_tanggal_tes),
+          _exportStatusKelulusan: detail?.spmb_status_kelulusan === "lulus"
+            ? "Lulus"
+            : detail?.spmb_status_kelulusan === "tidak_lulus"
+              ? "Tidak Lulus"
+              : "Belum Ditentukan",
+          _exportTanggalKeputusan: formatTanggal(detail?.spmb_tanggal_keputusan),
+          _exportTanggalLulus: formatTanggal(detail?.spmb_tanggal_lulus),
+          _exportStatusDaftarUlang: detail?.spmb_tanggal_daftar_ulang ? "Sudah Daftar Ulang" : "Belum Daftar Ulang",
+          _exportTanggalDaftarUlang: formatTanggal(detail?.spmb_tanggal_daftar_ulang),
+          _exportKesiapan: r?.siap ? "Siap diterima" : "Belum lengkap",
+          _exportKekurangan: Array.isArray(r?.kekurangan) ? r.kekurangan.join("; ") : "",
+          _exportVerifikasi: s.terverifikasi ? "Sudah diverifikasi" : "Belum diverifikasi",
+          _exportStatusPendaftaran: registrationStatus === "calon"
+            ? "Calon"
+            : registrationStatus === "diterima"
+              ? "Diterima"
+              : registrationStatus === "selesai"
+                ? "Selesai"
+                : registrationStatus,
+          _exportSumber: detail.spmb_siswa_internal === true ? "Siswa internal" : "Pendaftar baru",
         }];
       });
     },
@@ -1626,6 +1690,10 @@ export default function SPMB() {
         columns={columns}
         data={sortedCalonList as Record<string, unknown>[]}
         searchPlaceholder="Cari nama, NIS, lembaga, atau angkatan..."
+        exportable
+        exportFilename={`spmb-siswa-${new Date().toISOString().slice(0, 10)}`}
+        exportSheetName="Data SPMB"
+        exportColumns={SPMB_EXPORT_COLUMNS}
         loading={isLoading}
         pageSize={20}
         onRowClick={(row) => navigate(`/akademik/siswa/${row.id}`)}
