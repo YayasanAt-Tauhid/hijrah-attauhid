@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Hijrah At-Tauhid Integration API
   version: 1.1.0
-  description: Backward-compatible v1.1 read API, scoped SPMB milestone updates, granular sensitive-data scopes, filters, webhooks, and incremental synchronization.
+  description: Backward-compatible v1.1 API for scoped reads, SPMB milestone updates, employee read/import/update, granular sensitive-data scopes, filters, webhooks, and incremental synchronization.
 servers:
   - url: https://app.hijrah-attauhid.or.id
     description: Production Cloudflare Worker
@@ -91,6 +91,53 @@ components:
           type: array
           description: Omitted without pendaftaran:documents:read
           items: { $ref: '#/components/schemas/Document' }
+    Employee:
+      type: object
+      required: [id, nama, status, unit]
+      properties:
+        id: { type: string, format: uuid }
+        nip: { type: [string, 'null'] }
+        nama: { type: string }
+        jenis_kelamin: { type: [string, 'null'], enum: [L, P, null] }
+        jabatan: { type: [string, 'null'] }
+        status: { type: [string, 'null'], enum: [aktif, nonaktif, null] }
+        unit: { type: object, properties: { id: { type: [string, 'null'], format: uuid } } }
+        tanggal_masuk: { type: [string, 'null'], format: date }
+        tanggal_pensiun: { type: [string, 'null'], format: date }
+        golongan_terakhir: { type: [string, 'null'] }
+        created_at: { type: [string, 'null'], format: date-time }
+        data_pribadi:
+          type: object
+          description: Omitted unless token has pegawai:contact:read.
+          properties:
+            tempat_lahir: { type: [string, 'null'] }
+            tanggal_lahir: { type: [string, 'null'], format: date }
+            agama: { type: [string, 'null'] }
+            alamat: { type: [string, 'null'] }
+            telepon: { type: [string, 'null'] }
+            email: { type: [string, 'null'], format: email }
+            foto_url: { type: [string, 'null'] }
+    EmployeeImportRow:
+      type: object
+      additionalProperties: false
+      properties:
+        pegawai_id: { type: string, format: uuid, description: Existing employee ID. Preferred update key. }
+        nip: { type: string, description: Secondary update key. Recommended for repeatable imports. }
+        nama: { type: string }
+        jenis_kelamin: { type: string, enum: [L, P] }
+        tempat_lahir: { type: string }
+        tanggal_lahir: { type: string, format: date }
+        agama: { type: string }
+        alamat: { type: string }
+        telepon: { type: string }
+        email: { type: string }
+        foto_url: { type: string }
+        jabatan: { type: string }
+        departemen_id: { type: [string, 'null'], format: uuid, description: null means Yayasan / cross-unit employee. }
+        status: { type: string, enum: [aktif, nonaktif] }
+        tanggal_masuk: { type: string, format: date }
+        tanggal_pensiun: { type: string, format: date }
+        golongan_terakhir: { type: string }
     SyncPage:
       type: object
       properties:
@@ -191,6 +238,68 @@ paths:
       summary: Visible students in a class
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/AcademicYear' }]
       responses: { '200': { description: OK }, '404': { description: Not found or outside scope } }
+  /api/v1/pegawai:
+    get:
+      summary: List employees
+      description: Requires pegawai:read. Personal/contact block is included only with pegawai:contact:read. Department restrictions apply; academic-year restrictions do not apply to employee records.
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Department' }
+        - { name: status, in: query, schema: { type: string, enum: [aktif, nonaktif] } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Employee' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/v1/pegawai/{id}:
+    get:
+      summary: Employee detail
+      description: Requires pegawai:read. Personal/contact block is included only with pegawai:contact:read.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Employee' } } } } }
+        '404': { description: Not found or outside scope }
+  /api/v1/pegawai/import:
+    post:
+      summary: Bulk create or update employees
+      description: Requires pegawai:write. Maximum 200 rows. Existing records are matched by pegawai_id first, then NIP. This endpoint cannot change user roles/login, users_profile, attendance, savings, journals, payments, or finance tables. Empty update values are ignored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [rows]
+              properties:
+                update_existing: { type: boolean, default: false }
+                rows:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items: { $ref: '#/components/schemas/EmployeeImportRow' }
+      responses:
+        '200':
+          description: Per-row result with created/updated/failed summary
+        '400':
+          description: Invalid JSON or payload
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429':
+          description: General API or employee bulk-write rate limit exceeded
+          headers:
+            Retry-After: { schema: { type: integer } }
   /api/v1/sync/pendaftaran:
     get:
       summary: Incremental registration and document changes
