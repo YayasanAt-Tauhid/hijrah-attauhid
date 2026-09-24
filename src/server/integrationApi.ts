@@ -1,6 +1,6 @@
 import { createAdminClient } from './supabase'
 
-const SCOPES = ['pendaftaran:read','pendaftaran:sensitive:read','pendaftaran:documents:read','siswa:read','kelas:read','pendaftaran:milestone:update'] as const
+const SCOPES = ['pendaftaran:read','pendaftaran:identity:read','pendaftaran:contact:read','pendaftaran:sensitive:read','pendaftaran:documents:read','siswa:read','kelas:read','pendaftaran:milestone:update'] as const
 type Scope=(typeof SCOPES)[number]
 type Ctx={integration:any;token:any;admin:any;requestId:string;started:number;tokenHash:string}
 const MAX_PAGE=200, DEFAULT_PAGE=100
@@ -34,7 +34,7 @@ export async function authenticateIntegration(request:Request):Promise<Ctx|Respo
  await Promise.all([(admin.from('integration_tokens') as any).update({last_used_at:new Date().toISOString()}).eq('id',t.id),(admin.from('integration_apps') as any).update({last_used_at:new Date().toISOString()}).eq('id',i.id)])
  return {integration:i,token:t,admin,requestId,started,tokenHash}
 }
-export async function done(ctx:Ctx,route:string,response:Response){try{await (ctx.admin.from('integration_api_usage') as any).insert({integration_id:ctx.integration.id,route,request_id:ctx.requestId,status:response.status,duration_ms:Date.now()-ctx.started})}catch{}response.headers.set('X-Request-ID',ctx.requestId);return response}
+export async function done(ctx:Ctx,route:string,response:Response){try{await (ctx.admin.from('integration_api_usage') as any).insert({integration_id:ctx.integration.id,route,request_id:ctx.requestId,status:response.status,duration_ms:Date.now()-ctx.started})}catch{}response.headers.set('X-Request-ID',ctx.requestId);response.headers.set('X-Hijrah-API-Version','1.1');response.headers.set('X-Hijrah-API-Major','1');return response}
 export function need(ctx:Ctx,s:Scope){return has(ctx,s)?null:err('forbidden',`Scope ${s} diperlukan`,403,ctx.requestId)}
 
 const BASE='id,nis,nisn,nama,jenis_kelamin,tempat_lahir,tanggal_lahir,agama,alamat,telepon,email,status,angkatan_id,created_at,departemen_id,terverifikasi'
@@ -42,17 +42,151 @@ const DETAIL='id,siswa_id,pendaftaran_id,tahun_ajaran_id,jenis_pendaftaran,nik,n
 async function pathVersion(path:string){return (await sha256(path)).slice(0,24)}
 async function docs(pid:string,d:any){const rows=[['kk',d.dokumen_kk_path],['akta',d.dokumen_akta_path],['rapor',d.dokumen_rapor_path],['ijazah',d.dokumen_ijazah_path]].filter(x=>x[1]);return Promise.all(rows.map(async([kind,path])=>({id:`${pid}.${kind}`,jenis:kind,nama_file:String(path).split('/').pop(),mime_type:null,ukuran:null,version:await pathVersion(String(path)),download_path:`/api/v1/documents/${pid}.${kind}`})))}
 async function payment(ctx:Ctx,s:any,d:any){const targetDept=d.spmb_departemen_tujuan_id||s.departemen_id;const {data,error}=await (ctx.admin.rpc as any)('integration_registration_payment_status',{p_siswa_id:s.id,p_departemen_id:targetDept,p_created_at:s.created_at});if(error)return {status:'tidak_tersedia',tanggal_bayar:null,jumlah:null,gratis_gelombang_pertama:false};const p=Array.isArray(data)?data[0]:data;return {status:p?.status||'belum_tercatat',tanggal_bayar:p?.tanggal_bayar||null,jumlah:p?.jumlah??null,gratis_gelombang_pertama:!!p?.gratis_gelombang_pertama}}
-async function registration(s:any,d:any,ctx:Ctx){const targetDept=d.spmb_departemen_tujuan_id||s.departemen_id,targetCohort=d.spmb_angkatan_tujuan_id||s.angkatan_id,registrationStatus=d.spmb_status_pendaftaran||s.status;const out:any={id:d.pendaftaran_id,siswa_id:d.spmb_siswa_internal?s.id:(registrationStatus==='calon'?null:s.id),status:registrationStatus,tanggal_pendaftaran:s.created_at,unit:{id:targetDept},tahun_ajaran:{id:d.tahun_ajaran_id},angkatan:{id:targetCohort},identitas:{nama:s.nama,jenis_kelamin:s.jenis_kelamin},jenis_pendaftaran:d.jenis_pendaftaran,kategori:d.kategori,status_asrama:d.status_asrama,gelombang:d.spmb_gelombang?{id:d.spmb_gelombang.id,nama:d.spmb_gelombang.nama,gratis_pendaftaran:!!d.spmb_gelombang.gratis_pendaftaran,tanggal_mulai:d.spmb_gelombang.tanggal_mulai,tanggal_selesai:d.spmb_gelombang.tanggal_selesai}:null,tanggal_tes:d.spmb_tanggal_tes,status_kelulusan:d.spmb_status_kelulusan,tanggal_kelulusan:d.spmb_tanggal_lulus,tanggal_keputusan:d.spmb_tanggal_keputusan,tanggal_daftar_ulang:d.spmb_tanggal_daftar_ulang,verifikasi:{status:d.spmb_verifikasi_status,waktu:d.spmb_verifikasi_at},pembayaran_pendaftaran:await payment(ctx,s,d)}
- if(has(ctx,'pendaftaran:sensitive:read'))out.data_sensitif={nisn:s.nisn,nik:d.nik,no_kk:d.no_kk,tempat_lahir:s.tempat_lahir,tanggal_lahir:s.tanggal_lahir,agama:s.agama,alamat:s.alamat,telepon:s.telepon,email:s.email,anak_ke:d.anak_ke,jumlah_bersaudara:d.jumlah_bersaudara,tinggi_badan_cm:d.tinggi_badan_cm,berat_badan_kg:d.berat_badan_kg,lingkar_kepala_cm:d.lingkar_kepala_cm,ukuran_baju:d.ukuran_baju,penyakit_pernah_diderita:d.penyakit_pernah_diderita,jarak_rumah_km:d.jarak_rumah_km,waktu_perjalanan_menit:d.waktu_perjalanan_menit,transportasi:d.transportasi,orang_tua:{ayah:{nama:d.nama_ayah,nik:d.nik_ayah,tempat_lahir:d.tempat_lahir_ayah,tanggal_lahir:d.tanggal_lahir_ayah,pendidikan:d.pendidikan_ayah,pekerjaan:d.pekerjaan_ayah,penghasilan:d.penghasilan_ayah,telepon:d.telepon_ayah,alamat:d.alamat_ayah},ibu:{nama:d.nama_ibu,nik:d.nik_ibu,tempat_lahir:d.tempat_lahir_ibu,tanggal_lahir:d.tanggal_lahir_ibu,pendidikan:d.pendidikan_ibu,pekerjaan:d.pekerjaan_ibu,penghasilan:d.penghasilan_ibu,telepon:d.telepon_ibu,alamat:d.alamat_ibu},telepon:d.telepon_ortu,alamat:d.alamat_ortu},sekolah_asal:{nama:d.asal_sekolah,kelas_terakhir:d.kelas_terakhir,alasan_pindah:d.alasan_pindah,alamat:d.alamat_sekolah_asal,kabupaten:d.kabupaten_sekolah_asal,kecamatan:d.kecamatan_sekolah_asal,kelurahan:d.kelurahan_sekolah_asal},kemampuan:{iqro:d.kemampuan_iqro,membaca_latin:d.membaca_latin,menulis_latin:d.menulis_latin,hafalan_quran:d.hafalan_quran}}
- if(has(ctx,'pendaftaran:documents:read'))out.dokumen=await docs(d.pendaftaran_id,d);return out}
+async function registration(s:any,d:any,ctx:Ctx){
+ const targetDept=d.spmb_departemen_tujuan_id||s.departemen_id,targetCohort=d.spmb_angkatan_tujuan_id||s.angkatan_id,registrationStatus=d.spmb_status_pendaftaran||s.status
+ const statusTes=d.spmb_tanggal_tes?'sudah_tes':'belum_tes'
+ const out:any={id:d.pendaftaran_id,siswa_id:d.spmb_siswa_internal?s.id:(registrationStatus==='calon'?null:s.id),status:registrationStatus,tanggal_pendaftaran:s.created_at,unit:{id:targetDept},tahun_ajaran:{id:d.tahun_ajaran_id},angkatan:{id:targetCohort},identitas:{nama:s.nama,jenis_kelamin:s.jenis_kelamin},jenis_pendaftaran:d.jenis_pendaftaran,kategori:d.kategori,status_asrama:d.status_asrama,gelombang:d.spmb_gelombang?{id:d.spmb_gelombang.id,nama:d.spmb_gelombang.nama,gratis_pendaftaran:!!d.spmb_gelombang.gratis_pendaftaran,tanggal_mulai:d.spmb_gelombang.tanggal_mulai,tanggal_selesai:d.spmb_gelombang.tanggal_selesai}:null,status_tes:statusTes,tanggal_tes:d.spmb_tanggal_tes,status_kelulusan:d.spmb_status_kelulusan,tanggal_kelulusan:d.spmb_tanggal_lulus,tanggal_keputusan:d.spmb_tanggal_keputusan,tanggal_daftar_ulang:d.spmb_tanggal_daftar_ulang,status_verifikasi:d.spmb_verifikasi_status,verifikasi:{status:d.spmb_verifikasi_status,waktu:d.spmb_verifikasi_at},pembayaran_pendaftaran:await payment(ctx,s,d)}
+ const legacySensitive=has(ctx,'pendaftaran:sensitive:read'),identity=legacySensitive||has(ctx,'pendaftaran:identity:read'),contact=legacySensitive||has(ctx,'pendaftaran:contact:read')
+ if(legacySensitive)out.data_sensitif={nisn:s.nisn,nik:d.nik,no_kk:d.no_kk,tempat_lahir:s.tempat_lahir,tanggal_lahir:s.tanggal_lahir,agama:s.agama,alamat:s.alamat,telepon:s.telepon,email:s.email,anak_ke:d.anak_ke,jumlah_bersaudara:d.jumlah_bersaudara,tinggi_badan_cm:d.tinggi_badan_cm,berat_badan_kg:d.berat_badan_kg,lingkar_kepala_cm:d.lingkar_kepala_cm,ukuran_baju:d.ukuran_baju,penyakit_pernah_diderita:d.penyakit_pernah_diderita,jarak_rumah_km:d.jarak_rumah_km,waktu_perjalanan_menit:d.waktu_perjalanan_menit,transportasi:d.transportasi,orang_tua:{ayah:{nama:d.nama_ayah,nik:d.nik_ayah,tempat_lahir:d.tempat_lahir_ayah,tanggal_lahir:d.tanggal_lahir_ayah,pendidikan:d.pendidikan_ayah,pekerjaan:d.pekerjaan_ayah,penghasilan:d.penghasilan_ayah,telepon:d.telepon_ayah,alamat:d.alamat_ayah},ibu:{nama:d.nama_ibu,nik:d.nik_ibu,tempat_lahir:d.tempat_lahir_ibu,tanggal_lahir:d.tanggal_lahir_ibu,pendidikan:d.pendidikan_ibu,pekerjaan:d.pekerjaan_ibu,penghasilan:d.penghasilan_ibu,telepon:d.telepon_ibu,alamat:d.alamat_ibu},telepon:d.telepon_ortu,alamat:d.alamat_ortu},sekolah_asal:{nama:d.asal_sekolah,kelas_terakhir:d.kelas_terakhir,alasan_pindah:d.alasan_pindah,alamat:d.alamat_sekolah_asal,kabupaten:d.kabupaten_sekolah_asal,kecamatan:d.kecamatan_sekolah_asal,kelurahan:d.kelurahan_sekolah_asal},kemampuan:{iqro:d.kemampuan_iqro,membaca_latin:d.membaca_latin,menulis_latin:d.menulis_latin,hafalan_quran:d.hafalan_quran}}
+ else if(identity||contact){
+  const sensitive:any={}
+  if(identity)Object.assign(sensitive,{nisn:s.nisn,nik:d.nik,no_kk:d.no_kk,tempat_lahir:s.tempat_lahir,tanggal_lahir:s.tanggal_lahir})
+  if(contact)Object.assign(sensitive,{alamat:s.alamat,telepon:s.telepon,email:s.email,orang_tua:{ayah:{nama:d.nama_ayah,telepon:d.telepon_ayah,alamat:d.alamat_ayah},ibu:{nama:d.nama_ibu,telepon:d.telepon_ibu,alamat:d.alamat_ibu},telepon:d.telepon_ortu,alamat:d.alamat_ortu}})
+  out.data_sensitif=sensitive
+ }
+ if(has(ctx,'pendaftaran:documents:read'))out.dokumen=await docs(d.pendaftaran_id,d)
+ return out
+}
 async function fetchRegistration(ctx:Ctx,id:string){const {data:d}=await (ctx.admin.from('siswa_detail') as any).select(DETAIL).eq('pendaftaran_id',id).maybeSingle();if(!d)return null;const {data:s}=await ctx.admin.from('siswa').select(BASE).eq('id',d.siswa_id).maybeSingle();if(!s||!allowed(ctx,d.spmb_departemen_tujuan_id||s.departemen_id,d.tahun_ajaran_id))return null;return registration(s,d,ctx)}
 
-export async function handleList(request:Request,type:'pendaftaran'|'siswa'|'kelas'){const a=await authenticateIntegration(request);if(a instanceof Response)return a;const ctx=a,route=`/api/v1/${type}`,req=need(ctx,type==='pendaftaran'?'pendaftaran:read':type==='siswa'?'siswa:read':'kelas:read');if(req)return done(ctx,route,req)
- try{const u=new URL(request.url),lim=page(u),filters=filterFingerprint(u),c=await readCursor(u.searchParams.get('cursor'),`list:${type}`,ctx,filters),after=c?.after||'';let source:any[]=[];let items:any[]=[]
- if(type==='pendaftaran'){let q=(ctx.admin.from('siswa_detail') as any).select(DETAIL).not('pendaftaran_id','is',null).order('pendaftaran_id').limit(Math.min(1000,lim*5+1));if(after)q=q.gt('pendaftaran_id',after);const year=u.searchParams.get('tahun_ajaran_id');if(year){if(!uuid(year))throw new Error('PARAM');if(ctx.integration.academic_year_ids?.length&&!ctx.integration.academic_year_ids.includes(year))return done(ctx,route,err('filter_out_of_scope','Tahun ajaran di luar cakupan token',403,ctx.requestId));q=q.eq('tahun_ajaran_id',year)}const {data,error}=await q;if(error)throw error;source=data||[];const ids=source.map((d:any)=>d.siswa_id);const {data:ss}=ids.length?await ctx.admin.from('siswa').select(BASE).in('id',ids):{data:[]};const sm=new Map((ss||[]).map((s:any)=>[s.id,s]));const visible=source.map((d:any)=>[sm.get(d.siswa_id),d]).filter(([s,d]:any)=>s&&allowed(ctx,d.spmb_departemen_tujuan_id||s.departemen_id,d.tahun_ajaran_id));for(const [s,d] of visible.slice(0,lim+1) as any[])items.push(await registration(s,d,ctx))}
- else if(type==='siswa'){let q=ctx.admin.from('siswa').select(BASE).neq('status','calon').order('id').limit(Math.min(1000,lim*5+1));if(after)q=q.gt('id',after);const dept=u.searchParams.get('departemen_id');if(dept){if(!uuid(dept))throw new Error('PARAM');if(ctx.integration.department_ids?.length&&!ctx.integration.department_ids.includes(dept))return done(ctx,route,err('filter_out_of_scope','Unit di luar cakupan token',403,ctx.requestId));q=q.eq('departemen_id',dept)}if(u.searchParams.get('status'))q=q.eq('status',u.searchParams.get('status'));const {data,error}=await q;if(error)throw error;source=data||[];for(const s of source){if(ctx.integration.department_ids?.length&&!ctx.integration.department_ids.includes(s.departemen_id))continue;let years:any[]=[];if(ctx.integration.academic_year_ids?.length){const {data:rels}=await ctx.admin.from('kelas_siswa').select('tahun_ajaran_id').eq('siswa_id',s.id);years=(rels||[]).map((r:any)=>r.tahun_ajaran_id);if(!years.some(y=>ctx.integration.academic_year_ids.includes(y)))continue}items.push({id:s.id,nis:s.nis,nama:s.nama,jenis_kelamin:s.jenis_kelamin,status:s.status,unit:{id:s.departemen_id},angkatan:{id:s.angkatan_id},terverifikasi:s.terverifikasi,created_at:s.created_at});if(items.length>lim)break}}
- else {let q=ctx.admin.from('kelas').select('id,nama,tingkat_id,departemen_id,kapasitas,aktif').order('id').limit(Math.min(1000,lim*5+1));if(after)q=q.gt('id',after);const dept=u.searchParams.get('departemen_id');if(dept){if(!uuid(dept))throw new Error('PARAM');if(ctx.integration.department_ids?.length&&!ctx.integration.department_ids.includes(dept))return done(ctx,route,err('filter_out_of_scope','Unit di luar cakupan token',403,ctx.requestId));q=q.eq('departemen_id',dept)}const {data,error}=await q;if(error)throw error;source=data||[];for(const k of source){if(ctx.integration.department_ids?.length&&!ctx.integration.department_ids.includes(k.departemen_id))continue;if(ctx.integration.academic_year_ids?.length){const {data:r}=await ctx.admin.from('kelas_siswa').select('tahun_ajaran_id').eq('kelas_id',k.id).in('tahun_ajaran_id',ctx.integration.academic_year_ids).limit(1);if(!r?.length)continue}items.push(k);if(items.length>lim)break}}
- const more=items.length>lim;items=items.slice(0,lim);const last:any=items.at(-1);return done(ctx,route,json({data:items,pagination:{limit:lim,has_more:more,next_cursor:more&&last?await nextCursor(`list:${type}`,ctx,filters,{after:last.id}):null}}))}catch(e){const code=e instanceof Error&&e.message==='LIMIT'?'invalid_limit':e instanceof Error&&e.message==='PARAM'?'invalid_parameter':'invalid_cursor';return done(ctx,route,err(code,'Parameter request tidak valid',400,ctx.requestId))}}
+export async function handleList(request:Request,type:'pendaftaran'|'siswa'|'kelas'){
+ const a=await authenticateIntegration(request);if(a instanceof Response)return a
+ const ctx=a,route=`/api/v1/${type}`,req=need(ctx,type==='pendaftaran'?'pendaftaran:read':type==='siswa'?'siswa:read':'kelas:read')
+ if(req)return done(ctx,route,req)
+ try{
+  const u=new URL(request.url),lim=page(u),filters=filterFingerprint(u),c=await readCursor(u.searchParams.get('cursor'),`list:${type}`,ctx,filters),after=c?.after||''
+  let items:any[]=[]
+  const dept=u.searchParams.get('departemen_id'),year=u.searchParams.get('tahun_ajaran_id')
+  if(dept){
+   if(!uuid(dept))throw new Error('PARAM')
+   if(ctx.integration.department_ids?.length&&!ctx.integration.department_ids.includes(dept))return done(ctx,route,err('filter_out_of_scope','Unit di luar cakupan token',403,ctx.requestId))
+  }
+  if(year){
+   if(!uuid(year))throw new Error('PARAM')
+   if(ctx.integration.academic_year_ids?.length&&!ctx.integration.academic_year_ids.includes(year))return done(ctx,route,err('filter_out_of_scope','Tahun ajaran di luar cakupan token',403,ctx.requestId))
+  }
+
+  if(type==='pendaftaran'){
+   const status=u.searchParams.get('status'),statusTes=u.searchParams.get('status_tes'),statusKelulusan=u.searchParams.get('status_kelulusan'),wave=u.searchParams.get('gelombang_id'),verification=u.searchParams.get('status_verifikasi')
+   if(wave&&!uuid(wave))throw new Error('PARAM')
+   if(statusTes&&!['sudah_tes','belum_tes'].includes(statusTes))throw new Error('PARAM')
+   if(statusKelulusan&&!['lulus','tidak_lulus','belum_diputuskan'].includes(statusKelulusan))throw new Error('PARAM')
+   let scanAfter=after
+   const batchSize=200
+   while(items.length<=lim){
+    let q=(ctx.admin.from('siswa_detail') as any).select(DETAIL).not('pendaftaran_id','is',null).order('pendaftaran_id').limit(batchSize)
+    if(scanAfter)q=q.gt('pendaftaran_id',scanAfter)
+    if(year)q=q.eq('tahun_ajaran_id',year)
+    if(wave)q=q.eq('spmb_gelombang_id',wave)
+    if(statusTes==='sudah_tes')q=q.not('spmb_tanggal_tes','is',null)
+    if(statusTes==='belum_tes')q=q.is('spmb_tanggal_tes',null)
+    if(statusKelulusan==='belum_diputuskan')q=q.is('spmb_status_kelulusan',null)
+    else if(statusKelulusan)q=q.eq('spmb_status_kelulusan',statusKelulusan)
+    if(verification)q=q.eq('spmb_verifikasi_status',verification)
+    const {data,error}=await q;if(error)throw error
+    const rows=data||[];if(!rows.length)break
+    scanAfter=rows.at(-1).pendaftaran_id
+    const ids=rows.map((d:any)=>d.siswa_id)
+    const {data:ss}=ids.length?await ctx.admin.from('siswa').select(BASE).in('id',ids):{data:[]}
+    const sm=new Map((ss||[]).map((x:any)=>[x.id,x]))
+    for(const d of rows){
+     const student:any=sm.get(d.siswa_id);if(!student)continue
+     const targetDept=d.spmb_departemen_tujuan_id||student.departemen_id
+     if(!allowed(ctx,targetDept,d.tahun_ajaran_id))continue
+     if(dept&&targetDept!==dept)continue
+     if(status&&(d.spmb_status_pendaftaran||student.status)!==status)continue
+     items.push(await registration(student,d,ctx))
+     if(items.length>lim)break
+    }
+    if(rows.length<batchSize||items.length>lim)break
+   }
+  }else if(type==='siswa'){
+   const status=u.searchParams.get('status'),classId=u.searchParams.get('kelas_id')
+   if(classId&&!uuid(classId))throw new Error('PARAM')
+   if(classId){
+    const {data:k}=await ctx.admin.from('kelas').select('id,departemen_id').eq('id',classId).maybeSingle()
+    if(!k){return done(ctx,route,json({data:[],pagination:{limit:lim,has_more:false,next_cursor:null}}))}
+    if(ctx.integration.department_ids?.length&&!ctx.integration.department_ids.includes(k.departemen_id))return done(ctx,route,err('filter_out_of_scope','Kelas di luar cakupan unit token',403,ctx.requestId))
+    if(dept&&k.departemen_id!==dept)return done(ctx,route,json({data:[],pagination:{limit:lim,has_more:false,next_cursor:null}}))
+   }
+   let scanAfter=after
+   const batchSize=200
+   while(items.length<=lim){
+    let q=ctx.admin.from('siswa').select(BASE).neq('status','calon').order('id').limit(batchSize)
+    if(scanAfter)q=q.gt('id',scanAfter)
+    if(dept)q=q.eq('departemen_id',dept)
+    if(status)q=q.eq('status',status)
+    const {data,error}=await q;if(error)throw error
+    const rows=data||[];if(!rows.length)break
+    scanAfter=rows.at(-1).id
+    const ids=rows.map((x:any)=>x.id)
+    const needsMembership=!!year||!!classId||!!ctx.integration.academic_year_ids?.length
+    let visibleIds:Set<string>|null=null
+    if(needsMembership&&ids.length){
+     let rq=(ctx.admin.from('kelas_siswa') as any).select('siswa_id,kelas_id,tahun_ajaran_id').in('siswa_id',ids).eq('aktif',true)
+     if(year)rq=rq.eq('tahun_ajaran_id',year)
+     else if(ctx.integration.academic_year_ids?.length)rq=rq.in('tahun_ajaran_id',ctx.integration.academic_year_ids)
+     if(classId)rq=rq.eq('kelas_id',classId)
+     const {data:rels,error:relError}=await rq;if(relError)throw relError
+     visibleIds=new Set((rels||[]).map((x:any)=>x.siswa_id))
+    }
+    for(const student of rows){
+     if(ctx.integration.department_ids?.length&&!ctx.integration.department_ids.includes(student.departemen_id))continue
+     if(visibleIds&&!visibleIds.has(student.id))continue
+     items.push({id:student.id,nis:student.nis,nama:student.nama,jenis_kelamin:student.jenis_kelamin,status:student.status,unit:{id:student.departemen_id},angkatan:{id:student.angkatan_id},terverifikasi:student.terverifikasi,created_at:student.created_at})
+     if(items.length>lim)break
+    }
+    if(rows.length<batchSize||items.length>lim)break
+   }
+  }else{
+   let scanAfter=after
+   const batchSize=200
+   while(items.length<=lim){
+    let q=ctx.admin.from('kelas').select('id,nama,tingkat_id,departemen_id,kapasitas,aktif').order('id').limit(batchSize)
+    if(scanAfter)q=q.gt('id',scanAfter)
+    if(dept)q=q.eq('departemen_id',dept)
+    const {data,error}=await q;if(error)throw error
+    const rows=data||[];if(!rows.length)break
+    scanAfter=rows.at(-1).id
+    const ids=rows.map((x:any)=>x.id)
+    const needsMembership=!!year||!!ctx.integration.academic_year_ids?.length
+    let visibleIds:Set<string>|null=null
+    if(needsMembership&&ids.length){
+     let rq=(ctx.admin.from('kelas_siswa') as any).select('kelas_id,tahun_ajaran_id').in('kelas_id',ids).eq('aktif',true)
+     if(year)rq=rq.eq('tahun_ajaran_id',year)
+     else if(ctx.integration.academic_year_ids?.length)rq=rq.in('tahun_ajaran_id',ctx.integration.academic_year_ids)
+     const {data:rels,error:relError}=await rq;if(relError)throw relError
+     visibleIds=new Set((rels||[]).map((x:any)=>x.kelas_id))
+    }
+    for(const k of rows){
+     if(ctx.integration.department_ids?.length&&!ctx.integration.department_ids.includes(k.departemen_id))continue
+     if(visibleIds&&!visibleIds.has(k.id))continue
+     items.push(k)
+     if(items.length>lim)break
+    }
+    if(rows.length<batchSize||items.length>lim)break
+   }
+  }
+
+  const more=items.length>lim
+  items=items.slice(0,lim)
+  const last:any=items.at(-1)
+  return done(ctx,route,json({data:items,pagination:{limit:lim,has_more:more,next_cursor:more&&last?await nextCursor(`list:${type}`,ctx,filters,{after:last.id}):null}}))
+ }catch(e){
+  const code=e instanceof Error&&e.message==='LIMIT'?'invalid_limit':e instanceof Error&&e.message==='PARAM'?'invalid_parameter':'invalid_cursor'
+  return done(ctx,route,err(code,'Parameter request tidak valid',400,ctx.requestId))
+ }
+}
 
 export async function handleDetail(request:Request,type:'pendaftaran'|'siswa',id:string){const a=await authenticateIntegration(request);if(a instanceof Response)return a;const ctx=a,route=`/api/v1/${type}/:id`,req=need(ctx,type==='pendaftaran'?'pendaftaran:read':'siswa:read');if(req)return done(ctx,route,req);if(!uuid(id))return done(ctx,route,err('invalid_id','ID tidak valid',400,ctx.requestId));if(type==='pendaftaran'){const x=await fetchRegistration(ctx,id);return done(ctx,route,x?json({data:x}):err('not_found','Data tidak ditemukan atau di luar cakupan',404,ctx.requestId))}const {data:s}=await ctx.admin.from('siswa').select(BASE).eq('id',id).neq('status','calon').maybeSingle();if(!s||(ctx.integration.department_ids?.length&&!ctx.integration.department_ids.includes(s.departemen_id)))return done(ctx,route,err('not_found','Data tidak ditemukan atau di luar cakupan',404,ctx.requestId));const {data:ks}=await ctx.admin.from('kelas_siswa').select('id,kelas_id,tahun_ajaran_id,aktif').eq('siswa_id',id).eq('aktif',true);const visible=(ks||[]).filter((x:any)=>!ctx.integration.academic_year_ids?.length||ctx.integration.academic_year_ids.includes(x.tahun_ajaran_id));if(ctx.integration.academic_year_ids?.length&&!visible.length)return done(ctx,route,err('not_found','Data tidak ditemukan atau di luar cakupan',404,ctx.requestId));return done(ctx,route,json({data:{...s,kelas_aktif:visible}}))}
 
