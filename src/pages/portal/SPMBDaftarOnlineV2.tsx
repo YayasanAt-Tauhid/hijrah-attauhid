@@ -548,7 +548,7 @@ export default function SPMBDaftarOnlineV2() {
       return;
     }
     const requiredFields: Array<{ label: string; value: string; focusId?: string }> = [
-      { label: "Nama Pendaftar / Inputer", value: form.pendaftar_nama, focusId: "spmb-public-pendaftar" },
+      { label: "Nama Pendaftar", value: form.pendaftar_nama, focusId: "spmb-public-pendaftar" },
       { label: "Lembaga/Sekolah", value: form.departemen_id, focusId: "spmb-public-departemen" },
       { label: "Periode Tahun Ajaran", value: form.tahun_ajaran_id },
       { label: "Angkatan", value: form.angkatan_id, focusId: "spmb-public-angkatan" },
@@ -902,9 +902,9 @@ export default function SPMBDaftarOnlineV2() {
               {submitError && <div id="spmb-submit-error" tabIndex={-1} className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 outline-none focus:ring-2 focus:ring-red-400" role="alert"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{submitError}</div>}
 
               <fieldset disabled={loading || optionsLoading || Boolean(optionsError) || !registrationOpen} className="space-y-6 disabled:opacity-70">
-                <FormSection title="Pendaftar / Inputer" description="Nama orang atau petugas yang mengisi formulir pendaftaran">
+                <FormSection title="Nama Pendaftar" description="Nama orang yang mengisi formulir pendaftaran">
                   <div>
-                    <Label htmlFor="spmb-public-pendaftar">Nama Pendaftar / Inputer *</Label>
+                    <Label htmlFor="spmb-public-pendaftar">Nama Pendaftar *</Label>
                     <Input
                       id="spmb-public-pendaftar"
                       className="min-h-11"
