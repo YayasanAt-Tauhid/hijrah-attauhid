@@ -16,7 +16,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { Plus, Pencil, Trash2, Users, UserCheck, GraduationCap, Briefcase, Eye } from "lucide-react";
+import { ImportPegawaiDialog } from "@/pages/kepegawaian/ImportPegawaiDialog";
+import { Plus, Pencil, Trash2, Users, UserCheck, GraduationCap, Briefcase, Eye, Upload } from "lucide-react";
 import { useNavigate } from "@/lib/router-compat";
 
 const AGAMA_OPTIONS = ["Islam", "Kristen", "Katolik", "Hindu", "Buddha", "Konghucu"];
@@ -50,6 +51,7 @@ export default function DataPegawai() {
   const [filterLembaga, setFilterLembaga] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editItem, setEditItem] = useState<PegawaiRow | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -237,7 +239,12 @@ export default function DataPegawai() {
           <p className="text-sm text-muted-foreground">Kelola data pegawai seluruh lembaga</p>
         </div>
         {canEdit && (
-          <Button onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Tambah Pegawai</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Upload className="h-4 w-4 mr-2" />Import Data Pegawai
+            </Button>
+            <Button onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Tambah Pegawai</Button>
+          </div>
         )}
       </div>
 
@@ -292,6 +299,13 @@ export default function DataPegawai() {
           />
         </CardContent>
       </Card>
+
+      <ImportPegawaiDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        lembagaList={(lembagaList || []) as any[]}
+        onImported={() => qc.invalidateQueries({ queryKey: ["pegawai_list"] })}
+      />
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
