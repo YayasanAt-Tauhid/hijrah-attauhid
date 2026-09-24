@@ -703,7 +703,7 @@ export const spmbAdminDaftar = createServerFn({ method: "POST" })
 
 export const spmbAdminUpdateRegistrantName = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .inputValidator((d: { siswa_id: string; nama: string }) => d)
+  .inputValidator((d: { siswa_id: string; detail_id?: string; nama: string }) => d)
   .handler(async ({ data, context }): Promise<{ success: true; nama: string }> => {
     const actor = requireContext(context);
     const admin = createAdminClient();
@@ -713,13 +713,16 @@ export const spmbAdminUpdateRegistrantName = createServerFn({ method: "POST" })
     if (!siswaId) throw new Error("Data siswa tidak valid");
     if (!nama || nama.length < 2) throw new Error("Nama Pendaftar wajib diisi");
 
-    const { data: detail, error: detailError } = await (admin.from("siswa_detail") as any)
+    let detailQuery = (admin.from("siswa_detail") as any)
       .select("id,spmb_departemen_tujuan_id,spmb_gelombang_id")
       .eq("siswa_id", siswaId)
-      .not("spmb_gelombang_id", "is", null)
-      .order("spmb_registered_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .not("spmb_gelombang_id", "is", null);
+
+    const detailId = cleanText(data.detail_id, 100);
+    if (detailId) detailQuery = detailQuery.eq("id", detailId);
+    else detailQuery = detailQuery.order("spmb_registered_at", { ascending: false }).limit(1);
+
+    const { data: detail, error: detailError } = await detailQuery.maybeSingle();
 
     if (detailError) throw new Error(detailError.message);
     if (!detail?.id) throw new Error("Pendaftaran SPMB tidak ditemukan");
