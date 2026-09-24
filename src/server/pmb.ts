@@ -236,8 +236,12 @@ function kodeDepartemen(dept: { kode?: string | null; nama?: string | null }): s
   return match?.[2] || "";
 }
 
-function departemenPerluAsrama(dept: { kode?: string | null; nama?: string | null }): boolean {
-  return ["SMP", "SMA", "MTA"].includes(kodeDepartemen(dept));
+function departemenPerluAsrama(
+  dept: { kode?: string | null; nama?: string | null },
+  jenisKelamin: string,
+): boolean {
+  const code = kodeDepartemen(dept);
+  return code === "MTA" || (code === "SMP" && jenisKelamin === "L");
 }
 
 function departemenPerluNisn(dept: { kode?: string | null; nama?: string | null }): boolean {
@@ -293,7 +297,8 @@ export const pmbDaftar = createServerFn({ method: "POST" })
     if (!dept) throw new Error("Departemen tidak valid atau SPMB belum dibuka untuk lembaga ini");
 
     const deptCode = kodeDepartemen(dept);
-    const perluAsrama = departemenPerluAsrama(dept);
+    const jenisKelamin = data.jenis_kelamin === "P" ? "P" : "L";
+    const perluAsrama = departemenPerluAsrama(dept, jenisKelamin);
     const perluNisn = departemenPerluNisn(dept);
     const nisn = cleanText(data.nisn, 10);
     if (perluNisn && !/^\d{10}$/.test(nisn || "")) {
@@ -304,11 +309,15 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       throw new Error("NIK Calon Murid harus terdiri dari 16 digit");
     }
 
-    let statusAsrama = perluAsrama
-      ? cleanChoice(data.status_asrama, STATUS_ASRAMA_OPTIONS, "Pilihan asrama")
-      : null;
-    if (deptCode === "MTA") statusAsrama = "asrama";
-    if (perluAsrama && !statusAsrama) throw new Error("Pilihan Asrama / Non Asrama wajib dipilih untuk SMP atau SMA");
+    let statusAsrama: string | null = null;
+    if (deptCode === "MTA") {
+      statusAsrama = "asrama";
+    } else if (deptCode === "SMP" && jenisKelamin === "L") {
+      statusAsrama = cleanChoice(data.status_asrama, STATUS_ASRAMA_OPTIONS, "Pilihan asrama");
+      if (!statusAsrama) throw new Error("Pilihan Asrama / Non Asrama wajib dipilih untuk SMP Ikhwan");
+    } else if (deptCode === "SMA" || (deptCode === "SMP" && jenisKelamin === "P")) {
+      statusAsrama = "non_asrama";
+    }
 
     if (angkatan_id) {
       const { data: angkatan, error } = await admin.from("angkatan").select("id").eq("id", angkatan_id).eq("departemen_id", departemen_id).eq("aktif", true).maybeSingle();
@@ -400,7 +409,7 @@ export const pmbDaftar = createServerFn({ method: "POST" })
       existingDetail = detailLookup.data;
 
       const existingNik = normalizeDigits(existingDetail?.nik);
-      const submittedGender = data.jenis_kelamin === "P" ? "P" : "L";
+      const submittedGender = jenisKelamin;
       const birthMismatch = Boolean(
         existingSiswa?.tanggal_lahir &&
         data.tanggal_lahir &&
@@ -544,7 +553,7 @@ export const pmbDaftar = createServerFn({ method: "POST" })
 
     const { data: siswa, error: siswaError } = await (admin.from("siswa") as any).insert({
       nama,
-      jenis_kelamin: data.jenis_kelamin === "P" ? "P" : "L",
+      jenis_kelamin: jenisKelamin,
       tempat_lahir: cleanText(data.tempat_lahir, 100),
       tanggal_lahir: data.tanggal_lahir || null,
       nisn: perluNisn ? nisn : null,
