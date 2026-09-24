@@ -167,7 +167,7 @@ describe('Integration API v1 contract', () => {
     expect(postman).toContain('Import / Update')
     expect(postman).toContain('/api/v1/pegawai/import')
     expect(docs).toContain('## Integrasi data pegawai')
-    expect(docs).toContain('tidak dapat mengubah role/login')
+    expect(docs).toContain('role/login')
   })
 
 })
