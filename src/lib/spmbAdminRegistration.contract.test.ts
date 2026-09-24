@@ -34,7 +34,7 @@ describe("Admin SPMB registration parity", () => {
     }
     expect(adminForm).toContain("pmbCreateDocumentUpload");
     expect(adminForm).toContain("spmbAdminDaftar");
-    expect(adminForm).toContain("MURID PINDAHAN");
+    expect(adminForm).toContain("SPMB_TRANSFER_CATEGORY_VALUE");
   });
 
   it("persists and exposes the authenticated inputer audit", () => {
