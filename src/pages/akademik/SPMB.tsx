@@ -468,14 +468,22 @@ export default function SPMB() {
     )
   );
 
-  const calonCount = calonList.filter((s: any) => s.status === "calon").length;
-  const diterimaCount = calonList.filter((s: any) => s.status === "diterima").length;
-  const nisKosongCount = calonList.filter((s: any) => s.status === "diterima" && !s.nis).length;
-  const asramaCount = calonList.filter((s: any) => s._spmbDetail?.status_asrama === "asrama").length;
-  const nonAsramaCount = calonList.filter((s: any) => s._spmbDetail?.status_asrama === "non_asrama").length;
-  const lakiCount = calonList.filter((s: any) => s.jenis_kelamin === "L").length;
-  const perempuanCount = calonList.filter((s: any) => s.jenis_kelamin === "P").length;
-  const belumSiapCount = calonList.filter(
+  const statistikCalonList = filters.departemen === "all"
+    ? calonList
+    : calonList.filter((s: any) => s.departemen_id === filters.departemen);
+  const statistikDepartemen = filters.departemen === "all"
+    ? null
+    : spmbDepartemenList.find((dept: any) => dept.id === filters.departemen);
+  const statistikLabel = statistikDepartemen ? labelDepartemenSpmb(statistikDepartemen) : "Semua lembaga";
+
+  const calonCount = statistikCalonList.filter((s: any) => s.status === "calon").length;
+  const diterimaCount = statistikCalonList.filter((s: any) => s.status === "diterima").length;
+  const nisKosongCount = statistikCalonList.filter((s: any) => s.status === "diterima" && !s.nis).length;
+  const asramaCount = statistikCalonList.filter((s: any) => s._spmbDetail?.status_asrama === "asrama").length;
+  const nonAsramaCount = statistikCalonList.filter((s: any) => s._spmbDetail?.status_asrama === "non_asrama").length;
+  const lakiCount = statistikCalonList.filter((s: any) => s.jenis_kelamin === "L").length;
+  const perempuanCount = statistikCalonList.filter((s: any) => s.jenis_kelamin === "P").length;
+  const belumSiapCount = statistikCalonList.filter(
     (s: any) => s.status === "calon" && !getKesiapanPenerimaan(s as Record<string, unknown>).siap,
   ).length;
   const pendaftarPerLembaga = spmbDepartemenList.map((dept: any) => ({
@@ -1515,8 +1523,33 @@ export default function SPMB() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold">Statistik SPMB</p>
+          <p className="text-xs text-muted-foreground">
+            Menampilkan statistik: <span className="font-medium text-foreground">{statistikLabel}</span>
+          </p>
+        </div>
+        {spmbDepartemenList.length > 1 && (
+          <div className="w-full sm:w-56">
+            <Label className="text-xs">Lembaga/Jenjang Statistik</Label>
+            <Select value={filters.departemen} onValueChange={(value) => setFilter("departemen", value)}>
+              <SelectTrigger className="mt-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua lembaga</SelectItem>
+                {spmbDepartemenList.map((dept: any) => (
+                  <SelectItem key={dept.id} value={dept.id}>{labelDepartemenSpmb(dept)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+
       <div className={`grid gap-4 ${nisKosongCount > 0 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
-        <StatsCard title="Total Pendaftar" value={calonList.length} icon={Users} color="primary" />
+        <StatsCard title="Total Pendaftar" value={statistikCalonList.length} icon={Users} color="primary" />
         <StatsCard title="Menunggu" value={calonCount} icon={Clock} color="warning" />
         <StatsCard title="Diterima" value={diterimaCount} icon={UserCheck} color="success" />
         {nisKosongCount > 0 && <StatsCard title="NIS Belum Dibuat" value={nisKosongCount} icon={AlertTriangle} color="destructive" />}
