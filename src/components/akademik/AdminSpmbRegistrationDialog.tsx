@@ -292,7 +292,7 @@ export function AdminSpmbRegistrationDialog({
             <CheckCircle2 className="mx-auto h-12 w-12 text-success" />
             <DialogHeader className="mt-4"><DialogTitle>Pendaftaran SPMB Berhasil</DialogTitle></DialogHeader>
             <p className="mt-2 text-sm"><strong>{success.nama}</strong> sudah tercatat sebagai calon murid.</p>
-            <p className="mt-2 text-sm text-muted-foreground">Inputer/Petugas: <strong>{success.inputer || inputer}</strong></p>
+            <p className="mt-2 text-sm text-muted-foreground">Nama Pendaftar: <strong>{success.inputer || inputer}</strong></p>
             <div className="mt-6 flex justify-center gap-2">
               <Button variant="outline" onClick={() => { setOpen(false); reset(); }}>Kembali</Button>
               <Button onClick={() => navigate(`/akademik/siswa/${success.id}`)}>Lihat Data SPMB</Button>
@@ -306,7 +306,7 @@ export function AdminSpmbRegistrationDialog({
             </div>
 
             <fieldset disabled={saving} className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5 disabled:opacity-70">
-              <FormSection title="Petugas / Inputer" description="Dicatat otomatis dari akun yang sedang login">
+              <FormSection title="Nama Pendaftar" description="Dicatat otomatis dari akun yang sedang login">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div><Label>Petugas yang Menginput *</Label><Input value={inputer} disabled /></div>
                   <div><Label>Sumber Pendaftaran</Label><Input value="Admin / TU — /akademik/spmb" disabled /></div>
