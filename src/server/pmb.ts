@@ -390,7 +390,28 @@ async function performPmbRegistration(
         .maybeSingle();
       const pegawai = Array.isArray(profile?.pegawai) ? profile.pegawai[0] : profile?.pegawai;
       inputerEmail = profile?.email || actor.userEmail || null;
-      inputerNama = pegawai?.nama || inputerEmail || "Petugas";
+
+      const pegawaiName = cleanText(pegawai?.nama, 200);
+      let accountName: string | null = null;
+      if (!pegawaiName) {
+        try {
+          const { data: authUser } = await (admin.auth.admin as any).getUserById(actor.userId);
+          const auth = authUser?.user;
+          const metadataName = cleanText(auth?.user_metadata?.full_name || auth?.user_metadata?.name, 200);
+          const googleIdentity = auth?.identities?.find((identity: any) => identity?.provider === "google");
+          const identityData = googleIdentity?.identity_data || {};
+          const identityName = cleanText(
+            identityData.full_name ||
+            identityData.name ||
+            [identityData.given_name, identityData.family_name].filter(Boolean).join(" "),
+            200,
+          );
+          accountName = metadataName || identityName;
+        } catch {
+          // Nama pegawai tetap prioritas; kegagalan membaca metadata auth tidak menggagalkan pendaftaran.
+        }
+      }
+      inputerNama = pegawaiName || accountName || "Petugas";
     } else {
       inputerNama = cleanText(data.pendaftar_nama, 200);
       inputerEmail = cleanOptionalEmail(data.pendaftar_email);
