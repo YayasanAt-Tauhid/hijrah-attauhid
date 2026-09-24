@@ -286,7 +286,7 @@ export function AdminSpmbRegistrationDialog({
       <DialogTrigger asChild>
         <Button className="min-h-11 px-4" disabled={disabled}><UserPlus className="mr-2 h-4 w-4" />Daftarkan Calon Murid</Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[94dvh] overflow-hidden p-0 sm:max-w-4xl">
+      <DialogContent className="flex h-[94dvh] max-h-[94dvh] flex-col overflow-hidden p-0 sm:max-w-4xl">
         {success ? (
           <div className="p-7 text-center">
             <CheckCircle2 className="mx-auto h-12 w-12 text-success" />
@@ -299,17 +299,17 @@ export function AdminSpmbRegistrationDialog({
             </div>
           </div>
         ) : (
-          <form onSubmit={submit} className="flex max-h-[94dvh] flex-col" noValidate>
-            <div className="border-b px-6 py-5">
+          <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col overflow-hidden" noValidate>
+            <div className="shrink-0 border-b px-6 py-5">
               <DialogHeader><DialogTitle>Daftarkan Calon Murid</DialogTitle></DialogHeader>
-              <p className="mt-2 text-sm text-muted-foreground">Form ini mengikuti data dan aturan yang sama dengan halaman /spmb.</p>
+              <p className="mt-2 text-sm text-muted-foreground">Pendaftaran offline oleh Admin/TU dengan data dan aturan yang sama seperti /spmb.</p>
             </div>
 
-            <fieldset disabled={saving} className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5 disabled:opacity-70">
+            <fieldset disabled={saving} className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-6 py-5 touch-pan-y disabled:opacity-70">
               <FormSection title="Nama Pendaftar" description="Dicatat otomatis dari akun yang sedang login">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div><Label>Nama Pendaftar *</Label><Input value={inputer} disabled /></div>
-                  <div><Label>Sumber Pendaftaran</Label><Input value="Admin / TU — /akademik/spmb" disabled /></div>
+                  <div><Label>Sumber Pendaftaran</Label><Input value="Offline — Admin / TU" disabled /></div>
                 </div>
               </FormSection>
 
@@ -399,7 +399,7 @@ export function AdminSpmbRegistrationDialog({
               </FormSection>
             </fieldset>
 
-            <div className="flex flex-col-reverse gap-2 border-t px-6 py-4 sm:flex-row sm:justify-end">
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t bg-background px-6 py-4 sm:flex-row sm:justify-end">
               <Button type="button" variant="outline" disabled={saving} onClick={() => setOpen(false)}>Batal</Button>
               <Button type="submit" disabled={saving || !targetYear || !targetCohort}>
                 {saving ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Mengunggah & menyimpan…</> : <><UserPlus className="mr-2 h-4 w-4" />Simpan Pendaftaran</>}
