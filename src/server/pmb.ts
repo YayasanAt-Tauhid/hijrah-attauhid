@@ -30,6 +30,56 @@ export interface PmbOptionsResult {
   tahun_ajaran: { id: string; nama: string; aktif: boolean | null }[];
 }
 
+export interface PmbCurrentRegistrantResult {
+  nama: string | null;
+  email: string | null;
+  sumber_nama: "pegawai" | "akun" | null;
+}
+
+export const pmbCurrentRegistrant = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<PmbCurrentRegistrantResult> => {
+    const actor = requireContext(context);
+    const admin = createAdminClient();
+
+    const { data: profile } = await (admin.from("users_profile") as any)
+      .select("email,pegawai:pegawai_id(nama)")
+      .eq("id", actor.userId)
+      .maybeSingle();
+
+    const pegawai = Array.isArray(profile?.pegawai) ? profile.pegawai[0] : profile?.pegawai;
+    const pegawaiName = cleanText(pegawai?.nama, 200);
+    const email = cleanText(profile?.email || actor.userEmail, 254);
+
+    if (pegawaiName) {
+      return { nama: pegawaiName, email, sumber_nama: "pegawai" };
+    }
+
+    let accountName: string | null = null;
+    try {
+      const { data: authUser } = await (admin.auth.admin as any).getUserById(actor.userId);
+      const auth = authUser?.user;
+      const metadataName = cleanText(auth?.user_metadata?.full_name || auth?.user_metadata?.name, 200);
+      const googleIdentity = auth?.identities?.find((identity: any) => identity?.provider === "google");
+      const identityData = googleIdentity?.identity_data || {};
+      const identityName = cleanText(
+        identityData.full_name ||
+        identityData.name ||
+        [identityData.given_name, identityData.family_name].filter(Boolean).join(" "),
+        200,
+      );
+      accountName = metadataName || identityName;
+    } catch {
+      // Jika metadata auth tidak tersedia, nama dikembalikan null agar pengguna mengisi manual.
+    }
+
+    return {
+      nama: accountName,
+      email,
+      sumber_nama: accountName ? "akun" : null,
+    };
+  });
+
 export const pmbOptions = createServerFn({ method: "GET" }).handler(
   async (): Promise<PmbOptionsResult> => {
     const admin = createAdminClient();
