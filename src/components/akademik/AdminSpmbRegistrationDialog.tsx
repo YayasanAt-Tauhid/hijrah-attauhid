@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@/lib/router-compat";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { pmbCreateDocumentUpload, spmbAdminDaftar } from "@/server/pmb";
+import { pmbCreateDocumentUpload, pmbCurrentRegistrant, spmbAdminDaftar } from "@/server/pmb";
 import {
   SPMB_CATEGORY_LABEL,
   SPMB_CATEGORY_VALUE,
@@ -160,30 +160,25 @@ export function AdminSpmbRegistrationDialog({
         setInputerName("Petugas");
         return;
       }
+
       const googleIdentity = user.identities?.find((identity) => identity.provider === "google");
       const identityData = (googleIdentity?.identity_data || {}) as Record<string, unknown>;
-      const metadataName = String(user.user_metadata?.full_name || user.user_metadata?.name || "").trim();
-      const identityName = String(identityData.full_name || identityData.name || "").trim();
-      const partsName = [
-        String(identityData.given_name || "").trim(),
-        String(identityData.family_name || "").trim(),
-      ].filter(Boolean).join(" ").trim();
+      const fallbackName = String(
+        user.user_metadata?.full_name ||
+        user.user_metadata?.name ||
+        identityData.full_name ||
+        identityData.name ||
+        [identityData.given_name, identityData.family_name].filter(Boolean).join(" ") ||
+        "Petugas"
+      ).trim();
 
-      let resolved = metadataName || identityName || partsName || "Petugas";
       try {
-        const { data: profile } = await (supabase as any)
-          .from("users_profile")
-          .select("pegawai:pegawai_id(nama)")
-          .eq("id", user.id)
-          .maybeSingle();
+        const current = await pmbCurrentRegistrant();
         if (!active) return;
-        const pegawai = Array.isArray(profile?.pegawai) ? profile.pegawai[0] : profile?.pegawai;
-        const pegawaiName = String(pegawai?.nama || "").trim();
-        if (pegawaiName) resolved = pegawaiName;
+        setInputerName(current.nama?.trim() || fallbackName);
       } catch {
-        // Nama dari metadata/identity akun tetap dipakai.
+        if (active) setInputerName(fallbackName);
       }
-      if (active) setInputerName(resolved);
     };
     void resolveName();
     return () => { active = false; };
