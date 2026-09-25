@@ -122,6 +122,15 @@ function buildBreadcrumbs(pathname: string): BreadcrumbSegment[] {
       // uuid-like segments: skip silently
     }
   }
+  if (
+    parts.length === 3
+    && parts[0] === "akademik"
+    && parts[1] === "spmb"
+    && !segments.some((segment) => segment.path === pathname)
+  ) {
+    segments.push({ label: "Detail SPMB", path: pathname });
+  }
+
   return segments;
 }
 

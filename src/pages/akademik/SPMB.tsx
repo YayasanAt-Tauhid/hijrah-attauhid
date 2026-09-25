@@ -1013,6 +1013,18 @@ export default function SPMB() {
     setMethodEditRow(null);
   };
 
+  const openSpmbDetail = (row: Record<string, unknown>) => {
+    const detail = row._spmbDetail as Record<string, any> | undefined;
+    const registrationId = detail?.id ? String(detail.id) : "";
+    if (!registrationId) {
+      toast.error("Detail pendaftaran SPMB tidak ditemukan", {
+        description: "Muat ulang halaman lalu coba kembali.",
+      });
+      return;
+    }
+    navigate("/akademik/spmb/" + registrationId);
+  };
+
   const handleMethodEdit = async () => {
     if (!methodEditRow) return;
     setMethodEditLoading(true);
@@ -1040,7 +1052,24 @@ export default function SPMB() {
   };
 
   const columns: DataTableColumn<Record<string, unknown>>[] = [
-    { key: "nama", label: "Nama", sortable: true },
+    {
+      key: "nama",
+      label: "Nama",
+      sortable: true,
+      render: (value, row) => (
+        <button
+          type="button"
+          className="text-left font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={(event) => {
+            event.stopPropagation();
+            openSpmbDetail(row);
+          }}
+          title="Buka detail pendaftaran SPMB"
+        >
+          {String(value || "-")}
+        </button>
+      ),
+    },
     {
       key: "nis",
       label: "NIS",
@@ -1196,7 +1225,7 @@ export default function SPMB() {
           && !detail?.spmb_tanggal_aktivasi;
         return (
           <div className="flex flex-wrap gap-1" onClick={(event) => event.stopPropagation()}>
-            <Button size="sm" variant="outline" onClick={() => navigate(`/akademik/siswa/${row.id}`)} title="Lihat biodata, checklist verifikasi & dokumen SPMB"><Eye className="h-3 w-3" /></Button>
+            <Button size="sm" variant="outline" onClick={() => openSpmbDetail(row)} title="Lihat detail pendaftaran SPMB"><Eye className="h-3 w-3" /></Button>
             <Button size="sm" variant="outline" onClick={() => navigate(`/akademik/siswa/${row.id}/edit`)} title="Edit data lengkap"><Pencil className="h-3 w-3" /></Button>
             {canChangeSpmbTarget
               && !detail?.spmb_tanggal_aktivasi
@@ -1710,7 +1739,7 @@ export default function SPMB() {
         exportColumns={SPMB_EXPORT_COLUMNS}
         loading={isLoading}
         pageSize={20}
-        onRowClick={(row) => navigate(`/akademik/siswa/${row.id}`)}
+        onRowClick={(row) => openSpmbDetail(row)}
       />
     </div>
   );
