@@ -315,7 +315,7 @@ export default function IntegrasiApi() {
             <Input className="mt-2" type="datetime-local" value={expires} onChange={e => setExpires(e.target.value)} />
           </label>
           <p className="text-xs text-muted-foreground">
-            Gunakan cakupan paling sempit. API pegawai hanya mengekspos data operasional; alamat, telepon, email, TTL, agama, dan foto pegawai tidak tersedia melalui API pihak ketiga. Akses tulis pegawai juga tidak memberikan akses role/login pengguna.
+            Gunakan cakupan paling sempit. API pegawai mengekspos data operasional termasuk email; alamat, telepon, TTL, agama, dan foto pegawai tetap tidak tersedia melalui API pihak ketiga. Akses tulis pegawai juga tidak memberikan akses role/login pengguna.
           </p>
           <Button disabled={busy || name.trim().length < 2} onClick={create}>
             Buat dan terbitkan token
