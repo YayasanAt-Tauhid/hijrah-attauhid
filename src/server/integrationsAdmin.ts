@@ -9,6 +9,7 @@ const ALLOWED = [
   'pendaftaran:sensitive:read',
   'pendaftaran:documents:read',
   'siswa:read',
+  'siswa:identity:read',
   'kelas:read',
   'pegawai:read',
   'pegawai:contact:read',
@@ -46,6 +47,9 @@ function validateScopes(scopes: string[]) {
   ]
   if (registrationReadDependent.some(scope => scopes.includes(scope)) && !scopes.includes('pendaftaran:read')) {
     throw new Error('Scope identitas/kontak/sensitif/dokumen memerlukan pendaftaran:read')
+  }
+  if (scopes.includes('siswa:identity:read') && !scopes.includes('siswa:read')) {
+    throw new Error('Scope identitas siswa memerlukan siswa:read')
   }
 }
 
