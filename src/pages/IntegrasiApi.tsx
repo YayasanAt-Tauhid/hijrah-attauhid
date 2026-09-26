@@ -266,7 +266,7 @@ export default function IntegrasiApi() {
         <h1 className="text-2xl font-bold">Integrasi API</h1>
         <p className="text-sm text-muted-foreground">
           API v1.1 tetap kompatibel dengan token v1 lama. Atur akses backend pihak ketiga,
-          monitoring penggunaan, data pegawai, dan webhook event SPMB.
+          monitoring penggunaan, data siswa & identitas, data pegawai, serta webhook event SPMB.
         </p>
       </div>
 
@@ -324,7 +324,7 @@ export default function IntegrasiApi() {
             <Input className="mt-2" type="datetime-local" value={expires} onChange={e => setExpires(e.target.value)} />
           </label>
           <p className="text-xs text-muted-foreground">
-            Gunakan cakupan paling sempit. API pegawai mengekspos data operasional termasuk email; alamat, telepon, TTL, agama, dan foto pegawai tetap tidak tersedia melalui API pihak ketiga. Akses tulis pegawai juga tidak memberikan akses role/login pengguna.
+            Gunakan cakupan paling sempit. NIK Hijrah dan NIK Dapodik siswa hanya dikirim bila scope siswa:identity:read aktif bersama siswa:read. API pegawai mengekspos data operasional termasuk email; alamat, telepon, TTL, agama, dan foto pegawai tetap tidak tersedia melalui API pihak ketiga. Akses tulis pegawai juga tidak memberikan akses role/login pengguna.
           </p>
           <Button disabled={busy || name.trim().length < 2} onClick={create}>
             Buat dan terbitkan token
