@@ -12,7 +12,7 @@ function IntegrationApiDocs() {
             <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-blue-700">Hijrah At-Tauhid</p>
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Integration API v1.1</h1>
             <p className="mt-4 max-w-3xl text-slate-600">
-              Dokumentasi resmi API baca, update terbatas status SPMB, serta integrasi data pegawai untuk backend aplikasi pihak ketiga.
+              Dokumentasi resmi API baca, identitas siswa terkontrol, update terbatas status SPMB, serta integrasi data pegawai untuk backend aplikasi pihak ketiga.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <a className="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800" href="/docs/openapi-integration-v1.yaml" target="_blank" rel="noreferrer">Buka OpenAPI</a>
