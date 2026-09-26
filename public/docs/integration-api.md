@@ -30,11 +30,12 @@ Respons v1.1 mengirim `X-Hijrah-API-Version: 1.1`, `X-Hijrah-API-Major: 1`, dan 
 | `pendaftaran:documents:read` | metadata dokumen dan signed URL 60 detik |
 | `pendaftaran:milestone:update` | Update Status SPMB (Tes, Lulus, dan Tidak Lulus) |
 | `siswa:read` | siswa non-calon dan relasi kelas |
+| `siswa:identity:read` | identitas siswa: NISN, NIK Hijrah/legacy, dan NIK Dapodik; memerlukan `siswa:read` |
 | `kelas:read` | kelas; anggota kelas juga membutuhkan `siswa:read` |
 | `pegawai:read` | data operasional pegawai: ID, NIP, nama, jenis kelamin, jabatan, status, unit, tanggal masuk/pensiun, golongan |
 | `pegawai:write` | bulk import dan update data pegawai; tidak memberi akses role/login, presensi, tabungan, atau keuangan |
 
-Scope `identity`, `contact`, `sensitive`, dan `documents` pendaftaran memerlukan `pendaftaran:read`. Scope write tidak otomatis memberikan scope read. Scope `pendaftaran:sensitive:read` tetap dipertahankan agar token lama tidak rusak; integrasi baru dianjurkan memakai scope paling sempit.
+Scope `identity`, `contact`, `sensitive`, dan `documents` pendaftaran memerlukan `pendaftaran:read`. Scope `siswa:identity:read` memerlukan `siswa:read`. Scope write tidak otomatis memberikan scope read. Scope `pendaftaran:sensitive:read` tetap dipertahankan agar token lama tidak rusak; integrasi baru dianjurkan memakai scope paling sempit.
 
 `department_ids` dan `academic_year_ids` pada integrasi adalah batas maksimum. Filter request tidak pernah memperluas akses. Cursor ditandatangani HMAC dan terikat pada integration ID, scope, unit/tahun ajaran, endpoint, dan filter.
 
@@ -77,6 +78,20 @@ GET /api/v1/pendaftaran?departemen_id=<UUID_SMP>&tahun_ajaran_id=<UUID_TA>&statu
 
 `GET /api/v1/siswa` mendukung `departemen_id`, `tahun_ajaran_id`, `status`, dan `kelas_id`.
 
+Dengan `siswa:read`, kontrak lama tetap kompatibel. Jika token juga memiliki `siswa:identity:read`, payload siswa pada list, detail, anggota kelas, dan incremental sync ditambah `nisn`, `nik_hijrah`, dan `nik_dapodik`. `nik_hijrah` bersumber dari `siswa_detail.nik` (identitas legacy Hijrah), sedangkan `nik_dapodik` bersumber dari `siswa_detail.nik_dapodik` (NIK resmi yang dicocokkan dengan Dapodik/KK). Scope identitas tidak diberikan otomatis kepada token lama.
+
+```json
+{
+  "id": "UUID",
+  "nis": "26-03-001",
+  "nisn": "1234567890",
+  "nama": "Fulan",
+  "nik_hijrah": "1971066310140001",
+  "nik_dapodik": "3273011405120001",
+  "status": "aktif"
+}
+```
+
 ```http
 GET /api/v1/siswa?departemen_id=<UUID_SMP>&kelas_id=<UUID_KELAS_7A>
 ```
@@ -87,7 +102,7 @@ GET /api/v1/siswa?departemen_id=<UUID_SMP>&kelas_id=<UUID_KELAS_7A>
 
 ### Pegawai
 
-`GET /api/v1/pegawai` mendukung `departemen_id` dan `status` (`aktif` / `nonaktif`). Data pegawai membutuhkan scope `pegawai:read` dan sengaja dibatasi pada data operasional. Alamat, telepon, email, tempat/tanggal lahir, agama, foto, dokumen pribadi, data keluarga, serta data sensitif pegawai tidak diekspos melalui Integration API.
+`GET /api/v1/pegawai` mendukung `departemen_id` dan `status` (`aktif` / `nonaktif`). Data pegawai membutuhkan scope `pegawai:read` dan dibatasi pada data operasional termasuk email. Alamat, telepon, tempat/tanggal lahir, agama, foto, dokumen pribadi, data keluarga, serta data sensitif pegawai lain tidak diekspos melalui Integration API.
 
 Jika filter unit/tahun ajaran berada di luar scope token, server mengembalikan `403 filter_out_of_scope`. Untuk pegawai, pembatasan `department_ids` tetap berlaku; `academic_year_ids` tidak digunakan karena pegawai tidak terikat tahun ajaran.
 
