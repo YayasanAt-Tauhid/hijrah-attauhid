@@ -213,10 +213,11 @@ export async function handleClassStudents(request:Request,id:string){
  if(error)return done(ctx,route,err('temporary_failure','Gagal membaca anggota kelas',503,ctx.requestId))
  const ids=(rels||[]).map((r:any)=>r.siswa_id)
  const {data:ss}=ids.length?await ctx.admin.from('siswa').select('id,nis,nisn,nama,status,departemen_id').in('id',ids):{data:[]}
- if(!has(ctx,'siswa:identity:read')||!ids.length)return done(ctx,route,json({data:ss||[]}))
+ const baseStudents=(ss||[]).map((s:any)=>({id:s.id,nis:s.nis,nama:s.nama,status:s.status,departemen_id:s.departemen_id}))
+ if(!has(ctx,'siswa:identity:read')||!ids.length)return done(ctx,route,json({data:baseStudents}))
  const {data:identityRows}=await (ctx.admin.from('siswa_detail') as any).select('siswa_id,nik,nik_dapodik').in('siswa_id',ids)
  const identityMap=new Map((identityRows||[]).map((x:any)=>[x.siswa_id,x]))
- return done(ctx,route,json({data:(ss||[]).map((s:any)=>({...s,...studentIdentityView(ctx,s,identityMap.get(s.id))}))}))
+ return done(ctx,route,json({data:(ss||[]).map((s:any)=>({id:s.id,nis:s.nis,nama:s.nama,status:s.status,departemen_id:s.departemen_id,...studentIdentityView(ctx,s,identityMap.get(s.id))}))}))
 }
 
 export async function handleSync(request:Request,type:'pendaftaran'|'siswa'|'kelas'){const a=await authenticateIntegration(request);if(a instanceof Response)return a;const ctx=a,route=`/api/v1/sync/${type}`,req=need(ctx,type==='pendaftaran'?'pendaftaran:read':type==='siswa'?'siswa:read':'kelas:read');if(req)return done(ctx,route,req)
