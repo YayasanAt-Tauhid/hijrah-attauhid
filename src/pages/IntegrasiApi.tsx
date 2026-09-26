@@ -23,6 +23,7 @@ const scopes = [
   'pendaftaran:sensitive:read',
   'pendaftaran:documents:read',
   'siswa:read',
+  'siswa:identity:read',
   'kelas:read',
   'pegawai:read',
   'pegawai:write',
@@ -36,6 +37,7 @@ const scopeLabels: Record<string, string> = {
   'pendaftaran:sensitive:read': 'Legacy — seluruh data sensitif pendaftaran',
   'pendaftaran:documents:read': 'Dokumen pendaftaran',
   'siswa:read': 'Baca data siswa',
+  'siswa:identity:read': 'Identitas siswa (NISN, NIK Hijrah, NIK Dapodik)',
   'kelas:read': 'Baca data kelas',
   'pegawai:read': 'Baca data dasar pegawai',
   'pegawai:write': 'Import dan update data pegawai',
@@ -48,6 +50,7 @@ const dependentRegistrationScopes = [
   'pendaftaran:sensitive:read',
   'pendaftaran:documents:read',
 ]
+const dependentStudentScopes = ['siswa:identity:read']
 
 
 const webhookEvents = ['pendaftaran', 'siswa', 'kelas', 'dokumen']
@@ -62,6 +65,12 @@ function toggleScope(xs: string[], id: string, on: boolean) {
   }
   if (!on && id === 'pendaftaran:read') {
     next = next.filter(x => !dependentRegistrationScopes.includes(x))
+  }
+  if (on && dependentStudentScopes.includes(id) && !next.includes('siswa:read')) {
+    next = ['siswa:read', ...next]
+  }
+  if (!on && id === 'siswa:read') {
+    next = next.filter(x => !dependentStudentScopes.includes(x))
   }
   return [...new Set(next)]
 }
