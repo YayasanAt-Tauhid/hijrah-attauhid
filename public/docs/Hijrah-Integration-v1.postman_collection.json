@@ -90,13 +90,14 @@
     },
     {
       "name": "Siswa",
+      "description": "GET requires siswa:read. Add siswa:identity:read to receive nisn, nik_hijrah, and nik_dapodik. Existing tokens without that scope do not receive the NIK fields.",
       "item": [
         {
           "name": "List",
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/v1/siswa?limit=100",
-            "description": "Filters: departemen_id, tahun_ajaran_id, status, kelas_id."
+            "description": "Filters: departemen_id, tahun_ajaran_id, status, kelas_id. With siswa:identity:read, responses also include nisn, nik_hijrah, and nik_dapodik."
           }
         },
         {
@@ -113,7 +114,8 @@
           "name": "Detail",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/v1/siswa/{{siswaId}}"
+            "url": "{{baseUrl}}/api/v1/siswa/{{siswaId}}",
+            "description": "nik_hijrah and nik_dapodik are returned only when the token has siswa:identity:read."
           }
         }
       ]
