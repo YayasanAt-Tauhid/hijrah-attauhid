@@ -40,13 +40,14 @@ function IntegrationApiDocs() {
                   <tr><td className="px-4 py-3 font-mono">pendaftaran:sensitive:read</td><td className="px-4 py-3">Legacy compatibility — seluruh blok sensitif v1 lama</td></tr>
                   <tr><td className="px-4 py-3 font-mono">pendaftaran:documents:read</td><td className="px-4 py-3">Metadata dan signed URL dokumen privat</td></tr>
                   <tr><td className="px-4 py-3 font-mono">siswa:read</td><td className="px-4 py-3">Data siswa dan relasi kelas</td></tr>
+                  <tr><td className="px-4 py-3 font-mono">siswa:identity:read</td><td className="px-4 py-3">NISN, NIK Hijrah, dan NIK Dapodik — memerlukan siswa:read</td></tr>
                   <tr><td className="px-4 py-3 font-mono">kelas:read</td><td className="px-4 py-3">Data kelas</td></tr>
                   <tr><td className="px-4 py-3 font-mono">pegawai:read</td><td className="px-4 py-3">Data operasional pegawai</td></tr>                  <tr className="bg-amber-50"><td className="px-4 py-3 font-mono">pegawai:write</td><td className="px-4 py-3 font-semibold">Bulk import dan update data pegawai</td></tr>
                   <tr className="bg-amber-50"><td className="px-4 py-3 font-mono">pendaftaran:milestone:update</td><td className="px-4 py-3 font-semibold">Update Status SPMB (Tes, Lulus, dan Tidak Lulus)</td></tr>
                 </tbody>
               </table>
             </div>
-            <p className="mt-3 text-sm text-slate-500">Pembatasan unit/departemen dan tahun ajaran diterapkan server-side sesuai konfigurasi token. Untuk pegawai, pembatasan unit tetap berlaku sedangkan tahun ajaran tidak relevan. Token lama dengan scope sensitive tetap kompatibel; integrasi baru dianjurkan memakai scope paling sempit.</p>
+            <p className="mt-3 text-sm text-slate-500">NIK siswa hanya dikirim bila token memiliki <code className="rounded bg-slate-100 px-1">siswa:identity:read</code>. Pembatasan unit/departemen dan tahun ajaran diterapkan server-side sesuai konfigurasi token. Untuk pegawai, pembatasan unit tetap berlaku sedangkan tahun ajaran tidak relevan. Token lama dengan scope sensitive tetap kompatibel; integrasi baru dianjurkan memakai scope paling sempit.</p>
           </section>
 
           <section className="mt-9 rounded-xl border border-blue-200 bg-blue-50 p-5">
