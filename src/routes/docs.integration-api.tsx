@@ -63,7 +63,7 @@ Content-Type: application/json
 
           <section className="mt-9 rounded-xl border border-violet-200 bg-violet-50 p-5">
             <h2 className="text-xl font-bold text-violet-950">Integrasi Data Pegawai</h2>
-            <p className="mt-2 text-sm text-violet-900">Baca data operasional pegawai menggunakan <code className="rounded bg-white px-1">pegawai:read</code>. Alamat, telepon, email, TTL, agama, foto, dokumen pribadi, dan data keluarga tidak tersedia melalui API. Import/update operasional membutuhkan <code className="rounded bg-white px-1">pegawai:write</code>.</p>
+            <p className="mt-2 text-sm text-violet-900">Baca data operasional pegawai menggunakan <code className="rounded bg-white px-1">pegawai:read</code>, termasuk email pegawai. Alamat, telepon, TTL, agama, foto, dokumen pribadi, dan data keluarga tetap tidak tersedia melalui API. Import/update operasional termasuk email membutuhkan <code className="rounded bg-white px-1">pegawai:write</code>.</p>
             <div className="mt-4 grid gap-2">
               <code className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm">GET {BASE_URL}/pegawai</code>
               <code className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm">GET {BASE_URL}/pegawai/{'{pegawai_id}'}</code>
@@ -75,12 +75,13 @@ Content-Type: application/json
     "pegawai_id": "UUID",
     "nip": "19870001",
     "nama": "Ahmad Fulan",
+    "email": "ahmad.fulan@example.com",
     "jabatan": "Guru",
     "departemen_id": "UUID",
     "status": "aktif"
   }]
 }`}</pre>
-            <p className="mt-3 text-sm text-violet-900">Update dicocokkan berdasarkan <code className="rounded bg-white px-1">pegawai_id</code> lalu NIP. Nama tidak dijadikan kunci otomatis. Endpoint ini tidak dapat membaca atau mengubah alamat, telepon, email, TTL, agama, foto, dokumen pribadi, data keluarga, role/login, presensi, tabungan, jurnal, pembayaran, atau tabel keuangan.</p>
+            <p className="mt-3 text-sm text-violet-900">Update dicocokkan berdasarkan <code className="rounded bg-white px-1">pegawai_id</code> lalu NIP. Nama tidak dijadikan kunci otomatis. Endpoint ini dapat membaca dan mengubah email pegawai, tetapi tidak dapat membaca atau mengubah alamat, telepon, TTL, agama, foto, dokumen pribadi, data keluarga, role/login, presensi, tabungan, jurnal, pembayaran, atau tabel keuangan.</p>
           </section>
 
           <section className="mt-9">
