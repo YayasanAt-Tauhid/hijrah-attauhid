@@ -98,6 +98,7 @@ components:
         id: { type: string, format: uuid }
         nip: { type: [string, 'null'] }
         nama: { type: string }
+        email: { type: [string, 'null'], format: email }
         jenis_kelamin: { type: [string, 'null'], enum: [L, P, null] }
         jabatan: { type: [string, 'null'] }
         status: { type: [string, 'null'], enum: [aktif, nonaktif, null] }
@@ -113,6 +114,7 @@ components:
         pegawai_id: { type: string, format: uuid, description: Existing employee ID. Preferred update key. }
         nip: { type: string, description: Secondary update key. Recommended for repeatable imports. }
         nama: { type: string }
+        email: { type: string, format: email }
         jenis_kelamin: { type: string, enum: [L, P] }
         jabatan: { type: string }
         departemen_id: { type: [string, 'null'], format: uuid, description: null means Yayasan / cross-unit employee. }
@@ -223,7 +225,7 @@ paths:
   /api/v1/pegawai:
     get:
       summary: List employees
-      description: Requires pegawai:read. Only operational employee data is returned. Address, phone, email, birth data, religion, photo, private documents, and family data are never exposed. Department restrictions apply; academic-year restrictions do not apply to employee records.
+      description: Requires pegawai:read. Operational employee data including email is returned. Address, phone, birth data, religion, photo, private documents, and family data are not exposed. Department restrictions apply; academic-year restrictions do not apply to employee records.
       parameters:
         - { $ref: '#/components/parameters/Limit' }
         - { $ref: '#/components/parameters/Cursor' }
@@ -244,7 +246,7 @@ paths:
   /api/v1/pegawai/{id}:
     get:
       summary: Employee detail
-      description: Requires pegawai:read. Only operational employee data is returned; private/contact fields are never exposed.
+      description: Requires pegawai:read. Operational employee data including email is returned; other private/contact fields remain excluded.
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
@@ -255,7 +257,7 @@ paths:
   /api/v1/pegawai/import:
     post:
       summary: Bulk create or update employees
-      description: Requires pegawai:write. Maximum 200 rows. Existing records are matched by pegawai_id first, then NIP. Only operational fields can be written. Address, phone, email, birth data, religion, photo, private documents, family data, user roles/login, users_profile, attendance, savings, journals, payments, and finance tables cannot be read or changed through this endpoint. Empty update values are ignored.
+      description: Requires pegawai:write. Maximum 200 rows. Existing records are matched by pegawai_id first, then NIP. Operational fields including email can be written. Address, phone, birth data, religion, photo, private documents, family data, user roles/login, users_profile, attendance, savings, journals, payments, and finance tables cannot be read or changed through this endpoint. Empty update values are ignored.
       requestBody:
         required: true
         content:
