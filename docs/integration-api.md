@@ -150,7 +150,7 @@ GET /api/v1/pegawai?limit=100&departemen_id=<UUID>&status=aktif
 GET /api/v1/pegawai/{pegawai_id}
 ```
 
-Dengan `pegawai:read`, respons hanya berisi data operasional: ID, NIP, nama, jenis kelamin, jabatan, unit/lembaga, status, tanggal masuk, tanggal pensiun, golongan terakhir, dan waktu pembuatan record. Data pribadi seperti alamat, nomor HP, email, TTL, agama, foto, dokumen, serta data keluarga tidak tersedia melalui API.
+Dengan `pegawai:read`, respons berisi data operasional: ID, NIP, nama, **email**, jenis kelamin, jabatan, unit/lembaga, status, tanggal masuk, tanggal pensiun, golongan terakhir, dan waktu pembuatan record. **Email pegawai tersedia melalui API**. Data pribadi lain seperti alamat, nomor HP, TTL, agama, foto, dokumen, serta data keluarga tetap tidak tersedia melalui API.
 
 Bulk import/update membutuhkan scope `pegawai:write`:
 
@@ -166,6 +166,7 @@ Content-Type: application/json
       "pegawai_id": "00000000-0000-4000-8000-000000000001",
       "nip": "19870001",
       "nama": "Ahmad Fulan",
+      "email": "ahmad.fulan@example.com",
       "jabatan": "Guru",
       "departemen_id": "00000000-0000-4000-8000-000000000010",
       "status": "aktif"
@@ -178,7 +179,7 @@ Aturan pencocokan sama dengan import pada halaman kepegawaian: `pegawai_id` dipr
 
 `update_existing=false` (default) menolak record yang sudah ada. Dengan `update_existing=true`, record lama diperbarui pada ID yang sama sehingga relasi akun pengguna, presensi, riwayat jabatan, tabungan, dan data terkait tidak dibuat ulang atau diputus. Field kosong pada update diabaikan; untuk memindahkan pegawai menjadi pegawai Yayasan/lintas lembaga, kirim `"departemen_id": null`.
 
-Field yang diterima: `pegawai_id`, `nip`, `nama`, `jenis_kelamin`, `jabatan`, `departemen_id`, `status`, `tanggal_masuk`, `tanggal_pensiun`, dan `golongan_terakhir`. Field lain ditolak. Endpoint ini **tidak dapat** membaca/menulis alamat, telepon, email, TTL, agama, foto, dokumen pribadi, data keluarga, role/login pengguna, `users_profile`, presensi, tabungan, jurnal, pembayaran, atau tabel keuangan.
+Field yang diterima: `pegawai_id`, `nip`, `nama`, `email`, `jenis_kelamin`, `jabatan`, `departemen_id`, `status`, `tanggal_masuk`, `tanggal_pensiun`, dan `golongan_terakhir`. Field lain ditolak. Endpoint ini dapat membaca dan menulis **email pegawai**, tetapi **tidak dapat** membaca/menulis alamat, telepon, TTL, agama, foto, dokumen pribadi, data keluarga, role/login pengguna, `users_profile`, presensi, tabungan, jurnal, pembayaran, atau tabel keuangan.
 
 Tanggal menggunakan `YYYY-MM-DD`, `jenis_kelamin` menggunakan `L` / `P`, dan `status` menggunakan `aktif` / `nonaktif`. Maksimum 200 baris per request dan bulk write dibatasi 30 request/menit per integrasi.
 
