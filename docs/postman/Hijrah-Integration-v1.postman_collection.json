@@ -141,14 +141,14 @@
     },
     {
       "name": "Pegawai",
-      "description": "Employee API is limited to operational data. Address, phone, email, birth data, religion, photo, private documents, and family data are not exposed. GET requires pegawai:read; bulk import/update requires pegawai:write. Department restrictions apply.",
+      "description": "Employee API exposes operational data including email. Address, phone, birth data, religion, photo, private documents, and family data are not exposed. GET requires pegawai:read; bulk import/update requires pegawai:write. Department restrictions apply.",
       "item": [
         {
           "name": "List",
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/v1/pegawai?limit=100&departemen_id={{departemenId}}&status=aktif",
-            "description": "Returns operational employee data only. Private/contact data is never included."
+            "description": "Returns operational employee data. Email is included; other private/contact data remains excluded."
           },
           "response": []
         },
@@ -171,10 +171,10 @@
               }
             ],
             "url": "{{baseUrl}}/api/v1/pegawai/import",
-            "description": "Requires pegawai:write. Max 200 rows. Match existing by pegawai_id first, then NIP. Only operational fields are accepted; private/contact fields, roles/login, attendance, savings, journals, payments, and finance tables cannot be changed.",
+            "description": "Requires pegawai:write. Max 200 rows. Match existing by pegawai_id first, then NIP. Operational fields including email are accepted; other private/contact fields, roles/login, attendance, savings, journals, payments, and finance tables cannot be changed.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"update_existing\": true,\n  \"rows\": [\n    {\n      \"pegawai_id\": \"{{pegawaiId}}\",\n      \"nip\": \"19870001\",\n      \"nama\": \"Ahmad Fulan\",\n      \"jabatan\": \"Guru\",\n      \"departemen_id\": \"{{departemenId}}\",\n      \"status\": \"aktif\"\n    }\n  ]\n}",
+              "raw": "{\n  \"update_existing\": true,\n  \"rows\": [\n    {\n      \"pegawai_id\": \"{{pegawaiId}}\",\n      \"nip\": \"19870001\",\n      \"nama\": \"Ahmad Fulan\",\n      \"email\": \"ahmad.fulan@example.com\",\n      \"jabatan\": \"Guru\",\n      \"departemen_id\": \"{{departemenId}}\",\n      \"status\": \"aktif\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
