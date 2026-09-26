@@ -91,6 +91,22 @@ components:
           type: array
           description: Omitted without pendaftaran:documents:read
           items: { $ref: '#/components/schemas/Document' }
+    Student:
+      type: object
+      required: [id, nama, status]
+      properties:
+        id: { type: string, format: uuid }
+        nis: { type: [string, 'null'] }
+        nisn: { type: [string, 'null'], description: Available with siswa:identity:read on scoped student responses. }
+        nik_hijrah: { type: [string, 'null'], description: Legacy Hijrah identity field. Omitted unless siswa:identity:read is granted. }
+        nik_dapodik: { type: [string, 'null'], description: Dapodik identity field. Omitted unless siswa:identity:read is granted. }
+        nama: { type: string }
+        jenis_kelamin: { type: [string, 'null'] }
+        status: { type: string }
+        unit: { type: object }
+        angkatan: { type: object }
+        terverifikasi: { type: [boolean, 'null'] }
+        created_at: { type: [string, 'null'], format: date-time }
     Employee:
       type: object
       required: [id, nama, status, unit]
@@ -199,6 +215,7 @@ paths:
   /api/v1/siswa:
     get:
       summary: List non-candidate students
+      description: Requires siswa:read. With siswa:identity:read, responses also include nisn, nik_hijrah, and nik_dapodik.
       parameters:
         - { $ref: '#/components/parameters/Limit' }
         - { $ref: '#/components/parameters/Cursor' }
@@ -210,6 +227,7 @@ paths:
   /api/v1/siswa/{id}:
     get:
       summary: Student detail and visible class relations
+      description: Requires siswa:read. nik_hijrah and nik_dapodik are added only with siswa:identity:read.
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses: { '200': { description: OK }, '404': { description: Not found or outside scope } }
   /api/v1/kelas:
@@ -220,6 +238,7 @@ paths:
   /api/v1/kelas/{id}/siswa:
     get:
       summary: Visible students in a class
+      description: Requires kelas:read and siswa:read. Student identity fields are added only with siswa:identity:read.
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }, { $ref: '#/components/parameters/AcademicYear' }]
       responses: { '200': { description: OK }, '404': { description: Not found or outside scope } }
   /api/v1/pegawai:
