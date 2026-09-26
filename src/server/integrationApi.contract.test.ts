@@ -95,6 +95,19 @@ describe('Integration API v1 contract', () => {
     expect(api).toContain("legacySensitive=has(ctx,'pendaftaran:sensitive:read')")
   })
 
+  it('keeps student NIK fields behind the explicit student identity scope', () => {
+    expect(api).toContain("'siswa:identity:read'")
+    expect(admin).toContain("'siswa:identity:read'")
+    expect(admin).toContain("scopes.includes('siswa:identity:read') && !scopes.includes('siswa:read')")
+    expect(api).toContain("has(ctx,'siswa:identity:read')")
+    expect(api).toContain('nik_hijrah:d?.nik??null')
+    expect(api).toContain('nik_dapodik:d?.nik_dapodik??null')
+    expect(docs).toContain('siswa:identity:read')
+    expect(openapi).toContain('nik_hijrah:')
+    expect(openapi).toContain('nik_dapodik:')
+    expect(postman).toContain('siswa:identity:read')
+  })
+
   it('serializes explicit test and verification statuses while retaining legacy timestamps', () => {
     expect(api).toContain("statusTes=d.spmb_tanggal_tes?'sudah_tes':'belum_tes'")
     expect(api).toContain('status_tes:statusTes')
