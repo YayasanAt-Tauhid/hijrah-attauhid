@@ -218,9 +218,9 @@ export async function handleSync(request:Request,type:'pendaftaran'|'siswa'|'kel
 export async function handleDocument(request:Request,docId:string){const a=await authenticateIntegration(request);if(a instanceof Response)return a;const ctx=a,route='/api/v1/documents/:id',req=need(ctx,'pendaftaran:read')||need(ctx,'pendaftaran:documents:read');if(req)return done(ctx,route,req);const m=/^([0-9a-f-]{36})\.(kk|akta|rapor|ijazah)$/i.exec(docId);if(!m)return done(ctx,route,err('invalid_id','ID dokumen tidak valid',400,ctx.requestId));const pid=m[1],kind=m[2].toLowerCase();const {data:d}=await (ctx.admin.from('siswa_detail') as any).select(`siswa_id,pendaftaran_id,tahun_ajaran_id,spmb_departemen_tujuan_id,dokumen_${kind}_path`).eq('pendaftaran_id',pid).maybeSingle();const {data:s}=d?await ctx.admin.from('siswa').select('departemen_id').eq('id',d.siswa_id).maybeSingle():{data:null};const path=d?.[`dokumen_${kind}_path`];if(!d||!s||!path||!allowed(ctx,d.spmb_departemen_tujuan_id||s.departemen_id,d.tahun_ajaran_id))return done(ctx,route,err('not_found','Dokumen tidak ditemukan atau di luar cakupan',404,ctx.requestId));const {data:signed,error}=await ctx.admin.storage.from('pmb-dokumen').createSignedUrl(path,60);if(error||!signed?.signedUrl)return done(ctx,route,err('temporary_failure','Gagal menerbitkan akses dokumen',503,ctx.requestId));return done(ctx,route,json({data:{id:docId,version:await pathVersion(path),expires_in:60,url:signed.signedUrl}}))}
 
 
-const PEGAWAI_BASE='id,nip,nama,jenis_kelamin,jabatan,departemen_id,status,tanggal_masuk,tanggal_pensiun,golongan_terakhir,created_at'
+const PEGAWAI_BASE='id,nip,nama,email,jenis_kelamin,jabatan,departemen_id,status,tanggal_masuk,tanggal_pensiun,golongan_terakhir,created_at'
 function employeeAllowed(ctx:Ctx,dept?:string|null){const ds:string[]=ctx.integration.department_ids||[];return !ds.length||!!dept&&ds.includes(dept)}
-function employeeView(_ctx:Ctx,p:any){return {id:p.id,nip:p.nip,nama:p.nama,jenis_kelamin:p.jenis_kelamin,jabatan:p.jabatan,status:p.status,unit:{id:p.departemen_id},tanggal_masuk:p.tanggal_masuk,tanggal_pensiun:p.tanggal_pensiun,golongan_terakhir:p.golongan_terakhir,created_at:p.created_at}}
+function employeeView(_ctx:Ctx,p:any){return {id:p.id,nip:p.nip,nama:p.nama,email:p.email,jenis_kelamin:p.jenis_kelamin,jabatan:p.jabatan,status:p.status,unit:{id:p.departemen_id},tanggal_masuk:p.tanggal_masuk,tanggal_pensiun:p.tanggal_pensiun,golongan_terakhir:p.golongan_terakhir,created_at:p.created_at}}
 function apiText(v:unknown){return typeof v==='string'?v.trim():v==null?'':String(v).trim()}
 function validDate(v:unknown){const s=apiText(v);return !s||/^\d{4}-\d{2}-\d{2}$/.test(s)}
 function employeeError(row:number,code:string,message:string){return {row,status:'error',error:{code,message}}}
@@ -264,7 +264,7 @@ export async function handlePegawaiImport(request:Request){
  if(!body||typeof body!=='object'||Array.isArray(body)||!Array.isArray(body.rows)||body.rows.length<1||body.rows.length>200)return done(ctx,route,err('invalid_payload','rows wajib berupa array 1-200 baris',400,ctx.requestId))
  const topKeys=Object.keys(body);if(topKeys.some(k=>!['update_existing','rows'].includes(k)))return done(ctx,route,err('invalid_payload','Field request tidak dikenali',400,ctx.requestId))
  const updateExisting=body.update_existing===true
- const allowedFields=new Set(['pegawai_id','nip','nama','jenis_kelamin','jabatan','departemen_id','status','tanggal_masuk','tanggal_pensiun','golongan_terakhir'])
+ const allowedFields=new Set(['pegawai_id','nip','nama','email','jenis_kelamin','jabatan','departemen_id','status','tanggal_masuk','tanggal_pensiun','golongan_terakhir'])
  const rawIds=[...new Set(body.rows.map((r:any)=>apiText(r?.pegawai_id)).filter(Boolean))]
  const ids=rawIds.filter(x=>uuid(x))
  const nips=[...new Set(body.rows.map((r:any)=>apiText(r?.nip)).filter(Boolean))]
@@ -299,7 +299,7 @@ export async function handlePegawaiImport(request:Request){
   if(existing&&Object.prototype.hasOwnProperty.call(row,'nama')&&!apiText(row.nama)){results.push(employeeError(rowNo,'invalid_name','Nama tidak boleh dikosongkan saat update'));failed++;continue}
   if(existing&&Object.prototype.hasOwnProperty.call(row,'jabatan')&&!apiText(row.jabatan)){results.push(employeeError(rowNo,'invalid_position','Jabatan tidak boleh dikosongkan saat update'));failed++;continue}
   const payload:any={}
-  const stringFields=['nip','nama','jenis_kelamin','jabatan','status','tanggal_masuk','tanggal_pensiun','golongan_terakhir']
+  const stringFields=['nip','nama','email','jenis_kelamin','jabatan','status','tanggal_masuk','tanggal_pensiun','golongan_terakhir']
   for(const field of stringFields){
    if(!Object.prototype.hasOwnProperty.call(row,field))continue
    const value=apiText(row[field])
