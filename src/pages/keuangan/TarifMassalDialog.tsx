@@ -491,7 +491,7 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
                     <SelectItem key={j.id} value={j.id}>
                       {j.nama} {j.nominal ? `(Default: ${formatRupiah(Number(j.nominal))})` : ""}
                     </SelectItem>
-                  ))}
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -548,7 +548,7 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
                   <SelectItem value="__none__">— Pilih Kelas —</SelectItem>
                   {(kelasList || []).map((k: any) => (
                     <SelectItem key={k.id} value={k.id}>{k.nama} {k.tingkat?.nama ? `(${k.tingkat.nama})` : ""}</SelectItem>
-                  ))}
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -599,7 +599,7 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
                 Potongan/keringanan diterapkan terpisah setelah tarif bruto ditetapkan.
               </AlertDescription>
             </Alert>
-          ))}
+          )}
 
           {rows.length > 0 && jenisId && !isSPP && (
             <Alert className="py-2">
@@ -615,7 +615,7 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
                 )}
               </AlertDescription>
             </Alert>
-          ))}
+          )}
 
           {rows.length > 0 && (
             <div className="rounded-md border overflow-x-auto">
@@ -700,7 +700,7 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
                       <div className="mt-3 rounded-md bg-muted/50 p-2 text-xs text-muted-foreground space-y-1">
                         {generatePeriods.groups.map((g) => (
                           <p key={g.tahunBukuId}>{g.bulanList.map(namaBulan).join(", ")} → <strong className="text-foreground">{g.tahunBukuNama}</strong></p>
-                        ))}
+                        )}
                       </div>
                     )}
                   </div>
@@ -716,7 +716,7 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
                   <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-[1px]" />
                   {err}
                 </p>
-              ))}
+              )}
             </div>
           )}
         </div>
