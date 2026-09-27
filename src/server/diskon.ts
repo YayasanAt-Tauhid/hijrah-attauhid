@@ -339,9 +339,9 @@ export interface SaranKeluargaResult {
 }
 
 /**
- * Kandidat kelompok kakak-adik untuk DIREVIEW, bukan diterapkan otomatis:
- * kecocokan nama orang tua adalah heuristik, dan salah mengelompokkan berarti
- * memberi potongan ke anak yang keliru.
+ * Kandidat kelompok kakak-adik untuk DIREVIEW sebelum keluarga dikonfirmasi.
+ * Setelah konfirmasi, sinkronisasi bulanan dapat menerapkan potongan kakak/adik
+ * otomatis selama tidak ada keringanan lain yang tumpang tindih.
  */
 export const saranKelompokKeluarga = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
