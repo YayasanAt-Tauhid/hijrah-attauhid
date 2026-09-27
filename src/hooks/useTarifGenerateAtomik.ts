@@ -27,6 +27,8 @@ export interface SimpanTarifGenerateAtomikInput {
   siswa_id?: string | null;
   kelas_id?: string | null;
   angkatan_id?: string | null;
+  sampai_akhir_jenjang?: boolean;
+  rencana_mulai?: string | null;
 }
 
 export interface SimpanTarifGenerateAtomikResult {
@@ -35,6 +37,13 @@ export interface SimpanTarifGenerateAtomikResult {
   generated: number;
   skipped: number;
   scheduled: number;
+  sampai_akhir_jenjang?: boolean;
+  rencana?: {
+    rencana_id: string;
+    mulai: string;
+    selesai: string;
+    tarif_id: string;
+  } | null;
 }
 
 export function useSimpanTarifGenerateAtomik() {
@@ -43,7 +52,7 @@ export function useSimpanTarifGenerateAtomik() {
   return useMutation({
     mutationFn: async (input: SimpanTarifGenerateAtomikInput) => {
       const { data, error } = await (supabase as any).rpc(
-        "simpan_tarif_dan_generate_atomik",
+        "simpan_tarif_generate_dan_rencana_atomik",
         {
           p_tarif_rows: input.tarif_rows,
           p_tahun_akademik_id: input.tahun_akademik_id,
@@ -54,6 +63,8 @@ export function useSimpanTarifGenerateAtomik() {
           p_siswa_id: input.siswa_id || null,
           p_kelas_id: input.kelas_id || null,
           p_angkatan_id: input.angkatan_id || null,
+          p_sampai_akhir_jenjang: input.sampai_akhir_jenjang === true,
+          p_rencana_mulai: input.rencana_mulai || null,
         }
       );
       if (error) throw error;
@@ -67,16 +78,19 @@ export function useSimpanTarifGenerateAtomik() {
       const scheduledInfo = data.scheduled > 0
         ? `, ${data.scheduled} belum jatuh tempo`
         : "";
+      const rencanaInfo = data.sampai_akhir_jenjang && data.rencana?.selesai
+        ? ` · otomatis sampai akhir jenjang (${new Date(`${data.rencana.selesai}T00:00:00`).toLocaleDateString("id-ID")})`
+        : "";
 
       if (data.tarif_inserted === 0) {
         toast.success(
-          `Tagihan berhasil diproses tanpa membuat override: ${data.generated} tagihan baru, ${data.skipped} sudah ada${scheduledInfo}`
+          `Tagihan berhasil diproses tanpa membuat override: ${data.generated} tagihan baru, ${data.skipped} sudah ada${scheduledInfo}${rencanaInfo}`
         );
         return;
       }
 
       toast.success(
-        `Override & tagihan berhasil disimpan atomik: ${data.tarif_inserted} override, ${data.generated} tagihan baru, ${data.skipped} sudah ada${scheduledInfo}`
+        `Override & tagihan berhasil disimpan atomik: ${data.tarif_inserted} override, ${data.generated} tagihan baru, ${data.skipped} sudah ada${scheduledInfo}${rencanaInfo}`
       );
     },
     onError: (e: any) => {
