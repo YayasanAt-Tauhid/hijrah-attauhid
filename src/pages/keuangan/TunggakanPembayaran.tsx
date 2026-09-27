@@ -89,6 +89,7 @@ export default function TunggakanPembayaran() {
         kelas: r.kelas || "-",
         bulan_tunggak: isSekaliBayar ? "Sekali Bayar" : r.bulan_tunggak.map(namaBulan).join(", "),
         bulan_tunggak_arr: r.bulan_tunggak,
+        tagihan_tunggak: r.tagihan_tunggak,
         jumlah_bulan: r.bulan_tunggak.length,
         total: r.total,
       }));
@@ -124,7 +125,12 @@ export default function TunggakanPembayaran() {
 
     // Hitung total transaksi (bisa lebih dari jumlah siswa karena multi-bulan)
     const allTx = selectedRows.flatMap((sr) =>
-      sr.bulan_tunggak_arr.map((b: number) => ({ siswaId: sr.id, bulan: b }))
+      sr.tagihan_tunggak.map((t) => ({
+        siswaId: sr.id,
+        bulan: t.bulan,
+        tagihanId: t.tagihan_id,
+        sisa: t.sisa,
+      }))
     );
     setBulkProgress({ done: 0, total: allTx.length });
 
@@ -140,9 +146,9 @@ export default function TunggakanPembayaran() {
             siswa_id: tx.siswaId,
             jenis_id: jenisId,
             bulan: tx.bulan,
-            // Server mengambil tarif otoritatif sendiri dari get_tarif_siswa,
-            // nilai jumlah yang dikirim dari sini tidak dipakai.
-            jumlah: 0,
+            // Server memvalidasi nominal dari tagihan yang dipilih.
+            jumlah: tx.sisa,
+            tagihan_id: tx.tagihanId,
             tanggal_bayar: today,
             departemen_id: departemenId || undefined,
             tahun_ajaran_id: tahunAjaranId,
