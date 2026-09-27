@@ -74,6 +74,7 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
   const selectedJenis = jenisList?.find((j: any) => j.id === jenisId);
   const selectedTahunAjaran = tahunAjaranList?.find((t: any) => t.id === tahunAjaranId) || null;
   const isSekali = selectedJenis?.tipe === "sekali";
+  const isSPP = selectedJenis?.tipe === "bulanan" && /^spp([\s-]|$)/i.test(String(selectedJenis?.nama || "").trim());
   const effectiveDeptId = deptId || selectedJenis?.departemen_id || "";
   const jenisDefaultNominal = Number(selectedJenis?.nominal || 0);
 
@@ -133,7 +134,10 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
   };
 
   const defaultNominal = () =>
-    nominalUmum || (selectedJenis?.nominal ? String(Math.trunc(Number(selectedJenis.nominal))) : "");
+    nominalUmum ||
+    (!isSPP && selectedJenis?.nominal
+      ? String(Math.trunc(Number(selectedJenis.nominal)))
+      : "");
 
   const addSiswa = (s: SiswaRingkas | null) => {
     if (!s) return;
@@ -585,7 +589,19 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
             </div>
           )}
 
-          {rows.length > 0 && jenisId && (
+          {jenisId && isSPP && (
+            <Alert className="py-2">
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs leading-relaxed">
+                <strong>Aturan SPP:</strong> satu master SPP per lembaga dan nominal master selalu Rp0.
+                Tetapkan tarif efektif terlebih dahulu melalui daftar siswa, kelas/angkatan, atau Import Excel.
+                Sistem akan <strong>menolak generate SPP</strong> untuk siswa yang belum memiliki tarif agar tidak memakai nominal yang salah.
+                Potongan/keringanan diterapkan terpisah setelah tarif bruto ditetapkan.
+              </AlertDescription>
+            </Alert>
+          ))}
+
+          {rows.length > 0 && jenisId && !isSPP && (
             <Alert className="py-2">
               <Info className="h-4 w-4" />
               <AlertDescription className="text-xs leading-relaxed">
@@ -599,7 +615,7 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
                 )}
               </AlertDescription>
             </Alert>
-          )}
+          ))}
 
           {rows.length > 0 && (
             <div className="rounded-md border overflow-x-auto">
@@ -615,7 +631,7 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
                         <div className="flex items-center gap-1.5 min-w-0">
                           <p className="text-sm truncate">{r.siswa.nama} <span className="text-muted-foreground text-xs">({r.siswa.nis || "-"})</span></p>
                           <Badge variant={tanpaOverride ? "outline" : "secondary"} className="shrink-0 text-[10px]">
-                            {tanpaOverride ? "Tarif normal" : "Override tarif dasar"}
+                            {isSPP ? "Tarif SPP siswa" : tanpaOverride ? "Tarif normal" : "Override tarif dasar"}
                           </Badge>
                         </div>
                         {err && <p className="text-xs text-destructive">{err}</p>}
