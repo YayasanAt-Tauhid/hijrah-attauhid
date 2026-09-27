@@ -46,12 +46,14 @@ const tarifFormSchema = z.object({
   autoGenerate: z.boolean(),
   genBulanList: z.array(z.number()),
   genDeptId: z.string(),
+  sampaiAkhirJenjang: z.boolean(),
 });
 type TarifFormValues = z.infer<typeof tarifFormSchema>;
 
 const tarifFormDefaults: TarifFormValues = {
   deptId: "", jenisId: "", siswa: null, kelasId: "", angkatanId: "", tahunAjaranId: "",
   nominal: "", keterangan: "", autoGenerate: true, genBulanList: [], genDeptId: "",
+  sampaiAkhirJenjang: false,
 };
 
 function buildTarifSchema(opts: { isEditMode: boolean; jenisById: Map<string, any> }) {
@@ -74,6 +76,14 @@ function buildTarifSchema(opts: { isEditMode: boolean; jenisById: Map<string, an
       if (data.jenisId && !isSekali && data.genBulanList.length === 0) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["genBulanList"], message: "Pilih minimal satu bulan untuk generate tagihan" });
       }
+      if (data.sampaiAkhirJenjang && !data.siswa) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["sampaiAkhirJenjang"], message: "Rencana sampai akhir jenjang hanya dapat dibuat untuk satu siswa" });
+      }
+      if (data.sampaiAkhirJenjang && isSekali) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["sampaiAkhirJenjang"], message: "Rencana sampai akhir jenjang hanya berlaku untuk pembayaran bulanan" });
+      }
+    } else if (data.sampaiAkhirJenjang) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["sampaiAkhirJenjang"], message: "Aktifkan Generate tagihan otomatis untuk memakai rencana sampai akhir jenjang" });
     }
   });
 }
@@ -154,6 +164,7 @@ export default function TabTarifTagihan() {
   const autoGenerate = form.watch("autoGenerate");
   const genBulanList = form.watch("genBulanList");
   const genDeptId = form.watch("genDeptId");
+  const sampaiAkhirJenjang = form.watch("sampaiAkhirJenjang");
 
   const [filterJenis, setFilterJenis] = useState("");
   const [filterTarifKelas, setFilterTarifKelas] = useState("");
@@ -199,6 +210,11 @@ export default function TabTarifTagihan() {
   );
   const allMonths = kalenderAkademik.length ? kalenderAkademik.map((x) => x.bulan) : BULAN_ORDER_AKADEMIK;
   const allSelected = allMonths.length > 0 && allMonths.every((b) => genBulanList.includes(b));
+  const rencanaMulai = useMemo(() => {
+    const first = kalenderAkademik.find((item) => genBulanList.includes(item.bulan));
+    if (!first) return null;
+    return `${first.tahun}-${String(first.bulan).padStart(2, "0")}-01`;
+  }, [kalenderAkademik, genBulanList]);
 
   const tarifPeriods = useMemo(
     () => targetTahunBukuTarif({
@@ -356,6 +372,8 @@ export default function TabTarifTagihan() {
             siswa_id: data.siswa?.id || null,
             kelas_id: data.kelasId || null,
             angkatan_id: data.angkatanId || null,
+            sampai_akhir_jenjang: data.sampaiAkhirJenjang,
+            rencana_mulai: data.sampaiAkhirJenjang ? rencanaMulai : null,
           });
         } else {
           await createMut.mutateAsync({
@@ -612,7 +630,11 @@ export default function TabTarifTagihan() {
                 <div>
                   <Label>Jenis Pembayaran *</Label>
                   <Controller control={form.control} name="jenisId" render={({ field }) => (
-                    <Select value={field.value} onValueChange={(v) => { field.onChange(v); form.setValue("genBulanList", [], { shouldValidate: true }); }}>
+                    <Select value={field.value} onValueChange={(v) => {
+                      field.onChange(v);
+                      form.setValue("genBulanList", [], { shouldValidate: true });
+                      form.setValue("sampaiAkhirJenjang", false, { shouldValidate: true });
+                    }}>
                       <SelectTrigger><SelectValue placeholder="Pilih jenis pembayaran..." /></SelectTrigger>
                       <SelectContent>{jenisListForForm?.map((j: any) => <SelectItem key={j.id} value={j.id}>{j.nama} {j.nominal ? `(Default: ${formatRupiah(Number(j.nominal))})` : ""}</SelectItem>)}</SelectContent>
                     </Select>
@@ -625,6 +647,7 @@ export default function TabTarifTagihan() {
                       value={field.value}
                       onChange={(s) => {
                         field.onChange(s);
+                        if (!s) form.setValue("sampaiAkhirJenjang", false, { shouldValidate: true });
                         if (s && !deptId && s.departemen_id) {
                           form.setValue("deptId", s.departemen_id, { shouldValidate: true });
                           form.setValue("kelasId", "", { shouldValidate: true });
@@ -762,6 +785,33 @@ export default function TabTarifTagihan() {
                               {generatePeriods.groups.map((g) => (
                                 <p key={g.tahunBukuId}>{g.bulanList.map(namaBulan).join(", ")} → <strong className="text-foreground">{g.tahunBukuNama}</strong></p>
                               ))}
+                            </div>
+                          )}
+
+                          {siswa && (
+                            <div className="mt-4 rounded-md border bg-muted/30 p-3 space-y-2">
+                              <label className="flex items-start gap-2 cursor-pointer">
+                                <Controller control={form.control} name="sampaiAkhirJenjang" render={({ field }) => (
+                                  <Checkbox
+                                    className="mt-0.5"
+                                    checked={field.value}
+                                    onCheckedChange={(value) => field.onChange(value === true)}
+                                  />
+                                )} />
+                                <span>
+                                  <span className="text-sm font-medium">Lanjutkan SPP otomatis sampai akhir jenjang</span>
+                                  <span className="block text-xs text-muted-foreground mt-0.5">
+                                    SD &amp; MTA sampai tingkat 6, SMP sampai kelas 9, SMA sampai kelas 12.
+                                    Jika tidak naik kelas, batas akhir otomatis diperpanjang; jika pindah keluar/lulus,
+                                    rencana dihentikan. Nominal dapat diubah untuk bulan berikutnya tanpa mengubah histori.
+                                  </span>
+                                </span>
+                              </label>
+                              {sampaiAkhirJenjang && rencanaMulai && (
+                                <p className="text-xs text-primary">
+                                  Rencana mulai {new Date(`${rencanaMulai}T00:00:00`).toLocaleDateString("id-ID", { month: "long", year: "numeric" })}.
+                                </p>
+                              )}
                             </div>
                           )}
                         </div>
