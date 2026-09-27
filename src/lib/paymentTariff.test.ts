@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { resolvePaymentTariff } from "./paymentTariff";
+import { resolvePaymentAmount, resolvePaymentTariff } from "./paymentTariff";
+
+describe("resolvePaymentAmount", () => {
+  it("mengambil sisa tagihan terpilih walau tarif siswa lebih besar", () => {
+    expect(resolvePaymentAmount(150000, 500000, 500000)).toBe(150000);
+  });
+
+  it("tidak kembali menagih tarif penuh bila nominal tagihan rusak", () => {
+    expect(resolvePaymentAmount(null, 500000, 500000)).toBe(0);
+    expect(resolvePaymentAmount(undefined, 500000, 500000)).toBe(500000);
+  });
+});
 
 describe("resolvePaymentTariff", () => {
   it("memprioritaskan tarif khusus siswa", () => {
