@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,6 +31,7 @@ export default function MutasiSiswa() {
   const [targetTAInternal, setTargetTAInternal] = useState("");
   const [targetAsramaInternal, setTargetAsramaInternal] = useState("");
   const [alasanInternal, setAlasanInternal] = useState("");
+  const [tanggalPindah, setTanggalPindah] = useState(() => new Date().toLocaleDateString("en-CA"));
   const [isProcessing, setIsProcessing] = useState(false);
 
   const canInternalTransfer = role === "admin" || role === "admin_tu";
@@ -110,6 +112,51 @@ export default function MutasiSiswa() {
       toast.error("Gagal: " + e.message);
     }
     setIsProcessing(false);
+  };
+
+  const handlePindahKeluar = async () => {
+    if (selected.size === 0) {
+      toast.error("Pilih siswa terlebih dahulu");
+      return;
+    }
+    if (!tanggalPindah) {
+      toast.error("Tanggal efektif pindah wajib diisi");
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const jumlah = selected.size;
+      const { error } = await (supabase as any).rpc("akademik_pindah_keluar", {
+        p_ids: Array.from(selected),
+        p_tanggal_efektif: tanggalPindah,
+      });
+      if (error) throw error;
+
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["siswa"] }),
+        qc.invalidateQueries({ queryKey: ["siswa_detail"] }),
+        qc.invalidateQueries({ queryKey: ["statistik_siswa"] }),
+        qc.invalidateQueries({ queryKey: ["kelas_siswa"] }),
+        qc.invalidateQueries({ queryKey: ["tagihan"] }),
+        qc.invalidateQueries({ queryKey: ["siswa_diskon"] }),
+      ]);
+
+      toast.success(`${jumlah} siswa berhasil ditandai pindah keluar`, {
+        description:
+          `Efektif ${new Date(`${tanggalPindah}T00:00:00`).toLocaleDateString("id-ID")}. ` +
+          "Tagihan pada/setelah tanggal efektif dihentikan; histori pembayaran sebelumnya tetap tersimpan.",
+        duration: 10000,
+      });
+      setSelected(new Set());
+    } catch (e: any) {
+      toast.error("Pindah keluar gagal", {
+        description: e?.message || "Terjadi kesalahan teknis",
+        duration: 10000,
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const resetInternalTransfer = () => {
@@ -428,8 +475,28 @@ export default function MutasiSiswa() {
 
         <TabsContent value="pindah" className="mt-4 space-y-4">
           <Card>
-            <CardContent className="pt-6 flex items-center gap-3">
-              <Button variant="outline" onClick={() => handleBulkStatus("pindah")} disabled={isProcessing}>
+            <CardHeader>
+              <CardTitle className="text-base">Pindah Keluar Yayasan</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="max-w-xs space-y-1.5">
+                <label htmlFor="tanggal-efektif-pindah" className="text-sm font-medium">
+                  Tanggal Efektif Pindah *
+                </label>
+                <Input
+                  id="tanggal-efektif-pindah"
+                  type="date"
+                  value={tanggalPindah}
+                  onChange={(event) => setTanggalPindah(event.target.value)}
+                  disabled={isProcessing}
+                />
+              </div>
+              <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+                Tagihan pada atau setelah tanggal efektif akan dihentikan. Tagihan yang sudah menjadi
+                piutang akan dibatalkan melalui jurnal pembalik, sedangkan tagihan terjadwal dibatalkan
+                tanpa jurnal. Pembayaran dan histori sebelum tanggal efektif tetap tersimpan.
+              </div>
+              <Button variant="outline" onClick={handlePindahKeluar} disabled={isProcessing || !tanggalPindah}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Tandai Pindah Keluar ({selected.size} siswa)
               </Button>
