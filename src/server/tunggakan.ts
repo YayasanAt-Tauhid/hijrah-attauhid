@@ -239,6 +239,7 @@ export interface TunggakanSiswaRow {
   kelas: string | null;
   /** 0 = sekali bayar (konvensi UI), 1-12 = bulanan; hanya bulan yang menunggak. */
   bulan_tunggak: number[];
+  tagihan_tunggak: { tagihan_id: string; bulan: number; sisa: number }[];
   total: number;
 }
 
@@ -291,7 +292,7 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
     // Tagihan yang masih menagih (belum lunas/dibatalkan/dihapusbuku)
     let tagihanQuery = admin
       .from("tagihan")
-      .select("siswa_id, bulan, nominal, jatuh_tempo")
+      .select("id, siswa_id, bulan, nominal, jatuh_tempo")
       .eq("jenis_id", jenis_id)
       .eq("tahun_ajaran_id", tahun_ajaran_id)
       .in("siswa_id", siswaIds)
@@ -316,7 +317,11 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
       terbayarMap.set(k, (terbayarMap.get(k) || 0) + (Number(p.jumlah) || 0));
     }
 
-    const bySiswa = new Map<string, { bulanTunggak: number[]; total: number }>();
+    const bySiswa = new Map<string, {
+      bulanTunggak: number[];
+      tagihanTunggak: { tagihan_id: string; bulan: number; sisa: number }[];
+      total: number;
+    }>();
     for (const t of tagihanRows) {
       const nominal = Number(t.nominal) || 0;
       const k = kunci(t.siswa_id!, t.bulan);
@@ -325,8 +330,9 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
       if (sisa <= 0) continue;
       if (!sudahMenunggak(t.jatuh_tempo, perTanggal)) continue; // belum jatuh tempo -> bukan tunggakan
 
-      const entry = bySiswa.get(t.siswa_id!) || { bulanTunggak: [], total: 0 };
+      const entry = bySiswa.get(t.siswa_id!) || { bulanTunggak: [], tagihanTunggak: [], total: 0 };
       entry.bulanTunggak.push(t.bulan ?? 0);
+      entry.tagihanTunggak.push({ tagihan_id: t.id, bulan: t.bulan ?? 0, sisa });
       entry.total += sisa;
       bySiswa.set(t.siswa_id!, entry);
     }
@@ -341,6 +347,7 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
         nama: ks.siswa?.nama ?? null,
         kelas: ks.kelas?.nama ?? null,
         bulan_tunggak: agg.bulanTunggak.sort((a, b) => a - b),
+        tagihan_tunggak: agg.tagihanTunggak,
         total: agg.total,
       });
     }
