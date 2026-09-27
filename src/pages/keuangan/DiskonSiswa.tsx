@@ -436,11 +436,11 @@ function DialogAjukan({
             <Alert>
               <Users className="h-4 w-4" />
               <AlertDescription>
-                Potongan kakak-adik hanya diterima kalau siswa ini sudah
-                dikelompokkan ke keluarga yang berisi{" "}
-                <strong>minimal 2 bersaudara</strong>. Kalau belum, atur dulu di
-                tab <strong>Kelompok Keluarga</strong> — kalau tidak, pengajuan
-                ini akan ditolak sistem.
+                Potongan kakak-adik hanya berlaku kalau siswa sudah dikelompokkan
+                ke keluarga dengan <strong>minimal 2 saudara aktif</strong>. Sistem
+                biasanya menerapkan Rp50.000 otomatis setelah keluarga dikonfirmasi.
+                Pengajuan manual ini dipakai bila perlu koreksi/periode khusus.
+                Potongan tidak dapat digabung dengan keringanan lain pada periode yang sama.
               </AlertDescription>
             </Alert>
           )}
@@ -751,8 +751,10 @@ function TabKeluarga() {
             <strong> NIK ayah &amp; ibu</strong>, lalu akun orang tua yang sama,
             dengan nama ayah/ibu sebagai fallback. Identitas mentah tidak ditampilkan
             pada daftar ini. Hasilnya tetap <strong>saran, bukan keputusan</strong> —
-            periksa dulu sebelum dikonfirmasi. Potongan kakak-adik baru bisa diajukan
-            setelah keluarganya berisi minimal 2 siswa aktif di yayasan.
+            periksa dulu sebelum dikonfirmasi. Setelah keluarga dikonfirmasi, potongan
+            kakak/adik Rp50.000 bulan berjalan disinkronkan otomatis untuk anak ke-2
+            dan seterusnya selama minimal 2 saudara masih aktif di yayasan.
+            <strong> Jika sudah ada potongan lain, potongan kakak/adik tidak ditambahkan.</strong>
           </AlertDescription>
         </Alert>
 
