@@ -135,39 +135,48 @@ export async function buatTransaksiSnap(params: {
     }
   }
 
-  // Re-fetch nominal dari DB (JANGAN percaya frontend)
-  const { data: kelasSiswaData } = await admin
-    .from("kelas_siswa")
-    .select("siswa_id, kelas_id, tahun_ajaran_id")
-    .in("siswa_id", siswaIds)
-    .eq("aktif", true);
-
-  const kelasMap = new Map<
-    string,
-    { kelas_id: string | null; tahun_ajaran_id: string | null }
-  >();
-  (kelasSiswaData || []).forEach((ks) => {
-    kelasMap.set(ks.siswa_id, {
-      kelas_id: ks.kelas_id,
-      tahun_ajaran_id: ks.tahun_ajaran_id,
-    });
-  });
-
+  // Re-fetch TAGIHAN dari DB (JANGAN percaya nominal frontend dan jangan
+  // mengambil tarif bruto). tagihan.nominal adalah kewajiban bersih setelah
+  // potongan/keringanan, sehingga nilai yang dikirim ke Midtrans harus sama
+  // dengan yang benar-benar ditagihkan kepada siswa.
   const validatedItems: TagihanItem[] = [];
   for (const item of items) {
-    const kelasInfo = kelasMap.get(item.siswa_id);
-    const { data: tarifNominal } = await admin.rpc("get_tarif_siswa", {
-      p_jenis_id: item.jenis_id,
-      p_siswa_id: item.siswa_id,
-      p_kelas_id: kelasInfo?.kelas_id || null,
-      p_tahun_ajaran_id:
-        item.tahun_ajaran_id || kelasInfo?.tahun_ajaran_id || null,
-    });
+    let tagihanQuery = admin
+      .from("tagihan")
+      .select("id, nominal, nominal_bruto, nominal_diskon, status, tahun_ajaran_id")
+      .eq("siswa_id", item.siswa_id)
+      .eq("jenis_id", item.jenis_id);
 
-    const nominalDB = Number(tarifNominal) || 0;
+    if (item.tahun_ajaran_id) {
+      tagihanQuery = tagihanQuery.eq("tahun_ajaran_id", item.tahun_ajaran_id);
+    }
+
+    tagihanQuery =
+      item.bulan === 0
+        ? tagihanQuery.is("bulan", null)
+        : tagihanQuery.eq("bulan", item.bulan);
+
+    const { data: tagihanRows, error: tagihanError } = await tagihanQuery
+      .in("status", ["belum_bayar", "terjadwal"])
+      .limit(2);
+
+    if (tagihanError) throw tagihanError;
+    if (!tagihanRows || tagihanRows.length === 0) {
+      throw new Error(
+        `Tagihan aktif tidak ditemukan untuk ${item.jenis_nama} - ${item.nama_siswa}`
+      );
+    }
+    if (tagihanRows.length > 1) {
+      throw new Error(
+        `Periode tagihan tidak unik untuk ${item.jenis_nama} - ${item.nama_siswa}. Silakan pilih ulang tagihan.`
+      );
+    }
+
+    const tagihan = tagihanRows[0];
+    const nominalDB = Number(tagihan.nominal) || 0;
     if (nominalDB <= 0) {
       throw new Error(
-        `Tarif tidak ditemukan untuk ${item.jenis_nama} - ${item.nama_siswa}`
+        `Nominal tagihan tidak valid untuk ${item.jenis_nama} - ${item.nama_siswa}`
       );
     }
 
@@ -175,14 +184,9 @@ export async function buatTransaksiSnap(params: {
       ...item,
       jumlah: nominalDB,
       departemen_id: item.departemen_id || undefined,
-      // PENTING: prioritaskan tahun_ajaran_id dari tagihan yang dipilih (item),
-      // BUKAN dari kelas_siswa aktif siswa saat ini. Jika dibalik, pembayaran
-      // tunggakan tahun ajaran lama via portal ortu akan tersimpan dengan
-      // tahun_ajaran_id tahun berjalan — tidak match ke tagihan lama, sehingga
-      // tagihan lama tetap muncul belum lunas walau sudah dibayar (sama seperti
-      // bug tahun_ajaran_id nyangkut di InputPembayaran.tsx sisi kasir).
-      tahun_ajaran_id:
-        item.tahun_ajaran_id || kelasInfo?.tahun_ajaran_id || undefined,
+      // Gunakan Tahun Buku milik tagihan yang benar-benar dipilih. Ini menjaga
+      // pembayaran tunggakan tetap menutup tagihan lama dan bukan tahun berjalan.
+      tahun_ajaran_id: tagihan.tahun_ajaran_id || item.tahun_ajaran_id || undefined,
     });
   }
 
