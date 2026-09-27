@@ -414,7 +414,7 @@ export const konfirmasiKelompokKeluarga = createServerFn({ method: "POST" })
     if (error) throw new Error("Gagal menyimpan kelompok keluarga: " + error.message);
 
     const today = new Date().toISOString().slice(0, 10);
-    const { data: sinkronisasi, error: sinkronError } = await admin.rpc(
+    const { data: sinkronisasi, error: sinkronError } = await (admin as any).rpc(
       "sinkronkan_diskon_kakak_adik_bulanan",
       { p_tanggal: today }
     );
