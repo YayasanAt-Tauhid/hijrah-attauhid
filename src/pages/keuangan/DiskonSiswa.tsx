@@ -747,12 +747,12 @@ function TabKeluarga() {
         <Alert>
           <Users className="h-4 w-4" />
           <AlertDescription>
-            Sistem tidak menyimpan NIK/No. KK, jadi kakak-adik dideteksi dari
-            akun orang tua yang sama atau kecocokan nama ayah &amp; ibu. Hasilnya{" "}
-            <strong>saran, bukan keputusan</strong> — periksa dulu sebelum
-            dikonfirmasi, karena salah mengelompokkan berarti memberi potongan ke
-            anak yang keliru. Potongan kakak-adik baru bisa diajukan setelah
-            keluarganya berisi minimal 2 siswa.
+            Sistem memprioritaskan kecocokan <strong>No. KK</strong> dan
+            <strong> NIK ayah &amp; ibu</strong>, lalu akun orang tua yang sama,
+            dengan nama ayah/ibu sebagai fallback. Identitas mentah tidak ditampilkan
+            pada daftar ini. Hasilnya tetap <strong>saran, bukan keputusan</strong> —
+            periksa dulu sebelum dikonfirmasi. Potongan kakak-adik baru bisa diajukan
+            setelah keluarganya berisi minimal 2 siswa aktif di yayasan.
           </AlertDescription>
         </Alert>
 
@@ -777,9 +777,13 @@ function TabKeluarga() {
               <div key={g.kunci} className="border rounded-lg p-4 space-y-3">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline">
-                    {g.sumber === "akun_ortu"
-                      ? "Satu akun orang tua"
-                      : "Nama ayah & ibu cocok"}
+                    {g.sumber === "no_kk"
+                      ? "No. KK sama"
+                      : g.sumber === "nik_ortu"
+                        ? "NIK ayah & ibu sama"
+                        : g.sumber === "akun_ortu"
+                          ? "Satu akun orang tua"
+                          : "Nama ayah & ibu cocok"}
                   </Badge>
                   <span className="text-sm text-muted-foreground">
                     {g.jumlah_siswa} siswa · keyakinan {g.skor}%
