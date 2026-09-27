@@ -246,10 +246,27 @@ export function useKonfirmasiKeluarga() {
   return useMutation({
     mutationFn: (input: KonfirmasiKeluargaInput) =>
       konfirmasiKelompokKeluarga({ data: input }),
-    onSuccess: () => {
+    onSuccess: (hasil) => {
       qc.invalidateQueries({ queryKey: ["saran_keluarga"] });
       qc.invalidateQueries({ queryKey: ["siswa"] });
-      toast.success("Kelompok keluarga tersimpan — potongan kakak-adik kini bisa diajukan");
+      qc.invalidateQueries({ queryKey: ["siswa_diskon"] });
+      qc.invalidateQueries({ queryKey: ["tagihan"] });
+
+      const dibuat = Number(hasil.sinkronisasi?.dibuat ?? 0);
+      const dilewati = Number(hasil.sinkronisasi?.dilewati_karena_diskon_lain ?? 0);
+      toast.success(
+        dibuat > 0
+          ? `Kelompok keluarga tersimpan — ${dibuat} potongan kakak/adik bulan berjalan diterapkan otomatis`
+          : "Kelompok keluarga tersimpan"
+      );
+      if (dilewati > 0) {
+        toast.info(
+          `${dilewati} potongan kakak/adik tidak ditambahkan karena siswa sudah memiliki potongan lain pada periode yang sama.`
+        );
+      }
+      if (hasil.sinkron_error) {
+        toast.warning("Kelompok keluarga tersimpan, tetapi sinkronisasi potongan perlu dijalankan ulang.");
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   });
