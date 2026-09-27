@@ -8,7 +8,7 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { resolvePaymentBookYear } from "@/lib/paymentBookYear";
-import { resolvePaymentTariff } from "@/lib/paymentTariff";
+import { resolvePaymentAmount } from "@/lib/paymentTariff";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
 
@@ -105,11 +105,12 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       siswa_id: string;
       jenis_id: string;
       bulan: number | null;
+      nominal: number;
     } | null = null;
     if (tagihan_id) {
       const { data: tagihanData, error: tagihanError } = await admin
         .from("tagihan")
-        .select("id, status, tahun_ajaran_id, siswa_id, jenis_id, bulan")
+        .select("id, status, tahun_ajaran_id, siswa_id, jenis_id, bulan, nominal")
         .eq("id", tagihan_id)
         .maybeSingle();
       if (tagihanError) throw new Error("Gagal mengambil tagihan: " + tagihanError.message);
@@ -168,25 +169,29 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       .eq("aktif", true)
       .maybeSingle();
 
-    const { data: tarifNominalRaw, error: tarifErr } = await admin.rpc(
-      "get_tarif_siswa",
-      {
+    let tarifNominalRaw: number | null = null;
+    if (!tagihanTerpilih) {
+      const { data, error } = await admin.rpc("get_tarif_siswa", {
         p_jenis_id: jenis_id,
         p_siswa_id: siswa_id,
         p_kelas_id: kelasRow?.kelas_id ?? null,
         p_tahun_ajaran_id: tahunBukuTagihanId,
-      }
-    );
-    if (tarifErr) throw new Error("Gagal mengambil tarif: " + tarifErr.message);
+      });
+      if (error) throw new Error("Gagal mengambil tarif: " + error.message);
+      tarifNominalRaw = data;
+    }
 
-    // Tarif khusus tetap paling tinggi prioritasnya. Jika tidak ada, gunakan
-    // nominal default jenis pembayaran (mis. biaya pendaftaran SPMB).
-    // Nilai dari frontend sengaja tidak dipakai sebagai sumber nominal.
-    const jumlahValid = resolvePaymentTariff(
+    // Nilai dari frontend tidak dipakai sebagai sumber nominal. Tagihan yang
+    // dipilih menentukan jumlah; tanpa tagihan, gunakan tarif khusus/default.
+    // Untuk tagihan yang dipilih secara eksplisit, nominal bersumber dari
+    // kewajiban yang tersimpan. Ini mencakup potongan dan sisa saldo migrasi;
+    // tarif siswa dipakai hanya saat membuat pembayaran tanpa tagihan pilihan.
+    const jumlahValid = resolvePaymentAmount(
+      tagihanTerpilih ? tagihanTerpilih.nominal : undefined,
       tarifNominalRaw,
       jenis.nominal
     );
-    if (jumlahValid <= 0) {
+    if (!Number.isFinite(jumlahValid) || jumlahValid <= 0) {
       throw new Error("Tarif pembayaran belum dikonfigurasi untuk siswa ini");
     }
 
@@ -247,7 +252,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     if (!tagihanFound) {
       let tagihanQuery = admin
         .from("tagihan")
-        .select("id, status, tahun_ajaran_id, siswa_id, jenis_id, bulan")
+        .select("id, status, tahun_ajaran_id, siswa_id, jenis_id, bulan, nominal")
         .eq("siswa_id", siswa_id)
         .eq("jenis_id", jenis_id)
         .eq("tahun_ajaran_id", tahunAjaranEfektifId)
