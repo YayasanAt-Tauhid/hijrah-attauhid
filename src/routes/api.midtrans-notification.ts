@@ -163,6 +163,55 @@ async function handleNotification(request: Request): Promise<Response> {
           continue;
         }
 
+        // Pastikan nominal transaksi masih sama dengan kewajiban bersih pada
+        // tagihan. Ini mencegah token Snap lama membukukan nominal bruto
+        // ke tagihan yang sudah berubah karena diskon/keringanan.
+        let tagihanQuery = admin
+          .from("tagihan")
+          .select("id, nominal, status")
+          .eq("siswa_id", item.siswa_id)
+          .eq("jenis_id", item.jenis_id)
+          .eq("tahun_ajaran_id", item.tahun_ajaran_id);
+
+        tagihanQuery =
+          item.bulan === 0 || item.bulan == null
+            ? tagihanQuery.is("bulan", null)
+            : tagihanQuery.eq("bulan", item.bulan);
+
+        const { data: tagihanAktif, error: tagihanError } =
+          await tagihanQuery.maybeSingle();
+
+        if (tagihanError) {
+          hasilItems.push({
+            item_id: item.id,
+            success: false,
+            error: "Gagal memvalidasi tagihan saat ini: " + tagihanError.message,
+          });
+          continue;
+        }
+
+        if (!tagihanAktif || !["belum_bayar", "terjadwal"].includes(tagihanAktif.status)) {
+          hasilItems.push({
+            item_id: item.id,
+            success: false,
+            error: "Tagihan sudah tidak aktif atau sudah diselesaikan",
+          });
+          continue;
+        }
+
+        const nominalTagihan = Math.round(Number(tagihanAktif.nominal) || 0);
+        const nominalTransaksi = Math.round(Number(item.jumlah) || 0);
+        if (nominalTagihan <= 0 || nominalTransaksi !== nominalTagihan) {
+          hasilItems.push({
+            item_id: item.id,
+            success: false,
+            error:
+              "Nominal transaksi Rp " + nominalTransaksi.toLocaleString("id-ID") +
+              " tidak sama dengan tagihan bersih Rp " + nominalTagihan.toLocaleString("id-ID"),
+          });
+          continue;
+        }
+
         const { data: jenis } = await admin
           .from("jenis_pembayaran")
           .select("nama, akun_pendapatan_id")
@@ -219,11 +268,18 @@ async function handleNotification(request: Request): Promise<Response> {
         })
         .eq("order_id", order_id);
 
-      // Notifikasi orang tua (in-app + push ke perangkat mobile) — best-effort
-      const judulNotif = "Pembayaran Berhasil";
-      const pesanNotif = `Pembayaran ${items.length} tagihan senilai Rp ${Number(
-        transaksi.total_amount
-      ).toLocaleString("id-ID")} berhasil diproses via ${payment_type}. Order: ${order_id}`;
+      // Notifikasi orang tua (in-app + push ke perangkat mobile) — best-effort.
+      // Jika ada mismatch nominal / kegagalan item, jangan menyatakan pembayaran
+      // sudah berhasil dibukukan.
+      const judulNotif = adaGagal
+        ? "Pembayaran Perlu Verifikasi"
+        : "Pembayaran Berhasil";
+      const pesanNotif = adaGagal
+        ? "Pembayaran Midtrans order " + order_id +
+          " telah diterima, tetapi ada tagihan yang berubah atau belum dapat dibukukan otomatis. Silakan hubungi admin/TU untuk verifikasi."
+        : "Pembayaran " + items.length + " tagihan senilai Rp " +
+          Number(transaksi.total_amount).toLocaleString("id-ID") +
+          " berhasil diproses via " + payment_type + ". Order: " + order_id;
       try {
         await admin.from("notifikasi_ortu").insert({
           user_id: transaksi.user_id,
