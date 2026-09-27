@@ -261,8 +261,14 @@ export default function InputPembayaran() {
   });
 
   useEffect(() => {
-    if (tarifNominal != null && form.jenisId) setField("jumlah", String(tarifNominal));
-  }, [tarifNominal, form.jenisId]);
+    if (!form.jenisId) return;
+    const nominal = existingTagihan?.status === "belum_bayar" || existingTagihan?.status === "terjadwal"
+      ? Number(existingTagihan.nominal)
+      : tarifNominal;
+    if (nominal != null && Number.isFinite(nominal) && nominal > 0) {
+      setField("jumlah", String(nominal));
+    }
+  }, [tarifNominal, existingTagihan?.id, existingTagihan?.nominal, existingTagihan?.status, form.jenisId]);
 
   useEffect(() => {
     if (tahunAktif?.id && !selectedTahunAjaranId) setSelectedTahunAjaranId(tahunAktif.id);
@@ -280,8 +286,9 @@ export default function InputPembayaran() {
 
   const selectedTahun  = tahunAjaranList?.find(t => t.id === effectiveTahunAjaranId);
   const isBayarDimuka  = !!(selectedTahun?.tanggal_mulai && selectedTahun.tanggal_mulai > new Date().toISOString().split("T")[0]);
-  const tarifTidakAda  = !!(form.jenisId && selectedSiswa && !loadingTarif && tarifNominal == null);
-  const isJumlahLocked = !isSekali && tarifNominal != null;
+  const adaTagihanDipilih = existingTagihan?.status === "belum_bayar" || existingTagihan?.status === "terjadwal";
+  const tarifTidakAda  = !!(form.jenisId && selectedSiswa && !loadingTarif && tarifNominal == null && !adaTagihanDipilih);
+  const isJumlahLocked = !!adaTagihanDipilih || (!isSekali && tarifNominal != null);
   const sudahBayar     = bulanDibayar ? bulanTampil.filter(m => bulanDibayar.has(m)).length : 0;
   const belumBayar     = bulanTampil.length - sudahBayar;
   const kelasNama      = getKelasAktif(selectedSiswa)?.kelas?.nama ?? "-";
