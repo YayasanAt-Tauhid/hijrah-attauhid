@@ -321,7 +321,7 @@ export const terapkanDiskonSiswa = createServerFn({ method: "POST" })
 // ── Kelompok keluarga (kakak-adik) ─────────────────────────────────────────
 
 export interface SaranKeluarga {
-  sumber: "akun_ortu" | "nama_ortu";
+  sumber: "no_kk" | "nik_ortu" | "akun_ortu" | "nama_ortu";
   kunci: string;
   skor: number;
   jumlah_siswa: number;
