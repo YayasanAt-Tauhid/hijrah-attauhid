@@ -26,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FormSection } from "@/components/shared/FormSection";
 import { AlertCircle, CheckCircle2, Clock3, CreditCard, FileCheck2, RefreshCw, Upload, UserPlus } from "lucide-react";
 import { toast } from "sonner";
+import { PENGHASILAN_OPTIONS, PENGHASILAN_VALUES } from "@/lib/penghasilanOrangtua";
 
 interface Departemen { id: string; nama: string; kode: string | null }
 interface Angkatan { id: string; nama: string; departemen_id: string | null }
@@ -48,14 +49,6 @@ const PENDIDIKAN_OPTIONS = [
   ["D3", "D3"], ["S1", "S1"], ["S2", "S2"], ["S3", "S3"],
 ] as const;
 const PEKERJAAN_OPTIONS = ["PNS/TNI/POLRI", "KARYAWAN BUMN", "KARYAWAN SWASTA", "WIRASWASTA", "LAINNYA", "SUDAH MENINGGAL"];
-const PENGHASILAN_OPTIONS = [
-  ["1000000", "< Rp 1.000.000"],
-  ["2000000", "Rp 1.000.000 s.d Rp 2.000.000"],
-  ["5000000", "Rp 2.000.000 s.d Rp 5.000.000"],
-  ["20000000", "Rp 5.000.000 s.d Rp 20.000.000"],
-  ["30000000", "> Rp 20.000.000"],
-] as const;
-const PENGHASILAN_VALUES = new Set<string>(PENGHASILAN_OPTIONS.map(([value]) => value));
 const IQRO_OPTIONS = [
   ["0", "BELUM PERNAH BELAJAR IQRO"], ["1", "1"], ["2", "2"], ["3", "3"],
   ["4", "4"], ["5", "5"], ["6", "6"], ["7", "SUDAH MENAMATKAN IQRO"],

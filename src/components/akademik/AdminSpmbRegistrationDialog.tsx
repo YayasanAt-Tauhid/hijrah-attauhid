@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FormSection } from "@/components/shared/FormSection";
 import { CheckCircle2, FileCheck2, RefreshCw, Upload, UserPlus } from "lucide-react";
 import { toast } from "sonner";
+import { PENGHASILAN_OPTIONS } from "@/lib/penghasilanOrangtua";
 
 type Department = { id: string; nama?: string | null; kode?: string | null; psb_dibuka?: boolean | null };
 type Cohort = { id: string; nama?: string | null; departemen_id?: string | null; aktif?: boolean | null };
@@ -35,13 +36,6 @@ const PENDIDIKAN_OPTIONS = [
   ["D3", "D3"], ["S1", "S1"], ["S2", "S2"], ["S3", "S3"],
 ] as const;
 const PEKERJAAN_OPTIONS = ["PNS/TNI/POLRI", "KARYAWAN BUMN", "KARYAWAN SWASTA", "WIRASWASTA", "LAINNYA", "SUDAH MENINGGAL"];
-const PENGHASILAN_OPTIONS = [
-  ["1000000", "< Rp 1.000.000"],
-  ["2000000", "Rp 1.000.000 s.d Rp 2.000.000"],
-  ["5000000", "Rp 2.000.000 s.d Rp 5.000.000"],
-  ["20000000", "Rp 5.000.000 s.d Rp 20.000.000"],
-  ["30000000", "> Rp 20.000.000"],
-] as const;
 const IQRO_OPTIONS = [
   ["0", "BELUM PERNAH BELAJAR IQRO"], ["1", "1"], ["2", "2"], ["3", "3"],
   ["4", "4"], ["5", "5"], ["6", "6"], ["7", "SUDAH MENAMATKAN IQRO"],
