@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { formatRupiah, terbilang, namaBulanTahun } from "@/hooks/useKeuangan";
+import { terbilang, namaBulanTahun } from "@/hooks/useKeuangan";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 
@@ -18,9 +18,21 @@ interface PrintKuitansiProps {
   };
   kelasNama: string;
   lembagaNama: string;
+  petugasNama?: string;
+  metode?: string;
 }
 
-export function PrintKuitansi({ payment, kelasNama, lembagaNama }: PrintKuitansiProps) {
+function formatAngka(value: number) {
+  return new Intl.NumberFormat("id-ID").format(value);
+}
+
+export function PrintKuitansi({
+  payment,
+  kelasNama,
+  lembagaNama,
+  petugasNama,
+  metode = "Tunai",
+}: PrintKuitansiProps) {
   const { data: sekolah } = useQuery({
     queryKey: ["sekolah_info"],
     queryFn: async () => {
@@ -29,59 +41,140 @@ export function PrintKuitansi({ payment, kelasNama, lembagaNama }: PrintKuitansi
     },
   });
 
+  const tanggal = new Date(payment.tanggal_bayar);
+  const refPendek = payment.id?.replace(/-/g, "").slice(0, 10).toUpperCase() || "0000000000";
+  const nomorBukti =
+    payment.nomorJurnal ||
+    `HT-${format(tanggal, "yyyyMMdd")}-${refPendek}`;
+  const identitas = [payment.siswa.nis, payment.siswa.nisn].filter(Boolean).join(" / ") || "-";
+  const periode =
+    payment.periodeLabel ||
+    (payment.bulan
+      ? namaBulanTahun(payment.bulan, { tanggalTransaksi: payment.tanggal_bayar })
+      : "");
+  const rincian = periode
+    ? `${payment.jenisNama} ( ${periode.toUpperCase()} )`
+    : payment.jenisNama;
+
   return (
-    <div id="kuitansi-print" className="hidden print:!block bg-white text-black p-6 max-w-[210mm] mx-auto text-[11pt]">
-      {/* Kop Sekolah */}
-      <div className="flex items-center gap-4 border-b-2 border-black pb-3 mb-4">
-        {sekolah?.logo_url && (
-          <img src={sekolah.logo_url} alt="Logo" className="h-16 w-16 object-contain" />
-        )}
-        <div className="flex-1 text-center">
-          <h1 className="text-lg font-bold uppercase">{sekolah?.nama || lembagaNama}</h1>
-          <p className="text-sm">{sekolah?.alamat || ""}</p>
-          {sekolah?.telepon && <p className="text-xs">Telp: {sekolah.telepon} | Email: {sekolah?.email || ""}</p>}
+    <div
+      id="kuitansi-print"
+      className="hidden print:!block bg-white text-black mx-auto max-w-[190mm] p-5 print:p-0 text-[10.5pt] leading-snug"
+    >
+      <div className="flex items-start justify-between gap-5 border-b-2 border-black pb-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          {sekolah?.logo_url ? (
+            <img
+              src={sekolah.logo_url}
+              alt="Logo Yayasan"
+              className="h-[58px] w-[58px] shrink-0 object-contain"
+            />
+          ) : (
+            <div className="flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-full border-2 border-black text-[9px] font-bold">
+              AT-TAUHID
+            </div>
+          )}
+          <div className="min-w-0">
+            <h1 className="text-[13.5pt] font-extrabold uppercase tracking-tight">
+              YAYASAN AT-TAUHID AL ISLAMY BANGKA BELITUNG
+            </h1>
+            {sekolah?.alamat && <p className="mt-0.5 text-[9.5pt]">{sekolah.alamat}</p>}
+            {(sekolah?.telepon || sekolah?.email) && (
+              <p className="text-[9pt]">
+                {[sekolah?.telepon ? `Telp: ${sekolah.telepon}` : "", sekolah?.email || ""]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="shrink-0 border-y-2 border-black px-4 py-2 text-center text-[11pt] font-extrabold tracking-wide">
+          BUKTI PEMBAYARAN
         </div>
       </div>
 
-      {/* Judul */}
-      <h2 className="text-center font-bold text-base mb-4 underline">KUITANSI PEMBAYARAN</h2>
+      <div className="mt-3 font-bold tracking-wide">{nomorBukti}</div>
 
-      {/* Detail */}
-      <table className="w-full mb-4 text-sm">
+      <table className="mt-2 w-full table-fixed text-[10pt]">
         <tbody>
-          <tr><td className="py-1 w-36">No. Kuitansi</td><td className="py-1">: {payment.id?.slice(0, 8).toUpperCase() || "-"}</td></tr>
-          {payment.nomorJurnal && (
-            <tr><td className="py-1">No. Jurnal</td><td className="py-1">: {payment.nomorJurnal}</td></tr>
-          )}
-          <tr><td className="py-1">Tanggal</td><td className="py-1">: {format(new Date(payment.tanggal_bayar), "dd MMMM yyyy", { locale: idLocale })}</td></tr>
-          <tr><td className="py-1">Nama Siswa</td><td className="py-1">: {payment.siswa.nama}</td></tr>
-          <tr><td className="py-1">NIS / NISN</td><td className="py-1">: {[payment.siswa.nis, payment.siswa.nisn].filter(Boolean).join(" / ") || "-"}</td></tr>
-          <tr><td className="py-1">Kelas</td><td className="py-1">: {kelasNama}</td></tr>
-          <tr><td className="py-1">Lembaga</td><td className="py-1">: {lembagaNama}</td></tr>
-          <tr><td className="py-1">Jenis Pembayaran</td><td className="py-1">: {payment.jenisNama}</td></tr>
-          {payment.bulan ? (
-            <tr><td className="py-1">Bulan</td><td className="py-1">: {payment.periodeLabel || namaBulanTahun(payment.bulan, { tanggalTransaksi: payment.tanggal_bayar })}</td></tr>
-          ) : null}
-          <tr><td className="py-1 font-bold">Jumlah</td><td className="py-1 font-bold">: {formatRupiah(payment.jumlah)}</td></tr>
-          <tr><td className="py-1 italic">Terbilang</td><td className="py-1 italic">: {terbilang(payment.jumlah)}</td></tr>
-          {payment.keterangan && (
-            <tr><td className="py-1">Keterangan</td><td className="py-1">: {payment.keterangan}</td></tr>
-          )}
+          <tr>
+            <td className="w-[105px] py-1 align-top">Nama Siswa</td>
+            <td className="py-1 align-top font-semibold">{payment.siswa.nama}</td>
+            <td className="w-[90px] py-1 align-top">Tgl. Bayar</td>
+            <td className="w-[150px] py-1 align-top">
+              {format(tanggal, "dd MMM yyyy", { locale: idLocale })}
+            </td>
+          </tr>
+          <tr>
+            <td className="py-1 align-top">NIS / NISN</td>
+            <td className="py-1 align-top">{identitas}</td>
+            <td className="py-1 align-top">Metode</td>
+            <td className="py-1 align-top">{metode}</td>
+          </tr>
+          <tr>
+            <td className="py-1 align-top">Kelas</td>
+            <td className="py-1 align-top">{kelasNama || "-"}</td>
+            <td className="py-1 align-top">Petugas</td>
+            <td className="py-1 align-top">{petugasNama || "-"}</td>
+          </tr>
+          <tr>
+            <td className="py-1 align-top">Lembaga</td>
+            <td className="py-1 align-top" colSpan={3}>{lembagaNama || "-"}</td>
+          </tr>
         </tbody>
       </table>
 
-      {/* Tanda tangan */}
-      <div className="flex justify-between mt-12 text-sm">
-        <div className="text-center">
-          <p>Penerima,</p>
-          <div className="h-16" />
-          <p className="border-t border-black pt-1">Orang Tua / Wali</p>
+      <div className="my-3 border-y border-black py-1.5 text-[10pt] font-bold">
+        Dengan rincian pembayaran sebagai berikut:
+      </div>
+
+      <table className="w-full text-[10pt]">
+        <tbody>
+          <tr>
+            <td className="w-[28px] py-1.5 align-top">1.</td>
+            <td className="py-1.5 pr-3 align-top">{rincian}</td>
+            <td className="w-[30px] py-1.5 align-top">Rp</td>
+            <td className="w-[120px] py-1.5 text-right align-top">{formatAngka(payment.jumlah)}</td>
+          </tr>
+          <tr className="border-t-2 border-black font-extrabold">
+            <td className="py-2 text-right" colSpan={2}>JUMLAH</td>
+            <td className="py-2">Rp</td>
+            <td className="py-2 text-right">{formatAngka(payment.jumlah)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div className="mt-2 text-[9.5pt]">
+        <span className="font-semibold">Terbilang:</span>{" "}
+        <span className="italic">{terbilang(payment.jumlah)}</span>
+      </div>
+      {payment.keterangan && (
+        <div className="mt-1 text-[9.5pt]">
+          <span className="font-semibold">Keterangan:</span> {payment.keterangan}
         </div>
-        <div className="text-center">
-          <p>{sekolah?.alamat ? format(new Date(payment.tanggal_bayar), "dd MMMM yyyy", { locale: idLocale }) : ""}</p>
-          <p>Petugas,</p>
-          <div className="h-16" />
-          <p className="border-t border-black pt-1">(_____________________)</p>
+      )}
+
+      <div className="mt-8 grid grid-cols-[1.55fr_0.7fr_1fr] items-end gap-6">
+        <div className="text-[8.5pt] leading-snug">
+          <p className="italic">
+            This is a computer generated message and requires no signature.
+          </p>
+          <p className="italic">
+            Informasi ini merupakan hasil cetakan komputer dan tidak memerlukan tanda tangan petugas.
+          </p>
+          <p className="mt-3 font-medium">Powered by Hijrah At-Tauhid</p>
+        </div>
+
+        <div className="mx-auto flex h-[68px] w-[68px] flex-col items-center justify-center border-2 border-black text-center leading-tight">
+          <span className="text-[8px] font-bold">HIJRAH</span>
+          <span className="text-[7px]">AT-TAUHID</span>
+          <span className="mt-1 font-mono text-[6.5px]">{refPendek.slice(0, 8)}</span>
+        </div>
+
+        <div className="text-center text-[9.5pt]">
+          <p>Penyetor,</p>
+          <div className="h-14" />
+          <p>(....................................)</p>
         </div>
       </div>
     </div>
