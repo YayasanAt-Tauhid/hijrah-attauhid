@@ -117,7 +117,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     const { data: jenis, error: jenisErr } = await admin
       .from("jenis_pembayaran")
       .select(
-        "id, nama, nominal, tipe, akun_pendapatan_id, akun_dimuka_id, perlu_dimuka"
+        "id, nama, nominal, tipe, departemen_id, akun_pendapatan_id, akun_dimuka_id, perlu_dimuka"
       )
       .eq("id", jenis_id)
       .single();
@@ -393,7 +393,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         p_jumlah: jumlahValid,
         p_tanggal_bayar: tanggal_bayar,
         p_keterangan: keteranganFinal,
-        p_departemen_id: departemen_id ?? null,
+        p_departemen_id: jenis.departemen_id ?? departemen_id ?? null,
         p_tahun_ajaran_id: tahunAjaranEfektifId,
         p_is_bayar_dimuka: pakaiDimuka,
         p_tagihan_id: tagihanEfektifId,
