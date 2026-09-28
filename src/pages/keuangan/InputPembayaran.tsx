@@ -497,14 +497,14 @@ export default function InputPembayaran() {
                 {loadingTarif && form.jenisId && (
                   <p className="text-[11px] text-muted-foreground animate-pulse">Mengambil tarif...</p>
                 )}
-                {!loadingTarif && tarifNominal != null && (
+                {!loadingTarif && tarifNominal != null && !adaTagihanDipilih && (
                   <p className="text-[11px] text-primary">⚡ Tarif: {formatRupiah(tarifNominal)}</p>
                 )}
                 {tarifTidakAda && (
                   <p className="text-[11px] text-destructive font-medium">⚠️ Tarif belum dikonfigurasi</p>
                 )}
                 {existingTagihan?.status === "belum_bayar" && (
-                  <p className="text-[11px] text-amber-600">📋 Piutang: {formatRupiah(Number(existingTagihan.nominal))}</p>
+                  <p className="text-[11px] text-amber-600">📋 Sisa tagihan: {formatRupiah(Number(existingTagihan.nominal))}</p>
                 )}
               </div>
 
@@ -581,7 +581,11 @@ export default function InputPembayaran() {
             )}
 
             {/* ── Status Sekali Bayar ─────────────────────────────────────────────── */}
-            {isSekali && pembayaranSekali && (
+            {isSekali && existingTagihan?.status === "belum_bayar" ? (
+              <div className="rounded-md border px-3 py-2 text-xs bg-amber-50 border-amber-200 text-amber-700">
+                Sisa tagihan yang harus dibayar: {formatRupiah(Number(existingTagihan.nominal))}
+              </div>
+            ) : isSekali && pembayaranSekali ? (
               <div className={cn(
                 "rounded-md border px-3 py-2 text-xs",
                 pembayaranSekali.lunas
@@ -592,7 +596,7 @@ export default function InputPembayaran() {
                   ? `✓ Lunas — Total dibayar: ${formatRupiah(pembayaranSekali.totalBayar)}`
                   : `Sudah dibayar: ${formatRupiah(pembayaranSekali.totalBayar)} dari ${formatRupiah(tarifNominal ?? 0)}`}
               </div>
-            )}
+            ) : null}
 
             {/* ── Nominal ────────────────────────────────────────────────────────── */}
             <div className="space-y-1">
