@@ -64,7 +64,7 @@ def login(session, username, password):
 def old_student(session, nik, name, alternate_nik=""):
     # The autocomplete is name-oriented; searching a NIK can return unrelated
     # suggestions. Match the returned NIK exactly before reading any bills.
-    allowed = {value for value in (nik, alternate_nik) if re.fullmatch(r"\d{16}", value or "")}
+    allowed = {value.strip() for value in (nik, alternate_nik)\n               if (value or "").strip().isdigit()}
     words = name.split()
     queries = [name, " ".join(words[:2]), " ".join(words[-2:])]
     seen = set()
@@ -170,7 +170,7 @@ def main():
             result = {"siswa_id": row.get("siswa_id"), "nama": row.get("nama"),
                       "nik": nik, "diambil_at": datetime.now(timezone.utc).isoformat()}
             try:
-                if not any(re.fullmatch(r"\d{16}", v or "") for v in
+                if not any((v or "").strip().isdigit() for v in
                            (nik, row.get("nik_alternatif", ""))):
                     result["status"] = "unmatched"
                 else:
