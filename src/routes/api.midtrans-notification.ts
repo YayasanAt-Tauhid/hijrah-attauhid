@@ -21,6 +21,18 @@ async function sha512(str: string): Promise<string> {
     .join("");
 }
 
+function tanggalJakarta(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
 async function handleNotification(request: Request): Promise<Response> {
   try {
     const notification = await request.json();
@@ -138,7 +150,9 @@ async function handleNotification(request: Request): Promise<Response> {
     //    item itu (rollback RPC), dan errornya disimpan ke metadata transaksi.
     if (newStatus === "paid") {
       const items = transaksi.transaksi_midtrans_item || [];
-      const today = new Date().toISOString().split("T")[0];
+      // Tanggal pembukuan mengikuti hari operasional sekolah (WIB), bukan UTC.
+      // Tanpa ini, pembayaran antara 00.00–06.59 WIB tercatat sebagai hari sebelumnya.
+      const today = tanggalJakarta();
 
       // Ambil akun Bank Midtrans (debit) sekali di awal
       const { data: bankMidtransSetting } = await admin
