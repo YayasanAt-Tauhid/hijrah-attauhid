@@ -52,6 +52,7 @@ export interface CariSiswaPembayaranInput {
 export interface SiswaPembayaranRingkas {
   id: string;
   nis: string | null;
+  nisn: string | null;
   nama: string;
   foto_url: string | null;
   status: string | null;
@@ -90,7 +91,7 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     const status = data?.status === "calon" ? "calon" : "aktif";
     const limit = Math.min(Math.max(Number(data?.limit ?? 10), 1), 20);
     const select =
-      "id, nis, nama, foto_url, status, angkatan_id, departemen_id, kelas_siswa(kelas_id, aktif, kelas:kelas_id(id, nama, departemen_id))";
+      "id, nis, nisn, nama, foto_url, status, angkatan_id, departemen_id, kelas_siswa(kelas_id, aktif, kelas:kelas_id(id, nama, departemen_id))";
 
     const buildQuery = (field: "nama" | "nis") => {
       let q = admin
@@ -116,6 +117,7 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
       unik.set(row.id, {
         id: row.id,
         nis: row.nis?.trim() || null,
+        nisn: row.nisn?.trim() || null,
         nama: row.nama?.trim() || "—",
         foto_url: row.foto_url ?? null,
         status: row.status ?? null,
@@ -145,6 +147,7 @@ export interface RekapKasirSayaRow {
   siswa_id: string | null;
   siswa_nama: string;
   siswa_nis: string | null;
+  siswa_nisn: string | null;
   siswa_status: string | null;
   kelas_nama: string | null;
   jenis_nama: string;
@@ -205,7 +208,7 @@ export const getRekapKasirSaya = createServerFn({ method: "POST" })
     const { data: rows, error } = await admin
       .from("pembayaran")
       .select(
-        "id, jumlah, tanggal_bayar, bulan, keterangan, siswa_id, jenis_pembayaran:jenis_id(nama), siswa:siswa_id(nama, nis, status, kelas_siswa(aktif, kelas:kelas_id(nama))), departemen:departemen_id(kode, nama), jurnal:jurnal_id(nomor)"
+        "id, jumlah, tanggal_bayar, bulan, keterangan, siswa_id, jenis_pembayaran:jenis_id(nama), siswa:siswa_id(nama, nis, nisn, status, kelas_siswa(aktif, kelas:kelas_id(nama))), departemen:departemen_id(kode, nama), jurnal:jurnal_id(nomor)"
       )
       .eq("tanggal_bayar", tanggal)
       .eq("petugas_id", profile.pegawai_id);
@@ -227,6 +230,7 @@ export const getRekapKasirSaya = createServerFn({ method: "POST" })
         siswa_id: row.siswa_id ?? null,
         siswa_nama: row.siswa?.nama?.trim() || "—",
         siswa_nis: row.siswa?.nis?.trim() || null,
+        siswa_nisn: row.siswa?.nisn?.trim() || null,
         siswa_status: row.siswa?.status ?? null,
         kelas_nama: kelasAktif?.kelas?.nama ?? null,
         jenis_nama: row.jenis_pembayaran?.nama ?? "—",
