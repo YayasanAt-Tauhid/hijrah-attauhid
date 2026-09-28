@@ -1,11 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatsCard } from "@/components/shared/StatsCard";
-import { Wallet, TrendingUp, TrendingDown, PiggyBank, Building2 } from "lucide-react";
+import { Wallet, TrendingUp, TrendingDown, PiggyBank, Building2, ReceiptText, ClipboardList, GraduationCap, BadgePercent } from "lucide-react";
 import { useRekapPembayaranBulanan, useRekapPengeluaranBulanan, useTotalTabungan, useRekapKeuanganPerLembaga, formatRupiah, BULAN_NAMES, BULAN_ORDER_AKADEMIK } from "@/hooks/useKeuangan";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate } from "@/lib/router-compat";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 
 const now = new Date();
 const currentMonth = now.getMonth() + 1;
@@ -29,7 +30,7 @@ const links = [
   { label: "Online Payment", url: "/keuangan/online-payment" },
   { label: "Audit Trail", url: "/keuangan/audit-trail" },
   { label: "Audit Perubahan Data", url: "/keuangan/audit-perubahan" },
-  { label: "Pembayaran PMB", url: "/keuangan/pembayaran-pmb" },
+  { label: "Pembayaran SPMB", url: "/keuangan/pembayaran-spmb" },
   { label: "Referensi", url: "/keuangan/referensi" },
   { label: "Tutup Buku", url: "/keuangan/tutup-buku" },
   { label: "Rekon Antar Lembaga", url: "/keuangan/rekon-antar-lembaga" },
@@ -37,6 +38,87 @@ const links = [
 ];
 
 export default function Keuangan() {
+  const { role } = useAuth();
+
+  if (role === "kasir") return <KasirKeuanganLanding />;
+  if (role === "sekretaris_yayasan") return <SekretarisKeuanganLanding />;
+
+  return <DashboardKeuangan />;
+}
+
+function KasirKeuanganLanding() {
+  const navigate = useNavigate();
+  const actions = [
+    { label: "Input Pembayaran", description: "Terima pembayaran siswa dan cetak kuitansi.", url: "/keuangan/pembayaran", icon: ReceiptText },
+    { label: "Pembayaran SPMB", description: "Terima biaya pendaftaran calon murid di loket.", url: "/keuangan/pembayaran-spmb", icon: GraduationCap },
+    { label: "Tunggakan", description: "Lihat tagihan siswa yang masih belum dibayar.", url: "/keuangan/tunggakan", icon: ClipboardList },
+    { label: "Rekap Kasir Saya", description: "Lihat transaksi yang Anda catat sendiri per hari.", url: "/keuangan/rekap-kasir", icon: Wallet },
+  ];
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">Loket Kasir</h1>
+        <p className="text-sm text-muted-foreground">
+          Akses operasional penerimaan pembayaran. Laporan yayasan dan menu akuntansi tidak ditampilkan untuk kasir.
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {actions.map((action) => {
+          const Icon = action.icon;
+          return (
+            <Card key={action.url} className="transition-shadow hover:shadow-md">
+              <CardContent className="flex items-start gap-4 p-5">
+                <div className="rounded-lg bg-primary/10 p-3 text-primary">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold">{action.label}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{action.description}</p>
+                  <Button className="mt-4" size="sm" onClick={() => navigate(action.url)}>
+                    Buka
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SekretarisKeuanganLanding() {
+  const navigate = useNavigate();
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">Keringanan & Beasiswa</h1>
+        <p className="text-sm text-muted-foreground">
+          Akses sekretaris yayasan dibatasi pada alur persetujuan keringanan siswa.
+        </p>
+      </div>
+      <Card className="max-w-xl">
+        <CardContent className="flex items-start gap-4 p-5">
+          <div className="rounded-lg bg-primary/10 p-3 text-primary">
+            <BadgePercent className="h-5 w-5" />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold">Siswa Penerima Keringanan</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Tinjau dan putuskan pengajuan beasiswa atau keringanan sesuai kewenangan.
+            </p>
+            <Button className="mt-4" size="sm" onClick={() => navigate("/keuangan/diskon-siswa")}>
+              Buka Persetujuan
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function DashboardKeuangan() {
   const navigate = useNavigate();
   const { data: rekapPemasukan, isLoading: loadP } = useRekapPembayaranBulanan(currentYear);
   const { data: rekapPengeluaran, isLoading: loadE } = useRekapPengeluaranBulanan(currentYear);

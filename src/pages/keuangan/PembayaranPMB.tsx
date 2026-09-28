@@ -1,21 +1,33 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
+import { PrintKuitansi } from "@/components/shared/PrintKuitansi";
 import { supabase } from "@/integrations/supabase/client";
 import { useLembaga, useJenisPembayaran, usePembayaranBySiswa, formatRupiah } from "@/hooks/useKeuangan";
-import { prosesPembayaran } from "@/server/pembayaran";
+import { cariSiswaPembayaran, prosesPembayaran } from "@/server/pembayaran";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search } from "lucide-react";
+import { Printer, Search } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import { useAuth } from "@/contexts/AuthContext";
+import Unauthorized from "@/pages/Unauthorized";
 
 export default function PembayaranPMB() {
+  const { role } = useAuth();
+  if (!role || !["admin", "keuangan", "kasir"].includes(role)) {
+    return <Unauthorized />;
+  }
+  return <PembayaranPMBContent />;
+}
+
+function PembayaranPMBContent() {
   const qc = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSiswa, setSelectedSiswa] = useState<any>(null);
@@ -24,6 +36,17 @@ export default function PembayaranPMB() {
   const [jumlah, setJumlah] = useState("");
   const [tanggalBayar, setTanggalBayar] = useState(format(new Date(), "yyyy-MM-dd"));
   const [keterangan, setKeterangan] = useState("");
+  const [showKuitansi, setShowKuitansi] = useState(false);
+  const [lastPayment, setLastPayment] = useState<{
+    id: string;
+    nomorJurnal?: string;
+    jumlah: number;
+    tanggalBayar: string;
+    keterangan?: string;
+    jenisNama: string;
+    siswa: { nama: string; nis?: string | null };
+    lembagaNama: string;
+  } | null>(null);
 
   const { data: lembagaList } = useLembaga();
   const { data: jenisList = [] } = useJenisPembayaran(departemenId || undefined);
@@ -121,7 +144,22 @@ export default function PembayaranPMB() {
     onSuccess: async (result) => {
       await qc.invalidateQueries({ queryKey: ["pembayaran"] });
       await qc.invalidateQueries({ queryKey: ["rekap"] });
-      toast.success(`Pembayaran dan jurnal ${result.nomor_jurnal} berhasil dibuat`);
+      const jenis = pmbJenisList.find((j: any) => j.id === jenisId) as any;
+      const lembaga = lembagaList?.find((l: any) => l.id === departemenId) as any;
+      if (selectedSiswa) {
+        setLastPayment({
+          id: result.pembayaran_id,
+          nomorJurnal: result.nomor_jurnal,
+          jumlah: result.jumlah,
+          tanggalBayar,
+          keterangan: keterangan || "Pembayaran SPMB",
+          jenisNama: jenis?.nama || "Biaya Pendaftaran SPMB",
+          siswa: { nama: selectedSiswa.nama, nis: selectedSiswa.nis ?? null },
+          lembagaNama: lembaga?.nama || lembaga?.kode || "-",
+        });
+        setShowKuitansi(true);
+      }
+      toast.success("Pembayaran dan jurnal " + result.nomor_jurnal + " berhasil dibuat");
       setJenisId("");
       setJumlah("");
       setKeterangan("");
@@ -149,16 +187,17 @@ export default function PembayaranPMB() {
 
   const { data: searchResults } = useQuery({
     queryKey: ["search_calon", searchTerm, departemenId],
-    enabled: searchTerm.length >= 2 && !!departemenId,
+    enabled: searchTerm.trim().length >= 2 && !!departemenId,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("siswa")
-        .select("id, nis, nama, foto_url, status")
-        .or(`nama.ilike.%${searchTerm}%,nis.ilike.%${searchTerm}%`)
-        .eq("status", "calon")
-        .eq("departemen_id", departemenId)
-        .limit(10);
-      return data || [];
+      const result = await cariSiswaPembayaran({
+        data: {
+          search: searchTerm,
+          status: "calon",
+          departemen_id: departemenId,
+          limit: 10,
+        },
+      });
+      return result.items;
     },
   });
 
@@ -180,6 +219,32 @@ export default function PembayaranPMB() {
     { key: "jumlah", label: "Jumlah", render: (v) => formatRupiah(Number(v)) },
     { key: "tanggal_bayar", label: "Tanggal", render: (v) => v ? format(new Date(v as string), "dd MMM yyyy", { locale: idLocale }) : "-" },
     { key: "keterangan", label: "Keterangan", render: (v) => (v as string) || "-" },
+    {
+      key: "aksi",
+      label: "Aksi",
+      render: (_, r) => (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            const lembaga = lembagaList?.find((l: any) => l.id === departemenId) as any;
+            setLastPayment({
+              id: r.id,
+              jumlah: Number(r.jumlah || 0),
+              tanggalBayar: r.tanggal_bayar,
+              keterangan: r.keterangan || undefined,
+              jenisNama: r.jenis_pembayaran?.nama || "Biaya Pendaftaran SPMB",
+              siswa: { nama: selectedSiswa?.nama || "-", nis: selectedSiswa?.nis ?? null },
+              lembagaNama: lembaga?.nama || lembaga?.kode || "-",
+            });
+            setShowKuitansi(true);
+          }}
+        >
+          <Printer className="mr-1.5 h-4 w-4" />
+          Cetak
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -323,6 +388,47 @@ export default function PembayaranPMB() {
             </Card>
           </div>
         </>
+      )}
+
+      {lastPayment && (
+        <Dialog open={showKuitansi} onOpenChange={setShowKuitansi}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Kuitansi Pembayaran SPMB</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-1 text-sm">
+              <p>Calon murid: <span className="font-semibold">{lastPayment.siswa.nama}</span></p>
+              <p>Jumlah: <span className="font-semibold">{formatRupiah(lastPayment.jumlah)}</span></p>
+              {lastPayment.nomorJurnal && (
+                <p>No. jurnal: <span className="font-mono text-xs">{lastPayment.nomorJurnal}</span></p>
+              )}
+            </div>
+            <PrintKuitansi
+              payment={{
+                id: lastPayment.id,
+                nomorJurnal: lastPayment.nomorJurnal,
+                jumlah: lastPayment.jumlah,
+                bulan: 0,
+                tanggal_bayar: lastPayment.tanggalBayar,
+                keterangan: lastPayment.keterangan,
+                jenisNama: lastPayment.jenisNama,
+                siswa: {
+                  nama: lastPayment.siswa.nama,
+                  nis: lastPayment.siswa.nis || undefined,
+                },
+              }}
+              kelasNama="Calon Murid"
+              lembagaNama={lastPayment.lembagaNama}
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowKuitansi(false)}>Tutup</Button>
+              <Button onClick={() => window.print()}>
+                <Printer className="mr-1.5 h-4 w-4" />
+                Cetak Kuitansi
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

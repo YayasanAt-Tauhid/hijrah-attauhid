@@ -42,6 +42,213 @@ export interface LegacyOutstandingBreakdownRow {
   exact_match: boolean;
 }
 
+export interface CariSiswaPembayaranInput {
+  search: string;
+  status?: "aktif" | "calon";
+  departemen_id?: string;
+  limit?: number;
+}
+
+export interface SiswaPembayaranRingkas {
+  id: string;
+  nis: string | null;
+  nama: string;
+  foto_url: string | null;
+  status: string | null;
+  angkatan_id: string | null;
+  departemen_id: string | null;
+  kelas_siswa: Array<{
+    kelas_id: string;
+    aktif: boolean | null;
+    kelas: {
+      id: string;
+      nama: string;
+      departemen_id: string | null;
+    } | null;
+  }>;
+}
+
+/**
+ * Pencarian siswa khusus loket pembayaran.
+ *
+ * Dibaca melalui service role di server, tetapi hanya bisa dipanggil role
+ * admin/keuangan/kasir dan hanya mengembalikan field minimum yang diperlukan
+ * form pembayaran. Ini menghindari pemberian SELECT penuh tabel siswa kepada
+ * kasir hanya agar autocomplete bekerja.
+ */
+export const cariSiswaPembayaran = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: CariSiswaPembayaranInput) => d)
+  .handler(async ({ data, context }): Promise<{ items: SiswaPembayaranRingkas[] }> => {
+    const admin = createAdminClient();
+    const { userId } = requireContext(context);
+    await requireRole(admin, userId, ["admin", "keuangan", "kasir"]);
+
+    const search = String(data?.search ?? "").trim();
+    if (search.length < 2) return { items: [] };
+
+    const status = data?.status === "calon" ? "calon" : "aktif";
+    const limit = Math.min(Math.max(Number(data?.limit ?? 10), 1), 20);
+    const select =
+      "id, nis, nama, foto_url, status, angkatan_id, departemen_id, kelas_siswa(kelas_id, aktif, kelas:kelas_id(id, nama, departemen_id))";
+
+    const buildQuery = (field: "nama" | "nis") => {
+      let q = admin
+        .from("siswa")
+        .select(select)
+        .eq("status", status)
+        .ilike(field, "%" + search + "%")
+        .limit(limit);
+      if (data?.departemen_id) q = q.eq("departemen_id", data.departemen_id);
+      return q;
+    };
+
+    const [byNama, byNis] = await Promise.all([
+      buildQuery("nama"),
+      buildQuery("nis"),
+    ]);
+
+    if (byNama.error) throw new Error("Gagal mencari siswa: " + byNama.error.message);
+    if (byNis.error) throw new Error("Gagal mencari siswa: " + byNis.error.message);
+
+    const unik = new Map<string, SiswaPembayaranRingkas>();
+    for (const row of [...(byNama.data ?? []), ...(byNis.data ?? [])] as any[]) {
+      unik.set(row.id, {
+        id: row.id,
+        nis: row.nis?.trim() || null,
+        nama: row.nama?.trim() || "—",
+        foto_url: row.foto_url ?? null,
+        status: row.status ?? null,
+        angkatan_id: row.angkatan_id ?? null,
+        departemen_id: row.departemen_id ?? null,
+        kelas_siswa: Array.isArray(row.kelas_siswa) ? row.kelas_siswa : [],
+      });
+    }
+
+    return {
+      items: Array.from(unik.values())
+        .sort((a, b) => a.nama.localeCompare(b.nama, "id-ID"))
+        .slice(0, limit),
+    };
+  });
+
+export interface RekapKasirSayaInput {
+  tanggal: string;
+}
+
+export interface RekapKasirSayaRow {
+  id: string;
+  jumlah: number;
+  tanggal_bayar: string | null;
+  bulan: number | null;
+  keterangan: string | null;
+  siswa_id: string | null;
+  siswa_nama: string;
+  siswa_nis: string | null;
+  siswa_status: string | null;
+  kelas_nama: string | null;
+  jenis_nama: string;
+  departemen_nama: string;
+  departemen_kode: string | null;
+  jurnal_nomor: string | null;
+}
+
+export interface RekapKasirSayaResult {
+  petugas_nama: string | null;
+  items: RekapKasirSayaRow[];
+  jumlah_transaksi: number;
+  total_penerimaan: number;
+  transaksi_spmb: number;
+  transaksi_siswa: number;
+}
+
+/**
+ * Rekap transaksi loket milik petugas yang sedang login.
+ *
+ * Kasir sengaja tidak mendapat akses Rekap Harian yayasan. Query ini selalu
+ * dibatasi ke pegawai yang terhubung ke akun login, sehingga "Rekap Kasir
+ * Saya" tidak dapat dipakai untuk membaca transaksi petugas lain.
+ */
+export const getRekapKasirSaya = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: RekapKasirSayaInput) => d)
+  .handler(async ({ data, context }): Promise<RekapKasirSayaResult> => {
+    const admin = createAdminClient();
+    const { userId } = requireContext(context);
+    await requireRole(admin, userId, ["admin", "keuangan", "kasir"]);
+
+    const tanggal = String(data?.tanggal ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) {
+      throw new Error("Tanggal rekap tidak valid");
+    }
+
+    const { data: profile, error: profileError } = await admin
+      .from("users_profile")
+      .select("pegawai_id")
+      .eq("id", userId)
+      .maybeSingle();
+    if (profileError) {
+      throw new Error("Gagal membaca profil petugas: " + profileError.message);
+    }
+    if (!profile?.pegawai_id) {
+      throw new Error(
+        "Akun ini belum terhubung ke data pegawai. Hubungkan akun ke pegawai terlebih dahulu agar Rekap Kasir Saya dapat digunakan."
+      );
+    }
+
+    const { data: pegawai } = await admin
+      .from("pegawai")
+      .select("nama")
+      .eq("id", profile.pegawai_id)
+      .maybeSingle();
+
+    const { data: rows, error } = await admin
+      .from("pembayaran")
+      .select(
+        "id, jumlah, tanggal_bayar, bulan, keterangan, siswa_id, jenis_pembayaran:jenis_id(nama), siswa:siswa_id(nama, nis, status, kelas_siswa(aktif, kelas:kelas_id(nama))), departemen:departemen_id(kode, nama), jurnal:jurnal_id(nomor)"
+      )
+      .eq("tanggal_bayar", tanggal)
+      .eq("petugas_id", profile.pegawai_id);
+
+    if (error) {
+      throw new Error("Gagal mengambil rekap kasir: " + error.message);
+    }
+
+    const items: RekapKasirSayaRow[] = ((rows ?? []) as any[]).map((row) => {
+      const kelasAktif = Array.isArray(row.siswa?.kelas_siswa)
+        ? row.siswa.kelas_siswa.find((ks: any) => ks?.aktif) ?? row.siswa.kelas_siswa[0]
+        : null;
+      return {
+        id: row.id,
+        jumlah: Number(row.jumlah ?? 0),
+        tanggal_bayar: row.tanggal_bayar ?? null,
+        bulan: row.bulan ?? null,
+        keterangan: row.keterangan ?? null,
+        siswa_id: row.siswa_id ?? null,
+        siswa_nama: row.siswa?.nama?.trim() || "—",
+        siswa_nis: row.siswa?.nis?.trim() || null,
+        siswa_status: row.siswa?.status ?? null,
+        kelas_nama: kelasAktif?.kelas?.nama ?? null,
+        jenis_nama: row.jenis_pembayaran?.nama ?? "—",
+        departemen_nama: row.departemen?.nama ?? "—",
+        departemen_kode: row.departemen?.kode ?? null,
+        jurnal_nomor: row.jurnal?.nomor ?? null,
+      };
+    });
+
+    const totalPenerimaan = items.reduce((sum, item) => sum + item.jumlah, 0);
+    const transaksiSpmb = items.filter((item) => item.siswa_status === "calon").length;
+
+    return {
+      petugas_nama: pegawai?.nama?.trim() || null,
+      items,
+      jumlah_transaksi: items.length,
+      total_penerimaan: totalPenerimaan,
+      transaksi_spmb: transaksiSpmb,
+      transaksi_siswa: items.length - transaksiSpmb,
+    };
+  });
+
 export const getLegacyOutstandingBreakdown = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .inputValidator((d: { siswa_id: string }) => d)

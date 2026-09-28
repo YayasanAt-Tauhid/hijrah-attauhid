@@ -16,8 +16,18 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@/lib/router-compat";
 import { AlertTriangle, Users, X, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import Unauthorized from "@/pages/Unauthorized";
 
 export default function TunggakanPembayaran() {
+  const { role } = useAuth();
+  if (!role || !["admin", "keuangan", "kasir"].includes(role)) {
+    return <Unauthorized />;
+  }
+  return <TunggakanPembayaranContent />;
+}
+
+function TunggakanPembayaranContent() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [departemenId, setDepartemenId] = useState<string>("");

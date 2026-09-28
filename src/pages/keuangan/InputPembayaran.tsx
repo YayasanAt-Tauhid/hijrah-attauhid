@@ -13,6 +13,7 @@ import {
   prosesPembayaran,
   batalkanPembayaran,
   getLegacyOutstandingBreakdown,
+  cariSiswaPembayaran,
 } from "@/server/pembayaran";
 import type { LegacyOutstandingBreakdownRow } from "@/server/pembayaran";
 import {
@@ -23,6 +24,7 @@ import { useTarifSiswa } from "@/hooks/useTarifTagihan";
 import { useTagihanBySiswa } from "@/hooks/useTagihan";
 import { logAuditKeuangan } from "@/hooks/useJurnal";
 import { useAuth } from "@/contexts/AuthContext";
+import Unauthorized from "@/pages/Unauthorized";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Search, Printer, Check, X, ShoppingCart, Trash2, Clock3 } from "lucide-react";
@@ -121,6 +123,14 @@ function useBatalkanPembayaran() {
 }
 
 export default function InputPembayaran() {
+  const { role } = useAuth();
+  if (!role || !["admin", "keuangan", "kasir"].includes(role)) {
+    return <Unauthorized />;
+  }
+  return <InputPembayaranContent />;
+}
+
+function InputPembayaranContent() {
   const queryClient = useQueryClient();
   const [searchTerm,    setSearchTerm]    = useState("");
   const [selectedSiswa, setSelectedSiswa] = useState<SiswaWithKelas | null>(null);
@@ -201,19 +211,17 @@ export default function InputPembayaran() {
 
   const { data: searchResults } = useQuery<SiswaWithKelas[]>({
     queryKey: ["search_siswa", searchTerm, departemenId],
-    enabled: searchTerm.length >= 2,
+    enabled: searchTerm.trim().length >= 2,
     queryFn: async () => {
-      // karakter khusus filter PostgREST (koma/kurung/%) bisa merusak ekspresi .or()
-      const safeTerm = searchTerm.replace(/[%,()]/g, "");
-      const { data } = await supabase
-        .from("siswa")
-        .select("id, nis, nama, foto_url, status, angkatan_id, kelas_siswa(kelas_id, aktif, kelas(id, nama, departemen_id))")
-        .or(`nama.ilike.%${safeTerm}%,nis.ilike.%${safeTerm}%`)
-        .eq("status", "aktif")
-        .limit(10);
-      const all = (data ?? []) as SiswaWithKelas[];
-      if (!departemenId) return all;
-      return all.filter(s => s.kelas_siswa?.some(ks => ks.kelas?.departemen_id === departemenId));
+      const result = await cariSiswaPembayaran({
+        data: {
+          search: searchTerm,
+          status: "aktif",
+          departemen_id: departemenId || undefined,
+          limit: 10,
+        },
+      });
+      return result.items as SiswaWithKelas[];
     },
   });
 

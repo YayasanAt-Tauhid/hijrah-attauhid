@@ -7,6 +7,7 @@ import { id as idLocale } from "date-fns/locale";
 interface PrintKuitansiProps {
   payment: {
     id?: string;
+    nomorJurnal?: string;
     jumlah: number;
     bulan: number;
     tanggal_bayar: string;
@@ -49,6 +50,9 @@ export function PrintKuitansi({ payment, kelasNama, lembagaNama }: PrintKuitansi
       <table className="w-full mb-4 text-sm">
         <tbody>
           <tr><td className="py-1 w-36">No. Kuitansi</td><td className="py-1">: {payment.id?.slice(0, 8).toUpperCase() || "-"}</td></tr>
+          {payment.nomorJurnal && (
+            <tr><td className="py-1">No. Jurnal</td><td className="py-1">: {payment.nomorJurnal}</td></tr>
+          )}
           <tr><td className="py-1">Tanggal</td><td className="py-1">: {format(new Date(payment.tanggal_bayar), "dd MMMM yyyy", { locale: idLocale })}</td></tr>
           <tr><td className="py-1">Nama Siswa</td><td className="py-1">: {payment.siswa.nama}</td></tr>
           <tr><td className="py-1">NIS</td><td className="py-1">: {payment.siswa.nis || "-"}</td></tr>
