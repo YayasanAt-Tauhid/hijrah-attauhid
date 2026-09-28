@@ -7,6 +7,7 @@ const keuanganPage = readFileSync(resolve(process.cwd(), "src/pages/Keuangan.tsx
 const pembayaranPage = readFileSync(resolve(process.cwd(), "src/pages/keuangan/InputPembayaran.tsx"), "utf8");
 const spmbPage = readFileSync(resolve(process.cwd(), "src/pages/keuangan/PembayaranPMB.tsx"), "utf8");
 const rekapKasirPage = readFileSync(resolve(process.cwd(), "src/pages/keuangan/RekapKasirSaya.tsx"), "utf8");
+const kuitansi = readFileSync(resolve(process.cwd(), "src/components/shared/PrintKuitansi.tsx"), "utf8");
 const pembayaranServer = readFileSync(resolve(process.cwd(), "src/server/pembayaran.ts"), "utf8");
 const spmbRoute = readFileSync(resolve(process.cwd(), "src/routes/_protected._app.keuangan.pembayaran-spmb.tsx"), "utf8");
 const rekapRoute = readFileSync(resolve(process.cwd(), "src/routes/_protected._app.keuangan.rekap-kasir.tsx"), "utf8");
@@ -44,6 +45,12 @@ describe("Kasir payment access contract", () => {
     expect(pembayaranServer).toContain('.eq("petugas_id", profile.pegawai_id)');
     expect(pembayaranServer).toContain('// BUKAN kasir — hanya admin/keuangan');
     expect(pembayaranServer).toContain('await requireRole(admin, userId, [\n        "admin",\n        "keuangan",\n      ])');
+  });
+
+  it("never prints NIK and uses NIS/NISN as the cashier receipt identity", () => {
+    expect(kuitansi).toContain("NIS / NISN");
+    expect(kuitansi).toContain("payment.siswa.nisn");
+    expect(kuitansi).not.toContain(">NIK<");
   });
 
   it("shows a cashier-only finance landing and printable SPMB receipt", () => {
