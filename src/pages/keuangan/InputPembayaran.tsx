@@ -147,11 +147,13 @@ function InputPembayaranContent() {
     siswa: SiswaWithKelas;
     tanggal_bayar: string;
     keterangan?: string;
+    petugasNama?: string;
   } | null>(null);
   const [lastPayment, setLastPayment] = useState<{
     pembayaran_id: string; jumlah: number; jenisNama: string;
     jenisTipe: string; siswa: SiswaWithKelas; bulan: number; tanggal_bayar: string;
     periodeLabel?: string;
+    petugasNama?: string;
   } | null>(null);
 
   const setField = useCallback(
@@ -554,6 +556,7 @@ function InputPembayaranContent() {
 
     const berhasilKeys = new Set<string>();
     const berhasilItems: Array<{ pembayaran_id: string; jumlah: number; jenisNama: string; bulan: number; tahunLabel: string }> = [];
+    let petugasNama: string | undefined;
     const gagal: string[] = [];
 
     for (let i = 0; i < cartItems.length; i++) {
@@ -574,6 +577,7 @@ function InputPembayaranContent() {
           },
         });
         berhasilKeys.add(item.key);
+        petugasNama = petugasNama || result.petugas_nama || undefined;
         berhasilItems.push({
           pembayaran_id: result.pembayaran_id,
           jumlah: result.jumlah,
@@ -608,6 +612,7 @@ function InputPembayaranContent() {
         siswa: selectedSiswa,
         tanggal_bayar: form.tanggalBayar,
         keterangan: form.keterangan || undefined,
+        petugasNama,
       });
       setShowCartKuitansi(true);
     }
@@ -657,6 +662,7 @@ function InputPembayaranContent() {
       periodeLabel: !isSekali && selectedTahunLabel
         ? `${namaBulan(form.bulan)} ${selectedTahunLabel}`
         : undefined,
+      petugasNama: result.petugas_nama || undefined,
     });
     setShowKuitansi(true);
     resetForm();
@@ -1174,6 +1180,7 @@ function InputPembayaranContent() {
               siswa={lastCartPayment.siswa}
               kelasNama={kelasNama}
               lembagaNama={lembagaNama}
+              petugasNama={lastCartPayment.petugasNama}
             />
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowCartKuitansi(false)}>Tutup</Button>
@@ -1205,6 +1212,7 @@ function InputPembayaranContent() {
               }}
               kelasNama={kelasNama}
               lembagaNama={lembagaNama}
+              petugasNama={lastPayment.petugasNama}
             />
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowKuitansi(false)}>Tutup</Button>
