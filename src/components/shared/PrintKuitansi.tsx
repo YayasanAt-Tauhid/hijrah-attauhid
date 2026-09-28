@@ -12,6 +12,7 @@ interface PrintKuitansiProps {
     tanggal_bayar: string;
     keterangan?: string;
     jenisNama: string;
+    periodeLabel?: string;
     siswa: { nama: string; nis?: string };
   };
   kelasNama: string;
@@ -55,7 +56,7 @@ export function PrintKuitansi({ payment, kelasNama, lembagaNama }: PrintKuitansi
           <tr><td className="py-1">Lembaga</td><td className="py-1">: {lembagaNama}</td></tr>
           <tr><td className="py-1">Jenis Pembayaran</td><td className="py-1">: {payment.jenisNama}</td></tr>
           {payment.bulan ? (
-            <tr><td className="py-1">Bulan</td><td className="py-1">: {namaBulanTahun(payment.bulan, { tanggalTransaksi: payment.tanggal_bayar })}</td></tr>
+            <tr><td className="py-1">Bulan</td><td className="py-1">: {payment.periodeLabel || namaBulanTahun(payment.bulan, { tanggalTransaksi: payment.tanggal_bayar })}</td></tr>
           ) : null}
           <tr><td className="py-1 font-bold">Jumlah</td><td className="py-1 font-bold">: {formatRupiah(payment.jumlah)}</td></tr>
           <tr><td className="py-1 italic">Terbilang</td><td className="py-1 italic">: {terbilang(payment.jumlah)}</td></tr>
