@@ -166,11 +166,34 @@ export default function InputPembayaran() {
     },
   });
 
+  // Jenis pembayaran yang sudah punya tagihan terbuka harus tetap dapat dipilih
+  // walaupun tidak lagi memiliki tarif_tagihan aktif. Ini penting untuk
+  // tunggakan/migrasi historis: nominal pembayaran bersumber dari tagihan yang
+  // sudah tersimpan, bukan dari tarif baru.
+  const { data: openTagihanJenisIds } = useQuery<Set<string>>({
+    queryKey: ["open_tagihan_jenis", selectedSiswa?.id, effectiveTahunAjaranId],
+    enabled: !!selectedSiswa && !!effectiveTahunAjaranId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tagihan")
+        .select("jenis_id")
+        .eq("siswa_id", selectedSiswa!.id)
+        .eq("tahun_ajaran_id", effectiveTahunAjaranId)
+        .in("status", ["belum_bayar", "terjadwal"]);
+      if (error) throw error;
+      return new Set((data ?? []).map(t => t.jenis_id).filter(Boolean) as string[]);
+    },
+  });
+
   const jenisList = useMemo<JenisPembayaran[]>(() => {
     if (!allJenisList) return [];
-    if (!selectedSiswa || !applicableTarifJenisIds) return allJenisList as JenisPembayaran[];
-    return (allJenisList as JenisPembayaran[]).filter(j => applicableTarifJenisIds.has(j.id));
-  }, [allJenisList, selectedSiswa, applicableTarifJenisIds]);
+    if (!selectedSiswa) return allJenisList as JenisPembayaran[];
+    if (!applicableTarifJenisIds && !openTagihanJenisIds) return allJenisList as JenisPembayaran[];
+
+    return (allJenisList as JenisPembayaran[]).filter(j =>
+      applicableTarifJenisIds?.has(j.id) || openTagihanJenisIds?.has(j.id)
+    );
+  }, [allJenisList, selectedSiswa, applicableTarifJenisIds, openTagihanJenisIds]);
 
   const selectedJenis = jenisList.find(j => j.id === form.jenisId) ?? null;
   const isSekali      = selectedJenis ? isTipeSekali(selectedJenis.tipe) : false;
