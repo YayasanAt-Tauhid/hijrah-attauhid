@@ -36,6 +36,138 @@ alter table migration.legacy_spp_monthly_normalization_20260928
 revoke all on table migration.legacy_spp_monthly_normalization_20260928
   from anon, authenticated;
 
+-- Keep the SPP tariff guard strict for ordinary charges. Historical migrated
+-- charges are the sole exception because their contractual amount and source
+-- period come from the frozen legacy snapshot, not from today's tariff table.
+-- A non-null legacy_source_key is accepted only when it exactly matches the
+-- student, month and remaining amount in the migration snapshot.
+create or replace function public.guard_tagihan_spp_tarif()
+returns trigger
+language plpgsql
+set search_path to 'public'
+as $function$
+declare
+  v_jenis record;
+  v_siswa record;
+  v_tarif numeric;
+  v_bruto numeric;
+begin
+  select nama, tipe, departemen_id into v_jenis
+  from public.jenis_pembayaran where id = new.jenis_id;
+
+  if not found
+     or v_jenis.tipe is distinct from 'bulanan'
+     or lower(btrim(v_jenis.nama)) !~ '^spp([[:space:]-]|$)'
+  then
+    return new;
+  end if;
+
+  if new.legacy_source_key is not null then
+    perform 1
+    from migration.legacy_tagihan_snapshot l
+    where l.source_key = new.legacy_source_key
+      and l.siswa_id = new.siswa_id
+      and extract(month from l.period_month)::int is not distinct from new.bulan
+      and abs(l.remaining::numeric - new.nominal::numeric) < 0.01;
+
+    if not found then
+      raise exception
+        'Tagihan SPP legacy tidak cocok dengan snapshot sumber %',
+        new.legacy_source_key;
+    end if;
+
+    if new.status is distinct from 'belum_bayar'
+       or new.jurnal_piutang_id is null
+    then
+      raise exception
+        'Tagihan SPP legacy harus berupa piutang terbuka dengan jurnal asal';
+    end if;
+
+    return new;
+  end if;
+
+  select nama, departemen_id, angkatan_id into v_siswa
+  from public.siswa where id = new.siswa_id;
+
+  if not found then
+    raise exception 'Siswa tagihan SPP tidak ditemukan';
+  end if;
+
+  if v_jenis.departemen_id is distinct from v_siswa.departemen_id then
+    raise exception 'Jenis SPP tidak sesuai lembaga siswa %', v_siswa.nama;
+  end if;
+
+  v_tarif := public.get_tarif_siswa(
+    new.jenis_id, new.siswa_id, new.kelas_id,
+    new.tahun_ajaran_id, v_siswa.angkatan_id
+  );
+
+  if v_tarif is null or v_tarif <= 0 then
+    raise exception
+      'Tarif SPP belum dikonfigurasi untuk %. Tetapkan tarif terlebih dahulu.',
+      v_siswa.nama;
+  end if;
+
+  v_bruto := coalesce(new.nominal_bruto, new.nominal);
+  if round(v_bruto, 2) is distinct from round(v_tarif, 2) then
+    raise exception
+      'Nominal bruto SPP % tidak sesuai tarif efektif % untuk %',
+      v_bruto, v_tarif, v_siswa.nama;
+  end if;
+
+  return new;
+end;
+$function$;
+
+-- Closed-book guard remains strict for ordinary charges. A migrated legacy
+-- receivable is not a new economic event: it is only a more granular
+-- representation of an already-posted receivable. Allow that representation
+-- in a closed source year only when the legacy key exactly matches the frozen
+-- snapshot.
+create or replace function public.guard_tagihan_insert_tahun_buku_locked()
+returns trigger
+language plpgsql
+security definer
+set search_path = 'public'
+as $function$
+declare
+  v_nama text;
+begin
+  if new.legacy_source_key is not null then
+    perform 1
+    from migration.legacy_tagihan_snapshot l
+    where l.source_key = new.legacy_source_key
+      and l.siswa_id = new.siswa_id
+      and extract(month from l.period_month)::int is not distinct from new.bulan
+      and abs(l.remaining::numeric - new.nominal::numeric) < 0.01;
+
+    if not found then
+      raise exception
+        'Tagihan legacy tidak cocok dengan snapshot sumber %',
+        new.legacy_source_key
+        using errcode = '55000';
+    end if;
+
+    return new;
+  end if;
+
+  if new.tahun_ajaran_id is not null
+     and public.is_tahun_buku_pendidikan_locked(new.tahun_ajaran_id)
+  then
+    select nama into v_nama
+    from public.tahun_buku
+    where id = new.tahun_ajaran_id;
+
+    raise exception
+      'Tagihan baru tidak dapat dibuat: Tahun Buku "%" sudah ditutup untuk Unit Pendidikan',
+      coalesce(v_nama, new.tahun_ajaran_id::text)
+      using errcode = '55000';
+  end if;
+
+  return new;
+end;
+$function$;
+
 create temp table tmp_legacy_spp_monthly_normalization
 on commit drop
 as
@@ -179,7 +311,7 @@ select
   x.kelas_id, x.new_bulan, x.source_remaining, 'belum_bayar',
   x.jurnal_piutang_id, null, x.created_at, x.created_by, null,
   null, null, null, null, x.period_month, null, 0, null,
-  null, null, null, null
+  x.source_key, null, null, null
 from tmp_legacy_spp_monthly_normalization x;
 
 insert into migration.legacy_spp_monthly_normalization_20260928 (
@@ -196,10 +328,9 @@ set target_tagihan_id = x.new_tagihan_id
 from tmp_legacy_spp_monthly_normalization x
 where l.source_key = x.source_key;
 
-update migration.legacy_balance_split_source_20260928 a
-set new_tagihan_id = x.new_tagihan_id
-from tmp_legacy_spp_monthly_normalization x
-where a.source_key = x.source_key;
+-- Do not rewrite legacy_balance_split_source_20260928: that table is an
+-- immutable audit of the preceding split migration. The normalization table
+-- above records the new source -> monthly tagihan mapping separately.
 
 update public.tagihan t
 set
