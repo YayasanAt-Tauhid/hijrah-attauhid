@@ -2,6 +2,20 @@
 -- exit uses status pindah/alumni and deactivates kelas_siswa. These five rows are
 -- legacy artifacts: they still have an active 2026/2027 class, a September 2026
 -- SPP balance, and nine future SPP balances in the verified legacy snapshot.
+
+create table if not exists migration.legacy_status_normalization_audit (
+  id uuid primary key default gen_random_uuid(),
+  siswa_id uuid not null references public.siswa(id) on delete cascade,
+  old_status text not null,
+  new_status text not null,
+  reason text not null,
+  evidence_snapshot_date date not null,
+  changed_at timestamptz not null default now()
+);
+
+create unique index if not exists legacy_status_normalization_audit_unique
+  on migration.legacy_status_normalization_audit(siswa_id,evidence_snapshot_date);
+
 do $$
 declare
   v_count integer;
@@ -30,8 +44,9 @@ begin
           and l.remaining>0
       )=9
       and not exists (
-        select 1 from public.siswa_identitas_audit a
-        where a.siswa_id=s.id and a.field_name='status'
+        select 1 from migration.legacy_status_normalization_audit a
+        where a.siswa_id=s.id
+          and a.evidence_snapshot_date=date '2026-09-27'
       )
   )
   select count(*) into v_count from candidates;
@@ -40,9 +55,11 @@ begin
     raise exception 'Legacy status normalization candidates changed: %',v_count;
   end if;
 
-  insert into public.siswa_identitas_audit
-    (siswa_id,field_name,old_value,new_value,changed_by)
-  select s.id,'status','keluar','aktif',null
+  insert into migration.legacy_status_normalization_audit
+    (siswa_id,old_status,new_status,reason,evidence_snapshot_date)
+  select s.id,'keluar','aktif',
+    'Rekonsiliasi migrasi: kelas 2026/2027 masih aktif, SPP September 2026 masih berjalan, dan terdapat 9 SPP mendatang pada snapshot legacy.',
+    date '2026-09-27'
   from public.siswa s
   join public.tahun_ajaran ta on ta.aktif
   join public.kelas_siswa ks on ks.siswa_id=s.id
@@ -65,8 +82,9 @@ begin
         and l.remaining>0
     )=9
     and not exists (
-      select 1 from public.siswa_identitas_audit a
-      where a.siswa_id=s.id and a.field_name='status'
+      select 1 from migration.legacy_status_normalization_audit a
+      where a.siswa_id=s.id
+        and a.evidence_snapshot_date=date '2026-09-27'
     );
 
   update public.siswa s
