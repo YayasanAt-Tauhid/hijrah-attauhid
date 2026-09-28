@@ -348,3 +348,93 @@ export const getMidtransConfig = createServerFn({ method: "GET" }).handler(
     };
   }
 );
+
+export interface SyncMidtransPaymentInput {
+  order_id: string;
+}
+
+export interface SyncMidtransPaymentResult {
+  order_id: string;
+  status: string;
+  gateway_status: string | null;
+}
+
+/**
+ * Fallback rekonsiliasi ketika webhook Midtrans terlambat atau tidak sampai.
+ * Hanya pemilik order yang boleh memanggilnya. Status resmi tetap diambil
+ * langsung dari Status API Midtrans, lalu payload sah tersebut diproses oleh
+ * handler webhook yang sama agar pencatatan pembayaran dan jurnal tetap atomik.
+ */
+export const syncMidtransPaymentStatus = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: SyncMidtransPaymentInput) => d)
+  .handler(async ({ data, context }): Promise<SyncMidtransPaymentResult> => {
+    const orderId = String(data?.order_id || "").trim();
+    if (!/^HAT-[A-Z0-9-]+$/.test(orderId)) {
+      throw new Error("Order ID tidak valid");
+    }
+
+    const admin = createAdminClient();
+    const userId = requireContext(context).userId;
+    const { data: transaksi, error: txError } = await admin
+      .from("transaksi_midtrans")
+      .select("order_id, status, midtrans_payment_status")
+      .eq("order_id", orderId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (txError) throw txError;
+    if (!transaksi) throw new Error("Transaksi tidak ditemukan");
+    if (transaksi.status !== "pending") {
+      return {
+        order_id: transaksi.order_id,
+        status: transaksi.status,
+        gateway_status: transaksi.midtrans_payment_status,
+      };
+    }
+
+    const serverKey = readEnv("MIDTRANS_SERVER_KEY") || "";
+    if (!serverKey) throw new Error("MIDTRANS_SERVER_KEY belum dikonfigurasi");
+    const apiBase = serverKey.startsWith("SB-")
+      ? "https://api.sandbox.midtrans.com"
+      : "https://api.midtrans.com";
+    const statusResponse = await fetch(
+      `${apiBase}/v2/${encodeURIComponent(orderId)}/status`,
+      { headers: { Authorization: `Basic ${btoa(`${serverKey}:`)}` } }
+    );
+    const gatewayPayload = await statusResponse.json() as Record<string, unknown>;
+
+    if (!statusResponse.ok) {
+      const message = typeof gatewayPayload.status_message === "string"
+        ? gatewayPayload.status_message
+        : "Gagal memeriksa status transaksi Midtrans";
+      throw new Error(message);
+    }
+
+    // Jalankan satu-satunya jalur pembukuan yang sudah memiliki verifikasi
+    // signature, idempotensi pembayaran, serta jurnal atomik.
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const origin = new URL(getRequest().url).origin;
+    const processResponse = await fetch(`${origin}/api/midtrans-notification`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(gatewayPayload),
+    });
+    if (!processResponse.ok) {
+      throw new Error(`Sinkronisasi pembayaran gagal (${processResponse.status})`);
+    }
+
+    const { data: refreshed, error: refreshError } = await admin
+      .from("transaksi_midtrans")
+      .select("order_id, status, midtrans_payment_status")
+      .eq("order_id", orderId)
+      .eq("user_id", userId)
+      .single();
+    if (refreshError) throw refreshError;
+
+    return {
+      order_id: refreshed.order_id,
+      status: refreshed.status,
+      gateway_status: refreshed.midtrans_payment_status,
+    };
+  });

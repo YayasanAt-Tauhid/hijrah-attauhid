@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { syncMidtransPaymentStatus } from "@/server/payment";
 import { useSearchParams } from "@/lib/router-compat";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -62,6 +63,8 @@ export default function PortalRiwayat() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const highlightOrder = searchParams.get("order");
+  const queryClient = useQueryClient();
+  const syncedOrderRef = useRef<string | null>(null);
 
   const { data: anakIds = [] } = useQuery({
     queryKey: ["portal-anak-ids", user?.id],
@@ -156,13 +159,44 @@ export default function PortalRiwayat() {
   });
 
   useEffect(() => {
-    if (highlightOrder && transaksi.length > 0) {
-      const found = transaksi.find((t) => t.order_id === highlightOrder);
-      if (found && found.status === "paid") {
-        toast.success(`Transaksi ${highlightOrder} berhasil diproses`);
-      }
+    if (!highlightOrder || transaksi.length === 0) return;
+    const found = transaksi.find((t) => t.order_id === highlightOrder);
+    if (!found) return;
+
+    if (found.status === "paid") {
+      toast.success(`Transaksi ${highlightOrder} berhasil diproses`);
+      return;
     }
-  }, [highlightOrder, transaksi]);
+
+    // Callback browser tidak selalu dibarengi webhook tepat waktu. Saat orang
+    // tua kembali dari Midtrans dan order masih pending, minta server mengecek
+    // Status API resmi satu kali. Server tetap memverifikasi kepemilikan order
+    // dan signature sebelum membuat pembayaran/jurnal.
+    if (found.status === "pending" && syncedOrderRef.current !== highlightOrder) {
+      syncedOrderRef.current = highlightOrder;
+      void syncMidtransPaymentStatus({ data: { order_id: highlightOrder } })
+        .then(async (result) => {
+          await queryClient.invalidateQueries({
+            queryKey: ["portal-riwayat", user?.id],
+          });
+          if (result.status === "paid") {
+            toast.success(`Transaksi ${highlightOrder} berhasil diproses`);
+          } else if (result.status === "pending") {
+            toast.info("Pembayaran masih menunggu konfirmasi Midtrans");
+          } else {
+            toast.error(`Pembayaran berstatus ${result.status}`);
+          }
+        })
+        .catch((error) => {
+          syncedOrderRef.current = null;
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Status pembayaran belum dapat disinkronkan"
+          );
+        });
+    }
+  }, [highlightOrder, transaksi, queryClient, user?.id]);
 
   // Cetak di popup terpisah. Semua data DB di-escape sebelum masuk ke HTML
   // karena about:blank mewarisi origin halaman pembuka; tanpa escape, data
