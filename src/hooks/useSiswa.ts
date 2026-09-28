@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchAllPages } from "@/lib/fetchAll";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { getAkademikManagedDepartemenIds } from "@/lib/akademikScope";
 
 export interface SiswaWithRelations {
   id: string;
@@ -36,6 +37,9 @@ export function useSiswaList() {
   return useQuery({
     queryKey: ["siswa", role === "admin_tu" ? "scoped" : "all"],
     queryFn: async () => {
+      const managedDepartemenIds = await getAkademikManagedDepartemenIds(role);
+      if (role === "admin_tu" && !managedDepartemenIds?.length) return [];
+
       const data = await fetchAllPages((from, to) => {
         let q = supabase
           .from("siswa")
@@ -51,6 +55,7 @@ export function useSiswaList() {
           `)
           .order("nama")
           .order("id");
+        if (managedDepartemenIds) q = q.in("departemen_id", managedDepartemenIds);
         return q.range(from, to);
       });
       return data as SiswaWithRelations[];

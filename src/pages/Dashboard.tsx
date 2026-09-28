@@ -8,6 +8,8 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, subDays } from "date-fns";
+import { useAuth } from "@/contexts/AuthContext";
+import { getAkademikManagedDepartemenIds } from "@/lib/akademikScope";
 import { id as idLocale } from "date-fns/locale";
 
 function formatRupiahSingkat(n: number): string {
@@ -28,14 +30,21 @@ const STATUS_LABELS: Record<string, string> = { H: "Hadir", I: "Izin", S: "Sakit
 const HARI_SINGKAT = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 
 export default function Dashboard() {
+  const { role } = useAuth();
+
   // 1. Total Siswa Aktif
   const { data: totalSiswa, isLoading: loadSiswa } = useQuery({
-    queryKey: ["dashboard_total_siswa"],
+    queryKey: ["dashboard_total_siswa", role],
     queryFn: async () => {
-      const { count, error } = await supabase
+      const managedDepartemenIds = await getAkademikManagedDepartemenIds(role);
+      if (role === "admin_tu" && !managedDepartemenIds?.length) return 0;
+
+      let q = supabase
         .from("siswa")
         .select("*", { count: "exact", head: true })
         .eq("status", "aktif");
+      if (managedDepartemenIds) q = q.in("departemen_id", managedDepartemenIds);
+      const { count, error } = await q;
       if (error) throw error;
       return count || 0;
     },
@@ -125,12 +134,22 @@ export default function Dashboard() {
 
   // 6. Komposisi Siswa
   const { data: genderData, isLoading: loadGender } = useQuery({
-    queryKey: ["dashboard_komposisi_siswa"],
+    queryKey: ["dashboard_komposisi_siswa", role],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const managedDepartemenIds = await getAkademikManagedDepartemenIds(role);
+      if (role === "admin_tu" && !managedDepartemenIds?.length) {
+        return [
+          { name: "Laki-laki", value: 0 },
+          { name: "Perempuan", value: 0 },
+        ];
+      }
+
+      let q = supabase
         .from("siswa")
         .select("jenis_kelamin")
         .eq("status", "aktif");
+      if (managedDepartemenIds) q = q.in("departemen_id", managedDepartemenIds);
+      const { data, error } = await q;
       if (error) throw error;
       let L = 0, P = 0;
       (data || []).forEach((r) => {
