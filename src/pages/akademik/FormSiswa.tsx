@@ -21,6 +21,7 @@ import { SpmbDocumentUpload } from "@/components/akademik/SpmbDocumentUpload";
 import { SpmbFieldVerification } from "@/components/akademik/SpmbFieldVerification";
 import { fetchSpmbVerificationState, saveSpmbVerificationFields, spmbVerificationQueryKey, useSpmbVerificationState } from "@/hooks/useSpmbVerification";
 import { ArrowLeft, Save, Wand2, Pencil, Loader2 } from "lucide-react";
+import { PENGHASILAN_CHOICES } from "@/lib/penghasilanOrangtua";
 
 const optionalString = z.string().optional();
 const siswaSchema = z.object({
@@ -101,6 +102,7 @@ const kategoriOptions = makeChoices(["MURID BARU", "MURID PINDAHAN"]);
 const ukuranBajuOptions = makeChoices(["S", "M", "L", "XL", "XXL", "X3L", "X4L", "X5L"]);
 const transportasiOptions = makeChoices(["Mobil Pribadi", "Sepeda Motor", "Mobil/Bus Antar Jemput", "Sepeda", "Jalan Kaki", "Lainnya"]);
 const pekerjaanOptions = makeChoices(["PNS/TNI/POLRI", "KARYAWAN BUMN", "KARYAWAN SWASTA", "WIRASWASTA", "LAINNYA", "SUDAH MENINGGAL"]);
+const penghasilanOptions: Choice[] = PENGHASILAN_CHOICES;
 const latinOptions = makeChoices(["BAIK", "CUKUP", "KURANG"]);
 const pendidikanOptions: Choice[] = [
   { value: "SD", label: "SD / Sederajat" }, { value: "SMP", label: "SMP / Sederajat" },
@@ -203,7 +205,7 @@ function TextAreaField({ form, name, label, placeholder, onValueChange, after }:
   );
 }
 
-function SelectField({ form, name, label, options, placeholder = "Pilih", onValueChange, after }: {
+function SelectField({ form, name, label, options, placeholder = "Pilih", onValueChange, after, legacyValueLabel }: {
   form: UseFormReturn<SiswaForm>;
   name: keyof SiswaForm;
   label: string;
@@ -211,20 +213,40 @@ function SelectField({ form, name, label, options, placeholder = "Pilih", onValu
   placeholder?: string;
   onValueChange?: (value: string) => void;
   after?: ReactNode;
+  legacyValueLabel?: (value: string) => string;
 }) {
   return (
-    <FormField control={form.control} name={name as any} render={({ field }) => (
-      <FormItem>
-        <FormLabel>{label}</FormLabel>
-        <Select onValueChange={(value) => { field.onChange(value); onValueChange?.(value); }} value={field.value || ""}>
-          <FormControl><SelectTrigger><SelectValue placeholder={placeholder} /></SelectTrigger></FormControl>
-          <SelectContent>{options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
-        </Select>
-        <FormMessage />
-        {after}
-      </FormItem>
-    )} />
+    <FormField control={form.control} name={name as any} render={({ field }) => {
+      const currentValue = String(field.value || "");
+      const isLegacyValue = Boolean(currentValue) && !options.some((option) => option.value === currentValue);
+      return (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <Select onValueChange={(value) => { field.onChange(value); onValueChange?.(value); }} value={currentValue}>
+            <FormControl><SelectTrigger><SelectValue placeholder={placeholder} /></SelectTrigger></FormControl>
+            <SelectContent>
+              {isLegacyValue && (
+                <SelectItem value={currentValue}>
+                  {legacyValueLabel?.(currentValue) || ("Data lama: " + currentValue)}
+                </SelectItem>
+              )}
+              {options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <FormMessage />
+          {after}
+        </FormItem>
+      );
+    }} />
   );
+}
+
+function legacyPenghasilanLabel(value: string): string {
+  const amount = Number(value);
+  const formatted = Number.isFinite(amount)
+    ? new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(amount)
+    : value;
+  return "Data lama: " + formatted + " — pilih rentang";
 }
 
 export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
@@ -674,7 +696,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                         <TextField form={form} name="tanggal_lahir_ayah" label="Tanggal Lahir *" type="date" onValueChange={() => resetVerification("tanggal_lahir_ayah")} after={verificationControl("tanggal_lahir_ayah")} />
                         <SelectField form={form} name="pendidikan_ayah" label="Pendidikan Terakhir *" options={pendidikanOptions} onValueChange={() => resetVerification("pendidikan_ayah")} after={verificationControl("pendidikan_ayah")} />
                         <SelectField form={form} name="pekerjaan_ayah" label="Pekerjaan *" options={pekerjaanOptions} onValueChange={() => resetVerification("pekerjaan_ayah")} after={verificationControl("pekerjaan_ayah")} />
-                        <TextField form={form} name="penghasilan_ayah" label="Penghasilan (Rp) *" type="number" onValueChange={() => resetVerification("penghasilan_ayah")} after={verificationControl("penghasilan_ayah")} />
+                        <SelectField form={form} name="penghasilan_ayah" label="Rentang Penghasilan *" options={penghasilanOptions} placeholder="Pilih rentang penghasilan" legacyValueLabel={legacyPenghasilanLabel} onValueChange={() => resetVerification("penghasilan_ayah")} after={verificationControl("penghasilan_ayah")} />
                         <TextField form={form} name="telepon_ayah" label="No. HP / WA *" inputMode="tel" onValueChange={() => resetVerification("telepon_ayah")} after={verificationControl("telepon_ayah")} />
                       </div>
                       <TextAreaField form={form} name="alamat_ayah" label="Alamat Ayah *" onValueChange={() => resetVerification("alamat_ayah")} after={verificationControl("alamat_ayah")} />
@@ -691,7 +713,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                         <TextField form={form} name="tanggal_lahir_ibu" label="Tanggal Lahir *" type="date" onValueChange={() => resetVerification("tanggal_lahir_ibu")} after={verificationControl("tanggal_lahir_ibu")} />
                         <SelectField form={form} name="pendidikan_ibu" label="Pendidikan Terakhir *" options={pendidikanOptions} onValueChange={() => resetVerification("pendidikan_ibu")} after={verificationControl("pendidikan_ibu")} />
                         <SelectField form={form} name="pekerjaan_ibu" label="Pekerjaan *" options={pekerjaanOptions} onValueChange={() => resetVerification("pekerjaan_ibu")} after={verificationControl("pekerjaan_ibu")} />
-                        <TextField form={form} name="penghasilan_ibu" label="Penghasilan (Rp) *" type="number" onValueChange={() => resetVerification("penghasilan_ibu")} after={verificationControl("penghasilan_ibu")} />
+                        <SelectField form={form} name="penghasilan_ibu" label="Rentang Penghasilan *" options={penghasilanOptions} placeholder="Pilih rentang penghasilan" legacyValueLabel={legacyPenghasilanLabel} onValueChange={() => resetVerification("penghasilan_ibu")} after={verificationControl("penghasilan_ibu")} />
                         <TextField form={form} name="telepon_ibu" label="No. HP / WA *" inputMode="tel" onValueChange={() => resetVerification("telepon_ibu")} after={verificationControl("telepon_ibu")} />
                       </div>
                       <TextAreaField form={form} name="alamat_ibu" label="Alamat Ibu *" onValueChange={() => resetVerification("alamat_ibu")} after={verificationControl("alamat_ibu")} />
