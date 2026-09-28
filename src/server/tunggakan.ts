@@ -318,11 +318,15 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
       terbayarMap.set(k, (terbayarMap.get(k) || 0) + (Number(p.jumlah) || 0));
     }
 
-    const bySiswa = new Map<string, {
-      bulanTunggak: number[];
-      tagihanTunggak: { tagihan_id: string; bulan: number; sisa: number }[];
-      total: number;
-    }>();
+    // Satu baris hasil = satu tagihan/periode. Jangan gabungkan beberapa bulan
+    // milik siswa menjadi satu total karena kasir harus bisa memilih tunggakan
+    // tertentu (mis. November saja tanpa otomatis ikut Desember).
+    const siswaMeta = new Map<string, KelasSiswaRow>();
+    for (const ks of filtered) {
+      if (!siswaMeta.has(ks.siswa_id)) siswaMeta.set(ks.siswa_id, ks);
+    }
+
+    const rows: TunggakanSiswaRow[] = [];
     for (const t of tagihanRows) {
       const nominal = Number(t.nominal) || 0;
       const k = kunci(t.siswa_id!, t.bulan);
@@ -331,27 +335,25 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
       if (sisa <= 0) continue;
       if (!sudahMenunggak(t.jatuh_tempo, perTanggal)) continue; // belum jatuh tempo -> bukan tunggakan
 
-      const entry = bySiswa.get(t.siswa_id!) || { bulanTunggak: [], tagihanTunggak: [], total: 0 };
-      entry.bulanTunggak.push(t.bulan ?? 0);
-      entry.tagihanTunggak.push({ tagihan_id: t.id, bulan: t.bulan ?? 0, sisa });
-      entry.total += sisa;
-      bySiswa.set(t.siswa_id!, entry);
-    }
+      const ks = siswaMeta.get(t.siswa_id!);
+      if (!ks) continue;
 
-    const rows: TunggakanSiswaRow[] = [];
-    for (const ks of filtered) {
-      const agg = bySiswa.get(ks.siswa_id);
-      if (!agg) continue;
       rows.push({
-        siswa_id: ks.siswa_id,
+        siswa_id: t.siswa_id!,
         nis: ks.siswa?.nis ?? null,
         nama: ks.siswa?.nama ?? null,
         kelas: ks.kelas?.nama ?? null,
-        bulan_tunggak: agg.bulanTunggak.sort((a, b) => a - b),
-        tagihan_tunggak: agg.tagihanTunggak,
-        total: agg.total,
+        bulan_tunggak: [t.bulan ?? 0],
+        tagihan_tunggak: [{ tagihan_id: t.id, bulan: t.bulan ?? 0, sisa }],
+        total: sisa,
       });
     }
+
+    rows.sort((a, b) => {
+      const byName = (a.nama ?? "").localeCompare(b.nama ?? "", "id");
+      if (byName !== 0) return byName;
+      return (a.bulan_tunggak[0] ?? 0) - (b.bulan_tunggak[0] ?? 0);
+    });
 
     return { rows, per_tanggal: perTanggal };
   });

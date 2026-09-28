@@ -83,24 +83,26 @@ export default function TunggakanPembayaran() {
         },
       });
       return res.rows.map((r) => ({
-        id: r.siswa_id,
+        // Identitas baris/checkbox unik per tagihan, bukan per siswa.
+        id: r.tagihan_tunggak[0]?.tagihan_id ?? [r.siswa_id, r.bulan_tunggak[0] ?? 0].join(":"),
+        siswa_id: r.siswa_id,
         nis: r.nis || "-",
         nama: r.nama || "-",
         kelas: r.kelas || "-",
-        bulan_tunggak: isSekaliBayar ? "Sekali Bayar" : r.bulan_tunggak.map(namaBulan).join(", "),
-        bulan_tunggak_arr: r.bulan_tunggak,
+        bulan: r.bulan_tunggak[0] ?? 0,
         tagihan_tunggak: r.tagihan_tunggak,
-        jumlah_bulan: r.bulan_tunggak.length,
         total: r.total,
       }));
     },
   });
 
-  const totalSiswa = tunggakanData?.length || 0;
+  const totalTagihan = tunggakanData?.length || 0;
+  const totalSiswa = new Set((tunggakanData ?? []).map((r) => r.siswa_id)).size;
   const totalNominal = tunggakanData?.reduce((s, r) => s + r.total, 0) || 0;
 
   const selectedRows = tunggakanData?.filter((r) => selectedIds.has(r.id)) || [];
   const selectedTotal = selectedRows.reduce((s, r) => s + r.total, 0);
+  const selectedSiswaCount = new Set(selectedRows.map((r) => r.siswa_id)).size;
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -126,7 +128,8 @@ export default function TunggakanPembayaran() {
     // Hitung total transaksi (bisa lebih dari jumlah siswa karena multi-bulan)
     const allTx = selectedRows.flatMap((sr) =>
       sr.tagihan_tunggak.map((t) => ({
-        siswaId: sr.id,
+        rowId: sr.id,
+        siswaId: sr.siswa_id,
         bulan: t.bulan,
         tagihanId: t.tagihan_id,
         sisa: t.sisa,
@@ -157,7 +160,7 @@ export default function TunggakanPembayaran() {
         });
         berhasil++;
       } catch (e: any) {
-        const namaRow = selectedRows.find((r) => r.id === tx.siswaId)?.nama ?? tx.siswaId;
+        const namaRow = selectedRows.find((r) => r.id === tx.rowId)?.nama ?? tx.siswaId;
         gagalList.push(`${namaRow}: ${e.message}`);
       }
       setBulkProgress({ done: i + 1, total: allTx.length });
@@ -189,6 +192,9 @@ export default function TunggakanPembayaran() {
   const kelasNama = filteredKelas?.find((k: any) => k.id === kelasId);
   const jenisNama = jenisList?.find((j: any) => j.id === jenisId);
   const tahunAjaranNama = tahunAjaranList?.find((t: any) => t.id === tahunAjaranId);
+  const tahunPeriode = tahunAjaranNama?.tanggal_mulai?.slice(0, 4)
+    || String(tahunAjaranNama?.nama ?? "").match(/\d{4}/)?.[0]
+    || "";
 
   const activeFilters: ActiveFilter[] = [
     ...(tahunAjaranId ? [{
@@ -225,9 +231,14 @@ export default function TunggakanPembayaran() {
     { key: "nis", label: "NIS", sortable: true },
     { key: "nama", label: "Nama Siswa", sortable: true },
     { key: "kelas", label: "Kelas" },
-    { key: "bulan_tunggak", label: isSekaliBayar ? "Tipe" : "Bulan Tunggak" },
-    ...(!isSekaliBayar ? [{ key: "jumlah_bulan", label: "Jml Bulan" }] : []),
-    { key: "total", label: "Total Tunggakan", render: (v: unknown) => formatRupiah(Number(v)) },
+    {
+      key: "bulan",
+      label: "Periode Tagihan",
+      render: (v: unknown) => isSekaliBayar
+        ? "Sekali Bayar"
+        : namaBulan(Number(v)) + (tahunPeriode ? " " + tahunPeriode : ""),
+    },
+    { key: "total", label: "Sisa Tagihan", render: (v: unknown) => formatRupiah(Number(v)) },
   ];
 
   return (
@@ -242,7 +253,7 @@ export default function TunggakanPembayaran() {
           <div className="flex items-center gap-2 flex-wrap justify-end">
             <Badge variant="secondary" className="gap-1.5 py-1 px-2.5 text-xs font-medium">
               <Users className="h-3 w-3" />
-              {totalSiswa} siswa
+              {totalSiswa} siswa · {totalTagihan} tunggakan
             </Badge>
             <Badge variant="destructive" className="gap-1.5 py-1 px-2.5 text-xs font-medium">
               <AlertTriangle className="h-3 w-3" />
@@ -349,7 +360,7 @@ export default function TunggakanPembayaran() {
             exportable
             exportFilename="tunggakan-pembayaran"
             pageSize={20}
-            onRowClick={(row) => navigate(`/keuangan/pembayaran?siswa=${row.id}`)}
+            onRowClick={(row) => navigate("/keuangan/pembayaran?siswa=" + row.siswa_id)}
           />
         </>
       )}
@@ -366,7 +377,7 @@ export default function TunggakanPembayaran() {
           ) : (
             <>
               <span className="text-sm font-medium">
-                {selectedIds.size} siswa dipilih — Total: <span className="text-primary font-bold">{formatRupiah(selectedTotal)}</span>
+                {selectedIds.size} tunggakan dipilih ({selectedSiswaCount} siswa) — Total: <span className="text-primary font-bold">{formatRupiah(selectedTotal)}</span>
               </span>
               <Button size="sm" onClick={() => setShowConfirm(true)} disabled={isBulkPaying}>
                 <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
@@ -384,7 +395,7 @@ export default function TunggakanPembayaran() {
         open={showConfirm}
         onOpenChange={setShowConfirm}
         title="Konfirmasi Pembayaran Massal"
-        description={`Akan memproses pembayaran untuk ${selectedRows.length} siswa (${selectedRows.reduce((s, r) => s + r.bulan_tunggak_arr.length, 0)} transaksi).\nTotal: ${formatRupiah(selectedTotal)}\n\nJurnal otomatis akan dibuat dan tagihan diupdate via Edge Function.`}
+        description={"Akan memproses " + selectedRows.length + " tunggakan untuk " + selectedSiswaCount + " siswa.\nTotal: " + formatRupiah(selectedTotal) + "\n\nSetiap tagihan diproses terpisah; jurnal dan status tagihan diperbarui otomatis."}
         confirmLabel="Konfirmasi & Proses"
         onConfirm={handleBulkPay}
         loading={isBulkPaying}
