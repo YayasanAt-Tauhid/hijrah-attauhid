@@ -289,31 +289,74 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
     if (!filtered.length) return { rows: [], per_tanggal: perTanggal };
 
     const siswaIds = Array.from(new Set(filtered.map((r) => r.siswa_id)));
+    const siswaIdSet = new Set(siswaIds);
 
-    // Tagihan yang masih menagih (belum lunas/dibatalkan/dihapusbuku)
-    let tagihanQuery = admin
-      .from("tagihan")
-      .select("id, siswa_id, bulan, nominal, jatuh_tempo")
-      .eq("jenis_id", jenis_id)
-      .eq("tahun_ajaran_id", tahun_ajaran_id)
-      .in("siswa_id", siswaIds)
-      .not("status", "in", `(${STATUS_SELESAI.join(",")})`);
-    if (bulan_list && bulan_list.length > 0) tagihanQuery = tagihanQuery.in("bulan", bulan_list);
-    const { data: tagihanRows, error: tErr } = await tagihanQuery;
-    if (tErr) throw new Error("Gagal mengambil data tagihan: " + tErr.message);
-    if (!tagihanRows?.length) return { rows: [], per_tanggal: perTanggal };
+    // Jangan kirim >1.000 siswa aktif sebagai satu filter .in(...): selain URL
+    // menjadi terlalu panjang, PostgREST juga membatasi satu response page.
+    // Ambil tagihan per jenis+tahun secara berhalaman lalu saring ke siswa aktif
+    // di server. Ini juga membuat laporan tetap lengkap bila satu jenis punya
+    // >1.000 baris tagihan.
+    type BatchTagihanRow = {
+      id: string;
+      siswa_id: string | null;
+      bulan: number | null;
+      nominal: number | string | null;
+      jatuh_tempo: string | null;
+    };
+    const tagihanRows: BatchTagihanRow[] = [];
+    const pageSize = 1000;
+    for (let from = 0; ; from += pageSize) {
+      let tagihanQuery = admin
+        .from("tagihan")
+        .select("id, siswa_id, bulan, nominal, jatuh_tempo")
+        .eq("jenis_id", jenis_id)
+        .eq("tahun_ajaran_id", tahun_ajaran_id)
+        .not("status", "in", `(${STATUS_SELESAI.join(",")})`)
+        .order("id", { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (bulan_list && bulan_list.length > 0) {
+        tagihanQuery = tagihanQuery.in("bulan", bulan_list);
+      }
 
-    // Pembayaran (untuk sisa parsial -- satu tagihan bisa dicicil)
-    const { data: payments } = await admin
-      .from("pembayaran")
-      .select("siswa_id, bulan, jumlah")
-      .eq("jenis_id", jenis_id)
-      .eq("tahun_ajaran_id", tahun_ajaran_id)
-      .in("siswa_id", siswaIds);
+      const { data: page, error: tErr } = await tagihanQuery;
+      if (tErr) throw new Error("Gagal mengambil data tagihan: " + tErr.message);
+      for (const row of page || []) {
+        if (row.siswa_id && siswaIdSet.has(row.siswa_id)) {
+          tagihanRows.push(row as BatchTagihanRow);
+        }
+      }
+      if (!page || page.length < pageSize) break;
+    }
+    if (!tagihanRows.length) return { rows: [], per_tanggal: perTanggal };
+
+    // Pembayaran parsial juga dibaca berhalaman. Filtering siswa dilakukan di
+    // server supaya tidak membangun query-string .in(...) yang sangat panjang.
+    type BatchPaymentRow = {
+      siswa_id: string | null;
+      bulan: number | null;
+      jumlah: number | string | null;
+    };
+    const payments: BatchPaymentRow[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data: page, error: pErr } = await admin
+        .from("pembayaran")
+        .select("siswa_id, bulan, jumlah")
+        .eq("jenis_id", jenis_id)
+        .eq("tahun_ajaran_id", tahun_ajaran_id)
+        .order("id", { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (pErr) throw new Error("Gagal mengambil data pembayaran: " + pErr.message);
+      for (const row of page || []) {
+        if (row.siswa_id && siswaIdSet.has(row.siswa_id)) {
+          payments.push(row as BatchPaymentRow);
+        }
+      }
+      if (!page || page.length < pageSize) break;
+    }
 
     const kunci = (siswaId: string, bulan: number | null) => `${siswaId}|${bulan ?? "x"}`;
     const terbayarMap = new Map<string, number>();
-    for (const p of payments || []) {
+    for (const p of payments) {
       const k = kunci(p.siswa_id!, p.bulan);
       terbayarMap.set(k, (terbayarMap.get(k) || 0) + (Number(p.jumlah) || 0));
     }
