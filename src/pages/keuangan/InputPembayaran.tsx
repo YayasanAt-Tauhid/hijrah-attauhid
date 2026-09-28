@@ -8,7 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { supabase } from "@/integrations/supabase/client";
-import { prosesPembayaran, batalkanPembayaran } from "@/server/pembayaran";
+import {
+  prosesPembayaran,
+  batalkanPembayaran,
+  getLegacyOutstandingBreakdown,
+} from "@/server/pembayaran";
+import type { LegacyOutstandingBreakdownRow } from "@/server/pembayaran";
 import {
   useJenisPembayaran, useLembaga, useTahunBukuAktif,
   useTahunBuku, formatRupiah, terbilang, namaBulan, namaBulanTahun, BULAN_ORDER_AKADEMIK,
@@ -268,6 +273,16 @@ export default function InputPembayaran() {
     },
   });
 
+  const { data: legacyBreakdown = [] } = useQuery<LegacyOutstandingBreakdownRow[]>({
+    queryKey: ["legacy_outstanding_breakdown", selectedSiswa?.id],
+    enabled: !!selectedSiswa,
+    queryFn: async () => {
+      return await getLegacyOutstandingBreakdown({
+        data: { siswa_id: selectedSiswa!.id },
+      });
+    },
+  });
+
   const { data: riwayat, isLoading: loadRiwayat } = useQuery<PembayaranWithJenis[]>({
     queryKey: ["pembayaran_siswa", selectedSiswa?.id],
     enabled: !!selectedSiswa,
@@ -458,6 +473,37 @@ export default function InputPembayaran() {
                 <span className="text-muted-foreground">Lembaga</span><span className="font-medium">{lembagaNama}</span>
               </div>
             </div>
+            {legacyBreakdown.length > 0 && (
+              <div className="rounded-lg border p-4">
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  Rincian dari Aplikasi Lama
+                </h4>
+                <div className="space-y-2">
+                  {legacyBreakdown.map((row, i) => (
+                    <div key={`${row.kode_lama ?? "legacy"}-${row.nama_lama}-${i}`} className="text-xs border-b border-border/50 pb-2 last:border-0 last:pb-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium leading-snug">
+                            {row.kode_lama ? `${row.kode_lama} — ` : ""}{row.nama_lama}
+                          </p>
+                        </div>
+                        <span className="font-semibold shrink-0">{formatRupiah(row.nominal)}</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between pt-1 text-xs font-semibold">
+                    <span>Total rincian legacy</span>
+                    <span>{formatRupiah(legacyBreakdown[0]?.breakdown_total ?? 0)}</span>
+                  </div>
+                  {!legacyBreakdown[0]?.exact_match && (
+                    <p className="text-[10px] text-amber-600 leading-relaxed">
+                      Rincian di atas adalah sumber migrasi. Ada pembayaran/penyesuaian setelah snapshot,
+                      sehingga jumlah bayar pada form tetap menjadi acuan saldo terkini.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="rounded-lg border p-4">
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Riwayat Terakhir</h4>
               <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
