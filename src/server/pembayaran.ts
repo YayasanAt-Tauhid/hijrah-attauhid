@@ -33,6 +33,43 @@ export interface ProsesPembayaranResult {
   jumlah: number;
 }
 
+export interface LegacyOutstandingBreakdownRow {
+  kode_lama: string | null;
+  nama_lama: string;
+  nominal: number;
+  breakdown_total: number;
+  current_total: number;
+  exact_match: boolean;
+}
+
+export const getLegacyOutstandingBreakdown = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: { siswa_id: string }) => d)
+  .handler(async ({ data, context }): Promise<LegacyOutstandingBreakdownRow[]> => {
+    const admin = createAdminClient();
+    const { userId } = requireContext(context);
+    await requireRole(admin, userId, ["admin", "keuangan", "kasir"]);
+
+    if (!data.siswa_id) return [];
+
+    const { data: rows, error } = await (admin as any).rpc(
+      "get_legacy_outstanding_breakdown",
+      { p_siswa_id: data.siswa_id }
+    );
+    if (error) {
+      throw new Error("Gagal mengambil rincian tagihan legacy: " + error.message);
+    }
+
+    return (rows ?? []).map((row: any) => ({
+      kode_lama: row.kode_lama ?? null,
+      nama_lama: String(row.nama_lama ?? ""),
+      nominal: Number(row.nominal ?? 0),
+      breakdown_total: Number(row.breakdown_total ?? 0),
+      current_total: Number(row.current_total ?? 0),
+      exact_match: Boolean(row.exact_match),
+    }));
+  });
+
 export const prosesPembayaran = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .inputValidator((d: ProsesPembayaranInput) => d)
