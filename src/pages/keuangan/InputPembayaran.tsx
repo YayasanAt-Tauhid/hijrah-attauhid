@@ -47,6 +47,10 @@ const FORM_DEFAULT: FormPembayaran = {
   keterangan: "",
 };
 
+type PembayaranRiwayat = PembayaranWithJenis & {
+  periodeTagihanLabel?: string | null;
+};
+
 type PaymentCartItem = {
   key: string;
   tagihanId?: string;
@@ -59,6 +63,7 @@ type PaymentCartItem = {
   departemenId?: string;
   isBayarDimuka: boolean;
   status: string | null;
+  tahunLabel: string;
 };
 
 // Ambil baris kelas_siswa yang aktif -- kelas_siswa[0] TIDAK BOLEH dipakai langsung
@@ -128,7 +133,7 @@ export default function InputPembayaran() {
   const [cartProgress, setCartProgress] = useState<{ done: number; total: number } | null>(null);
   const [showCartKuitansi, setShowCartKuitansi] = useState(false);
   const [lastCartPayment, setLastCartPayment] = useState<{
-    items: Array<{ pembayaran_id: string; jumlah: number; jenisNama: string; bulan: number }>;
+    items: Array<{ pembayaran_id: string; jumlah: number; jenisNama: string; bulan: number; tahunLabel: string }>;
     siswa: SiswaWithKelas;
     tanggal_bayar: string;
     keterangan?: string;
@@ -136,6 +141,7 @@ export default function InputPembayaran() {
   const [lastPayment, setLastPayment] = useState<{
     pembayaran_id: string; jumlah: number; jenisNama: string;
     jenisTipe: string; siswa: SiswaWithKelas; bulan: number; tanggal_bayar: string;
+    periodeLabel?: string;
   } | null>(null);
 
   const setField = useCallback(
@@ -150,6 +156,23 @@ export default function InputPembayaran() {
   const { data: tahunAjaranList } = useTahunBuku();
   const { data: allJenisList }    = useJenisPembayaran(departemenId || undefined);
   const effectiveTahunAjaranId = selectedTahunAjaranId || tahunAktif?.id || "";
+
+  // Tahun buku yang sudah ditutup tetap harus dapat dipilih apabila siswa masih
+  // memiliki tagihan terbuka dari periode tersebut. Ini penting untuk tunggakan
+  // migrasi (mis. SPP November 2025) yang dibayar saat kas diterima pada 2026.
+  const { data: openTagihanTahunIds = new Set<string>() } = useQuery<Set<string>>({
+    queryKey: ["open_tagihan_tahun", selectedSiswa?.id],
+    enabled: !!selectedSiswa,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tagihan")
+        .select("tahun_ajaran_id")
+        .eq("siswa_id", selectedSiswa!.id)
+        .in("status", ["belum_bayar", "terjadwal"]);
+      if (error) throw error;
+      return new Set((data ?? []).map(row => row.tahun_ajaran_id).filter(Boolean) as string[]);
+    },
+  });
 
   // Tagihan migrasi dapat berasal dari lembaga sebelumnya (mis. SD) sementara
   // siswa sekarang sudah berada di SMP. Jenis tagihan terbuka lintas lembaga
@@ -347,7 +370,7 @@ export default function InputPembayaran() {
     },
   });
 
-  const { data: riwayat, isLoading: loadRiwayat } = useQuery<PembayaranWithJenis[]>({
+  const { data: riwayat, isLoading: loadRiwayat } = useQuery<PembayaranRiwayat[]>({
     queryKey: ["pembayaran_siswa", selectedSiswa?.id],
     enabled: !!selectedSiswa,
     queryFn: async () => {
@@ -358,7 +381,35 @@ export default function InputPembayaran() {
         .order("tanggal_bayar", { ascending: false })
         .limit(20);
       if (error) throw error;
-      return (data ?? []) as PembayaranWithJenis[];
+
+      const rows = (data ?? []) as PembayaranWithJenis[];
+      const ids = rows.map(row => row.id).filter(Boolean);
+      if (ids.length === 0) return [];
+
+      // Periode kewajiban berasal dari tagihan, bukan dari tanggal uang masuk.
+      // Ini membuat pembayaran SPP November 2025 yang diterima pada 2026 tetap
+      // tampil sebagai November 2025 di riwayat.
+      const { data: tagihanRows, error: tagihanError } = await supabase
+        .from("tagihan")
+        .select("pembayaran_id, bulan, tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai)")
+        .in("pembayaran_id", ids);
+      if (tagihanError) throw tagihanError;
+
+      const periodeByPembayaran = new Map<string, string>();
+      for (const tagihan of (tagihanRows ?? []) as any[]) {
+        if (!tagihan.pembayaran_id || !tagihan.bulan) continue;
+        const tahun = tagihan.tahun_ajaran as { nama?: string; tanggal_mulai?: string } | null;
+        const tahunLabel = tahun?.tanggal_mulai?.slice(0, 4) || tahun?.nama || "";
+        periodeByPembayaran.set(
+          tagihan.pembayaran_id,
+          `${namaBulan(tagihan.bulan)} ${tahunLabel}`.trim(),
+        );
+      }
+
+      return rows.map(row => ({
+        ...row,
+        periodeTagihanLabel: periodeByPembayaran.get(row.id) ?? null,
+      }));
     },
   });
 
@@ -387,14 +438,27 @@ export default function InputPembayaran() {
   }, [bulanAdaTagihan, form.jenisId]);
 
   const selectedTahun  = tahunAjaranList?.find(t => t.id === effectiveTahunAjaranId);
+  const selectedTahunLabel = selectedTahun?.tanggal_mulai?.slice(0, 4) || selectedTahun?.nama || "";
   const isBayarDimuka  = !!(selectedTahun?.tanggal_mulai && selectedTahun.tanggal_mulai > new Date().toISOString().split("T")[0]);
   const adaTagihanDipilih = existingTagihan?.status === "belum_bayar" || existingTagihan?.status === "terjadwal";
   const tarifTidakAda  = !!(form.jenisId && selectedSiswa && !loadingTarif && tarifNominal == null && !adaTagihanDipilih);
   const isJumlahLocked = !!adaTagihanDipilih || (!isSekali && tarifNominal != null);
-  const sudahBayar     = bulanDibayar ? bulanTampil.filter(m => bulanDibayar.has(m)).length : 0;
+  // Untuk tunggakan tahun lama, pembayaran dicatat pada tahun buku kas saat
+  // diterima (mis. 2026), sementara tagihannya tetap periode 2025. Karena itu
+  // status "lunas" pada tagihan adalah sumber kebenaran tambahan selain tabel
+  // pembayaran yang difilter berdasarkan tahun penerimaan.
+  const bulanLunas = useMemo(
+    () => new Set(
+      bulanTampil.filter(m =>
+        bulanDibayar?.has(m) || statusTagihanPerBulan?.get(m) === "lunas"
+      )
+    ),
+    [bulanTampil, bulanDibayar, statusTagihanPerBulan],
+  );
+  const sudahBayar     = bulanLunas.size;
   const terjadwal      = bulanTampil.filter(m => statusTagihanPerBulan?.get(m) === "terjadwal").length;
   const belumBayar     = bulanTampil.filter(
-    m => !bulanDibayar?.has(m) && statusTagihanPerBulan?.get(m) !== "terjadwal"
+    m => !bulanLunas.has(m) && statusTagihanPerBulan?.get(m) !== "terjadwal"
   ).length;
   const cartTotal      = cartItems.reduce((sum, item) => sum + item.jumlah, 0);
   const currentCartKey = form.jenisId
@@ -430,8 +494,8 @@ export default function InputPembayaran() {
     if (!selectedSiswa || !form.jenisId || !form.jumlah || !selectedJenis || tarifTidakAda) return;
     if (!tahunAktif?.id) { toast.error("Tahun ajaran aktif belum dikonfigurasi"); return; }
     if (isSekali && pembayaranSekali?.lunas) { toast.error("Pembayaran ini sudah lunas"); return; }
-    if (!isSekali && bulanDibayar?.has(form.bulan)) {
-      toast.error("Pembayaran bulan ini sudah ada");
+    if (!isSekali && bulanLunas.has(form.bulan)) {
+      toast.error("Pembayaran bulan ini sudah lunas");
       return;
     }
 
@@ -456,6 +520,7 @@ export default function InputPembayaran() {
       departemenId: departemenId || undefined,
       isBayarDimuka,
       status: existingTagihan?.status ?? null,
+      tahunLabel: selectedTahunLabel,
     }]);
 
     // Untuk pembayaran bulanan, pindahkan pilihan ke bulan tagihan berikutnya
@@ -463,8 +528,8 @@ export default function InputPembayaran() {
     if (!isSekali) {
       const nextMonth = bulanTampil.find(m =>
         m !== form.bulan &&
-        !bulanDibayar?.has(m) &&
-        !cartItems.some(item => item.jenisId === form.jenisId && item.bulan === m)
+        !bulanLunas.has(m) &&
+        !cartItems.some(item => item.jenisId === form.jenisId && item.bulan === m && item.tahunAjaranId === effectiveTahunAjaranId)
       );
       if (nextMonth) setField("bulan", nextMonth);
     } else {
@@ -480,7 +545,7 @@ export default function InputPembayaran() {
     setCartProgress({ done: 0, total: cartItems.length });
 
     const berhasilKeys = new Set<string>();
-    const berhasilItems: Array<{ pembayaran_id: string; jumlah: number; jenisNama: string; bulan: number }> = [];
+    const berhasilItems: Array<{ pembayaran_id: string; jumlah: number; jenisNama: string; bulan: number; tahunLabel: string }> = [];
     const gagal: string[] = [];
 
     for (let i = 0; i < cartItems.length; i++) {
@@ -506,6 +571,7 @@ export default function InputPembayaran() {
           jumlah: result.jumlah,
           jenisNama: item.jenisNama,
           bulan: item.bulan,
+          tahunLabel: item.tahunLabel,
         });
       } catch (e) {
         const message = e instanceof Error ? e.message : "Gagal diproses";
@@ -580,25 +646,28 @@ export default function InputPembayaran() {
       siswa:         selectedSiswa,
       bulan:         form.bulan,
       tanggal_bayar: form.tanggalBayar,
+      periodeLabel: !isSekali && selectedTahunLabel
+        ? `${namaBulan(form.bulan)} ${selectedTahunLabel}`
+        : undefined,
     });
     setShowKuitansi(true);
     resetForm();
     toast.success("Pembayaran berhasil disimpan");
   };
 
-  const riwayatColumns: DataTableColumn<PembayaranWithJenis>[] = [
+  const riwayatColumns: DataTableColumn<PembayaranRiwayat>[] = [
     { key: "jenis_pembayaran", label: "Jenis", render: (_, r) => r.jenis_pembayaran?.nama ?? "-" },
-    { key: "bulan",   label: "Bulan",   render: (v, r) => v ? namaBulanTahun(v as number, { tanggalTransaksi: r.tanggal_bayar }) : <span className="text-muted-foreground text-xs">Sekali Bayar{r.tanggal_bayar ? ` ${new Date(r.tanggal_bayar).getFullYear()}` : ""}</span> },
+    { key: "bulan",   label: "Periode Tagihan",   render: (v, r) => v ? (r.periodeTagihanLabel || namaBulanTahun(v as number, { tanggalTransaksi: r.tanggal_bayar })) : <span className="text-muted-foreground text-xs">Sekali Bayar{r.tanggal_bayar ? ` ${new Date(r.tanggal_bayar).getFullYear()}` : ""}</span> },
     { key: "jumlah",  label: "Jumlah",  render: v => formatRupiah(Number(v)) },
     { key: "tanggal_bayar", label: "Tanggal", render: v => v ? format(new Date(v as string), "dd MMM yyyy", { locale: idLocale }) : "-" },
     ...(canBatal ? [{
-      key: "aksi", label: "", render: (_: unknown, r: PembayaranWithJenis) => (
+      key: "aksi", label: "", render: (_: unknown, r: PembayaranRiwayat) => (
         <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive"
           onClick={() => { setBatalTarget(r); setBatalAlasan(""); }}>
           <X className="h-3.5 w-3.5 mr-1" />Batalkan
         </Button>
       ),
-    } as DataTableColumn<PembayaranWithJenis>] : []),
+    } as DataTableColumn<PembayaranRiwayat>] : []),
   ];
 
   return (
@@ -642,9 +711,13 @@ export default function InputPembayaran() {
         <Select value={selectedTahunAjaranId || tahunAktif?.id || ""} onValueChange={setSelectedTahunAjaranId}>
           <SelectTrigger className="w-48 h-11"><SelectValue placeholder="Tahun Ajaran" /></SelectTrigger>
           <SelectContent>
-            {tahunAjaranList?.filter(t => !t.ditutup).map(t => (
-              <SelectItem key={t.id} value={t.id}>{t.nama} {t.aktif ? "(Aktif)" : ""}</SelectItem>
-            ))}
+            {tahunAjaranList
+              ?.filter(t => !t.ditutup || openTagihanTahunIds.has(t.id))
+              .map(t => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.nama} {t.aktif ? "(Aktif)" : t.ditutup && openTagihanTahunIds.has(t.id) ? "(Tunggakan lama)" : ""}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
         {selectedSiswa && (
@@ -767,10 +840,10 @@ export default function InputPembayaran() {
                       <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {bulanTampil.map(m => {
-                          const sudah = bulanDibayar?.has(m);
+                          const sudah = bulanLunas.has(m);
                           return (
                             <SelectItem key={m} value={String(m)} disabled={sudah}>
-                              {namaBulan(m)}
+                              {namaBulan(m)}{selectedTahunLabel ? ` ${selectedTahunLabel}` : ""}
                               {sudah ? " ✓" : statusTagihanPerBulan?.get(m) === "terjadwal" ? " · Terjadwal" : ""}
                             </SelectItem>
                           );
@@ -803,7 +876,7 @@ export default function InputPembayaran() {
                   <div className="grid grid-cols-4 gap-1">
                     {/* FIX: hanya render bulanTampil (bulan yg punya tagihan), bukan semua 12 bulan */}
                     {bulanTampil.map(m => {
-                      const sudah = bulanDibayar?.has(m);
+                      const sudah = bulanLunas.has(m);
                       const isTerjadwal = statusTagihanPerBulan?.get(m) === "terjadwal";
                       return (
                         <button
@@ -897,7 +970,7 @@ export default function InputPembayaran() {
                   isCartPaying ||
                   currentAlreadyInCart ||
                   (isSekali && !!pembayaranSekali?.lunas) ||
-                  (!isSekali && !!bulanDibayar?.has(form.bulan))
+                  (!isSekali && bulanLunas.has(form.bulan))
                 }
               >
                 <ShoppingCart className="h-3.5 w-3.5 mr-1.5" />
@@ -910,7 +983,7 @@ export default function InputPembayaran() {
                   !form.jenisId || !form.jumlah || tarifTidakAda ||
                   prosesMutation.isPending || isCartPaying || currentAlreadyInCart ||
                   (isSekali && !!pembayaranSekali?.lunas) ||
-                  (!isSekali && !!bulanDibayar?.has(form.bulan))
+                  (!isSekali && bulanLunas.has(form.bulan))
                 }
               >
                 {prosesMutation.isPending ? (
@@ -943,7 +1016,7 @@ export default function InputPembayaran() {
                       <div className="min-w-0">
                         <p className="font-medium truncate">{item.jenisNama}</p>
                         <p className="text-muted-foreground">
-                          {item.bulan ? namaBulan(item.bulan) : "Sekali Bayar"}
+                          {item.bulan ? `${namaBulan(item.bulan)} ${item.tahunLabel}`.trim() : "Sekali Bayar"}
                           {item.status === "terjadwal" ? " · Terjadwal" : ""}
                         </p>
                       </div>
@@ -1086,6 +1159,7 @@ export default function InputPembayaran() {
                 jumlah: item.jumlah,
                 jenisNama: item.jenisNama,
                 bulan: item.bulan,
+                periodeLabel: item.bulan ? `${namaBulan(item.bulan)} ${item.tahunLabel}`.trim() : "Sekali Bayar",
               }))}
               tanggalBayar={lastCartPayment.tanggal_bayar}
               keterangan={lastCartPayment.keterangan}
@@ -1118,6 +1192,7 @@ export default function InputPembayaran() {
                 bulan: lastPayment.bulan,
                 tanggal_bayar: lastPayment.tanggal_bayar,
                 jenisNama: lastPayment.jenisNama,
+                periodeLabel: lastPayment.periodeLabel,
                 siswa: lastPayment.siswa,
               }}
               kelasNama={kelasNama}

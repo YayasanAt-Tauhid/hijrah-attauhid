@@ -9,6 +9,7 @@ interface CombinedPaymentItem {
   jumlah: number;
   bulan: number;
   jenisNama: string;
+  periodeLabel?: string;
 }
 
 interface PrintKuitansiGabunganProps {
@@ -77,7 +78,7 @@ export function PrintKuitansiGabungan({
             <tr key={item.id ?? index} className="border-b border-gray-300">
               <td className="py-1.5 pr-2">{item.jenisNama}</td>
               <td className="py-1.5 pr-2">
-                {item.bulan ? namaBulanTahun(item.bulan, { tanggalTransaksi: tanggalBayar }) : "Sekali Bayar"}
+                {item.periodeLabel || (item.bulan ? namaBulanTahun(item.bulan, { tanggalTransaksi: tanggalBayar }) : "Sekali Bayar")}
               </td>
               <td className="py-1.5 pr-2 font-mono text-[9pt]">{item.id?.slice(0, 8).toUpperCase() || "-"}</td>
               <td className="py-1.5 text-right">{formatRupiah(item.jumlah)}</td>

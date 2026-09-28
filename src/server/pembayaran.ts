@@ -295,6 +295,25 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         .maybeSingle();
       if (dupCheck)
         throw new Error(`Pembayaran bulan ${bulan} untuk jenis ini sudah ada`);
+
+      // Pembayaran tunggakan periode lama dicatat pada tahun buku kas saat
+      // uang diterima, sehingga baris pembayaran bisa berada di tahun yang
+      // berbeda dari tahun tagihan. Status tagihan lunas tetap harus memblokir
+      // percobaan pembayaran ulang walaupun payment-year berbeda.
+      const { data: settledCharge, error: settledChargeError } = await admin
+        .from("tagihan")
+        .select("id")
+        .eq("siswa_id", siswa_id)
+        .eq("jenis_id", jenis_id)
+        .eq("tahun_ajaran_id", tahunBukuTagihanId)
+        .eq("bulan", bulanNormalized)
+        .eq("status", "lunas")
+        .limit(1)
+        .maybeSingle();
+      if (settledChargeError) {
+        throw new Error("Gagal memeriksa status tagihan bulanan: " + settledChargeError.message);
+      }
+      if (settledCharge) throw new Error("Pembayaran bulan ini sudah lunas");
     }
 
     // Konfigurasi akun
