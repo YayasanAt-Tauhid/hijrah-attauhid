@@ -46,6 +46,7 @@ function PembayaranPMBContent() {
     jenisNama: string;
     siswa: { nama: string; nis?: string | null; nisn?: string | null };
     lembagaNama: string;
+    petugasNama?: string;
   } | null>(null);
 
   const { data: lembagaList } = useLembaga();
@@ -156,6 +157,7 @@ function PembayaranPMBContent() {
           jenisNama: jenis?.nama || "Biaya Pendaftaran SPMB",
           siswa: { nama: selectedSiswa.nama, nis: selectedSiswa.nis ?? null, nisn: selectedSiswa.nisn ?? null },
           lembagaNama: lembaga?.nama || lembaga?.kode || "-",
+          petugasNama: result.petugas_nama || undefined,
         });
         setShowKuitansi(true);
       }
@@ -420,6 +422,7 @@ function PembayaranPMBContent() {
               }}
               kelasNama="Calon Murid"
               lembagaNama={lastPayment.lembagaNama}
+              petugasNama={lastPayment.petugasNama}
             />
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowKuitansi(false)}>Tutup</Button>
