@@ -166,6 +166,7 @@ function RekapKasirSayaContent() {
               }}
               kelasNama={printRow.siswa_status === "calon" ? "Calon Murid" : printRow.kelas_nama || "-"}
               lembagaNama={printRow.departemen_nama}
+              petugasNama={data?.petugas_nama || undefined}
             />
             <DialogFooter>
               <Button variant="outline" onClick={() => setPrintRow(null)}>Tutup</Button>
