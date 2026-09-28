@@ -44,7 +44,7 @@ function PembayaranPMBContent() {
     tanggalBayar: string;
     keterangan?: string;
     jenisNama: string;
-    siswa: { nama: string; nis?: string | null };
+    siswa: { nama: string; nis?: string | null; nisn?: string | null };
     lembagaNama: string;
   } | null>(null);
 
@@ -154,7 +154,7 @@ function PembayaranPMBContent() {
           tanggalBayar,
           keterangan: keterangan || "Pembayaran SPMB",
           jenisNama: jenis?.nama || "Biaya Pendaftaran SPMB",
-          siswa: { nama: selectedSiswa.nama, nis: selectedSiswa.nis ?? null },
+          siswa: { nama: selectedSiswa.nama, nis: selectedSiswa.nis ?? null, nisn: selectedSiswa.nisn ?? null },
           lembagaNama: lembaga?.nama || lembaga?.kode || "-",
         });
         setShowKuitansi(true);
@@ -234,7 +234,7 @@ function PembayaranPMBContent() {
               tanggalBayar: r.tanggal_bayar,
               keterangan: r.keterangan || undefined,
               jenisNama: r.jenis_pembayaran?.nama || "Biaya Pendaftaran SPMB",
-              siswa: { nama: selectedSiswa?.nama || "-", nis: selectedSiswa?.nis ?? null },
+              siswa: { nama: selectedSiswa?.nama || "-", nis: selectedSiswa?.nis ?? null, nisn: selectedSiswa?.nisn ?? null },
               lembagaNama: lembaga?.nama || lembaga?.kode || "-",
             });
             setShowKuitansi(true);
@@ -415,6 +415,7 @@ function PembayaranPMBContent() {
                 siswa: {
                   nama: lastPayment.siswa.nama,
                   nis: lastPayment.siswa.nis || undefined,
+                  nisn: lastPayment.siswa.nisn || undefined,
                 },
               }}
               kelasNama="Calon Murid"
