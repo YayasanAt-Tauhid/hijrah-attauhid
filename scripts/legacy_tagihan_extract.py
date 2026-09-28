@@ -64,7 +64,8 @@ def login(session, username, password):
 def old_student(session, nik, name, alternate_nik=""):
     # The autocomplete is name-oriented; searching a NIK can return unrelated
     # suggestions. Match the returned NIK exactly before reading any bills.
-    allowed = {value.strip() for value in (nik, alternate_nik)\n               if (value or "").strip().isdigit()}
+    allowed = {value.strip() for value in (nik, alternate_nik)
+               if (value or "").strip().isdigit()}
     words = name.split()
     queries = [name, " ".join(words[:2]), " ".join(words[-2:])]
     seen = set()
