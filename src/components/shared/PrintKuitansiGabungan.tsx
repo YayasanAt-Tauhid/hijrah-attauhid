@@ -16,7 +16,7 @@ interface PrintKuitansiGabunganProps {
   items: CombinedPaymentItem[];
   tanggalBayar: string;
   keterangan?: string;
-  siswa: { nama: string; nis?: string };
+  siswa: { nama: string; nis?: string; nisn?: string };
   kelasNama: string;
   lembagaNama: string;
 }
@@ -58,7 +58,7 @@ export function PrintKuitansiGabungan({
         <tbody>
           <tr><td className="py-1 w-36">Tanggal</td><td className="py-1">: {format(new Date(tanggalBayar), "dd MMMM yyyy", { locale: idLocale })}</td></tr>
           <tr><td className="py-1">Nama Siswa</td><td className="py-1">: {siswa.nama}</td></tr>
-          <tr><td className="py-1">NIS</td><td className="py-1">: {siswa.nis || "-"}</td></tr>
+          <tr><td className="py-1">NIS / NISN</td><td className="py-1">: {[siswa.nis, siswa.nisn].filter(Boolean).join(" / ") || "-"}</td></tr>
           <tr><td className="py-1">Kelas</td><td className="py-1">: {kelasNama}</td></tr>
           <tr><td className="py-1">Lembaga</td><td className="py-1">: {lembagaNama}</td></tr>
         </tbody>
