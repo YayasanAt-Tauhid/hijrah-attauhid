@@ -127,6 +127,43 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       }
       tagihanTerpilih = tagihanData;
     }
+    // Untuk pembayaran sekali bayar, tagihan existing harus menjadi sumber utama
+    // walaupun caller tidak mengirim tagihan_id. Ini mencegah saldo migrasi
+    // parsial dibayar kembali memakai tarif bruto/asli.
+    if (!tagihanTerpilih && isSekali) {
+      const { data: openOnceRows, error: openOnceError } = await admin
+        .from("tagihan")
+        .select("id, status, tahun_ajaran_id, siswa_id, jenis_id, bulan, nominal")
+        .eq("siswa_id", siswa_id)
+        .eq("jenis_id", jenis_id)
+        .eq("tahun_ajaran_id", tahun_ajaran_id)
+        .is("bulan", null)
+        .in("status", ["belum_bayar", "terjadwal"])
+        .limit(1);
+      if (openOnceError) {
+        throw new Error("Gagal mengambil tagihan sekali bayar: " + openOnceError.message);
+      }
+      tagihanTerpilih = openOnceRows?.[0] ?? null;
+
+      if (!tagihanTerpilih) {
+        const { data: settledOnceRows, error: settledOnceError } = await admin
+          .from("tagihan")
+          .select("id")
+          .eq("siswa_id", siswa_id)
+          .eq("jenis_id", jenis_id)
+          .eq("tahun_ajaran_id", tahun_ajaran_id)
+          .is("bulan", null)
+          .eq("status", "lunas")
+          .limit(1);
+        if (settledOnceError) {
+          throw new Error("Gagal memeriksa tagihan sekali bayar yang sudah lunas: " + settledOnceError.message);
+        }
+        if ((settledOnceRows ?? []).length > 0) {
+          throw new Error("Pembayaran ini sudah lunas");
+        }
+      }
+    }
+
     const tahunBukuTagihanId =
       tagihanTerpilih?.tahun_ajaran_id || tahunAjaranEfektifId;
 
