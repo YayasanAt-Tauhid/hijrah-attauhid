@@ -259,19 +259,22 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
       "kasir",
     ]);
 
-    const { jenis_id, tahun_ajaran_id, kelas_id, departemen_id, bulan_list } = data;
+    const { jenis_id, tahun_ajaran_id, kelas_id, bulan_list } = data;
     const perTanggal = data.per_tanggal || new Date().toISOString().split("T")[0];
 
     if (!jenis_id || !tahun_ajaran_id) {
       throw new Error("jenis_id dan tahun_ajaran_id wajib diisi");
     }
 
-    // Siswa aktif sesuai filter kelas/lembaga
+    // Gunakan kelas AKTIF siswa sebagai identitas tampilan, bukan kelas pada
+    // tahun tagihan. Data migrasi dapat berisi tunggakan periode lama (mis.
+    // SPP SD 2025) sementara histori kelas tahun tersebut tidak tersedia lagi
+    // dan siswa sekarang sudah berada di jenjang lain. Sumber lembaga tetap
+    // ditentukan oleh jenis pembayaran/tagihan yang dipilih.
     let siswaQuery = admin
       .from("kelas_siswa")
       .select("siswa_id, siswa:siswa_id(nis, nama), kelas:kelas_id(nama, departemen_id)")
-      .eq("aktif", true)
-      .eq("tahun_ajaran_id", tahun_ajaran_id);
+      .eq("aktif", true);
     if (kelas_id) siswaQuery = siswaQuery.eq("kelas_id", kelas_id);
     const { data: kelasSiswaRows, error: ksErr } = await siswaQuery;
     if (ksErr)
@@ -282,12 +285,10 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
       siswa: { nis: string | null; nama: string | null } | null;
       kelas: { nama: string | null; departemen_id: string | null } | null;
     }
-    let filtered = (kelasSiswaRows || []) as unknown as KelasSiswaRow[];
-    if (departemen_id)
-      filtered = filtered.filter((r) => r.kelas?.departemen_id === departemen_id);
+    const filtered = (kelasSiswaRows || []) as unknown as KelasSiswaRow[];
     if (!filtered.length) return { rows: [], per_tanggal: perTanggal };
 
-    const siswaIds = filtered.map((r) => r.siswa_id);
+    const siswaIds = Array.from(new Set(filtered.map((r) => r.siswa_id)));
 
     // Tagihan yang masih menagih (belum lunas/dibatalkan/dihapusbuku)
     let tagihanQuery = admin
