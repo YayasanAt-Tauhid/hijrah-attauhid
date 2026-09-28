@@ -17,7 +17,7 @@ export type Siswa      = Database["public"]["Tables"]["siswa"]["Row"];
 // ─── Enriched / joined types ──────────────────────────────────────────────────
 
 /** Siswa dengan kelas aktif, dipakai di form pencarian */
-export interface SiswaWithKelas extends Pick<Siswa, "id" | "nis" | "nama" | "foto_url" | "status"> {
+export interface SiswaWithKelas extends Pick<Siswa, "id" | "nis" | "nisn" | "nama" | "foto_url" | "status"> {
   kelas_siswa: Array<{
     kelas_id: string;
     kelas: {
