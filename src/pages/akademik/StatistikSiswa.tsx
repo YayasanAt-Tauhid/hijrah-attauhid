@@ -8,6 +8,8 @@ import { useDepartemen } from "@/hooks/useAkademikData";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllPages } from "@/lib/fetchAll";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
+import { getAkademikManagedDepartemenIds } from "@/lib/akademikScope";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { Users, UserCheck, UserX, GraduationCap } from "lucide-react";
 
@@ -15,19 +17,28 @@ const COLORS = ["hsl(199, 89%, 48%)", "hsl(340, 82%, 52%)", "hsl(142, 71%, 45%)"
 
 export default function StatistikSiswa() {
   const [deptId, setDeptId] = useState("");
+  const { role } = useAuth();
   const { data: depts } = useDepartemen();
 
   const { data: stats, isLoading } = useQuery({
-    queryKey: ["statistik_siswa", deptId],
+    queryKey: ["statistik_siswa", deptId, role],
     queryFn: async () => {
+      const managedDepartemenIds = await getAkademikManagedDepartemenIds(role);
+      if (role === "admin_tu" && !managedDepartemenIds?.length) {
+        return { total: 0, aktif: 0, lulus: 0, nonAktif: 0, genderData: [], statusData: [], agamaData: [], angkatanData: [] };
+      }
+      if (managedDepartemenIds && deptId && !managedDepartemenIds.includes(deptId)) {
+        return { total: 0, aktif: 0, lulus: 0, nonAktif: 0, genderData: [], statusData: [], agamaData: [], angkatanData: [] };
+      }
+
       const all = await fetchAllPages<any>((from, to) => {
         let q = supabase
           .from("siswa")
           .select("id, jenis_kelamin, status, agama, angkatan_id, angkatan:angkatan_id(nama)")
-          .order("id")
-          .range(from, to);
+          .order("id");
         if (deptId) q = q.eq("departemen_id", deptId);
-        return q;
+        else if (managedDepartemenIds) q = q.in("departemen_id", managedDepartemenIds);
+        return q.range(from, to);
       });
 
       const total = all.length;
