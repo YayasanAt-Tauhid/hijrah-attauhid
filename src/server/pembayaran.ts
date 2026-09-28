@@ -31,6 +31,7 @@ export interface ProsesPembayaranResult {
   jurnal_id: string;
   nomor_jurnal: string;
   jumlah: number;
+  petugas_nama: string | null;
 }
 
 export interface LegacyOutstandingBreakdownRow {
@@ -644,12 +645,29 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       jurnal_id: string;
       nomor_jurnal: string;
     };
+
+    const { data: petugasProfile } = await admin
+      .from("users_profile")
+      .select("pegawai_id")
+      .eq("id", userId)
+      .maybeSingle();
+    let petugasNama: string | null = null;
+    if (petugasProfile?.pegawai_id) {
+      const { data: pegawai } = await admin
+        .from("pegawai")
+        .select("nama")
+        .eq("id", petugasProfile.pegawai_id)
+        .maybeSingle();
+      petugasNama = pegawai?.nama?.trim() || null;
+    }
+
     return {
       success: true,
       pembayaran_id: r.pembayaran_id,
       jurnal_id: r.jurnal_id,
       nomor_jurnal: r.nomor_jurnal,
       jumlah: jumlahValid,
+      petugas_nama: petugasNama,
     };
   });
 
