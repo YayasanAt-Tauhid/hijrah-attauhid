@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { PrintKuitansi } from "@/components/shared/PrintKuitansi";
+import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -24,7 +25,7 @@ import { logAuditKeuangan } from "@/hooks/useJurnal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search, Printer, Check, X } from "lucide-react";
+import { Search, Printer, Check, X, ShoppingCart, Trash2, Clock3 } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,20 @@ const FORM_DEFAULT: FormPembayaran = {
   jumlah: "",
   tanggalBayar: new Date().toISOString().split("T")[0],
   keterangan: "",
+};
+
+type PaymentCartItem = {
+  key: string;
+  tagihanId?: string;
+  jenisId: string;
+  jenisNama: string;
+  jenisTipe: string;
+  bulan: number;
+  jumlah: number;
+  tahunAjaranId: string;
+  departemenId?: string;
+  isBayarDimuka: boolean;
+  status: string | null;
 };
 
 // Ambil baris kelas_siswa yang aktif -- kelas_siswa[0] TIDAK BOLEH dipakai langsung
@@ -101,12 +116,23 @@ function useBatalkanPembayaran() {
 }
 
 export default function InputPembayaran() {
+  const queryClient = useQueryClient();
   const [searchTerm,    setSearchTerm]    = useState("");
   const [selectedSiswa, setSelectedSiswa] = useState<SiswaWithKelas | null>(null);
   const [departemenId,  setDepartemenId]  = useState("");
   const [form, setForm] = useState<FormPembayaran>(FORM_DEFAULT);
   const [selectedTahunAjaranId, setSelectedTahunAjaranId] = useState("");
   const [showKuitansi, setShowKuitansi] = useState(false);
+  const [cartItems, setCartItems] = useState<PaymentCartItem[]>([]);
+  const [isCartPaying, setIsCartPaying] = useState(false);
+  const [cartProgress, setCartProgress] = useState<{ done: number; total: number } | null>(null);
+  const [showCartKuitansi, setShowCartKuitansi] = useState(false);
+  const [lastCartPayment, setLastCartPayment] = useState<{
+    items: Array<{ pembayaran_id: string; jumlah: number; jenisNama: string; bulan: number }>;
+    siswa: SiswaWithKelas;
+    tanggal_bayar: string;
+    keterangan?: string;
+  } | null>(null);
   const [lastPayment, setLastPayment] = useState<{
     pembayaran_id: string; jumlah: number; jenisNama: string;
     jenisTipe: string; siswa: SiswaWithKelas; bulan: number; tanggal_bayar: string;
@@ -261,26 +287,37 @@ export default function InputPembayaran() {
     },
   });
 
-  // Bulan yang punya tagihan (dari tabel tagihan) — hanya bulan ini yang tampil di grid & dropdown
-  const { data: bulanAdaTagihan } = useQuery<Set<number>>({
+  // Bulan yang punya tagihan beserta statusnya. Status diperlukan agar UI
+  // membedakan kewajiban yang sudah jatuh tempo dari tagihan masa depan
+  // (terjadwal) tanpa mengubah kemampuan kasir menerima pembayaran di muka.
+  const { data: statusTagihanPerBulan } = useQuery<Map<number, string>>({
     queryKey: ["cek_bulan_ada_tagihan", selectedSiswa?.id, form.jenisId, effectiveTahunAjaranId],
     enabled: !!selectedSiswa && !!form.jenisId && !isSekali,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tagihan")
-        .select("bulan")
+        .select("bulan, status")
         .eq("siswa_id", selectedSiswa!.id)
         .eq("jenis_id", form.jenisId)
         .eq("tahun_ajaran_id", effectiveTahunAjaranId)
         .not("bulan", "is", null);
       if (error) throw error;
-      return new Set((data ?? []).map(r => r.bulan as number));
+      return new Map(
+        (data ?? [])
+          .filter(r => r.bulan != null)
+          .map(r => [r.bulan as number, String(r.status ?? "")])
+      );
     },
   });
 
+  const bulanAdaTagihan = useMemo(
+    () => new Set(statusTagihanPerBulan ? Array.from(statusTagihanPerBulan.keys()) : []),
+    [statusTagihanPerBulan],
+  );
+
   // Bulan yang tampil = bulan punya tagihan ATAU semua bulan jika belum ada tagihan sama sekali
   const bulanTampil = useMemo<number[]>(() => {
-    if (!bulanAdaTagihan || bulanAdaTagihan.size === 0) return BULAN_ORDER_AKADEMIK;
+    if (bulanAdaTagihan.size === 0) return BULAN_ORDER_AKADEMIK;
     return BULAN_ORDER_AKADEMIK.filter(m => bulanAdaTagihan.has(m));
   }, [bulanAdaTagihan]);
 
@@ -355,7 +392,15 @@ export default function InputPembayaran() {
   const tarifTidakAda  = !!(form.jenisId && selectedSiswa && !loadingTarif && tarifNominal == null && !adaTagihanDipilih);
   const isJumlahLocked = !!adaTagihanDipilih || (!isSekali && tarifNominal != null);
   const sudahBayar     = bulanDibayar ? bulanTampil.filter(m => bulanDibayar.has(m)).length : 0;
-  const belumBayar     = bulanTampil.length - sudahBayar;
+  const terjadwal      = bulanTampil.filter(m => statusTagihanPerBulan?.get(m) === "terjadwal").length;
+  const belumBayar     = bulanTampil.filter(
+    m => !bulanDibayar?.has(m) && statusTagihanPerBulan?.get(m) !== "terjadwal"
+  ).length;
+  const cartTotal      = cartItems.reduce((sum, item) => sum + item.jumlah, 0);
+  const currentCartKey = form.jenisId
+    ? (existingTagihan?.id ?? [form.jenisId, isSekali ? "sekali" : String(form.bulan), effectiveTahunAjaranId].join(":"))
+    : "";
+  const currentAlreadyInCart = !!currentCartKey && cartItems.some(item => item.key === currentCartKey);
   const kelasNama      = getKelasAktif(selectedSiswa)?.kelas?.nama ?? "-";
   const lembagaNama    = lembagaList?.find(l => l.id === departemenId)?.nama ?? "-";
 
@@ -369,6 +414,7 @@ export default function InputPembayaran() {
   const handleSelectSiswa = useCallback((s: SiswaWithKelas) => {
     setSelectedSiswa(s);
     setSearchTerm("");
+    setCartItems([]);
     const dept = getKelasAktif(s)?.kelas?.departemen_id;
     if (dept && !departemenId) setDepartemenId(dept);
     // Reset filter tahun ajaran ke tahun aktif setiap ganti siswa.
@@ -379,6 +425,131 @@ export default function InputPembayaran() {
     // sebagai belum lunas di portal ortu.
     if (tahunAktif?.id) setSelectedTahunAjaranId(tahunAktif.id);
   }, [departemenId, tahunAktif?.id]);
+
+  const handleAddToCart = () => {
+    if (!selectedSiswa || !form.jenisId || !form.jumlah || !selectedJenis || tarifTidakAda) return;
+    if (!tahunAktif?.id) { toast.error("Tahun ajaran aktif belum dikonfigurasi"); return; }
+    if (isSekali && pembayaranSekali?.lunas) { toast.error("Pembayaran ini sudah lunas"); return; }
+    if (!isSekali && bulanDibayar?.has(form.bulan)) {
+      toast.error("Pembayaran bulan ini sudah ada");
+      return;
+    }
+
+    const jumlah = Number(form.jumlah);
+    if (!Number.isFinite(jumlah) || jumlah <= 0) return;
+
+    const key = currentCartKey;
+    if (currentAlreadyInCart) {
+      toast.info("Tagihan ini sudah ada di keranjang");
+      return;
+    }
+
+    setCartItems(prev => [...prev, {
+      key,
+      tagihanId: existingTagihan?.id,
+      jenisId: form.jenisId,
+      jenisNama: selectedJenis.nama,
+      jenisTipe: selectedJenis.tipe,
+      bulan: isSekali ? 0 : form.bulan,
+      jumlah,
+      tahunAjaranId: effectiveTahunAjaranId,
+      departemenId: departemenId || undefined,
+      isBayarDimuka,
+      status: existingTagihan?.status ?? null,
+    }]);
+
+    // Untuk pembayaran bulanan, pindahkan pilihan ke bulan tagihan berikutnya
+    // agar kasir bisa menambahkan beberapa bulan dengan cepat.
+    if (!isSekali) {
+      const nextMonth = bulanTampil.find(m =>
+        m !== form.bulan &&
+        !bulanDibayar?.has(m) &&
+        !cartItems.some(item => item.jenisId === form.jenisId && item.bulan === m)
+      );
+      if (nextMonth) setField("bulan", nextMonth);
+    } else {
+      setField("jenisId", "");
+      setField("jumlah", "");
+    }
+    toast.success("Ditambahkan ke keranjang");
+  };
+
+  const handlePayCart = async () => {
+    if (!selectedSiswa || cartItems.length === 0 || isCartPaying) return;
+    setIsCartPaying(true);
+    setCartProgress({ done: 0, total: cartItems.length });
+
+    const berhasilKeys = new Set<string>();
+    const berhasilItems: Array<{ pembayaran_id: string; jumlah: number; jenisNama: string; bulan: number }> = [];
+    const gagal: string[] = [];
+
+    for (let i = 0; i < cartItems.length; i++) {
+      const item = cartItems[i];
+      try {
+        const result = await prosesPembayaran({
+          data: {
+            siswa_id: selectedSiswa.id,
+            jenis_id: item.jenisId,
+            bulan: item.bulan,
+            jumlah: item.jumlah,
+            tanggal_bayar: form.tanggalBayar,
+            keterangan: form.keterangan || undefined,
+            departemen_id: item.departemenId,
+            tahun_ajaran_id: item.tahunAjaranId,
+            is_bayar_dimuka: item.isBayarDimuka,
+            tagihan_id: item.tagihanId,
+          },
+        });
+        berhasilKeys.add(item.key);
+        berhasilItems.push({
+          pembayaran_id: result.pembayaran_id,
+          jumlah: result.jumlah,
+          jenisNama: item.jenisNama,
+          bulan: item.bulan,
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Gagal diproses";
+        gagal.push(item.jenisNama + (item.bulan ? " " + namaBulan(item.bulan) : "") + ": " + message);
+      }
+      setCartProgress({ done: i + 1, total: cartItems.length });
+    }
+
+    setCartItems(prev => prev.filter(item => !berhasilKeys.has(item.key)));
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["pembayaran"] }),
+      queryClient.invalidateQueries({ queryKey: ["pembayaran_siswa"] }),
+      queryClient.invalidateQueries({ queryKey: ["tagihan"] }),
+      queryClient.invalidateQueries({ queryKey: ["jurnal"] }),
+      queryClient.invalidateQueries({ queryKey: ["tunggakan"] }),
+      queryClient.invalidateQueries({ queryKey: ["cek_bulan_dibayar"] }),
+      queryClient.invalidateQueries({ queryKey: ["cek_bulan_ada_tagihan"] }),
+      queryClient.invalidateQueries({ queryKey: ["open_tagihan_jenis"] }),
+      queryClient.invalidateQueries({ queryKey: ["open_tagihan_jenis_extras"] }),
+      queryClient.invalidateQueries({ queryKey: ["legacy_outstanding_breakdown"] }),
+    ]);
+
+    if (berhasilItems.length > 0) {
+      setLastCartPayment({
+        items: berhasilItems,
+        siswa: selectedSiswa,
+        tanggal_bayar: form.tanggalBayar,
+        keterangan: form.keterangan || undefined,
+      });
+      setShowCartKuitansi(true);
+    }
+
+    if (berhasilKeys.size > 0 && gagal.length === 0) {
+      toast.success(berhasilKeys.size + " pembayaran berhasil diproses");
+    } else if (berhasilKeys.size > 0) {
+      toast.success(berhasilKeys.size + " pembayaran berhasil");
+      toast.error(gagal.length + " gagal: " + gagal.slice(0, 2).join(" | "));
+    } else {
+      toast.error("Semua item keranjang gagal diproses");
+    }
+
+    setCartProgress(null);
+    setIsCartPaying(false);
+  };
 
   const handleSubmit = async () => {
     if (!selectedSiswa || !form.jenisId || !form.jumlah || tarifTidakAda) return;
@@ -461,7 +632,7 @@ export default function InputPembayaran() {
             </div>
           )}
         </div>
-        <Select value={departemenId || "__all__"} onValueChange={v => { setDepartemenId(v === "__all__" ? "" : v); setSelectedSiswa(null); setField("jenisId", ""); }}>
+        <Select value={departemenId || "__all__"} onValueChange={v => { setDepartemenId(v === "__all__" ? "" : v); setSelectedSiswa(null); setCartItems([]); setField("jenisId", ""); }}>
           <SelectTrigger className="w-44 h-11"><SelectValue placeholder="Semua lembaga" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Semua Lembaga</SelectItem>
@@ -478,7 +649,7 @@ export default function InputPembayaran() {
         </Select>
         {selectedSiswa && (
           <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0"
-            onClick={() => { setSelectedSiswa(null); setField("jenisId", ""); }}>
+            onClick={() => { setSelectedSiswa(null); setCartItems([]); setField("jenisId", ""); }}>
             <X className="h-4 w-4" />
           </Button>
         )}
@@ -579,6 +750,9 @@ export default function InputPembayaran() {
                 {existingTagihan?.status === "belum_bayar" && (
                   <p className="text-[11px] text-amber-600">📋 Sisa tagihan: {formatRupiah(Number(existingTagihan.nominal))}</p>
                 )}
+                {currentAlreadyInCart && (
+                  <p className="text-[11px] text-primary font-medium">🛒 Tagihan ini sudah ada di keranjang</p>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -596,7 +770,8 @@ export default function InputPembayaran() {
                           const sudah = bulanDibayar?.has(m);
                           return (
                             <SelectItem key={m} value={String(m)} disabled={sudah}>
-                              {namaBulan(m)}{sudah ? " ✓" : ""}
+                              {namaBulan(m)}
+                              {sudah ? " ✓" : statusTagihanPerBulan?.get(m) === "terjadwal" ? " · Terjadwal" : ""}
                             </SelectItem>
                           );
                         })}
@@ -616,7 +791,7 @@ export default function InputPembayaran() {
                   <Label className="text-xs">Status Bulan</Label>
                   {bulanTampil.length > 0 && (
                     <span className="text-[10px] text-muted-foreground">
-                      {sudahBayar}/{bulanTampil.length} bulan lunas
+                      {sudahBayar} lunas · {belumBayar} jatuh tempo · {terjadwal} terjadwal
                     </span>
                   )}
                 </div>
@@ -629,22 +804,27 @@ export default function InputPembayaran() {
                     {/* FIX: hanya render bulanTampil (bulan yg punya tagihan), bukan semua 12 bulan */}
                     {bulanTampil.map(m => {
                       const sudah = bulanDibayar?.has(m);
+                      const isTerjadwal = statusTagihanPerBulan?.get(m) === "terjadwal";
                       return (
                         <button
                           key={m}
                           type="button"
                           onClick={() => !sudah && setField("bulan", m)}
+                          title={sudah ? "Lunas" : isTerjadwal ? "Belum jatuh tempo" : "Belum bayar"}
                           className={cn(
                             "rounded px-1.5 py-1 text-[10px] font-medium border transition-colors",
                             sudah
                               ? "bg-green-50 border-green-200 text-green-700 cursor-default"
                               : form.bulan === m
                               ? "bg-primary border-primary text-primary-foreground"
+                              : isTerjadwal
+                              ? "bg-muted/60 border-dashed border-border text-muted-foreground hover:border-primary/50"
                               : "bg-background border-border text-foreground hover:border-primary/50"
                           )}
                         >
                           {namaBulan(m).slice(0, 3)}
                           {sudah && <Check className="inline ml-0.5 h-2.5 w-2.5" />}
+                          {!sudah && isTerjadwal && <Clock3 className="inline ml-0.5 h-2.5 w-2.5" />}
                         </button>
                       );
                     })}
@@ -706,29 +886,107 @@ export default function InputPembayaran() {
               />
             </div>
 
-            {/* ── Tombol Simpan ──────────────────────────────────────────────────── */}
-            <Button
-              className="w-full h-9"
-              onClick={handleSubmit}
-              disabled={
-                !form.jenisId || !form.jumlah || tarifTidakAda ||
-                prosesMutation.isPending ||
-                (isSekali && !!pembayaranSekali?.lunas) ||
-                (!isSekali && !!bulanDibayar?.has(form.bulan))
-              }
-            >
-              {prosesMutation.isPending ? (
-                <span className="flex items-center gap-1.5">
-                  <span className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  Memproses...
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5">
-                  <Printer className="h-3.5 w-3.5" />
-                  Simpan & Cetak Kuitansi
-                </span>
-              )}
-            </Button>
+            {/* ── Aksi Pembayaran ──────────────────────────────────────────────────── */}
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                className="h-9"
+                onClick={handleAddToCart}
+                disabled={
+                  !form.jenisId || !form.jumlah || tarifTidakAda ||
+                  isCartPaying ||
+                  currentAlreadyInCart ||
+                  (isSekali && !!pembayaranSekali?.lunas) ||
+                  (!isSekali && !!bulanDibayar?.has(form.bulan))
+                }
+              >
+                <ShoppingCart className="h-3.5 w-3.5 mr-1.5" />
+                Tambah ke Keranjang
+              </Button>
+              <Button
+                className="h-9"
+                onClick={handleSubmit}
+                disabled={
+                  !form.jenisId || !form.jumlah || tarifTidakAda ||
+                  prosesMutation.isPending || isCartPaying || currentAlreadyInCart ||
+                  (isSekali && !!pembayaranSekali?.lunas) ||
+                  (!isSekali && !!bulanDibayar?.has(form.bulan))
+                }
+              >
+                {prosesMutation.isPending ? (
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    Memproses...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5">
+                    <Printer className="h-3.5 w-3.5" />
+                    Bayar Langsung
+                  </span>
+                )}
+              </Button>
+            </div>
+
+            {cartItems.length > 0 && (
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <ShoppingCart className="h-4 w-4" />
+                    <span className="text-sm font-semibold">Keranjang Pembayaran</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{cartItems.length} item</span>
+                </div>
+
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {cartItems.map(item => (
+                    <div key={item.key} className="flex items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-2 text-xs">
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{item.jenisNama}</p>
+                        <p className="text-muted-foreground">
+                          {item.bulan ? namaBulan(item.bulan) : "Sekali Bayar"}
+                          {item.status === "terjadwal" ? " · Terjadwal" : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-semibold">{formatRupiah(item.jumlah)}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive"
+                          disabled={isCartPaying}
+                          onClick={() => setCartItems(prev => prev.filter(row => row.key !== item.key))}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between border-t pt-2 text-sm">
+                  <span className="font-medium">Total</span>
+                  <span className="font-bold">{formatRupiah(cartTotal)}</span>
+                </div>
+
+                <Button className="w-full h-9" onClick={handlePayCart} disabled={isCartPaying}>
+                  {isCartPaying ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      Memproses {cartProgress?.done ?? 0}/{cartProgress?.total ?? cartItems.length}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5">
+                      <Check className="h-3.5 w-3.5" />
+                      Bayar Semua · {formatRupiah(cartTotal)}
+                    </span>
+                  )}
+                </Button>
+                <p className="text-[10px] text-muted-foreground">
+                  Setiap item divalidasi ulang oleh server. Item yang gagal tetap berada di keranjang dan tidak menggandakan pembayaran yang sudah berhasil.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -809,6 +1067,42 @@ export default function InputPembayaran() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Dialog Kuitansi Gabungan ─────────────────────────────────────────────── */}
+      {lastCartPayment && (
+        <Dialog open={showCartKuitansi} onOpenChange={setShowCartKuitansi}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Bukti Pembayaran Gabungan</DialogTitle>
+            </DialogHeader>
+            <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
+              <p><span className="font-medium">{lastCartPayment.items.length} pembayaran</span> berhasil diproses.</p>
+              <p>Total: <span className="font-bold">{formatRupiah(lastCartPayment.items.reduce((sum, item) => sum + item.jumlah, 0))}</span></p>
+              <p className="text-xs text-muted-foreground">Setiap item tetap memiliki referensi pembayaran dan jurnal masing-masing.</p>
+            </div>
+            <PrintKuitansiGabungan
+              items={lastCartPayment.items.map(item => ({
+                id: item.pembayaran_id,
+                jumlah: item.jumlah,
+                jenisNama: item.jenisNama,
+                bulan: item.bulan,
+              }))}
+              tanggalBayar={lastCartPayment.tanggal_bayar}
+              keterangan={lastCartPayment.keterangan}
+              siswa={lastCartPayment.siswa}
+              kelasNama={kelasNama}
+              lembagaNama={lembagaNama}
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowCartKuitansi(false)}>Tutup</Button>
+              <Button onClick={() => window.print()}>
+                <Printer className="h-4 w-4 mr-1.5" />
+                Cetak Bukti Gabungan
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* ── Dialog Kuitansi ────────────────────────────────────────────────────── */}
       {lastPayment && (
