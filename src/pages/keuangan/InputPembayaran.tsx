@@ -123,6 +123,7 @@ export default function InputPembayaran() {
   const { data: tahunAktif }      = useTahunBukuAktif();
   const { data: tahunAjaranList } = useTahunBuku();
   const { data: allJenisList }    = useJenisPembayaran(departemenId || undefined);
+  const effectiveTahunAjaranId = selectedTahunAjaranId || tahunAktif?.id || "";
 
   // Tagihan migrasi dapat berasal dari lembaga sebelumnya (mis. SD) sementara
   // siswa sekarang sudah berada di SMP. Jenis tagihan terbuka lintas lembaga
@@ -148,8 +149,6 @@ export default function InputPembayaran() {
       return Array.from(byId.values());
     },
   });
-
-  const effectiveTahunAjaranId = selectedTahunAjaranId || tahunAktif?.id || "";
 
   const { data: searchResults } = useQuery<SiswaWithKelas[]>({
     queryKey: ["search_siswa", searchTerm, departemenId],
