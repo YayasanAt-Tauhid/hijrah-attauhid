@@ -41,7 +41,7 @@ function RekapKasirSayaContent() {
       render: (_, row) => (
         <div>
           <p className="font-medium">{row.siswa_nama}</p>
-          <p className="text-xs text-muted-foreground">{row.siswa_nis || "Belum memiliki NIS"}</p>
+          <p className="text-xs text-muted-foreground">{[row.siswa_nis, row.siswa_nisn].filter(Boolean).join(" / ") || "Belum memiliki NIS/NISN"}</p>
         </div>
       ),
     },
@@ -161,6 +161,7 @@ function RekapKasirSayaContent() {
                 siswa: {
                   nama: printRow.siswa_nama,
                   nis: printRow.siswa_nis || undefined,
+                  nisn: printRow.siswa_nisn || undefined,
                 },
               }}
               kelasNama={printRow.siswa_status === "calon" ? "Calon Murid" : printRow.kelas_nama || "-"}
