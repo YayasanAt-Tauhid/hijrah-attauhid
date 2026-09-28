@@ -124,6 +124,31 @@ export default function InputPembayaran() {
   const { data: tahunAjaranList } = useTahunBuku();
   const { data: allJenisList }    = useJenisPembayaran(departemenId || undefined);
 
+  // Tagihan migrasi dapat berasal dari lembaga sebelumnya (mis. SD) sementara
+  // siswa sekarang sudah berada di SMP. Jenis tagihan terbuka lintas lembaga
+  // tetap harus tersedia di dropdown pembayaran, walaupun tidak termasuk
+  // hasil useJenisPembayaran(departemenId) untuk lembaga siswa saat ini.
+  const { data: openTagihanJenisExtras = [] } = useQuery<JenisPembayaran[]>({
+    queryKey: ["open_tagihan_jenis_extras", selectedSiswa?.id, effectiveTahunAjaranId],
+    enabled: !!selectedSiswa && !!effectiveTahunAjaranId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tagihan")
+        .select("jenis_id, jenis_pembayaran:jenis_id(id, nama, nominal, keterangan, departemen_id, akun_pendapatan_id, tipe)")
+        .eq("siswa_id", selectedSiswa!.id)
+        .eq("tahun_ajaran_id", effectiveTahunAjaranId)
+        .in("status", ["belum_bayar", "terjadwal"]);
+      if (error) throw error;
+
+      const byId = new Map<string, JenisPembayaran>();
+      for (const row of (data ?? []) as any[]) {
+        const jenis = row.jenis_pembayaran as JenisPembayaran | null;
+        if (jenis?.id) byId.set(jenis.id, jenis);
+      }
+      return Array.from(byId.values());
+    },
+  });
+
   const effectiveTahunAjaranId = selectedTahunAjaranId || tahunAktif?.id || "";
 
   const { data: searchResults } = useQuery<SiswaWithKelas[]>({
@@ -193,12 +218,15 @@ export default function InputPembayaran() {
   const jenisList = useMemo<JenisPembayaran[]>(() => {
     if (!allJenisList) return [];
     if (!selectedSiswa) return allJenisList as JenisPembayaran[];
-    if (!applicableTarifJenisIds && !openTagihanJenisIds) return allJenisList as JenisPembayaran[];
 
-    return (allJenisList as JenisPembayaran[]).filter(j =>
+    const merged = new Map<string, JenisPembayaran>();
+    for (const jenis of allJenisList as JenisPembayaran[]) merged.set(jenis.id, jenis);
+    for (const jenis of openTagihanJenisExtras) merged.set(jenis.id, jenis);
+
+    return Array.from(merged.values()).filter(j =>
       applicableTarifJenisIds?.has(j.id) || openTagihanJenisIds?.has(j.id)
     );
-  }, [allJenisList, selectedSiswa, applicableTarifJenisIds, openTagihanJenisIds]);
+  }, [allJenisList, selectedSiswa, applicableTarifJenisIds, openTagihanJenisIds, openTagihanJenisExtras]);
 
   const selectedJenis = jenisList.find(j => j.id === form.jenisId) ?? null;
   const isSekali      = selectedJenis ? isTipeSekali(selectedJenis.tipe) : false;
