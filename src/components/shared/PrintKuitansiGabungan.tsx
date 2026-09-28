@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { formatRupiah, terbilang, namaBulanTahun } from "@/hooks/useKeuangan";
+import { terbilang, namaBulanTahun } from "@/hooks/useKeuangan";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 
@@ -19,6 +19,12 @@ interface PrintKuitansiGabunganProps {
   siswa: { nama: string; nis?: string; nisn?: string };
   kelasNama: string;
   lembagaNama: string;
+  petugasNama?: string;
+  metode?: string;
+}
+
+function formatAngka(value: number) {
+  return new Intl.NumberFormat("id-ID").format(value);
 }
 
 export function PrintKuitansiGabungan({
@@ -28,6 +34,8 @@ export function PrintKuitansiGabungan({
   siswa,
   kelasNama,
   lembagaNama,
+  petugasNama,
+  metode = "Tunai",
 }: PrintKuitansiGabunganProps) {
   const { data: sekolah } = useQuery({
     queryKey: ["sekolah_info"],
@@ -37,76 +45,143 @@ export function PrintKuitansiGabungan({
     },
   });
 
+  const tanggal = new Date(tanggalBayar);
   const total = items.reduce((sum, item) => sum + item.jumlah, 0);
+  const refPendek = items[0]?.id?.replace(/-/g, "").slice(0, 10).toUpperCase() || "0000000000";
+  const nomorBukti = `HTG-${format(tanggal, "yyyyMMdd")}-${refPendek}`;
+  const identitas = [siswa.nis, siswa.nisn].filter(Boolean).join(" / ") || "-";
 
   return (
-    <div id="kuitansi-print" className="hidden print:!block bg-white text-black p-6 max-w-[210mm] mx-auto text-[11pt]">
-      <div className="flex items-center gap-4 border-b-2 border-black pb-3 mb-4">
-        {sekolah?.logo_url && (
-          <img src={sekolah.logo_url} alt="Logo" className="h-16 w-16 object-contain" />
-        )}
-        <div className="flex-1 text-center">
-          <h1 className="text-lg font-bold uppercase">{sekolah?.nama || lembagaNama}</h1>
-          <p className="text-sm">{sekolah?.alamat || ""}</p>
-          {sekolah?.telepon && <p className="text-xs">Telp: {sekolah.telepon} | Email: {sekolah?.email || ""}</p>}
+    <div
+      id="kuitansi-print"
+      className="hidden print:!block bg-white text-black mx-auto max-w-[190mm] p-5 print:p-0 text-[10.5pt] leading-snug"
+    >
+      <div className="flex items-start justify-between gap-5 border-b-2 border-black pb-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          {sekolah?.logo_url ? (
+            <img
+              src={sekolah.logo_url}
+              alt="Logo Yayasan"
+              className="h-[58px] w-[58px] shrink-0 object-contain"
+            />
+          ) : (
+            <div className="flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-full border-2 border-black text-[9px] font-bold">
+              AT-TAUHID
+            </div>
+          )}
+          <div className="min-w-0">
+            <h1 className="text-[13.5pt] font-extrabold uppercase tracking-tight">
+              YAYASAN AT-TAUHID AL ISLAMY BANGKA BELITUNG
+            </h1>
+            {sekolah?.alamat && <p className="mt-0.5 text-[9.5pt]">{sekolah.alamat}</p>}
+            {(sekolah?.telepon || sekolah?.email) && (
+              <p className="text-[9pt]">
+                {[sekolah?.telepon ? `Telp: ${sekolah.telepon}` : "", sekolah?.email || ""]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="shrink-0 border-y-2 border-black px-4 py-2 text-center text-[11pt] font-extrabold tracking-wide">
+          BUKTI PEMBAYARAN
         </div>
       </div>
 
-      <h2 className="text-center font-bold text-base mb-4 underline">BUKTI PEMBAYARAN GABUNGAN</h2>
+      <div className="mt-3 font-bold tracking-wide">{nomorBukti}</div>
 
-      <table className="w-full mb-4 text-sm">
+      <table className="mt-2 w-full table-fixed text-[10pt]">
         <tbody>
-          <tr><td className="py-1 w-36">Tanggal</td><td className="py-1">: {format(new Date(tanggalBayar), "dd MMMM yyyy", { locale: idLocale })}</td></tr>
-          <tr><td className="py-1">Nama Siswa</td><td className="py-1">: {siswa.nama}</td></tr>
-          <tr><td className="py-1">NIS / NISN</td><td className="py-1">: {[siswa.nis, siswa.nisn].filter(Boolean).join(" / ") || "-"}</td></tr>
-          <tr><td className="py-1">Kelas</td><td className="py-1">: {kelasNama}</td></tr>
-          <tr><td className="py-1">Lembaga</td><td className="py-1">: {lembagaNama}</td></tr>
+          <tr>
+            <td className="w-[105px] py-1 align-top">Nama Siswa</td>
+            <td className="py-1 align-top font-semibold">{siswa.nama}</td>
+            <td className="w-[90px] py-1 align-top">Tgl. Bayar</td>
+            <td className="w-[150px] py-1 align-top">
+              {format(tanggal, "dd MMM yyyy", { locale: idLocale })}
+            </td>
+          </tr>
+          <tr>
+            <td className="py-1 align-top">NIS / NISN</td>
+            <td className="py-1 align-top">{identitas}</td>
+            <td className="py-1 align-top">Metode</td>
+            <td className="py-1 align-top">{metode}</td>
+          </tr>
+          <tr>
+            <td className="py-1 align-top">Kelas</td>
+            <td className="py-1 align-top">{kelasNama || "-"}</td>
+            <td className="py-1 align-top">Petugas</td>
+            <td className="py-1 align-top">{petugasNama || "-"}</td>
+          </tr>
+          <tr>
+            <td className="py-1 align-top">Lembaga</td>
+            <td className="py-1 align-top" colSpan={3}>{lembagaNama || "-"}</td>
+          </tr>
         </tbody>
       </table>
 
-      <table className="w-full border-collapse mb-4 text-sm">
-        <thead>
-          <tr className="border-y border-black">
-            <th className="py-1.5 text-left">Jenis Pembayaran</th>
-            <th className="py-1.5 text-left">Periode</th>
-            <th className="py-1.5 text-left">Ref.</th>
-            <th className="py-1.5 text-right">Jumlah</th>
-          </tr>
-        </thead>
+      <div className="my-3 border-y border-black py-1.5 text-[10pt] font-bold">
+        Dengan rincian pembayaran sebagai berikut:
+      </div>
+
+      <table className="w-full text-[10pt]">
         <tbody>
-          {items.map((item, index) => (
-            <tr key={item.id ?? index} className="border-b border-gray-300">
-              <td className="py-1.5 pr-2">{item.jenisNama}</td>
-              <td className="py-1.5 pr-2">
-                {item.periodeLabel || (item.bulan ? namaBulanTahun(item.bulan, { tanggalTransaksi: tanggalBayar }) : "Sekali Bayar")}
-              </td>
-              <td className="py-1.5 pr-2 font-mono text-[9pt]">{item.id?.slice(0, 8).toUpperCase() || "-"}</td>
-              <td className="py-1.5 text-right">{formatRupiah(item.jumlah)}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="border-t-2 border-black font-bold">
-            <td className="py-2" colSpan={3}>TOTAL</td>
-            <td className="py-2 text-right">{formatRupiah(total)}</td>
+          {items.map((item, index) => {
+            const periode =
+              item.periodeLabel ||
+              (item.bulan
+                ? namaBulanTahun(item.bulan, { tanggalTransaksi: tanggalBayar })
+                : "");
+            const rincian = periode
+              ? `${item.jenisNama} ( ${periode.toUpperCase()} )`
+              : item.jenisNama;
+            return (
+              <tr key={item.id ?? index}>
+                <td className="w-[28px] py-1.5 align-top">{index + 1}.</td>
+                <td className="py-1.5 pr-3 align-top">{rincian}</td>
+                <td className="w-[30px] py-1.5 align-top">Rp</td>
+                <td className="w-[120px] py-1.5 text-right align-top">{formatAngka(item.jumlah)}</td>
+              </tr>
+            );
+          })}
+          <tr className="border-t-2 border-black font-extrabold">
+            <td className="py-2 text-right" colSpan={2}>JUMLAH</td>
+            <td className="py-2">Rp</td>
+            <td className="py-2 text-right">{formatAngka(total)}</td>
           </tr>
-        </tfoot>
+        </tbody>
       </table>
 
-      <p className="text-sm italic mb-2">Terbilang: {terbilang(total)}</p>
-      {keterangan && <p className="text-sm">Keterangan: {keterangan}</p>}
-
-      <div className="flex justify-between mt-12 text-sm">
-        <div className="text-center">
-          <p>Penerima,</p>
-          <div className="h-16" />
-          <p className="border-t border-black pt-1">Orang Tua / Wali</p>
+      <div className="mt-2 text-[9.5pt]">
+        <span className="font-semibold">Terbilang:</span>{" "}
+        <span className="italic">{terbilang(total)}</span>
+      </div>
+      {keterangan && (
+        <div className="mt-1 text-[9.5pt]">
+          <span className="font-semibold">Keterangan:</span> {keterangan}
         </div>
-        <div className="text-center">
-          <p>{sekolah?.alamat ? format(new Date(tanggalBayar), "dd MMMM yyyy", { locale: idLocale }) : ""}</p>
-          <p>Petugas,</p>
-          <div className="h-16" />
-          <p className="border-t border-black pt-1">(_____________________)</p>
+      )}
+
+      <div className="mt-8 grid grid-cols-[1.55fr_0.7fr_1fr] items-end gap-6">
+        <div className="text-[8.5pt] leading-snug">
+          <p className="italic">
+            This is a computer generated message and requires no signature.
+          </p>
+          <p className="italic">
+            Informasi ini merupakan hasil cetakan komputer dan tidak memerlukan tanda tangan petugas.
+          </p>
+          <p className="mt-3 font-medium">Powered by Hijrah At-Tauhid</p>
+        </div>
+
+        <div className="mx-auto flex h-[68px] w-[68px] flex-col items-center justify-center border-2 border-black text-center leading-tight">
+          <span className="text-[8px] font-bold">HIJRAH</span>
+          <span className="text-[7px]">AT-TAUHID</span>
+          <span className="mt-1 font-mono text-[6.5px]">{refPendek.slice(0, 8)}</span>
+        </div>
+
+        <div className="text-center text-[9.5pt]">
+          <p>Penyetor,</p>
+          <div className="h-14" />
+          <p>(....................................)</p>
         </div>
       </div>
     </div>
