@@ -86,7 +86,7 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     const { userId } = requireContext(context);
     await requireRole(admin, userId, ["admin", "keuangan", "kasir"]);
 
-    const search = String(data?.search ?? "").trim();
+    const search = String(data?.search ?? "").trim().replace(/\s+/g, " ");
     if (search.length < 2) return { items: [] };
 
     const status = data?.status === "calon" ? "calon" : "aktif";
@@ -94,13 +94,25 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     const select =
       "id, nis, nisn, nama, foto_url, status, angkatan_id, departemen_id, kelas_siswa(kelas_id, aktif, kelas:kelas_id(id, nama, departemen_id))";
 
+    // Untuk siswa aktif, token kelas di akhir pencarian boleh digabung dengan
+    // nama/NIS, misalnya "Shofiyya 2C" atau "2538144422 5C". Token kelas
+    // dipisahkan dari pencarian nama/NIS lalu divalidasi terhadap kelas aktif.
+    const parts = search.split(" ");
+    const lastPart = parts.at(-1) ?? "";
+    const isClassToken = /^(?:(?:[1-9]|1[0-2])[a-z]?|(?:x|xi|xii)[a-z]?)$/i.test(lastPart);
+    const kelasSearch = status === "aktif" && parts.length > 1 && isClassToken ? lastPart : null;
+    const identitySearch = kelasSearch ? parts.slice(0, -1).join(" ").trim() : search;
+    if (identitySearch.length < 2) return { items: [] };
+
     const buildQuery = (field: "nama" | "nis") => {
       let q = admin
         .from("siswa")
         .select(select)
         .eq("status", status)
-        .ilike(field, "%" + search + "%")
-        .limit(limit);
+        .ilike(field, "%" + identitySearch + "%")
+        // Ambil kandidat lebih banyak sebelum filter kelas diterapkan, agar
+        // nama yang sama di beberapa kelas tidak terpotong terlalu dini.
+        .limit(kelasSearch ? 100 : limit);
       if (data?.departemen_id) q = q.eq("departemen_id", data.departemen_id);
       return q;
     };
@@ -128,8 +140,18 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
       });
     }
 
+    const normalizeKelas = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const kelasNeedle = kelasSearch ? normalizeKelas(kelasSearch) : null;
+
     return {
       items: Array.from(unik.values())
+        .filter((siswa) => {
+          if (!kelasNeedle) return true;
+          return siswa.kelas_siswa.some((ks) => {
+            if (!ks.aktif || !ks.kelas?.nama) return false;
+            return normalizeKelas(ks.kelas.nama).includes(kelasNeedle);
+          });
+        })
         .sort((a, b) => a.nama.localeCompare(b.nama, "id-ID"))
         .slice(0, limit),
     };

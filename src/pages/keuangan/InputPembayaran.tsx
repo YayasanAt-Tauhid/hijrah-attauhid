@@ -696,7 +696,7 @@ function InputPembayaranContent() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
           <Input
-            placeholder="Ketik NIS atau nama siswa untuk mencari..."
+            placeholder="Cari nama, NIS, atau nama + kelas (contoh: Shofiyya 2C)..."
             value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
             className="pl-10 h-11 text-base"
           />
