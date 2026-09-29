@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { terbilang, namaBulanTahun } from "@/hooks/useKeuangan";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import { YAYASAN_LOGO_URL } from "@/lib/branding";
 
 interface CombinedPaymentItem {
   id?: string;
@@ -61,17 +62,11 @@ export function PrintKuitansiGabungan({
     >
       <div className="flex items-start justify-between gap-5 border-b-2 border-black pb-3">
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          {sekolah?.logo_url ? (
-            <img
-              src={sekolah.logo_url}
-              alt="Logo Yayasan"
-              className="h-[58px] w-[58px] shrink-0 object-contain"
-            />
-          ) : (
-            <div className="flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-full border-2 border-black text-[9px] font-bold">
-              AT-TAUHID
-            </div>
-          )}
+          <img
+            src={YAYASAN_LOGO_URL}
+            alt="Logo Yayasan At-Tauhid"
+            className="h-[58px] w-[58px] shrink-0 object-contain"
+          />
           <div className="min-w-0">
             <h1 className="text-[13.5pt] font-extrabold uppercase tracking-tight">
               YAYASAN AT-TAUHID AL ISLAMY BANGKA BELITUNG
