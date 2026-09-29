@@ -834,9 +834,29 @@ function InputPembayaranContent() {
                 {tarifTidakAda && (
                   <p className="text-[11px] text-destructive font-medium">⚠️ Tarif belum dikonfigurasi</p>
                 )}
-                {existingTagihan?.status === "belum_bayar" && (
+                {adaTagihanDipilih && Number(existingTagihan?.nominal_diskon ?? 0) > 0 ? (
+                  <div className="mt-1 rounded-md border bg-muted/30 px-2.5 py-2 text-[11px] space-y-1">
+                    <div className="flex items-center justify-between gap-3 text-muted-foreground">
+                      <span>Tarif awal</span>
+                      <span>{formatRupiah(Number(existingTagihan?.nominal_bruto ?? existingTagihan?.nominal ?? 0))}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 text-emerald-700">
+                      <span>
+                        Keringanan / Diskon
+                        {(existingTagihan as any)?.siswa_diskon?.skema_diskon?.nama
+                          ? ` (${(existingTagihan as any).siswa_diskon.skema_diskon.nama})`
+                          : ""}
+                      </span>
+                      <span>- {formatRupiah(Number(existingTagihan?.nominal_diskon ?? 0))}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 border-t pt-1 font-semibold text-foreground">
+                      <span>Yang harus dibayar</span>
+                      <span>{formatRupiah(Number(existingTagihan?.nominal ?? 0))}</span>
+                    </div>
+                  </div>
+                ) : existingTagihan?.status === "belum_bayar" ? (
                   <p className="text-[11px] text-amber-600">📋 Sisa tagihan: {formatRupiah(Number(existingTagihan.nominal))}</p>
-                )}
+                ) : null}
                 {currentAlreadyInCart && (
                   <p className="text-[11px] text-primary font-medium">🛒 Tagihan ini sudah ada di keranjang</p>
                 )}
