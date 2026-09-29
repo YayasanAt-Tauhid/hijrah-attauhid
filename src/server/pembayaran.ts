@@ -316,7 +316,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<ProsesPembayaranResult> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, [
+    const role = await requireRole(admin, userId, [
       "admin",
       "keuangan",
       "kasir",
@@ -326,13 +326,26 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       siswa_id,
       jenis_id,
       bulan,
-      tanggal_bayar,
+      tanggal_bayar: requestedTanggalBayar,
       keterangan,
       departemen_id,
       tahun_ajaran_id,
       is_bayar_dimuka,
       tagihan_id,
     } = data;
+
+    // Kasir tidak boleh mengubah tanggal transaksi. Server menjadi sumber
+    // kebenaran agar pembatasan tidak dapat dilewati dengan request manual.
+    // Admin/keuangan tetap boleh menginput transaksi historis/koreksi.
+    const tanggal_bayar =
+      role === "kasir"
+        ? new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Asia/Jakarta",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).format(new Date())
+        : requestedTanggalBayar;
 
     if (!siswa_id || !jenis_id || !tanggal_bayar || !tahun_ajaran_id) {
       throw new Error(
