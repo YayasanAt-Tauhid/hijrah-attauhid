@@ -9,6 +9,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { resolvePaymentBookYear } from "@/lib/paymentBookYear";
 import { resolvePaymentAmount } from "@/lib/paymentTariff";
+import { calculateRemainingBill, resolveInstallmentAmount } from "@/lib/installment";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
 
@@ -32,6 +33,8 @@ export interface ProsesPembayaranResult {
   nomor_jurnal: string;
   jumlah: number;
   petugas_nama: string | null;
+  status_tagihan: string | null;
+  sisa_tagihan: number | null;
 }
 
 export interface LegacyOutstandingBreakdownRow {
@@ -396,7 +399,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       ) {
         throw new Error("Tagihan tidak sesuai dengan siswa, jenis, atau bulan pembayaran");
       }
-      if (!["belum_bayar", "terjadwal"].includes(tagihanData.status ?? "")) {
+      if (!["belum_bayar", "sebagian", "terjadwal"].includes(tagihanData.status ?? "")) {
         throw new Error("Tagihan ini sudah lunas atau tidak dapat dibayar");
       }
       tagihanTerpilih = tagihanData;
@@ -412,7 +415,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         .eq("jenis_id", jenis_id)
         .eq("tahun_ajaran_id", tahun_ajaran_id)
         .is("bulan", null)
-        .in("status", ["belum_bayar", "terjadwal"])
+        .in("status", ["belum_bayar", "sebagian", "terjadwal"])
         .limit(1);
       if (openOnceError) {
         throw new Error("Gagal mengambil tagihan sekali bayar: " + openOnceError.message);
@@ -492,22 +495,39 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       tarifNominalRaw = data;
     }
 
-    // Nilai dari frontend tidak dipakai sebagai sumber nominal. Tagihan yang
-    // dipilih menentukan jumlah; tanpa tagihan, gunakan tarif khusus/default.
-    // Untuk tagihan yang dipilih secara eksplisit, nominal bersumber dari
-    // kewajiban yang tersimpan. Ini mencakup potongan dan sisa saldo migrasi;
-    // tarif siswa dipakai hanya saat membuat pembayaran tanpa tagihan pilihan.
-    const jumlahValid = resolvePaymentAmount(
-      tagihanTerpilih ? tagihanTerpilih.nominal : undefined,
-      tarifNominalRaw,
-      jenis.nominal
-    );
-    if (!Number.isFinite(jumlahValid) || jumlahValid <= 0) {
-      throw new Error("Tarif pembayaran belum dikonfigurasi untuk siswa ini");
+    // Tagihan sekali bayar (mis. Uang Pangkal) yang sudah jatuh tempo
+    // boleh dicicil bebas. Setiap pembayaran ditautkan ke tagihan exact, jadi
+    // sisa tidak lagi ditebak dari tahun buku pembayaran.
+    let jumlahValid: number;
+    if (tagihanTerpilih) {
+      const { data: pembayaranTagihan, error: pembayaranTagihanError } = await admin
+        .from("pembayaran")
+        .select("jumlah")
+        .eq("tagihan_id", tagihanTerpilih.id);
+      if (pembayaranTagihanError) {
+        throw new Error("Gagal menghitung cicilan tagihan: " + pembayaranTagihanError.message);
+      }
+      const totalSudahBayar = (pembayaranTagihan || []).reduce(
+        (sum, row) => sum + Number(row.jumlah || 0),
+        0
+      );
+      const { remaining } = calculateRemainingBill(tagihanTerpilih.nominal, totalSudahBayar);
+      const allowPartial = isSekali && tagihanTerpilih.status !== "terjadwal";
+      jumlahValid = resolveInstallmentAmount({
+        requestedAmount: data.jumlah,
+        remainingAmount: remaining,
+        allowPartial,
+      });
+    } else {
+      jumlahValid = resolvePaymentAmount(undefined, tarifNominalRaw, jenis.nominal);
+      if (!Number.isFinite(jumlahValid) || jumlahValid <= 0) {
+        throw new Error("Tarif pembayaran belum dikonfigurasi untuk siswa ini");
+      }
     }
 
-    // Cek duplikasi
-    if (isSekali) {
+    // Cek duplikasi. Pembayaran sekali bayar dengan tagihan exact sengaja
+    // boleh memiliki banyak baris pembayaran (cicilan).
+    if (isSekali && !tagihanTerpilih) {
       const { data: existingPay } = await admin
         .from("pembayaran")
         .select("jumlah")
@@ -515,13 +535,13 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         .eq("jenis_id", jenis_id)
         .eq("tahun_ajaran_id", tahunBukuTagihanId);
       const totalSudahBayar = (existingPay || []).reduce(
-        (s, r) => s + Number(r.jumlah || 0),
+        (sum, row) => sum + Number(row.jumlah || 0),
         0
       );
       if (totalSudahBayar >= jumlahValid) {
         throw new Error("Pembayaran ini sudah lunas");
       }
-    } else {
+    } else if (!isSekali) {
       const { data: dupCheck } = await admin
         .from("pembayaran")
         .select("id")
@@ -586,7 +606,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         .eq("siswa_id", siswa_id)
         .eq("jenis_id", jenis_id)
         .eq("tahun_ajaran_id", tahunAjaranEfektifId)
-        .in("status", ["belum_bayar", "terjadwal"]);
+        .in("status", ["belum_bayar", "sebagian", "terjadwal"]);
       tagihanQuery =
         bulanNormalized == null
           ? tagihanQuery.is("bulan", null)
@@ -595,7 +615,8 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       tagihanFound = tagihanRows?.[0] ?? null;
     }
     const belumJatuhTempo = tagihanFound?.status === "terjadwal";
-    const tagihanSudahDiakuiPiutang = tagihanFound?.status === "belum_bayar";
+    const tagihanSudahDiakuiPiutang =
+      tagihanFound?.status === "belum_bayar" || tagihanFound?.status === "sebagian";
     const pakaiDimuka =
       jenis.perlu_dimuka !== false && (is_bayar_dimuka || belumJatuhTempo);
     // Tagihan efektif = yang dikirim caller, atau yang ditemukan lewat
@@ -669,6 +690,8 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       pembayaran_id: string;
       jurnal_id: string;
       nomor_jurnal: string;
+      status_tagihan?: string | null;
+      sisa_tagihan?: number | null;
     };
 
     const { data: petugasProfile } = await admin
@@ -693,6 +716,8 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       nomor_jurnal: r.nomor_jurnal,
       jumlah: jumlahValid,
       petugas_nama: petugasNama,
+      status_tagihan: r.status_tagihan ?? null,
+      sisa_tagihan: r.sisa_tagihan == null ? null : Number(r.sisa_tagihan),
     };
   });
 

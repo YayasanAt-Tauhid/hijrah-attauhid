@@ -12,6 +12,7 @@ import { authMiddleware, requireContext } from "./auth";
 import { createAdminClient, readEnv } from "./supabase";
 
 interface TagihanItem {
+  tagihan_id?: string;
   siswa_id: string;
   nama_siswa: string;
   jenis_id: string;
@@ -119,35 +120,22 @@ export async function buatTransaksiSnap(params: {
     throw new Error("Akses ditolak: beberapa siswa bukan anak Anda");
   }
 
-  // Anti double payment
-  for (const item of items) {
-    const { data: existingPayment } = await admin
-      .from("pembayaran")
-      .select("id")
-      .eq("siswa_id", item.siswa_id)
-      .eq("jenis_id", item.jenis_id)
-      .eq("bulan", item.bulan)
-      .maybeSingle();
-    if (existingPayment) {
-      throw new Error(
-        `Tagihan ${item.jenis_nama} bulan ke-${item.bulan} untuk ${item.nama_siswa} sudah dibayar`
-      );
-    }
-  }
-
-  // Re-fetch TAGIHAN dari DB (JANGAN percaya nominal frontend dan jangan
-  // mengambil tarif bruto). tagihan.nominal adalah kewajiban bersih setelah
-  // potongan/keringanan, sehingga nilai yang dikirim ke Midtrans harus sama
-  // dengan yang benar-benar ditagihkan kepada siswa.
+  // Validasi pembayaran dilakukan terhadap tagihan exact di bawah. Untuk
+  // tagihan sekali bayar, beberapa pembayaran memang sah karena merupakan cicilan.
+  // Re-fetch TAGIHAN dari DB (JANGAN percaya nominal frontend). Untuk
+  // tagihan sekali bayar yang sudah jatuh tempo, jumlah frontend adalah nominal
+  // cicilan yang diminta; server tetap menghitung sisa dan membatasi nominalnya.
   const validatedItems: TagihanItem[] = [];
   for (const item of items) {
     let tagihanQuery = admin
       .from("tagihan")
-      .select("id, nominal, nominal_bruto, nominal_diskon, status, tahun_ajaran_id")
+      .select("id, nominal, nominal_bruto, nominal_diskon, status, tahun_ajaran_id, bulan, jatuh_tempo")
       .eq("siswa_id", item.siswa_id)
       .eq("jenis_id", item.jenis_id);
 
-    if (item.tahun_ajaran_id) {
+    if (item.tagihan_id) {
+      tagihanQuery = tagihanQuery.eq("id", item.tagihan_id);
+    } else if (item.tahun_ajaran_id) {
       tagihanQuery = tagihanQuery.eq("tahun_ajaran_id", item.tahun_ajaran_id);
     }
 
@@ -157,7 +145,7 @@ export async function buatTransaksiSnap(params: {
         : tagihanQuery.eq("bulan", item.bulan);
 
     const { data: tagihanRows, error: tagihanError } = await tagihanQuery
-      .in("status", ["belum_bayar", "terjadwal"])
+      .in("status", ["belum_bayar", "sebagian", "terjadwal"])
       .limit(2);
 
     if (tagihanError) throw tagihanError;
@@ -173,19 +161,53 @@ export async function buatTransaksiSnap(params: {
     }
 
     const tagihan = tagihanRows[0];
-    const nominalDB = Number(tagihan.nominal) || 0;
-    if (nominalDB <= 0) {
+    const nominalTagihan = Number(tagihan.nominal) || 0;
+    if (nominalTagihan <= 0) {
       throw new Error(
         `Nominal tagihan tidak valid untuk ${item.jenis_nama} - ${item.nama_siswa}`
       );
     }
 
+    const { data: paidRows, error: paidError } = await admin
+      .from("pembayaran")
+      .select("jumlah")
+      .eq("tagihan_id", tagihan.id);
+    if (paidError) throw paidError;
+    const totalSudahBayar = (paidRows || []).reduce(
+      (sum, row) => sum + Number(row.jumlah || 0),
+      0
+    );
+    const sisa = Math.max(nominalTagihan - totalSudahBayar, 0);
+    if (sisa <= 0) {
+      throw new Error(
+        `Tagihan ${item.jenis_nama} untuk ${item.nama_siswa} sudah lunas`
+      );
+    }
+
+    const requested = Number(item.jumlah);
+    if (!Number.isFinite(requested) || requested <= 0) {
+      throw new Error("Jumlah pembayaran harus lebih dari 0");
+    }
+    if (requested > sisa) {
+      throw new Error(
+        `Jumlah pembayaran ${item.jenis_nama} melebihi sisa tagihan`
+      );
+    }
+
+    const cicilanDiizinkan = item.bulan === 0 && tagihan.status !== "terjadwal";
+    if (!cicilanDiizinkan && requested !== sisa) {
+      throw new Error(
+        tagihan.status === "terjadwal"
+          ? "Tagihan yang belum jatuh tempo harus dibayar penuh"
+          : "Tagihan bulanan harus dibayar penuh"
+      );
+    }
+
     validatedItems.push({
       ...item,
-      jumlah: nominalDB,
+      tagihan_id: tagihan.id,
+      jumlah: requested,
       departemen_id: item.departemen_id || undefined,
-      // Gunakan Tahun Buku milik tagihan yang benar-benar dipilih. Ini menjaga
-      // pembayaran tunggakan tetap menutup tagihan lama dan bukan tahun berjalan.
       tahun_ajaran_id: tagihan.tahun_ajaran_id || item.tahun_ajaran_id || undefined,
     });
   }
@@ -216,6 +238,7 @@ export async function buatTransaksiSnap(params: {
 
   const itemsToInsert = validatedItems.map((item) => ({
     transaksi_id: transaksi.id,
+    tagihan_id: item.tagihan_id || null,
     siswa_id: item.siswa_id,
     jenis_id: item.jenis_id,
     bulan: item.bulan,

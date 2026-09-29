@@ -1833,6 +1833,7 @@ export type Database = {
           keterangan: string | null
           petugas_id: string | null
           siswa_id: string | null
+          tagihan_id: string | null
           tahun_ajaran_id: string | null
           tanggal_bayar: string | null
         }
@@ -1846,6 +1847,7 @@ export type Database = {
           keterangan?: string | null
           petugas_id?: string | null
           siswa_id?: string | null
+          tagihan_id?: string | null
           tahun_ajaran_id?: string | null
           tanggal_bayar?: string | null
         }
@@ -1859,6 +1861,7 @@ export type Database = {
           keterangan?: string | null
           petugas_id?: string | null
           siswa_id?: string | null
+          tagihan_id?: string | null
           tahun_ajaran_id?: string | null
           tanggal_bayar?: string | null
         }
@@ -4420,6 +4423,7 @@ export type Database = {
           nama_item: string
           pembayaran_id: string | null
           siswa_id: string
+          tagihan_id: string | null
           tahun_ajaran_id: string | null
           transaksi_id: string
         }
@@ -4433,6 +4437,7 @@ export type Database = {
           nama_item: string
           pembayaran_id?: string | null
           siswa_id: string
+          tagihan_id?: string | null
           tahun_ajaran_id?: string | null
           transaksi_id: string
         }
@@ -4446,6 +4451,7 @@ export type Database = {
           nama_item?: string
           pembayaran_id?: string | null
           siswa_id?: string
+          tagihan_id?: string | null
           tahun_ajaran_id?: string | null
           transaksi_id?: string
         }

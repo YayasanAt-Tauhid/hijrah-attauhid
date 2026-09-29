@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@/lib/router-compat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -55,6 +56,8 @@ const formatRupiah = (n: number) =>
   }).format(n);
 
 interface TagihanItem {
+  tagihan_id: string;
+  status: string;
   siswa_id: string;
   nama_siswa: string;
   nis: string;
@@ -78,6 +81,7 @@ export default function PortalTagihan() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [partialAmounts, setPartialAmounts] = useState<Record<string, number>>({});
 
   // Get anak IDs
   const { data: anakIds = [] } = useQuery({
@@ -169,8 +173,15 @@ export default function PortalTagihan() {
   };
 
   const selectedItems = tagihan.filter((t) => selected.has(getKey(t)));
+  const cicilanDiizinkan = (t: TagihanItem) =>
+    t.bulan === 0 && t.status !== "terjadwal";
+  const amountFor = (t: TagihanItem) => {
+    const requested = partialAmounts[getKey(t)];
+    if (!cicilanDiizinkan(t) || requested == null) return Number(t.nominal || 0);
+    return Math.min(Math.max(Number(requested) || 0, 0), Number(t.nominal || 0));
+  };
   const totalSelected = selectedItems.reduce(
-    (sum, t) => sum + (t.nominal || 0),
+    (sum, t) => sum + amountFor(t),
     0
   );
 
@@ -179,16 +190,26 @@ export default function PortalTagihan() {
       toast.warning("Pilih minimal satu tagihan");
       return;
     }
+    const invalidPartial = selectedItems.find((t) => {
+      const amount = amountFor(t);
+      return amount <= 0 || amount > Number(t.nominal || 0);
+    });
+    if (invalidPartial) {
+      toast.error("Nominal cicilan harus lebih dari 0 dan tidak boleh melebihi sisa tagihan");
+      return;
+    }
+
     sessionStorage.setItem(
       "keranjang_tagihan",
       JSON.stringify(
         selectedItems.map((t) => ({
+          tagihan_id: t.tagihan_id,
           siswa_id: t.siswa_id,
           nama_siswa: t.nama_siswa,
           jenis_id: t.jenis_id,
           jenis_nama: t.jenis_nama,
           bulan: t.bulan,
-          jumlah: t.nominal,
+          jumlah: amountFor(t),
           departemen_id: t.departemen_id,
           departemen_nama: t.departemen_nama,
           tahun_ajaran_id: t.tahun_ajaran_id,
@@ -241,7 +262,7 @@ export default function PortalTagihan() {
           const allChecked = allKeys.every((k) => selected.has(k));
           const subtotal = items
             .filter((t) => selected.has(getKey(t)))
-            .reduce((s, t) => s + (t.nominal || 0), 0);
+            .reduce((s, t) => s + amountFor(t), 0);
 
           return (
             <Card key={siswaId}>
@@ -295,6 +316,35 @@ export default function PortalTagihan() {
                               Jatuh tempo {labelTanggal(t.jatuh_tempo)}
                             </span>
                           ) : null}
+                          {cicilanDiizinkan(t) && (
+                            <div
+                              className="mt-2 flex max-w-sm items-center gap-2"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                Bayar cicilan
+                              </span>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={Number(t.nominal || 0)}
+                                value={partialAmounts[key] ?? Number(t.nominal || 0)}
+                                onChange={(event) => {
+                                  const value = Number(event.target.value);
+                                  setPartialAmounts((prev) => ({ ...prev, [key]: value }));
+                                  setSelected((prev) => {
+                                    const next = new Set(prev);
+                                    next.add(key);
+                                    return next;
+                                  });
+                                }}
+                                className="h-8 w-36 text-xs"
+                              />
+                              <span className="text-[10px] text-muted-foreground">
+                                maks. {formatRupiah(Number(t.nominal || 0))}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <span className="text-sm font-semibold">
                           {formatRupiah(t.nominal || 0)}
