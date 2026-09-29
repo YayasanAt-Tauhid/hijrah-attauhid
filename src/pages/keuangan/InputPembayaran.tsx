@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { PrintKuitansi } from "@/components/shared/PrintKuitansi";
 import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan";
 import { PrintTagihan, type PrintTagihanItem } from "@/components/shared/PrintTagihan";
+import { RupiahInput } from "@/components/shared/RupiahInput";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -1336,17 +1337,12 @@ function InputPembayaranContent() {
 
                   <div className="space-y-1.5">
                     <Label className="text-xs">Jumlah Bayar (Rp)</Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rp</span>
-                      <Input
-                        type="number"
-                        value={form.jumlah}
-                        onChange={e => setField("jumlah", e.target.value)}
-                        readOnly={isJumlahLocked}
-                        className={cn("h-10 pl-10", isJumlahLocked && "bg-muted/40")}
-                        placeholder="0"
-                      />
-                    </div>
+                    <RupiahInput
+                      value={form.jumlah}
+                      onChange={value => setField("jumlah", value)}
+                      readOnly={isJumlahLocked}
+                      placeholder="0"
+                    />
                   </div>
 
                   <div className="space-y-1.5">
