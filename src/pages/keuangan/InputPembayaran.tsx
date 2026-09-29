@@ -82,6 +82,11 @@ function getKelasAktif(siswa: SiswaWithKelas | null | undefined) {
   return list.find((ks: any) => ks.aktif) ?? list[0];
 }
 
+function formatStatusSiswa(status?: string | null) {
+  if (!status) return "—";
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
 function useProsesPembayaran() {
   const qc = useQueryClient();
   return useMutation({
@@ -178,30 +183,53 @@ function InputPembayaranContent() {
   const { data: tahunAjaranList } = useTahunBuku();
   const { data: allJenisList }    = useJenisPembayaran(departemenId || undefined);
   const effectiveTahunAjaranId = selectedTahunAjaranId || tahunAktif?.id || "";
+  const isSiswaNonaktif = !!selectedSiswa &&
+    ["keluar", "alumni", "pindah"].includes(String(selectedSiswa.status ?? ""));
+  const payableTagihanStatuses = isSiswaNonaktif
+    ? ["belum_bayar", "sebagian"]
+    : ["belum_bayar", "sebagian", "terjadwal"];
 
   // Tahun buku yang sudah ditutup tetap harus dapat dipilih apabila siswa masih
   // memiliki tagihan terbuka dari periode tersebut. Ini penting untuk tunggakan
   // migrasi (mis. SPP November 2025) yang dibayar saat kas diterima pada 2026.
   const { data: openTagihanTahunIds = new Set<string>() } = useQuery<Set<string>>({
-    queryKey: ["open_tagihan_tahun", selectedSiswa?.id],
+    queryKey: ["open_tagihan_tahun", selectedSiswa?.id, isSiswaNonaktif],
     enabled: !!selectedSiswa,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tagihan")
         .select("tahun_ajaran_id")
         .eq("siswa_id", selectedSiswa!.id)
-        .in("status", ["belum_bayar", "sebagian", "terjadwal"]);
+        .in("status", payableTagihanStatuses);
       if (error) throw error;
       return new Set((data ?? []).map(row => row.tahun_ajaran_id).filter(Boolean) as string[]);
     },
   });
+
+  useEffect(() => {
+    if (!isSiswaNonaktif || openTagihanTahunIds.size === 0) return;
+    const currentId = selectedTahunAjaranId || tahunAktif?.id || "";
+    if (currentId && openTagihanTahunIds.has(currentId)) return;
+
+    const target = (tahunAjaranList ?? [])
+      .filter((tahun) => openTagihanTahunIds.has(tahun.id))
+      .sort((a, b) => String(b.tanggal_mulai ?? "").localeCompare(String(a.tanggal_mulai ?? "")))[0];
+
+    if (target?.id) setSelectedTahunAjaranId(target.id);
+  }, [
+    isSiswaNonaktif,
+    openTagihanTahunIds,
+    selectedTahunAjaranId,
+    tahunAktif?.id,
+    tahunAjaranList,
+  ]);
 
   // Tagihan migrasi dapat berasal dari lembaga sebelumnya (mis. SD) sementara
   // siswa sekarang sudah berada di SMP. Jenis tagihan terbuka lintas lembaga
   // tetap harus tersedia di dropdown pembayaran, walaupun tidak termasuk
   // hasil useJenisPembayaran(departemenId) untuk lembaga siswa saat ini.
   const { data: openTagihanJenisExtras = [] } = useQuery<JenisPembayaran[]>({
-    queryKey: ["open_tagihan_jenis_extras", selectedSiswa?.id, effectiveTahunAjaranId],
+    queryKey: ["open_tagihan_jenis_extras", selectedSiswa?.id, effectiveTahunAjaranId, isSiswaNonaktif],
     enabled: !!selectedSiswa && !!effectiveTahunAjaranId,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -209,7 +237,7 @@ function InputPembayaranContent() {
         .select("jenis_id, jenis_pembayaran:jenis_id(id, nama, nominal, keterangan, departemen_id, akun_pendapatan_id, tipe)")
         .eq("siswa_id", selectedSiswa!.id)
         .eq("tahun_ajaran_id", effectiveTahunAjaranId)
-        .in("status", ["belum_bayar", "sebagian", "terjadwal"]);
+        .in("status", payableTagihanStatuses);
       if (error) throw error;
 
       const byId = new Map<string, JenisPembayaran>();
@@ -229,6 +257,7 @@ function InputPembayaranContent() {
         data: {
           search: searchTerm,
           status: "aktif",
+          include_nonaktif_with_open_bills: true,
           departemen_id: departemenId || undefined,
           limit: 10,
         },
@@ -269,7 +298,7 @@ function InputPembayaranContent() {
   // tunggakan/migrasi historis: nominal pembayaran bersumber dari tagihan yang
   // sudah tersimpan, bukan dari tarif baru.
   const { data: openTagihanJenisIds } = useQuery<Set<string>>({
-    queryKey: ["open_tagihan_jenis", selectedSiswa?.id, effectiveTahunAjaranId],
+    queryKey: ["open_tagihan_jenis", selectedSiswa?.id, effectiveTahunAjaranId, isSiswaNonaktif],
     enabled: !!selectedSiswa && !!effectiveTahunAjaranId,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -277,7 +306,7 @@ function InputPembayaranContent() {
         .select("jenis_id")
         .eq("siswa_id", selectedSiswa!.id)
         .eq("tahun_ajaran_id", effectiveTahunAjaranId)
-        .in("status", ["belum_bayar", "sebagian", "terjadwal"]);
+        .in("status", payableTagihanStatuses);
       if (error) throw error;
       return new Set((data ?? []).map(t => t.jenis_id).filter(Boolean) as string[]);
     },
@@ -291,10 +320,21 @@ function InputPembayaranContent() {
     for (const jenis of allJenisList as JenisPembayaran[]) merged.set(jenis.id, jenis);
     for (const jenis of openTagihanJenisExtras) merged.set(jenis.id, jenis);
 
+    if (isSiswaNonaktif) {
+      return Array.from(merged.values()).filter(j => openTagihanJenisIds?.has(j.id));
+    }
+
     return Array.from(merged.values()).filter(j =>
       applicableTarifJenisIds?.has(j.id) || openTagihanJenisIds?.has(j.id)
     );
-  }, [allJenisList, selectedSiswa, applicableTarifJenisIds, openTagihanJenisIds, openTagihanJenisExtras]);
+  }, [
+    allJenisList,
+    selectedSiswa,
+    applicableTarifJenisIds,
+    openTagihanJenisIds,
+    openTagihanJenisExtras,
+    isSiswaNonaktif,
+  ]);
 
   const selectedJenis = jenisList.find(j => j.id === form.jenisId) ?? null;
   const isSekali      = selectedJenis ? isTipeSekali(selectedJenis.tipe) : false;
@@ -334,7 +374,7 @@ function InputPembayaranContent() {
   // membedakan kewajiban yang sudah jatuh tempo dari tagihan masa depan
   // (terjadwal) tanpa mengubah kemampuan kasir menerima pembayaran di muka.
   const { data: statusTagihanPerBulan } = useQuery<Map<number, string>>({
-    queryKey: ["cek_bulan_ada_tagihan", selectedSiswa?.id, form.jenisId, effectiveTahunAjaranId],
+    queryKey: ["cek_bulan_ada_tagihan", selectedSiswa?.id, form.jenisId, effectiveTahunAjaranId, isSiswaNonaktif],
     enabled: !!selectedSiswa && !!form.jenisId && !isSekali,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -343,6 +383,7 @@ function InputPembayaranContent() {
         .eq("siswa_id", selectedSiswa!.id)
         .eq("jenis_id", form.jenisId)
         .eq("tahun_ajaran_id", effectiveTahunAjaranId)
+        .in("status", payableTagihanStatuses)
         .not("bulan", "is", null);
       if (error) throw error;
       return new Map(
@@ -834,8 +875,15 @@ function InputPembayaranContent() {
                 <button key={s.id} className="w-full text-left px-4 py-2.5 hover:bg-accent flex items-center gap-3"
                   onClick={() => handleSelectSiswa(s)}>
                   <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold shrink-0">{s.nama?.[0]}</div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{s.nama}</p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate">{s.nama}</p>
+                      {s.status && s.status !== "aktif" && (
+                        <span className="rounded-full border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          {formatStatusSiswa(s.status)}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">NIS: {s.nis ?? "-"} • {getKelasAktif(s)?.kelas?.nama ?? "-"}</p>
                   </div>
                 </button>
@@ -877,14 +925,27 @@ function InputPembayaranContent() {
               <div className="flex items-center gap-3 mb-3">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary shrink-0">{selectedSiswa.nama?.[0]}</div>
                 <div className="min-w-0">
-                  <h3 className="font-semibold text-sm truncate">{selectedSiswa.nama}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-sm truncate">{selectedSiswa.nama}</h3>
+                    {isSiswaNonaktif && (
+                      <span className="rounded-full border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        {formatStatusSiswa(selectedSiswa.status)}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">NIS: {selectedSiswa.nis ?? "-"}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-1 text-xs">
                 <span className="text-muted-foreground">Kelas</span><span className="font-medium">{kelasNama}</span>
                 <span className="text-muted-foreground">Lembaga</span><span className="font-medium">{lembagaNama}</span>
+                <span className="text-muted-foreground">Status</span><span className="font-medium">{formatStatusSiswa(selectedSiswa.status)}</span>
               </div>
+              {isSiswaNonaktif && (
+                <p className="mt-3 rounded-md border bg-muted/30 p-2 text-[11px] text-muted-foreground">
+                  Siswa nonaktif hanya dapat membayar tunggakan lama yang berstatus belum bayar atau sebagian.
+                </p>
+              )}
             </div>
             {legacyBreakdown.length > 0 && (
               <div className="rounded-lg border p-4">
