@@ -243,7 +243,7 @@ function PembayaranPMBContent() {
           }}
         >
           <Printer className="mr-1.5 h-4 w-4" />
-          Cetak
+          Cetak Kuitansi
         </Button>
       ),
     },
