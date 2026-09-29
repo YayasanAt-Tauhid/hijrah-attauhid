@@ -8,6 +8,7 @@ interface RupiahInputProps {
   id?: string;
   placeholder?: string;
   disabled?: boolean;
+  readOnly?: boolean;
   className?: string;
 }
 
@@ -21,6 +22,7 @@ export function RupiahInput({
   id,
   placeholder = "0",
   disabled = false,
+  readOnly = false,
   className,
 }: RupiahInputProps) {
   const formatted = value ? Number(value).toLocaleString("id-ID") : "";
@@ -33,9 +35,10 @@ export function RupiahInput({
         id={id}
         inputMode="numeric"
         autoComplete="off"
-        className="pl-9"
+        className={cn("pl-9", readOnly && "bg-muted/40 cursor-default")}
         value={formatted}
         disabled={disabled}
+        readOnly={readOnly}
         placeholder={placeholder}
         onChange={(e) => {
           const raw = e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, 13);
