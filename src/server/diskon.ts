@@ -25,6 +25,173 @@ const ROLE_LIHAT_KERINGANAN = [
 
 type StatusDiskon = "diajukan" | "disetujui" | "ditolak" | "dibatalkan";
 
+
+export interface KebijakanKeringananListItem {
+  id: string;
+  kode: string;
+  versi: number;
+  nama: string;
+  skema_diskon_id: string;
+  jenis_id: string;
+  kelas_regex: string | null;
+  tipe: "persen" | "nominal";
+  nilai: number;
+  otomatis: boolean;
+  perlu_pengajuan: boolean;
+  berlaku_mulai: string;
+  berlaku_selesai: string | null;
+  aktif: boolean;
+  keterangan: string | null;
+  created_at: string;
+  skema_diskon: { nama: string; kategori: string } | null;
+  jenis_pembayaran: { nama: string; departemen_id: string | null } | null;
+}
+
+export interface BuatVersiKebijakanInput {
+  kode: string;
+  nama: string;
+  skema_diskon_id: string;
+  jenis_id: string;
+  kelas_regex?: string | null;
+  tipe: "persen" | "nominal";
+  nilai: number;
+  otomatis: boolean;
+  perlu_pengajuan: boolean;
+  berlaku_mulai: string;
+  berlaku_selesai?: string | null;
+  keterangan?: string | null;
+}
+
+export const listKebijakanKeringanan = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: { hanya_aktif?: boolean } | undefined) => d ?? {})
+  .handler(async ({ data, context }): Promise<{ items: KebijakanKeringananListItem[] }> => {
+    const admin = createAdminClient();
+    const { userId } = requireContext(context);
+    await requireRole(admin, userId, ROLE_LIHAT_KERINGANAN);
+
+    let q = (admin as any)
+      .from("kebijakan_keringanan")
+      .select(
+        "id,kode,versi,nama,skema_diskon_id,jenis_id,kelas_regex,tipe,nilai," +
+          "otomatis,perlu_pengajuan,berlaku_mulai,berlaku_selesai,aktif,keterangan,created_at," +
+          "skema_diskon:skema_diskon_id(nama,kategori)," +
+          "jenis_pembayaran:jenis_id(nama,departemen_id)"
+      )
+      .order("kode")
+      .order("versi", { ascending: false });
+
+    if (data.hanya_aktif) q = q.eq("aktif", true);
+
+    const { data: rows, error } = await q;
+    if (error) throw new Error("Gagal memuat kebijakan keringanan: " + error.message);
+    return { items: (rows ?? []) as KebijakanKeringananListItem[] };
+  });
+
+export const buatVersiKebijakanKeringanan = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: BuatVersiKebijakanInput) => d)
+  .handler(async ({ data, context }): Promise<{ item: KebijakanKeringananListItem }> => {
+    const admin = createAdminClient();
+    const { userId } = requireContext(context);
+    await requireRole(admin, userId, ROLE_PENGAJU);
+
+    if (!data.kode?.trim() || !data.nama?.trim()) {
+      throw new Error("Kode dan nama kebijakan wajib diisi");
+    }
+    if (!data.skema_diskon_id || !data.jenis_id || !data.berlaku_mulai) {
+      throw new Error("Skema, jenis pembayaran, dan tanggal mulai wajib diisi");
+    }
+    if (!Number.isFinite(Number(data.nilai)) || Number(data.nilai) < 0) {
+      throw new Error("Nilai kebijakan tidak valid");
+    }
+    if (data.tipe === "persen" && Number(data.nilai) > 100) {
+      throw new Error("Persentase tidak boleh lebih dari 100%");
+    }
+
+    const { data: row, error } = await (admin as any).rpc(
+      "buat_versi_kebijakan_keringanan",
+      {
+        p_kode: data.kode.trim(),
+        p_nama: data.nama.trim(),
+        p_skema_diskon_id: data.skema_diskon_id,
+        p_jenis_id: data.jenis_id,
+        p_kelas_regex: data.kelas_regex?.trim() || null,
+        p_tipe: data.tipe,
+        p_nilai: Number(data.nilai),
+        p_otomatis: data.otomatis,
+        p_perlu_pengajuan: data.perlu_pengajuan,
+        p_berlaku_mulai: data.berlaku_mulai,
+        p_berlaku_selesai: data.berlaku_selesai || null,
+        p_keterangan: data.keterangan?.trim() || null,
+        p_user_id: userId,
+      }
+    );
+    if (error) throw new Error("Gagal membuat versi kebijakan: " + error.message);
+    return { item: row as KebijakanKeringananListItem };
+  });
+
+export interface CariKebijakanKeringananInput {
+  siswa_id: string;
+  skema_diskon_id: string;
+  jenis_id: string;
+  periode_mulai: string;
+  periode_selesai?: string | null;
+}
+
+export const cariKebijakanKeringananAktif = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: CariKebijakanKeringananInput) => d)
+  .handler(async ({ data, context }): Promise<{ item: KebijakanKeringananListItem | null }> => {
+    const admin = createAdminClient();
+    const { userId } = requireContext(context);
+    await requireRole(admin, userId, ROLE_LIHAT_KERINGANAN);
+
+    if (!data.siswa_id || !data.skema_diskon_id || !data.jenis_id || !data.periode_mulai) {
+      return { item: null };
+    }
+
+    const { data: kelasRows } = await (admin as any)
+      .from("kelas_siswa")
+      .select("kelas:kelas_id(nama)")
+      .eq("siswa_id", data.siswa_id)
+      .eq("aktif", true)
+      .order("id", { ascending: false })
+      .limit(1);
+    const kelasNama = String(kelasRows?.[0]?.kelas?.nama || "");
+
+    let q = (admin as any)
+      .from("kebijakan_keringanan")
+      .select(
+        "id,kode,versi,nama,skema_diskon_id,jenis_id,kelas_regex,tipe,nilai," +
+          "otomatis,perlu_pengajuan,berlaku_mulai,berlaku_selesai,aktif,keterangan,created_at," +
+          "skema_diskon:skema_diskon_id(nama,kategori)," +
+          "jenis_pembayaran:jenis_id(nama,departemen_id)"
+      )
+      .eq("aktif", true)
+      .eq("skema_diskon_id", data.skema_diskon_id)
+      .eq("jenis_id", data.jenis_id)
+      .lte("berlaku_mulai", data.periode_mulai)
+      .or("berlaku_selesai.is.null,berlaku_selesai.gte." + (data.periode_selesai || data.periode_mulai))
+      .order("berlaku_mulai", { ascending: false })
+      .order("versi", { ascending: false });
+
+    const { data: rows, error } = await q;
+    if (error) throw new Error("Gagal mencari kebijakan aktif: " + error.message);
+
+    for (const row of (rows ?? []) as KebijakanKeringananListItem[]) {
+      if (!row.kelas_regex) return { item: row };
+      try {
+        if (kelasNama && new RegExp(row.kelas_regex, "i").test(kelasNama)) {
+          return { item: row };
+        }
+      } catch {
+        // Regex kebijakan yang rusak tidak boleh membuat pengajuan gagal total.
+      }
+    }
+    return { item: null };
+  });
+
 /** Hasil penerapan diskon ke baris tagihan yang sudah ada. */
 export interface PenerapanDiskon {
   /** Tagihan 'terjadwal' yang nominalnya langsung diubah (belum punya jurnal). */
@@ -87,6 +254,10 @@ export interface SiswaDiskonListItem {
   periode_mulai: string;
   periode_selesai: string;
   nilai: number | null;
+  kebijakan_keringanan_id: string | null;
+  tipe_snapshot: string | null;
+  nilai_snapshot: number | null;
+  kebijakan_snapshot: Record<string, unknown> | null;
   status: StatusDiskon;
   catatan: string | null;
   dokumen_url: string | null;
@@ -136,6 +307,7 @@ export const listSiswaDiskon = createServerFn({ method: "POST" })
       .from("siswa_diskon")
       .select(
         "id, siswa_id, skema_diskon_id, jenis_id, periode_mulai, periode_selesai, nilai, " +
+          "kebijakan_keringanan_id, tipe_snapshot, nilai_snapshot, kebijakan_snapshot, " +
           "status, catatan, dokumen_url, alasan_penolakan, diajukan_at, diputuskan_at, diterapkan_at, " +
           "siswa:siswa_id(nama, nis), " +
           "skema_diskon:skema_diskon_id(nama, kategori, tipe, nilai_default), " +
@@ -188,7 +360,9 @@ export interface AjukanDiskonInput {
   periode_mulai: string;
   /** "yyyy-MM-dd". Dinormalisasi ke akhir bulan oleh trigger DB. */
   periode_selesai: string;
-  /** Override nilai default skema. Kosong = pakai default skema. */
+  /** Versi kebijakan yang menjadi dasar pengajuan, bila ada. */
+  kebijakan_keringanan_id?: string | null;
+  /** Override nilai kebijakan/default skema. Kosong = pakai nilai yang berlaku. */
   nilai?: number | null;
   catatan?: string | null;
   dokumen_url?: string | null;
@@ -214,15 +388,56 @@ export const ajukanDiskonSiswa = createServerFn({ method: "POST" })
       throw new Error("Periode berlaku keringanan wajib diisi");
     }
 
-    const { data: baris, error } = await admin
+    const { data: skema, error: skemaError } = await (admin as any)
+      .from("skema_diskon")
+      .select("id,tipe,nilai_default")
+      .eq("id", data.skema_diskon_id)
+      .eq("aktif", true)
+      .single();
+    if (skemaError || !skema) throw new Error("Skema keringanan tidak ditemukan atau tidak aktif");
+
+    let policy: any = null;
+    if (data.kebijakan_keringanan_id) {
+      const { data: policyRow, error: policyError } = await (admin as any)
+        .from("kebijakan_keringanan")
+        .select("id,skema_diskon_id,jenis_id,tipe,nilai,berlaku_mulai,berlaku_selesai,aktif")
+        .eq("id", data.kebijakan_keringanan_id)
+        .eq("aktif", true)
+        .single();
+      if (policyError || !policyRow) throw new Error("Kebijakan keringanan tidak ditemukan atau tidak aktif");
+      if (policyRow.skema_diskon_id !== data.skema_diskon_id || policyRow.jenis_id !== data.jenis_id) {
+        throw new Error("Kebijakan keringanan tidak sesuai skema atau jenis pembayaran");
+      }
+      if (
+        data.periode_mulai < policyRow.berlaku_mulai ||
+        (policyRow.berlaku_selesai && data.periode_selesai > policyRow.berlaku_selesai)
+      ) {
+        throw new Error("Periode pengajuan melewati masa berlaku kebijakan");
+      }
+      policy = policyRow;
+    }
+
+    const nilaiAktual = Number(
+      data.nilai ?? policy?.nilai ?? skema.nilai_default ?? 0
+    );
+    const tipeAktual = String(policy?.tipe ?? skema.tipe);
+    if (!Number.isFinite(nilaiAktual) || nilaiAktual <= 0) {
+      throw new Error("Nilai keringanan harus lebih dari 0");
+    }
+    if (tipeAktual === "persen" && nilaiAktual > 100) {
+      throw new Error("Persentase keringanan tidak boleh lebih dari 100%");
+    }
+
+    const { data: baris, error } = await (admin as any)
       .from("siswa_diskon")
       .insert({
         siswa_id: data.siswa_id,
         skema_diskon_id: data.skema_diskon_id,
         jenis_id: data.jenis_id,
+        kebijakan_keringanan_id: data.kebijakan_keringanan_id ?? null,
         periode_mulai: data.periode_mulai,
         periode_selesai: data.periode_selesai,
-        nilai: data.nilai ?? null,
+        nilai: nilaiAktual,
         catatan: data.catatan ?? null,
         dokumen_url: data.dokumen_url ?? null,
         diajukan_oleh: userId,

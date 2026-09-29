@@ -190,8 +190,8 @@ export default function RencanaTagihanSiswaBaru() {
   const isMta4Entry = String(selected?.target_departemen_kode || "").trim().toUpperCase() === "MTA"
     && selectedLevel === 4
     && !selected?.rencana_spp;
-  const requiredMta4UangPangkal = useMemo(
-    () => initialJenisList.find((jenis: any) => /^uang pangkal\b/i.test(String(jenis.nama || "").trim())),
+  const requiredMta4DaftarUlang = useMemo(
+    () => initialJenisList.find((jenis: any) => /daftar ulang/i.test(String(jenis.nama || "").trim())),
     [initialJenisList],
   );
   const manualEndDate = useMemo(() => lastDayOfMonth(manualEndMonth), [manualEndMonth]);
@@ -254,10 +254,10 @@ export default function RencanaTagihanSiswaBaru() {
         !/pendaftaran|spmb|psb/i.test(String(jenis.nama || "")) &&
         (!jenis.departemen_id || jenis.departemen_id === row.target_departemen_id)
       ) {
-        const isMta4UangPangkal = requireMta4Fee
-          && /^uang pangkal\b/i.test(String(jenis.nama || "").trim());
+        const isMta4DaftarUlang = requireMta4Fee
+          && /daftar ulang/i.test(String(jenis.nama || "").trim());
         fees[jenis.id] = {
-          checked: isMta4UangPangkal,
+          checked: isMta4DaftarUlang,
           nominal: jenis.nominal ? String(jenis.nominal) : "",
         };
       }
@@ -341,8 +341,8 @@ export default function RencanaTagihanSiswaBaru() {
       }
     }
 
-    if (isMta4Entry && requiredMta4UangPangkal && !initialFees[requiredMta4UangPangkal.id]?.checked) {
-      toast.error("Uang Pangkal MTA perlu dipilih untuk siswa yang masuk MTA 4");
+    if (isMta4Entry && requiredMta4DaftarUlang && !initialFees[requiredMta4DaftarUlang.id]?.checked) {
+      toast.error("Daftar Ulang MTA 4 perlu dipilih; nominalnya mengikuti kebijakan khusus MTA 4");
       return;
     }
 
@@ -776,8 +776,8 @@ export default function RencanaTagihanSiswaBaru() {
                     <Alert>
                       <Info className="h-4 w-4" />
                       <AlertDescription className="text-xs">
-                        Masuk MTA 4 memulai fase MTA 4–6 (setingkat SMA), sehingga Uang Pangkal MTA dikenakan kembali.
-                        Jenis Uang Pangkal otomatis dipilih bila tersedia; nominal tetap dapat disesuaikan per siswa.
+                        Masuk MTA 4 memulai fase MTA 4–6 (setingkat SMA). Biaya transisinya adalah Daftar Ulang MTA 4 dengan nominal khusus, bukan Uang Pangkal baru.
+                        Jenis Daftar Ulang otomatis dipilih bila tersedia; nominal tetap dapat disesuaikan per siswa.
                       </AlertDescription>
                     </Alert>
                   )}

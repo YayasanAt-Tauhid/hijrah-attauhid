@@ -38,10 +38,11 @@ describe("SPMB recurring billing phases contract", () => {
     expect(page).toContain('type="month"');
   });
 
-  it("requires Uang Pangkal again on new MTA 4 plan", () => {
+  it("uses special Daftar Ulang, not a new Uang Pangkal, on MTA 4", () => {
     expect(page).toContain("Masuk MTA 4 memulai fase MTA 4–6");
-    expect(page).toContain("Uang Pangkal MTA perlu dipilih untuk siswa yang masuk MTA 4");
-    expect(page).toContain("/^uang pangkal\\b/i");
+    expect(page).toContain("Daftar Ulang MTA 4 perlu dipilih");
+    expect(page).toContain("/daftar ulang/i");
+    expect(page).toContain("bukan Uang Pangkal baru");
   });
 
   it("does not reuse an expired prior-phase plan for a new SPMB period", () => {

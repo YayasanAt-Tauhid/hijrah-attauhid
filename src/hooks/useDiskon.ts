@@ -19,9 +19,14 @@ import {
   terapkanDiskonSiswa,
   saranKelompokKeluarga,
   konfirmasiKelompokKeluarga,
+  listKebijakanKeringanan,
+  buatVersiKebijakanKeringanan,
+  cariKebijakanKeringananAktif,
   type AjukanDiskonInput,
   type PutuskanDiskonInput,
   type KonfirmasiKeluargaInput,
+  type BuatVersiKebijakanInput,
+  type KebijakanKeringananListItem,
 } from "@/server/diskon";
 
 export type KategoriDiskon =
@@ -59,6 +64,62 @@ export interface SkemaDiskon {
   perlu_approval: boolean;
   aktif: boolean;
   keterangan: string | null;
+}
+
+
+export type KebijakanKeringanan = KebijakanKeringananListItem;
+
+export function useKebijakanKeringanan(hanyaAktif = false) {
+  return useQuery({
+    queryKey: ["kebijakan_keringanan", { hanyaAktif }],
+    queryFn: async () =>
+      (await listKebijakanKeringanan({ data: { hanya_aktif: hanyaAktif } })).items,
+  });
+}
+
+export function useBuatVersiKebijakanKeringanan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: BuatVersiKebijakanInput) =>
+      buatVersiKebijakanKeringanan({ data: input }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["kebijakan_keringanan"] });
+      toast.success("Versi kebijakan keringanan berhasil disimpan");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useKebijakanKeringananAktif(input: {
+  siswa_id?: string;
+  skema_diskon_id?: string;
+  jenis_id?: string;
+  periode_mulai?: string;
+  periode_selesai?: string;
+}) {
+  const enabled = !!(
+    input.siswa_id &&
+    input.skema_diskon_id &&
+    input.jenis_id &&
+    input.periode_mulai
+  );
+  return useQuery({
+    queryKey: ["kebijakan_keringanan_aktif", input],
+    enabled,
+    queryFn: async () => {
+      if (!enabled) return null;
+      const hasil = await cariKebijakanKeringananAktif({
+        data: {
+          siswa_id: input.siswa_id!,
+          skema_diskon_id: input.skema_diskon_id!,
+          jenis_id: input.jenis_id!,
+          periode_mulai: input.periode_mulai!,
+          periode_selesai: input.periode_selesai || null,
+        },
+      });
+      return hasil.item;
+    },
+  });
 }
 
 // ─── Skema diskon (master) ───
@@ -140,6 +201,10 @@ export interface SiswaDiskonRow {
   periode_mulai: string;
   periode_selesai: string;
   nilai: number | null;
+  kebijakan_keringanan_id: string | null;
+  tipe_snapshot: string | null;
+  nilai_snapshot: number | null;
+  kebijakan_snapshot: Record<string, unknown> | null;
   status: StatusDiskon;
   catatan: string | null;
   dokumen_url: string | null;

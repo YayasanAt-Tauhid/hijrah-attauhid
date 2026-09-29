@@ -49,6 +49,7 @@ import {
   useTerapkanDiskon,
   useSaranKeluarga,
   useKonfirmasiKeluarga,
+  useKebijakanKeringananAktif,
   LABEL_KATEGORI,
   LABEL_STATUS,
   type KategoriDiskon,
@@ -78,8 +79,8 @@ function formatPeriode(mulai: string, selesai: string): string {
 }
 
 function nilaiTampil(row: SiswaDiskonRow): string {
-  const tipe = row.skema_diskon?.tipe;
-  const nilai = row.nilai ?? row.skema_diskon?.nilai_default ?? 0;
+  const tipe = row.tipe_snapshot ?? row.skema_diskon?.tipe;
+  const nilai = row.nilai_snapshot ?? row.nilai ?? row.skema_diskon?.nilai_default ?? 0;
   if (Number(nilai) === 0) return "belum ditentukan";
   return tipe === "persen"
     ? `${nilai}% / tagihan`
@@ -169,6 +170,11 @@ function TabDaftar({ bolehAjukan }: { bolehAjukan: boolean }) {
         return (
           <div>
             <p>{r.skema_diskon?.nama ?? "—"}</p>
+            {r.kebijakan_snapshot?.versi != null && (
+              <p className="text-xs text-muted-foreground">
+                Kebijakan {String(r.kebijakan_snapshot.kode || "")} v{String(r.kebijakan_snapshot.versi)}
+              </p>
+            )}
             <Badge variant="outline" className="mt-1">
               {LABEL_KATEGORI[r.skema_diskon?.kategori as KategoriDiskon] ?? "—"}
             </Badge>
@@ -343,6 +349,14 @@ function DialogAjukan({
   const [dokumenUrl, setDokumenUrl] = useState("");
 
   const skema = skemaList?.find((s) => s.id === skemaId);
+  const { data: kebijakanAktif } = useKebijakanKeringananAktif({
+    siswa_id: siswa?.id,
+    skema_diskon_id: skemaId || undefined,
+    jenis_id: jenisId || undefined,
+    periode_mulai: bulanMulai ? bulanKeTanggal(bulanMulai) : undefined,
+    periode_selesai: bulanSelesai ? bulanKeTanggal(bulanSelesai) : undefined,
+  });
+  const nilaiBakuAktif = Number(kebijakanAktif?.nilai ?? skema?.nilai_default ?? 0);
 
   function reset() {
     setSiswa(null);
@@ -369,9 +383,9 @@ function DialogAjukan({
     if (n <= 0) kekurangan.push("Nilai potongan harus lebih dari 0");
     if (skema?.tipe === "persen" && n > 100)
       kekurangan.push("Persentase tidak boleh lebih dari 100%");
-  } else if ((skema?.nilai_default ?? 0) <= 0) {
+  } else if (nilaiBakuAktif <= 0) {
     kekurangan.push(
-      "Skema ini belum punya nilai default — isi nominalnya di sini, atau tetapkan dulu di Referensi Keuangan → Skema Diskon"
+      "Belum ada nilai kebijakan/default yang bisa dipakai — isi nilai potongannya secara manual"
     );
   }
 
@@ -382,6 +396,7 @@ function DialogAjukan({
         siswa_id: siswa.id,
         skema_diskon_id: skemaId,
         jenis_id: jenisId,
+        kebijakan_keringanan_id: kebijakanAktif?.id ?? null,
         periode_mulai: bulanKeTanggal(bulanMulai),
         periode_selesai: bulanKeTanggal(bulanSelesai),
         nilai: pakaiDefault ? null : Number(nilai || 0),
@@ -438,7 +453,7 @@ function DialogAjukan({
               <AlertDescription>
                 Potongan kakak-adik hanya berlaku kalau siswa sudah dikelompokkan
                 ke keluarga dengan <strong>minimal 2 saudara aktif</strong>. Sistem
-                biasanya menerapkan Rp50.000 otomatis setelah keluarga dikonfirmasi.
+                menerapkan nilai sesuai <strong>kebijakan aktif</strong> setelah keluarga dikonfirmasi.
                 Pengajuan manual ini dipakai bila perlu koreksi/periode khusus.
                 Potongan tidak dapat digabung dengan keringanan lain pada periode yang sama.
               </AlertDescription>
@@ -464,6 +479,19 @@ function DialogAjukan({
               pembayaran dalam periode yang sama.
             </p>
           </div>
+
+          {kebijakanAktif && (
+            <Alert>
+              <Check className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Kebijakan aktif:</strong> {kebijakanAktif.nama} · v{kebijakanAktif.versi} ·{" "}
+                {kebijakanAktif.tipe === "persen"
+                  ? `${Number(kebijakanAktif.nilai)}%`
+                  : formatRupiah(Number(kebijakanAktif.nilai))}
+                . Nilai ini menjadi dasar pengajuan dan disimpan sebagai snapshot.
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -499,14 +527,14 @@ function DialogAjukan({
                   onCheckedChange={(c) => setPakaiDefault(c === true)}
                 />
                 <Label htmlFor="pakai-default" className="cursor-pointer font-normal">
-                  Pakai nilai default skema
-                  {skema.nilai_default > 0 && (
+                  {kebijakanAktif ? "Pakai nilai kebijakan aktif" : "Pakai nilai default skema"}
+                  {nilaiBakuAktif > 0 && (
                     <>
                       {" "}
                       (
                       {skema.tipe === "persen"
-                        ? `${skema.nilai_default}%`
-                        : formatRupiah(skema.nilai_default)}
+                        ? `${nilaiBakuAktif}%`
+                        : formatRupiah(nilaiBakuAktif)}
                       )
                     </>
                   )}
