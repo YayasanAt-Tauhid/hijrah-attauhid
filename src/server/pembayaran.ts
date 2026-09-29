@@ -51,6 +51,7 @@ export interface CariSiswaPembayaranInput {
   status?: "aktif" | "calon";
   departemen_id?: string;
   limit?: number;
+  include_nonaktif_with_open_bills?: boolean;
 }
 
 export interface SiswaPembayaranRingkas {
@@ -93,17 +94,22 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     if (search.length < 2) return { items: [] };
 
     const status = data?.status === "calon" ? "calon" : "aktif";
+    const includeNonaktifWithOpenBills =
+      status === "aktif" && data?.include_nonaktif_with_open_bills === true;
+    const searchableStatuses = includeNonaktifWithOpenBills
+      ? ["aktif", "keluar", "alumni", "pindah"]
+      : [status];
     const limit = Math.min(Math.max(Number(data?.limit ?? 10), 1), 20);
     const select =
       "id, nis, nisn, nama, foto_url, status, angkatan_id, departemen_id, kelas_siswa(kelas_id, aktif, kelas:kelas_id(id, nama, departemen_id))";
 
-    // Untuk siswa aktif, token kelas di akhir pencarian boleh digabung dengan
-    // nama/NIS, misalnya "Shofiyya 2C" atau "2538144422 5C". Token kelas
-    // dipisahkan dari pencarian nama/NIS lalu divalidasi terhadap kelas aktif.
+    // Untuk pencarian loket pembayaran, token kelas di akhir pencarian boleh
+    // digabung dengan nama/NIS, misalnya "Shofiyya 2C" atau "2538144422 5C".
+    // Pada siswa nonaktif, kelas historis tetap boleh dipakai sebagai petunjuk.
     const parts = search.split(" ");
     const lastPart = parts.at(-1) ?? "";
     const isClassToken = /^(?:(?:[1-9]|1[0-2])[a-z]?|(?:x|xi|xii)[a-z]?)$/i.test(lastPart);
-    const kelasSearch = status === "aktif" && parts.length > 1 && isClassToken ? lastPart : null;
+    const kelasSearch = status !== "calon" && parts.length > 1 && isClassToken ? lastPart : null;
     const identitySearch = kelasSearch ? parts.slice(0, -1).join(" ").trim() : search;
     if (identitySearch.length < 2) return { items: [] };
 
@@ -111,11 +117,13 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
       let q = admin
         .from("siswa")
         .select(select)
-        .eq("status", status)
         .ilike(field, "%" + identitySearch + "%")
-        // Ambil kandidat lebih banyak sebelum filter kelas diterapkan, agar
-        // nama yang sama di beberapa kelas tidak terpotong terlalu dini.
-        .limit(kelasSearch ? 100 : limit);
+        // Ambil kandidat lebih banyak sebelum filter kelas/status diterapkan,
+        // agar nama yang sama di beberapa kelas tidak terpotong terlalu dini.
+        .limit(kelasSearch || includeNonaktifWithOpenBills ? 100 : limit);
+      q = searchableStatuses.length === 1
+        ? q.eq("status", searchableStatuses[0])
+        : q.in("status", searchableStatuses);
       if (data?.departemen_id) q = q.eq("departemen_id", data.departemen_id);
       return q;
     };
@@ -143,15 +151,44 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
       });
     }
 
+    const nonaktifDenganTagihanTerbuka = new Set<string>();
+    if (includeNonaktifWithOpenBills) {
+      const nonaktifIds = Array.from(unik.values())
+        .filter((siswa) => siswa.status !== "aktif")
+        .map((siswa) => siswa.id);
+
+      if (nonaktifIds.length > 0) {
+        const { data: openBills, error: openBillsError } = await admin
+          .from("tagihan")
+          .select("siswa_id")
+          .in("siswa_id", nonaktifIds)
+          .in("status", ["belum_bayar", "sebagian"]);
+        if (openBillsError) {
+          throw new Error("Gagal memeriksa tunggakan siswa nonaktif: " + openBillsError.message);
+        }
+        for (const row of openBills ?? []) {
+          if (row.siswa_id) nonaktifDenganTagihanTerbuka.add(row.siswa_id);
+        }
+      }
+    }
+
     const normalizeKelas = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "");
     const kelasNeedle = kelasSearch ? normalizeKelas(kelasSearch) : null;
 
     return {
       items: Array.from(unik.values())
         .filter((siswa) => {
+          if (
+            includeNonaktifWithOpenBills &&
+            siswa.status !== "aktif" &&
+            !nonaktifDenganTagihanTerbuka.has(siswa.id)
+          ) {
+            return false;
+          }
           if (!kelasNeedle) return true;
           return siswa.kelas_siswa.some((ks) => {
-            if (!ks.aktif || !ks.kelas?.nama) return false;
+            if (!ks.kelas?.nama) return false;
+            if (siswa.status === "aktif" && !ks.aktif) return false;
             return normalizeKelas(ks.kelas.nama).includes(kelasNeedle);
           });
         })
@@ -459,9 +496,25 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
 
     const { data: siswaRow } = await admin
       .from("siswa")
-      .select("nama")
+      .select("nama, status")
       .eq("id", siswa_id)
       .maybeSingle();
+
+    const siswaNonaktif =
+      siswaRow?.status != null &&
+      ["keluar", "alumni", "pindah"].includes(siswaRow.status);
+    if (siswaNonaktif) {
+      if (!tagihanTerpilih) {
+        throw new Error(
+          "Siswa berstatus keluar/alumni hanya dapat membayar tagihan lama yang masih terbuka."
+        );
+      }
+      if (!["belum_bayar", "sebagian"].includes(tagihanTerpilih.status ?? "")) {
+        throw new Error(
+          "Siswa berstatus keluar/alumni tidak dapat membayar tagihan baru atau yang belum jatuh tempo."
+        );
+      }
+    }
 
     // Tagihan netto Rp0 yang sudah berstatus lunas berarti kewajibannya
     // diselesaikan lewat potongan/promo, bukan lewat kas masuk. Blokir jalur
