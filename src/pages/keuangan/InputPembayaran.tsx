@@ -32,7 +32,7 @@ import { Search, Printer, Check, X, ShoppingCart, Trash2, Clock3, WalletCards, U
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { calculateRemainingBill } from "@/lib/installment";
+import { calculateRemainingBill, isSppPaymentName } from "@/lib/installment";
 
 import type {
   SiswaWithKelas,
@@ -575,14 +575,20 @@ function InputPembayaranContent() {
     );
   }, [isSekali, existingTagihan?.id, existingTagihan?.nominal, pembayaranSekali?.totalBayar]);
 
+  const selectedOpenBill = useMemo(
+    () => openBills.find(bill => bill.id === existingTagihan?.id) ?? null,
+    [openBills, existingTagihan?.id],
+  );
+
   useEffect(() => {
     if (!form.jenisId) return;
     const isOpenBill = !!existingTagihan &&
       ["belum_bayar", "sebagian", "terjadwal"].includes(String(existingTagihan.status));
     const nominal = isOpenBill
-      ? (isSekali && ringkasanTagihanSekali
-          ? ringkasanTagihanSekali.remaining
-          : Number(existingTagihan.nominal))
+      ? (selectedOpenBill?.sisa ??
+          (isSekali && ringkasanTagihanSekali
+            ? ringkasanTagihanSekali.remaining
+            : Number(existingTagihan.nominal)))
       : tarifNominal;
     if (nominal != null && Number.isFinite(nominal) && nominal > 0) {
       setField("jumlah", String(nominal));
@@ -595,6 +601,7 @@ function InputPembayaranContent() {
     form.jenisId,
     isSekali,
     ringkasanTagihanSekali?.remaining,
+    selectedOpenBill?.sisa,
   ]);
 
   useEffect(() => {
@@ -617,20 +624,30 @@ function InputPembayaranContent() {
   const adaTagihanDipilih = !!existingTagihan &&
     ["belum_bayar", "sebagian", "terjadwal"].includes(String(existingTagihan.status));
   const tarifTidakAda  = !!(form.jenisId && selectedSiswa && !loadingTarif && tarifNominal == null && !adaTagihanDipilih);
+  const isSpp = !isSekali && isSppPaymentName(selectedJenis?.nama);
   const cicilanSekaliDiizinkan =
     isSekali && !!existingTagihan && existingTagihan.status !== "terjadwal";
+  const cicilanSppDiizinkan =
+    isSpp && !!existingTagihan && existingTagihan.status !== "terjadwal";
+  const cicilanDiizinkan = cicilanSekaliDiizinkan || cicilanSppDiizinkan;
+  const sisaTagihanDipilih =
+    selectedOpenBill?.sisa ??
+    (isSekali && ringkasanTagihanSekali
+      ? ringkasanTagihanSekali.remaining
+      : Number(existingTagihan?.nominal ?? 0));
   const isJumlahLocked =
-    (!!adaTagihanDipilih && !cicilanSekaliDiizinkan) ||
-    (!isSekali && tarifNominal != null);
+    (!!adaTagihanDipilih && !cicilanDiizinkan) ||
+    (!adaTagihanDipilih && !isSekali && tarifNominal != null);
   // Untuk tunggakan tahun lama, pembayaran dicatat pada tahun buku kas saat
   // diterima (mis. 2026), sementara tagihannya tetap periode 2025. Karena itu
   // status "lunas" pada tagihan adalah sumber kebenaran tambahan selain tabel
   // pembayaran yang difilter berdasarkan tahun penerimaan.
   const bulanLunas = useMemo(
     () => new Set(
-      bulanTampil.filter(m =>
-        bulanDibayar?.has(m) || statusTagihanPerBulan?.get(m) === "lunas"
-      )
+      bulanTampil.filter(m => {
+        const status = statusTagihanPerBulan?.get(m);
+        return status === "lunas" || (status == null && bulanDibayar?.has(m));
+      })
     ),
     [bulanTampil, bulanDibayar, statusTagihanPerBulan],
   );
@@ -765,7 +782,7 @@ function InputPembayaranContent() {
 
     const jumlah = Number(form.jumlah);
     if (!Number.isFinite(jumlah) || jumlah <= 0) return;
-    if (isSekali && ringkasanTagihanSekali && jumlah > ringkasanTagihanSekali.remaining) {
+    if (cicilanDiizinkan && sisaTagihanDipilih > 0 && jumlah > sisaTagihanDipilih) {
       toast.error("Jumlah pembayaran melebihi sisa tagihan");
       return;
     }
@@ -855,6 +872,7 @@ function InputPembayaranContent() {
       queryClient.invalidateQueries({ queryKey: ["pembayaran"] }),
       queryClient.invalidateQueries({ queryKey: ["pembayaran_siswa"] }),
       queryClient.invalidateQueries({ queryKey: ["tagihan"] }),
+      queryClient.invalidateQueries({ queryKey: ["open_bills_payment_ui"] }),
       queryClient.invalidateQueries({ queryKey: ["jurnal"] }),
       queryClient.invalidateQueries({ queryKey: ["tunggakan"] }),
       queryClient.invalidateQueries({ queryKey: ["cek_bulan_dibayar"] }),
@@ -897,7 +915,7 @@ function InputPembayaranContent() {
       toast.error("Jumlah pembayaran harus lebih dari 0");
       return;
     }
-    if (isSekali && ringkasanTagihanSekali && jumlahInput > ringkasanTagihanSekali.remaining) {
+    if (cicilanDiizinkan && sisaTagihanDipilih > 0 && jumlahInput > sisaTagihanDipilih) {
       toast.error("Jumlah pembayaran melebihi sisa tagihan");
       return;
     }
@@ -1262,13 +1280,20 @@ function InputPembayaranContent() {
                     {existingTagihan && adaTagihanDipilih && (
                       <p className="text-[11px] text-amber-700 dark:text-amber-300">
                         Sisa tagihan:{" "}
-                        {formatRupiah(
-                          isSekali && ringkasanTagihanSekali
-                            ? ringkasanTagihanSekali.remaining
-                            : Number(existingTagihan.nominal),
-                        )}
+                        {formatRupiah(sisaTagihanDipilih)}
                         {existingTagihan.status === "sebagian" ? " · Dibayar sebagian" : ""}
                       </p>
+                    )}
+                    {cicilanSppDiizinkan && (
+                      <div className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-2 text-[11px] text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
+                        <p className="font-medium">SPP dapat dibayar sebagian.</p>
+                        <p className="mt-0.5">
+                          Sisa: {formatRupiah(sisaTagihanDipilih)}
+                          {selectedOpenBill && selectedOpenBill.terbayar > 0
+                            ? " · Sudah dibayar " + formatRupiah(selectedOpenBill.terbayar)
+                            : ""}
+                        </p>
+                      </div>
                     )}
                     {currentAlreadyInCart && (
                       <p className="text-[11px] font-medium text-primary">Tagihan ini sudah ada di keranjang.</p>
