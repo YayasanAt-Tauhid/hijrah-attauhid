@@ -44,7 +44,7 @@ export function useTagihanBySiswa(
     queryFn: async () => {
       let q = supabase
         .from("tagihan")
-        .select("id, nominal, status, jurnal_piutang_id, tahun_ajaran_id")
+        .select("id, nominal, nominal_bruto, nominal_diskon, status, jurnal_piutang_id, tahun_ajaran_id, siswa_diskon:siswa_diskon_id(id, nilai, skema_diskon:skema_diskon_id(nama, tipe))")
         .eq("siswa_id", siswaId!)
         .eq("jenis_id", jenisId!)
         .in("status", ["belum_bayar", "terjadwal"]);
