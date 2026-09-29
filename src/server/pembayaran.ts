@@ -9,7 +9,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { resolvePaymentBookYear } from "@/lib/paymentBookYear";
 import { resolvePaymentAmount } from "@/lib/paymentTariff";
-import { calculateRemainingBill, resolveInstallmentAmount } from "@/lib/installment";
+import { calculateRemainingBill, isSppPaymentName, resolveInstallmentAmount } from "@/lib/installment";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
 
@@ -413,6 +413,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       .single();
     if (jenisErr || !jenis) throw new Error("Jenis pembayaran tidak ditemukan");
     const isSekali = jenis.tipe === "sekali";
+    const isSpp = !isSekali && isSppPaymentName(jenis.nama);
     const bulanNormalized: number | null =
       isSekali || bulan === 0 ? null : bulan;
 
@@ -578,7 +579,8 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         0
       );
       const { remaining } = calculateRemainingBill(tagihanTerpilih.nominal, totalSudahBayar);
-      const allowPartial = isSekali && tagihanTerpilih.status !== "terjadwal";
+      const allowPartial =
+        tagihanTerpilih.status !== "terjadwal" && (isSekali || isSpp);
       jumlahValid = resolveInstallmentAmount({
         requestedAmount: data.jumlah,
         remainingAmount: remaining,
@@ -608,16 +610,26 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         throw new Error("Pembayaran ini sudah lunas");
       }
     } else if (!isSekali) {
-      const { data: dupCheck } = await admin
-        .from("pembayaran")
-        .select("id")
-        .eq("siswa_id", siswa_id)
-        .eq("jenis_id", jenis_id)
-        .eq("bulan", bulanNormalized)
-        .eq("tahun_ajaran_id", tahunBukuTagihanId)
-        .maybeSingle();
-      if (dupCheck)
-        throw new Error(`Pembayaran bulan ${bulan} untuk jenis ini sudah ada`);
+      // SPP yang sudah jatuh tempo boleh memiliki beberapa pembayaran yang
+      // semuanya menempel ke tagihan bulanan exact. Jenis bulanan lain tetap
+      // mengikuti aturan satu pembayaran penuh per periode.
+      const allowMonthlyInstallment =
+        isSpp &&
+        !!tagihanTerpilih &&
+        tagihanTerpilih.status !== "terjadwal";
+
+      if (!allowMonthlyInstallment) {
+        const { data: dupCheck } = await admin
+          .from("pembayaran")
+          .select("id")
+          .eq("siswa_id", siswa_id)
+          .eq("jenis_id", jenis_id)
+          .eq("bulan", bulanNormalized)
+          .eq("tahun_ajaran_id", tahunBukuTagihanId)
+          .maybeSingle();
+        if (dupCheck)
+          throw new Error(`Pembayaran bulan ${bulan} untuk jenis ini sudah ada`);
+      }
 
       // Pembayaran tunggakan periode lama dicatat pada tahun buku kas saat
       // uang diterima, sehingga baris pembayaran bisa berada di tahun yang
