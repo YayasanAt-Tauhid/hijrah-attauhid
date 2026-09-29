@@ -37,7 +37,18 @@ describe("Kasir payment access contract", () => {
     expect(pembayaranServer).toContain('export const cariSiswaPembayaran');
     expect(pembayaranServer).toContain('await requireRole(admin, userId, ["admin", "keuangan", "kasir"])');
     expect(pembayaranPage).toContain("cariSiswaPembayaran");
+    expect(pembayaranPage).toContain("include_nonaktif_with_open_bills: true");
+    expect(pembayaranServer).toContain('["aktif", "keluar", "alumni", "pindah"]');
+    expect(pembayaranServer).toContain('.in("status", ["belum_bayar", "sebagian"])');
     expect(spmbPage).toContain('status: "calon"');
+  });
+
+  it("allows inactive students to settle old arrears without opening new obligations", () => {
+    expect(pembayaranPage).toContain("Siswa nonaktif hanya dapat membayar tunggakan lama");
+    expect(pembayaranPage).toContain('["keluar", "alumni", "pindah"]');
+    expect(pembayaranPage).toContain("payableTagihanStatuses");
+    expect(pembayaranServer).toContain("Siswa berstatus keluar/alumni hanya dapat membayar tagihan lama yang masih terbuka.");
+    expect(pembayaranServer).toContain("Siswa berstatus keluar/alumni tidak dapat membayar tagihan baru atau yang belum jatuh tempo.");
   });
 
   it("limits cashier recap to the logged-in employee and preserves cancellation separation", () => {
