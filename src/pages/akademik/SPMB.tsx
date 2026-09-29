@@ -1276,6 +1276,22 @@ export default function SPMB() {
                 Aktif di Tujuan
               </span>
             )}
+            {role === "admin"
+              && detail?.spmb_status_kelulusan === "lulus"
+              && (
+                (!internalStudent && row._academicStatus === "aktif")
+                || (internalStudent && Boolean(detail?.spmb_tanggal_aktivasi))
+              )
+              && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigate(`/keuangan/rencana-siswa-baru?siswa=${row.id}`)}
+                  title="Atur tagihan awal dan SPP sampai akhir jenjang"
+                >
+                  Atur Tagihan
+                </Button>
+              )}
           </div>
         );
       },

@@ -31,6 +31,7 @@ const links = [
   { label: "Audit Trail", url: "/keuangan/audit-trail" },
   { label: "Audit Perubahan Data", url: "/keuangan/audit-perubahan" },
   { label: "Pembayaran SPMB", url: "/keuangan/pembayaran-spmb" },
+  { label: "Rencana Tagihan Siswa Baru", url: "/keuangan/rencana-siswa-baru" },
   { label: "Referensi", url: "/keuangan/referensi" },
   { label: "Tutup Buku", url: "/keuangan/tutup-buku" },
   { label: "Rekon Antar Lembaga", url: "/keuangan/rekon-antar-lembaga" },
