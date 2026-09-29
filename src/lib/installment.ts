@@ -41,3 +41,8 @@ export function calculateRemainingBill(
   const remaining = Math.max(total - paid, 0);
   return { total, paid, remaining, paidOff: total > 0 && remaining <= 0 };
 }
+
+export function isSppPaymentName(value: unknown): boolean {
+  const name = String(value ?? "").trim();
+  return /(^|\s|[-_/])SPP($|\s|[-_/])/i.test(name);
+}
