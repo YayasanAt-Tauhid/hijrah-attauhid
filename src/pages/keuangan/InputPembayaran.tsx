@@ -136,6 +136,8 @@ export default function InputPembayaran() {
 }
 
 function InputPembayaranContent() {
+  const { role } = useAuth();
+  const isKasir = role === "kasir";
   const queryClient = useQueryClient();
   const [searchTerm,    setSearchTerm]    = useState("");
   const [selectedSiswa, setSelectedSiswa] = useState<SiswaWithKelas | null>(null);
@@ -1068,8 +1070,15 @@ function InputPembayaranContent() {
                 type="date"
                 value={form.tanggalBayar}
                 onChange={e => setField("tanggalBayar", e.target.value)}
-                className="h-9 text-sm"
+                readOnly={isKasir}
+                disabled={isKasir}
+                className={cn("h-9 text-sm", isKasir && "bg-muted cursor-not-allowed")}
               />
+              {isKasir && (
+                <p className="text-[11px] text-muted-foreground">
+                  Tanggal pembayaran kasir otomatis mengikuti tanggal hari ini.
+                </p>
+              )}
             </div>
 
             {/* ── Keterangan ─────────────────────────────────────────────────────── */}
