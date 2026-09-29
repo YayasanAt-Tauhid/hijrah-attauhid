@@ -30,6 +30,7 @@ export interface SpmbBillingCandidate {
     mulai: string;
     selesai: string;
     bulan_terakhir: number;
+    sampai_akhir_jenjang: boolean;
   } | null;
 }
 
@@ -77,7 +78,7 @@ export const getSpmbBillingCandidates = createServerFn({ method: "GET" })
         .eq("aktif", true),
       (admin as any)
         .from("rencana_tagihan_siswa")
-        .select("id,siswa_id,jenis_id,nominal,mulai,selesai,bulan_terakhir,aktif,jenis:jenis_id(nama,tipe)")
+        .select("id,siswa_id,jenis_id,nominal,mulai,selesai,bulan_terakhir,sampai_akhir_jenjang,aktif,jenis:jenis_id(nama,tipe)")
         .in("siswa_id", siswaIds)
         .eq("aktif", true),
     ]);
@@ -176,7 +177,10 @@ export const getSpmbBillingCandidates = createServerFn({ method: "GET" })
         }
       }
 
-      const plan = sppPlanBySiswa.get(siswaId) as any;
+      const rawPlan = sppPlanBySiswa.get(siswaId) as any;
+      const plan = rawPlan && tahun?.tanggal_mulai && String(rawPlan.selesai || "") < String(tahun.tanggal_mulai)
+        ? null
+        : rawPlan;
       const effectiveClass = targetClass || activeClass?.kelas || null;
 
       items.push({
@@ -208,6 +212,7 @@ export const getSpmbBillingCandidates = createServerFn({ method: "GET" })
               mulai: plan.mulai,
               selesai: plan.selesai,
               bulan_terakhir: Number(plan.bulan_terakhir || 6),
+              sampai_akhir_jenjang: plan.sampai_akhir_jenjang !== false,
             }
           : null,
       });

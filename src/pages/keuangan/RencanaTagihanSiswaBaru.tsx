@@ -30,6 +30,7 @@ import { toast } from "sonner";
 import { CalendarRange, CheckCircle2, GraduationCap, Info, Search, WalletCards } from "lucide-react";
 
 type InitialFeeState = Record<string, { checked: boolean; nominal: string }>;
+type EndMode = "level" | "date";
 
 const BULAN_AKHIR_OPTIONS = [
   { value: 4, label: "April" },
@@ -42,6 +43,40 @@ function formatDate(value?: string | null) {
   const d = new Date(value + (value.includes("T") ? "" : "T00:00:00"));
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function classLevel(value?: string | null) {
+  const match = String(value || "").match(/\b(\d+)\b/);
+  return match ? Number(match[1]) : null;
+}
+
+function supportsEndOfLevel(row?: SpmbBillingCandidate | null) {
+  const code = String(row?.target_departemen_kode || "").trim().toUpperCase();
+  return ["TK", "SD", "SMP", "SMA", "MTA"].includes(code);
+}
+
+function defaultEndMode(row: SpmbBillingCandidate): EndMode {
+  if (row.rencana_spp) return row.rencana_spp.sampai_akhir_jenjang ? "level" : "date";
+  return supportsEndOfLevel(row) ? "level" : "date";
+}
+
+function phaseLabel(row?: SpmbBillingCandidate | null) {
+  if (!row) return "";
+  const code = String(row.target_departemen_kode || "").trim().toUpperCase();
+  if (code === "MTA") {
+    const level = classLevel(row.kelas_nama);
+    if (level && level <= 3) return "MTA 1–3 · fase setingkat SMP";
+    if (level && level >= 4 && level <= 6) return "MTA 4–6 · fase setingkat SMA";
+  }
+  if (code === "TK") return "TK A–B";
+  return row.target_departemen_nama || code;
+}
+
+function lastDayOfMonth(value: string) {
+  if (!/^\d{4}-\d{2}$/.test(value)) return null;
+  const [year, month] = value.split("-").map(Number);
+  if (!year || month < 1 || month > 12) return null;
+  return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
 }
 
 export default function RencanaTagihanSiswaBaru() {
@@ -64,6 +99,8 @@ export default function RencanaTagihanSiswaBaru() {
   const [sppNominal, setSppNominal] = useState("");
   const [bulanMulai, setBulanMulai] = useState("");
   const [bulanTerakhir, setBulanTerakhir] = useState(6);
+  const [endMode, setEndMode] = useState<EndMode>("level");
+  const [manualEndMonth, setManualEndMonth] = useState("");
   const [initialFees, setInitialFees] = useState<InitialFeeState>({});
   const [saving, setSaving] = useState(false);
 
@@ -149,6 +186,16 @@ export default function RencanaTagihanSiswaBaru() {
     [selectedAcademicYear, tahunBukuList, firstYearMonths],
   );
 
+  const selectedLevel = classLevel(selected?.kelas_nama);
+  const isMta4Entry = String(selected?.target_departemen_kode || "").trim().toUpperCase() === "MTA"
+    && selectedLevel === 4
+    && !selected?.rencana_spp;
+  const requiredMta4UangPangkal = useMemo(
+    () => initialJenisList.find((jenis: any) => /^uang pangkal\b/i.test(String(jenis.nama || "").trim())),
+    [initialJenisList],
+  );
+  const manualEndDate = useMemo(() => lastDayOfMonth(manualEndMonth), [manualEndMonth]);
+
   const openPlan = (row: SpmbBillingCandidate) => {
     setSelected(row);
 
@@ -188,7 +235,17 @@ export default function RencanaTagihanSiswaBaru() {
       : calendar[0]?.tanggal || "";
     setBulanMulai(startInAcademicYear);
     setBulanTerakhir(currentPlan?.bulan_terakhir || 6);
+    setEndMode(defaultEndMode(row));
+    setManualEndMonth(
+      currentPlan && !currentPlan.sampai_akhir_jenjang
+        ? String(currentPlan.selesai || "").slice(0, 7)
+        : String(row.tahun_ajaran_selesai || "").slice(0, 7),
+    );
 
+    const rowLevel = classLevel(row.kelas_nama);
+    const requireMta4Fee = !currentPlan
+      && String(row.target_departemen_kode || "").trim().toUpperCase() === "MTA"
+      && rowLevel === 4;
     const fees: InitialFeeState = {};
     for (const jenis of (jenisList as any[])) {
       if (
@@ -197,8 +254,10 @@ export default function RencanaTagihanSiswaBaru() {
         !/pendaftaran|spmb|psb/i.test(String(jenis.nama || "")) &&
         (!jenis.departemen_id || jenis.departemen_id === row.target_departemen_id)
       ) {
+        const isMta4UangPangkal = requireMta4Fee
+          && /^uang pangkal\b/i.test(String(jenis.nama || "").trim());
         fees[jenis.id] = {
-          checked: false,
+          checked: isMta4UangPangkal,
           nominal: jenis.nominal ? String(jenis.nominal) : "",
         };
       }
@@ -271,6 +330,22 @@ export default function RencanaTagihanSiswaBaru() {
       return;
     }
 
+    if (endMode === "date") {
+      if (!manualEndDate) {
+        toast.error("Pilih bulan terakhir rencana SPP");
+        return;
+      }
+      if (manualEndDate < bulanMulai) {
+        toast.error("Bulan terakhir rencana tidak boleh sebelum bulan mulai");
+        return;
+      }
+    }
+
+    if (isMta4Entry && requiredMta4UangPangkal && !initialFees[requiredMta4UangPangkal.id]?.checked) {
+      toast.error("Uang Pangkal MTA perlu dipilih untuk siswa yang masuk MTA 4");
+      return;
+    }
+
     const checkedInitial = initialJenisList.filter((jenis: any) => initialFees[jenis.id]?.checked);
     for (const jenis of checkedInitial as any[]) {
       const nominal = Number(initialFees[jenis.id]?.nominal);
@@ -304,18 +379,19 @@ export default function RencanaTagihanSiswaBaru() {
         p_siswa_id: selected.id,
         p_kelas_id: selected.kelas_id,
         p_angkatan_id: null,
-        p_sampai_akhir_jenjang: true,
+        p_mode_akhir: endMode === "level" ? "akhir_jenjang" : "tanggal",
         p_rencana_mulai: bulanMulai,
+        p_rencana_selesai: endMode === "date" ? manualEndDate : null,
       };
 
       const { data: sppResult, error: sppError } = await (supabase as any).rpc(
-        "simpan_tarif_generate_dan_rencana_atomik",
+        "simpan_tarif_generate_dan_rencana_fleksibel_atomik",
         sppPayload,
       );
       if (sppError) throw sppError;
 
       const rencanaId = sppResult?.rencana?.rencana_id || selected.rencana_spp?.id;
-      if (rencanaId) {
+      if (rencanaId && endMode === "level") {
         await updateSpmbBillingPlanEndMonth({
           data: {
             rencana_id: rencanaId,
@@ -375,7 +451,9 @@ export default function RencanaTagihanSiswaBaru() {
 
       if (failures.length === 0) {
         toast.success("Rencana tagihan siswa baru berhasil disimpan", {
-          description: `SPP ${formatRupiah(sppAmount)} · otomatis sampai ${namaBulan(bulanTerakhir)} tahun kelulusan.`,
+          description: endMode === "level"
+            ? `SPP ${formatRupiah(sppAmount)} · otomatis sampai ${namaBulan(bulanTerakhir)} akhir ${phaseLabel(selected) || "jenjang"}.`
+            : `SPP ${formatRupiah(sppAmount)} · otomatis sampai ${formatDate(manualEndDate)}.`,
         });
         closePlan();
       } else {
@@ -581,7 +659,7 @@ export default function RencanaTagihanSiswaBaru() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-base">
-                    <WalletCards className="h-4 w-4 text-primary" /> SPP sampai akhir jenjang
+                    <WalletCards className="h-4 w-4 text-primary" /> Rencana SPP
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -612,6 +690,23 @@ export default function RencanaTagihanSiswaBaru() {
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
+                      <Label>Batas rencana SPP</Label>
+                      <Select value={endMode} onValueChange={(value) => setEndMode(value as EndMode)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="level" disabled={!supportsEndOfLevel(selected)}>
+                            Sampai akhir jenjang/fase
+                          </SelectItem>
+                          <SelectItem value="date">Sampai bulan tertentu</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {endMode === "level"
+                          ? `Batas otomatis: ${phaseLabel(selected) || "akhir jenjang"}.`
+                          : "Cocok untuk PAUD/KB atau kebutuhan khusus."}
+                      </p>
+                    </div>
+                    <div>
                       <Label>Bulan mulai</Label>
                       <Select value={bulanMulai} onValueChange={setBulanMulai}>
                         <SelectTrigger>
@@ -629,8 +724,11 @@ export default function RencanaTagihanSiswaBaru() {
                         SPP tahun pertama hanya dibuat mulai bulan ini.
                       </p>
                     </div>
+                  </div>
+
+                  {endMode === "level" ? (
                     <div>
-                      <Label>Bulan terakhir pada tahun kelulusan</Label>
+                      <Label>Bulan terakhir pada tahun akhir fase/kelulusan</Label>
                       <Select value={String(bulanTerakhir)} onValueChange={(v) => setBulanTerakhir(Number(v))}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -640,13 +738,28 @@ export default function RencanaTagihanSiswaBaru() {
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
+                  ) : (
+                    <div>
+                      <Label>Bulan terakhir rencana</Label>
+                      <Input
+                        type="month"
+                        value={manualEndMonth}
+                        min={bulanMulai ? bulanMulai.slice(0, 7) : undefined}
+                        onChange={(event) => setManualEndMonth(event.target.value)}
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Tagihan bulanan berikutnya berhenti setelah bulan ini.
+                      </p>
+                    </div>
+                  )}
 
                   <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
                     Tahun pertama: mulai {firstYearCalendar[0] ? `${namaBulan(firstYearCalendar[0].bulan)} ${firstYearCalendar[0].tahun}` : "—"}
                     ({firstYearCalendar.length || 0} bulan tersisa pada {selected.tahun_ajaran_nama || "Tahun Ajaran"}).
-                    Setelah itu sistem membuat SPP bulanan otomatis sampai {namaBulan(bulanTerakhir)} pada tahun kelulusan.
-                    Jika siswa tinggal kelas, akhir rencana ikut bergeser. Jika pindah atau menjadi alumni, rencana dihentikan.
+                    {endMode === "level"
+                      ? ` Setelah itu sistem membuat SPP bulanan otomatis sampai ${namaBulan(bulanTerakhir)} akhir ${phaseLabel(selected) || "jenjang"}. Jika siswa tinggal kelas, akhir rencana dapat ikut bergeser.`
+                      : ` Setelah itu sistem membuat SPP bulanan otomatis sampai ${manualEndDate ? formatDate(manualEndDate) : "bulan yang dipilih"}.`}
+                    {" "}Jika siswa pindah atau menjadi alumni, rencana dihentikan.
                   </div>
                 </CardContent>
               </Card>
@@ -659,6 +772,15 @@ export default function RencanaTagihanSiswaBaru() {
                   <p className="text-xs text-muted-foreground">
                     Pilih biaya satu kali seperti Uang Pangkal, Daftar Ulang, atau Seragam. Biaya pendaftaran SPMB tidak ditampilkan agar tidak tertagih dua kali.
                   </p>
+                  {isMta4Entry && (
+                    <Alert>
+                      <Info className="h-4 w-4" />
+                      <AlertDescription className="text-xs">
+                        Masuk MTA 4 memulai fase MTA 4–6 (setingkat SMA), sehingga Uang Pangkal MTA dikenakan kembali.
+                        Jenis Uang Pangkal otomatis dipilih bila tersedia; nominal tetap dapat disesuaikan per siswa.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   {initialJenisList.length === 0 ? (
                     <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
                       Tidak ada jenis pembayaran sekali bayar untuk jenjang ini.
