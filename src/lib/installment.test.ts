@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateRemainingBill, resolveInstallmentAmount } from "./installment";
+import { calculateRemainingBill, isSppPaymentName, resolveInstallmentAmount } from "./installment";
 
 describe("resolveInstallmentAmount", () => {
   it("membolehkan cicilan bebas selama tidak melebihi sisa", () => {
@@ -35,5 +35,19 @@ describe("calculateRemainingBill", () => {
       remaining: 6_750_000,
       paidOff: false,
     });
+  });
+});
+
+describe("isSppPaymentName", () => {
+  it("mengenali nama jenis SPP berbagai jenjang", () => {
+    expect(isSppPaymentName("SPP SD")).toBe(true);
+    expect(isSppPaymentName("SPP SMPITA NON ASRAMA")).toBe(true);
+    expect(isSppPaymentName("SPP-SMA")).toBe(true);
+  });
+
+  it("tidak menganggap jenis non-SPP sebagai SPP", () => {
+    expect(isSppPaymentName("UANG PANGKAL SD")).toBe(false);
+    expect(isSppPaymentName("DAFTAR ULANG")).toBe(false);
+    expect(isSppPaymentName("SPPPLUS")).toBe(false);
   });
 });
