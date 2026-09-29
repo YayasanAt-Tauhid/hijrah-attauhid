@@ -527,7 +527,6 @@ function InputPembayaranContent() {
 
   const prosesMutation = useProsesPembayaran();
   const batalMutation  = useBatalkanPembayaran();
-  const { role } = useAuth();
   const canBatal = role === "admin" || role === "keuangan";
   const [batalTarget, setBatalTarget] = useState<PembayaranWithJenis | null>(null);
   const [batalAlasan, setBatalAlasan] = useState("");
