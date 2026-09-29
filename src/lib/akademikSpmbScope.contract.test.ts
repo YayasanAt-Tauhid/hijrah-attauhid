@@ -10,6 +10,10 @@ const spmbScopeMigration = readFileSync(
   resolve(process.cwd(), "supabase/migrations/20260921175557_spmb_internal_verification_scope.sql"),
   "utf8",
 );
+const kepsekSpmbTargetMigration = readFileSync(
+  resolve(process.cwd(), "supabase/migrations/20260929233023_fix_kepsek_spmb_target_student_visibility.sql"),
+  "utf8",
+);
 const helper = readFileSync(resolve(process.cwd(), "src/lib/akademikScope.ts"), "utf8");
 const siswaHook = readFileSync(resolve(process.cwd(), "src/hooks/useSiswa.ts"), "utf8");
 const statistik = readFileSync(resolve(process.cwd(), "src/pages/akademik/StatistikSiswa.tsx"), "utf8");
@@ -35,5 +39,10 @@ describe("Academic student scope stays separate from SPMB destination access", (
     expect(spmbScopeMigration).toContain("d.spmb_departemen_tujuan_id IS NOT NULL");
     expect(spmbScopeMigration).toContain("public.can_manage_akademik_departemen(_user_id,d.spmb_departemen_tujuan_id)");
     expect(spmbPage).toContain('rpc("spmb_visible_siswa_ids")');
+    expect(kepsekSpmbTargetMigration).toContain("CREATE POLICY kepsek_spmb_target_siswa_select");
+    expect(kepsekSpmbTargetMigration).toContain("public.has_role(auth.uid(), 'kepala_sekolah')");
+    expect(kepsekSpmbTargetMigration).toContain("d.spmb_gelombang_id IS NOT NULL");
+    expect(kepsekSpmbTargetMigration).toContain("d.spmb_departemen_tujuan_id IS NOT NULL");
+    expect(kepsekSpmbTargetMigration).toContain("public.can_manage_akademik_departemen(");
   });
 });
