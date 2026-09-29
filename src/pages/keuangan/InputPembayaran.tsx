@@ -740,11 +740,10 @@ function InputPembayaranContent() {
         <div className="flex items-center justify-end gap-1">
           <Button
             size="sm"
-            variant="ghost"
-            className="h-7 text-xs"
+            variant="outline"
             onClick={() => setRiwayatPrintTarget(r)}
           >
-            <Printer className="h-3.5 w-3.5 mr-1" />Cetak
+            <Printer className="h-4 w-4 mr-1.5" />Cetak Kuitansi
           </Button>
           {canBatal && (
             <Button
@@ -1304,7 +1303,7 @@ function InputPembayaranContent() {
               <Button variant="outline" onClick={() => setShowCartKuitansi(false)}>Tutup</Button>
               <Button onClick={() => window.print()}>
                 <Printer className="h-4 w-4 mr-1.5" />
-                Cetak Bukti Gabungan
+                Cetak Kuitansi
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1337,7 +1336,7 @@ function InputPembayaranContent() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setRiwayatPrintTarget(null)}>Tutup</Button>
               <Button onClick={() => window.print()}>
-                <Printer className="h-4 w-4 mr-1.5" />Cetak
+                <Printer className="h-4 w-4 mr-1.5" />Cetak Kuitansi
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1405,7 +1404,7 @@ function InputPembayaranContent() {
               <Button variant="outline" onClick={() => setShowKuitansi(false)}>Tutup</Button>
               <Button onClick={() => window.print()}>
                 <Printer className="h-4 w-4 mr-1.5" />
-                Cetak
+                Cetak Kuitansi
               </Button>
             </DialogFooter>
           </DialogContent>
