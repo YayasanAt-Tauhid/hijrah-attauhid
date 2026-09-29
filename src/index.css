@@ -216,6 +216,21 @@
     display: block !important;
   }
 
+  /* Kwitansi kasir: kertas C5 landscape (229 x 162 mm), mengikuti format bukti pembayaran yayasan. */
+  body:has(#kuitansi-print) {
+    width: 229mm !important;
+    min-height: 162mm !important;
+  }
+  body:has(#kuitansi-print) #kuitansi-print {
+    width: 213mm !important;
+    max-width: 213mm !important;
+    margin: 0 auto !important;
+  }
+  @page {
+    size: 229mm 162mm;
+    margin: 8mm;
+  }
+
   /* Dokumen formal: hilangkan "chrome" UI (kartu, bayangan, sudut bulat) */
   * {
     box-shadow: none !important;
