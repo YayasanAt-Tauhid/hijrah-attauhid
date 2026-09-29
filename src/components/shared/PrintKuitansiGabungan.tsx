@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { terbilang, namaBulanTahun } from "@/hooks/useKeuangan";
@@ -51,7 +52,9 @@ export function PrintKuitansiGabungan({
   const nomorBukti = `HTG-${format(tanggal, "yyyyMMdd")}-${refPendek}`;
   const identitas = [siswa.nis, siswa.nisn].filter(Boolean).join(" / ") || "-";
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       id="kuitansi-print"
       className="hidden print:!block bg-white text-black mx-auto w-full max-w-[213mm] p-5 print:p-0 text-[10.5pt] leading-snug"
@@ -184,6 +187,7 @@ export function PrintKuitansiGabungan({
           <p>(....................................)</p>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
