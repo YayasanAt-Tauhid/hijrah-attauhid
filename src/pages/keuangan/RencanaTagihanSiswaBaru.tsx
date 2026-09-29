@@ -62,6 +62,7 @@ export default function RencanaTagihanSiswaBaru() {
   const [selected, setSelected] = useState<SpmbBillingCandidate | null>(null);
   const [sppJenisId, setSppJenisId] = useState("");
   const [sppNominal, setSppNominal] = useState("");
+  const [bulanMulai, setBulanMulai] = useState("");
   const [bulanTerakhir, setBulanTerakhir] = useState(6);
   const [initialFees, setInitialFees] = useState<InitialFeeState>({});
   const [saving, setSaving] = useState(false);
@@ -133,24 +134,19 @@ export default function RencanaTagihanSiswaBaru() {
     () => bulanKalenderTahunAjaran(selectedAcademicYear),
     [selectedAcademicYear],
   );
-  const academicMonths = useMemo(() => academicCalendar.map((x) => x.bulan), [academicCalendar]);
-
-  const sppTariffPeriods = useMemo(
-    () => targetTahunBukuTarif({
-      tahunAjaran: selectedAcademicYear,
-      tahunBukuList: tahunBukuList as any,
-      tipeSekali: false,
-    }),
-    [selectedAcademicYear, tahunBukuList],
+  const firstYearCalendar = useMemo(
+    () => academicCalendar.filter((item) => !bulanMulai || item.tanggal >= bulanMulai),
+    [academicCalendar, bulanMulai],
   );
+  const firstYearMonths = useMemo(() => firstYearCalendar.map((x) => x.bulan), [firstYearCalendar]);
 
   const sppGeneratePeriods = useMemo(
     () => kelompokkanBulanKeTahunBuku({
       tahunAjaran: selectedAcademicYear,
       tahunBukuList: tahunBukuList as any,
-      bulanList: academicMonths,
+      bulanList: firstYearMonths,
     }),
-    [selectedAcademicYear, tahunBukuList, academicMonths],
+    [selectedAcademicYear, tahunBukuList, firstYearMonths],
   );
 
   const openPlan = (row: SpmbBillingCandidate) => {
@@ -176,6 +172,21 @@ export default function RencanaTagihanSiswaBaru() {
           ? String(defaultSpp.nominal)
           : "",
     );
+    const calendar = bulanKalenderTahunAjaran(
+      row.tahun_ajaran_id && row.tahun_ajaran_mulai && row.tahun_ajaran_selesai
+        ? {
+            id: row.tahun_ajaran_id,
+            nama: row.tahun_ajaran_nama,
+            tanggal_mulai: row.tahun_ajaran_mulai,
+            tanggal_selesai: row.tahun_ajaran_selesai,
+          }
+        : null,
+    );
+    const currentStart = currentPlan?.mulai;
+    const startInAcademicYear = currentStart && calendar.some((item) => item.tanggal === currentStart)
+      ? currentStart
+      : calendar[0]?.tanggal || "";
+    setBulanMulai(startInAcademicYear);
     setBulanTerakhir(currentPlan?.bulan_terakhir || 6);
 
     const fees: InitialFeeState = {};
@@ -245,13 +256,17 @@ export default function RencanaTagihanSiswaBaru() {
       return;
     }
 
-    if (sppTariffPeriods.missing.length || sppGeneratePeriods.missing.length) {
-      toast.error("Tahun Buku untuk seluruh periode tahun ajaran belum tersedia", {
+    if (!bulanMulai || !academicCalendar.some((item) => item.tanggal === bulanMulai)) {
+      toast.error("Pilih bulan mulai SPP yang valid");
+      return;
+    }
+    if (sppGeneratePeriods.missing.length) {
+      toast.error("Tahun Buku untuk periode SPP yang dipilih belum tersedia", {
         description: "Buat Tahun Buku yang hilang di Referensi Keuangan lalu ulangi.",
       });
       return;
     }
-    if (sppTariffPeriods.ids.length === 0 || sppGeneratePeriods.groups.length === 0) {
+    if (sppGeneratePeriods.groups.length === 0) {
       toast.error("Periode tagihan tidak dapat dipetakan ke Tahun Buku");
       return;
     }
@@ -269,12 +284,12 @@ export default function RencanaTagihanSiswaBaru() {
     const failures: string[] = [];
     try {
       const sppPayload = {
-        p_tarif_rows: sppTariffPeriods.ids.map((tahunBukuId) => ({
+        p_tarif_rows: sppGeneratePeriods.groups.map((group) => ({
           jenis_id: sppJenisId,
           siswa_id: selected.id,
           kelas_id: null,
           angkatan_id: null,
-          tahun_ajaran_id: tahunBukuId,
+          tahun_ajaran_id: group.tahunBukuId,
           nominal: sppAmount,
           keterangan: "Tarif SPP siswa baru dari SPMB",
         })),
@@ -290,7 +305,7 @@ export default function RencanaTagihanSiswaBaru() {
         p_kelas_id: selected.kelas_id,
         p_angkatan_id: null,
         p_sampai_akhir_jenjang: true,
-        p_rencana_mulai: academicCalendar[0]?.tanggal || selectedAcademicYear.tanggal_mulai,
+        p_rencana_mulai: bulanMulai,
       };
 
       const { data: sppResult, error: sppError } = await (supabase as any).rpc(
@@ -302,7 +317,11 @@ export default function RencanaTagihanSiswaBaru() {
       const rencanaId = sppResult?.rencana?.rencana_id || selected.rencana_spp?.id;
       if (rencanaId) {
         await updateSpmbBillingPlanEndMonth({
-          data: { rencana_id: rencanaId, bulan_terakhir: bulanTerakhir },
+          data: {
+            rencana_id: rencanaId,
+            bulan_terakhir: bulanTerakhir,
+            mulai: bulanMulai,
+          },
         });
       }
 
@@ -594,11 +613,21 @@ export default function RencanaTagihanSiswaBaru() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                       <Label>Bulan mulai</Label>
-                      <Input
-                        readOnly
-                        value={academicCalendar[0] ? `${namaBulan(academicCalendar[0].bulan)} ${academicCalendar[0].tahun}` : "—"}
-                        className="bg-muted/40"
-                      />
+                      <Select value={bulanMulai} onValueChange={setBulanMulai}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Pilih bulan mulai" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {academicCalendar.map((item) => (
+                            <SelectItem key={item.tanggal} value={item.tanggal}>
+                              {namaBulan(item.bulan)} {item.tahun}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        SPP tahun pertama hanya dibuat mulai bulan ini.
+                      </p>
                     </div>
                     <div>
                       <Label>Bulan terakhir pada tahun kelulusan</Label>
@@ -614,7 +643,8 @@ export default function RencanaTagihanSiswaBaru() {
                   </div>
 
                   <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
-                    Tahun pertama: {selected.tahun_ajaran_nama || "—"} ({academicCalendar.length || 0} bulan).
+                    Tahun pertama: mulai {firstYearCalendar[0] ? `${namaBulan(firstYearCalendar[0].bulan)} ${firstYearCalendar[0].tahun}` : "—"}
+                    ({firstYearCalendar.length || 0} bulan tersisa pada {selected.tahun_ajaran_nama || "Tahun Ajaran"}).
                     Setelah itu sistem membuat SPP bulanan otomatis sampai {namaBulan(bulanTerakhir)} pada tahun kelulusan.
                     Jika siswa tinggal kelas, akhir rencana ikut bergeser. Jika pindah atau menjadi alumni, rencana dihentikan.
                   </div>

@@ -219,15 +219,19 @@ export const getSpmbBillingCandidates = createServerFn({ method: "GET" })
 
 export const updateSpmbBillingPlanEndMonth = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .inputValidator((d: { rencana_id: string; bulan_terakhir: number }) => d)
-  .handler(async ({ data, context }): Promise<{ success: true; selesai: string }> => {
+  .inputValidator((d: { rencana_id: string; bulan_terakhir: number; mulai: string }) => d)
+  .handler(async ({ data, context }): Promise<{ success: true; mulai: string; selesai: string }> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
     await requireRole(admin, userId, ["admin", "keuangan"]);
 
     const rencanaId = String(data?.rencana_id || "");
     const bulan = Number(data?.bulan_terakhir);
+    const mulai = String(data?.mulai || "");
     if (!rencanaId) throw new Error("Rencana tagihan tidak ditemukan");
+    if (!/^\d{4}-\d{2}-01$/.test(mulai)) {
+      throw new Error("Bulan mulai SPP tidak valid");
+    }
     if (![4, 5, 6].includes(bulan)) {
       throw new Error("Bulan terakhir SPP hanya dapat dipilih April, Mei, atau Juni");
     }
@@ -248,13 +252,14 @@ export const updateSpmbBillingPlanEndMonth = createServerFn({ method: "POST" })
     const year = existingEnd.getUTCFullYear();
     const lastDay = new Date(Date.UTC(year, bulan, 0)).toISOString().slice(0, 10);
 
-    if (lastDay < String(row.mulai)) {
+    if (lastDay < mulai) {
       throw new Error("Bulan akhir rencana tidak boleh sebelum periode mulai");
     }
 
     const { error: updateError } = await (admin as any)
       .from("rencana_tagihan_siswa")
       .update({
+        mulai,
         bulan_terakhir: bulan,
         selesai: lastDay,
         updated_at: new Date().toISOString(),
@@ -263,5 +268,5 @@ export const updateSpmbBillingPlanEndMonth = createServerFn({ method: "POST" })
 
     if (updateError) throw new Error("Gagal mengubah batas akhir SPP: " + updateError.message);
 
-    return { success: true, selesai: lastDay };
+    return { success: true, mulai, selesai: lastDay };
   });
