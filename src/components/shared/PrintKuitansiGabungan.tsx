@@ -54,7 +54,7 @@ export function PrintKuitansiGabungan({
   return (
     <div
       id="kuitansi-print"
-      className="hidden print:!block bg-white text-black mx-auto max-w-[190mm] p-5 print:p-0 text-[10.5pt] leading-snug"
+      className="hidden print:!block bg-white text-black mx-auto w-full max-w-[213mm] p-5 print:p-0 text-[10.5pt] leading-snug"
     >
       <div className="flex items-start justify-between gap-5 border-b-2 border-black pb-3">
         <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -83,7 +83,7 @@ export function PrintKuitansiGabungan({
             )}
           </div>
         </div>
-        <div className="shrink-0 border-y-2 border-black px-4 py-2 text-center text-[11pt] font-extrabold tracking-wide">
+        <div className="shrink-0 border-y-2 border-black px-5 py-2 text-center text-[11pt] font-extrabold tracking-wide">
           BUKTI PEMBAYARAN
         </div>
       </div>
@@ -172,7 +172,7 @@ export function PrintKuitansiGabungan({
           <p className="mt-3 font-medium">Powered by Hijrah At-Tauhid</p>
         </div>
 
-        <div className="mx-auto flex h-[68px] w-[68px] flex-col items-center justify-center border-2 border-black text-center leading-tight">
+        <div className="mx-auto flex h-[68px] w-[68px] flex-col items-center justify-center border border-black text-center leading-tight">
           <span className="text-[8px] font-bold">HIJRAH</span>
           <span className="text-[7px]">AT-TAUHID</span>
           <span className="mt-1 font-mono text-[6.5px]">{refPendek.slice(0, 8)}</span>
