@@ -42,7 +42,7 @@ describe("Kasir payment access contract", () => {
 
   it("limits cashier recap to the logged-in employee and preserves cancellation separation", () => {
     expect(pembayaranServer).toContain('export const getRekapKasirSaya');
-    expect(pembayaranServer).toContain('.eq("petugas_id", profile.pegawai_id)');
+    expect(pembayaranServer).toContain('.in("petugas_id", [userId, profile.pegawai_id])');
     expect(pembayaranServer).toContain('// BUKAN kasir — hanya admin/keuangan');
     expect(pembayaranServer).toContain('await requireRole(admin, userId, [\n        "admin",\n        "keuangan",\n      ])');
   });
