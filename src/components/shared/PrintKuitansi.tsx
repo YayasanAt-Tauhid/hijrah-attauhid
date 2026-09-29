@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { terbilang, namaBulanTahun } from "@/hooks/useKeuangan";
@@ -56,7 +57,9 @@ export function PrintKuitansi({
     ? `${payment.jenisNama} ( ${periode.toUpperCase()} )`
     : payment.jenisNama;
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       id="kuitansi-print"
       className="hidden print:!block bg-white text-black mx-auto w-full max-w-[213mm] p-5 print:p-0 text-[10.5pt] leading-snug"
@@ -177,6 +180,7 @@ export function PrintKuitansi({
           <p>(....................................)</p>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
