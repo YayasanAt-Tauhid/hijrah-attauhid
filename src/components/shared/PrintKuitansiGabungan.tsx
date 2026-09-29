@@ -159,7 +159,7 @@ export function PrintKuitansiGabungan({
         </div>
       )}
 
-      <div className="mt-8 grid grid-cols-[1.55fr_0.7fr_1fr] items-end gap-6">
+      <div className="mt-8 grid grid-cols-[1.6fr_1fr] items-end gap-8">
         <div className="text-[8.5pt] leading-snug">
           <p className="italic">
             This is a computer generated message and requires no signature.
@@ -168,12 +168,6 @@ export function PrintKuitansiGabungan({
             Informasi ini merupakan hasil cetakan komputer dan tidak memerlukan tanda tangan petugas.
           </p>
           <p className="mt-3 font-medium">Powered by Hijrah At-Tauhid</p>
-        </div>
-
-        <div className="mx-auto flex h-[68px] w-[68px] flex-col items-center justify-center border border-black text-center leading-tight">
-          <span className="text-[8px] font-bold">HIJRAH</span>
-          <span className="text-[7px]">AT-TAUHID</span>
-          <span className="mt-1 font-mono text-[6.5px]">{refPendek.slice(0, 8)}</span>
         </div>
 
         <div className="text-center text-[9.5pt]">
