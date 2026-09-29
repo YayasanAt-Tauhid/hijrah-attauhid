@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { PrintKuitansi } from "@/components/shared/PrintKuitansi";
 import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan";
-import { PrintTagihan } from "@/components/shared/PrintTagihan";
+import { PrintTagihan, type PrintTagihanItem } from "@/components/shared/PrintTagihan";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -146,6 +146,7 @@ function InputPembayaranContent() {
   const [selectedTahunAjaranId, setSelectedTahunAjaranId] = useState("");
   const [showKuitansi, setShowKuitansi] = useState(false);
   const [showTagihanPrint, setShowTagihanPrint] = useState(false);
+  const [tagihanPrintItems, setTagihanPrintItems] = useState<PrintTagihanItem[]>([]);
   const [riwayatPrintTarget, setRiwayatPrintTarget] = useState<PembayaranRiwayat | null>(null);
   const [cartItems, setCartItems] = useState<PaymentCartItem[]>([]);
   const [isCartPaying, setIsCartPaying] = useState(false);
@@ -522,6 +523,46 @@ function InputPembayaranContent() {
     ? (existingTagihan?.id ?? [form.jenisId, isSekali ? "sekali" : String(form.bulan), effectiveTahunAjaranId].join(":"))
     : "";
   const currentAlreadyInCart = !!currentCartKey && cartItems.some(item => item.key === currentCartKey);
+  const currentTagihanPrintItem = useMemo<PrintTagihanItem | null>(() => {
+    if (!existingTagihan || !selectedSiswa || !selectedJenis || !adaTagihanDipilih) return null;
+
+    const terbayar = isSekali ? (ringkasanTagihanSekali?.paid ?? 0) : 0;
+    const sisa = isSekali && ringkasanTagihanSekali
+      ? ringkasanTagihanSekali.remaining
+      : Number(existingTagihan.nominal);
+
+    return {
+      id: existingTagihan.id,
+      jenisNama: selectedJenis.nama,
+      periodeLabel: isSekali
+        ? (selectedTahun?.nama ? `TA ${selectedTahun.nama}` : "Sekali Bayar")
+        : `${namaBulan(form.bulan)} ${selectedTahunLabel}`.trim(),
+      nominal: Number(existingTagihan.nominal),
+      terbayar,
+      sisa,
+      status: String(existingTagihan.status || "belum_bayar"),
+      jatuhTempo: existingTagihan.jatuh_tempo || null,
+      siswa: selectedSiswa,
+    };
+  }, [
+    existingTagihan?.id,
+    existingTagihan?.nominal,
+    existingTagihan?.status,
+    existingTagihan?.jatuh_tempo,
+    selectedSiswa,
+    selectedJenis?.id,
+    selectedJenis?.nama,
+    isSekali,
+    ringkasanTagihanSekali?.paid,
+    ringkasanTagihanSekali?.remaining,
+    selectedTahun?.nama,
+    form.bulan,
+    selectedTahunLabel,
+    adaTagihanDipilih,
+  ]);
+  const currentTagihanSelected = !!currentTagihanPrintItem &&
+    tagihanPrintItems.some(item => item.id === currentTagihanPrintItem.id);
+  const tagihanPrintTotal = tagihanPrintItems.reduce((sum, item) => sum + Number(item.sisa || 0), 0);
   const kelasNama      = getKelasAktif(selectedSiswa)?.kelas?.nama ?? "-";
   const lembagaNama    = lembagaList?.find(l => l.id === departemenId)?.nama ?? "-";
 
@@ -535,6 +576,8 @@ function InputPembayaranContent() {
     setSelectedSiswa(s);
     setSearchTerm("");
     setCartItems([]);
+    setTagihanPrintItems([]);
+    setShowTagihanPrint(false);
     const dept = getKelasAktif(s)?.kelas?.departemen_id;
     if (dept && !departemenId) setDepartemenId(dept);
     // Reset filter tahun ajaran ke tahun aktif setiap ganti siswa.
@@ -545,6 +588,15 @@ function InputPembayaranContent() {
     // sebagai belum lunas di portal ortu.
     if (tahunAktif?.id) setSelectedTahunAjaranId(tahunAktif.id);
   }, [departemenId, tahunAktif?.id]);
+
+  const handleAddTagihanToPrint = () => {
+    if (!currentTagihanPrintItem) return;
+    setTagihanPrintItems(prev => {
+      if (prev.some(item => item.id === currentTagihanPrintItem.id)) return prev;
+      return [...prev, currentTagihanPrintItem];
+    });
+    toast.success("Tagihan ditambahkan ke daftar cetak");
+  };
 
   const handleAddToCart = () => {
     if (!selectedSiswa || !form.jenisId || !form.jumlah || !selectedJenis || tarifTidakAda) return;
@@ -791,7 +843,7 @@ function InputPembayaranContent() {
             </div>
           )}
         </div>
-        <Select value={departemenId || "__all__"} onValueChange={v => { setDepartemenId(v === "__all__" ? "" : v); setSelectedSiswa(null); setCartItems([]); setField("jenisId", ""); }}>
+        <Select value={departemenId || "__all__"} onValueChange={v => { setDepartemenId(v === "__all__" ? "" : v); setSelectedSiswa(null); setCartItems([]); setTagihanPrintItems([]); setShowTagihanPrint(false); setField("jenisId", ""); }}>
           <SelectTrigger className="w-44 h-11"><SelectValue placeholder="Semua lembaga" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Semua Lembaga</SelectItem>
@@ -812,7 +864,7 @@ function InputPembayaranContent() {
         </Select>
         {selectedSiswa && (
           <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0"
-            onClick={() => { setSelectedSiswa(null); setCartItems([]); setField("jenisId", ""); }}>
+            onClick={() => { setSelectedSiswa(null); setCartItems([]); setTagihanPrintItems([]); setShowTagihanPrint(false); setField("jenisId", ""); }}>
             <X className="h-4 w-4" />
           </Button>
         )}
@@ -925,9 +977,11 @@ function InputPembayaranContent() {
                       size="sm"
                       variant="outline"
                       className="h-7 px-2 text-[11px]"
-                      onClick={() => setShowTagihanPrint(true)}
+                      onClick={handleAddTagihanToPrint}
+                      disabled={currentTagihanSelected}
                     >
-                      <Printer className="h-3.5 w-3.5 mr-1" />Cetak Tagihan
+                      <Printer className="h-3.5 w-3.5 mr-1" />
+                      {currentTagihanSelected ? "Sudah Dipilih" : "Tambah ke Daftar Cetak"}
                     </Button>
                   </div>
                 )}
@@ -1047,6 +1101,71 @@ function InputPembayaranContent() {
                   : `Sudah dibayar: ${formatRupiah(pembayaranSekali.totalBayar)} dari ${formatRupiah(tarifNominal ?? 0)}`}
               </div>
             ) : null}
+
+            {tagihanPrintItems.length > 0 && (
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Printer className="h-4 w-4" />
+                    <span className="text-sm font-semibold">Daftar Cetak Tagihan</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{tagihanPrintItems.length} tagihan</span>
+                </div>
+
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {tagihanPrintItems.map(item => (
+                    <div key={item.id} className="flex items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-2 text-xs">
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{item.jenisNama}</p>
+                        <p className="text-muted-foreground">
+                          {item.periodeLabel || "Sekali Bayar"}
+                          {item.status === "terjadwal" ? " · Belum jatuh tempo" : item.status === "sebagian" ? " · Dibayar sebagian" : " · Belum dibayar"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-semibold">{formatRupiah(item.sisa)}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive"
+                          onClick={() => setTagihanPrintItems(prev => prev.filter(row => row.id !== item.id))}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between border-t pt-2 text-sm">
+                  <span className="font-medium">Total Sisa Tagihan</span>
+                  <span className="font-bold">{formatRupiah(tagihanPrintTotal)}</span>
+                </div>
+
+                <div className="grid grid-cols-[auto_1fr] gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9"
+                    onClick={() => setTagihanPrintItems([])}
+                  >
+                    Kosongkan
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-9"
+                    onClick={() => setShowTagihanPrint(true)}
+                  >
+                    <Printer className="h-3.5 w-3.5 mr-1.5" />
+                    Cetak {tagihanPrintItems.length} Tagihan
+                  </Button>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Tagihan jatuh tempo dan belum jatuh tempo dapat digabung dalam satu dokumen cetak.
+                </p>
+              </div>
+            )}
 
             {/* ── Nominal ────────────────────────────────────────────────────────── */}
             <div className="space-y-1">
@@ -1343,36 +1462,27 @@ function InputPembayaranContent() {
         </Dialog>
       )}
 
-      {/* ── Cetak tagihan aktif (jatuh tempo / belum jatuh tempo) ───────────── */}
-      {showTagihanPrint && existingTagihan && selectedSiswa && selectedJenis && (
+      {/* ── Cetak tagihan terpilih (bisa gabungan jatuh tempo / belum jatuh tempo) ── */}
+      {showTagihanPrint && tagihanPrintItems.length > 0 && selectedSiswa && (
         <Dialog open={showTagihanPrint} onOpenChange={setShowTagihanPrint}>
-          <DialogContent className="max-w-sm">
+          <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Tagihan Siswa</DialogTitle>
+              <DialogTitle>Tagihan Siswa · {tagihanPrintItems.length} item</DialogTitle>
             </DialogHeader>
+            <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
+              <p><span className="font-medium">{tagihanPrintItems.length} tagihan</span> akan dicetak dalam satu dokumen.</p>
+              <p>Total sisa: <span className="font-bold">{formatRupiah(tagihanPrintTotal)}</span></p>
+            </div>
             <PrintTagihan
-              tagihan={{
-                id: existingTagihan.id,
-                jenisNama: selectedJenis.nama,
-                periodeLabel: isSekali
-                  ? (selectedTahun?.nama ? `TA ${selectedTahun.nama}` : "Sekali Bayar")
-                  : `${namaBulan(form.bulan)} ${selectedTahunLabel}`.trim(),
-                nominal: Number(existingTagihan.nominal),
-                terbayar: isSekali ? (ringkasanTagihanSekali?.paid ?? 0) : 0,
-                sisa: isSekali && ringkasanTagihanSekali
-                  ? ringkasanTagihanSekali.remaining
-                  : Number(existingTagihan.nominal),
-                status: String(existingTagihan.status || "belum_bayar"),
-                jatuhTempo: existingTagihan.jatuh_tempo || null,
-                siswa: selectedSiswa,
-              }}
+              tagihan={tagihanPrintItems}
               kelasNama={kelasNama}
               lembagaNama={lembagaNama}
             />
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowTagihanPrint(false)}>Tutup</Button>
               <Button onClick={() => window.print()}>
-                <Printer className="h-4 w-4 mr-1.5" />Cetak Tagihan
+                <Printer className="h-4 w-4 mr-1.5" />
+                Cetak {tagihanPrintItems.length} Tagihan
               </Button>
             </DialogFooter>
           </DialogContent>
