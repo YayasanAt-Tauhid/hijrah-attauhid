@@ -177,20 +177,23 @@ async function handleNotification(request: Request): Promise<Response> {
           continue;
         }
 
-        // Pastikan nominal transaksi masih sama dengan kewajiban bersih pada
-        // tagihan. Ini mencegah token Snap lama membukukan nominal bruto
-        // ke tagihan yang sudah berubah karena diskon/keringanan.
+        // Validasi ulang terhadap tagihan exact. Untuk tagihan sekali bayar
+        // yang sudah jatuh tempo, transaksi boleh lebih kecil dari sisa (cicilan).
         let tagihanQuery = admin
           .from("tagihan")
-          .select("id, nominal, status")
+          .select("id, nominal, status, bulan")
           .eq("siswa_id", item.siswa_id)
           .eq("jenis_id", item.jenis_id)
           .eq("tahun_ajaran_id", item.tahun_ajaran_id);
 
-        tagihanQuery =
-          item.bulan === 0 || item.bulan == null
-            ? tagihanQuery.is("bulan", null)
-            : tagihanQuery.eq("bulan", item.bulan);
+        if (item.tagihan_id) {
+          tagihanQuery = tagihanQuery.eq("id", item.tagihan_id);
+        } else {
+          tagihanQuery =
+            item.bulan === 0 || item.bulan == null
+              ? tagihanQuery.is("bulan", null)
+              : tagihanQuery.eq("bulan", item.bulan);
+        }
 
         const { data: tagihanAktif, error: tagihanError } =
           await tagihanQuery.maybeSingle();
@@ -204,7 +207,7 @@ async function handleNotification(request: Request): Promise<Response> {
           continue;
         }
 
-        if (!tagihanAktif || !["belum_bayar", "terjadwal"].includes(tagihanAktif.status)) {
+        if (!tagihanAktif || !["belum_bayar", "sebagian", "terjadwal"].includes(tagihanAktif.status)) {
           hasilItems.push({
             item_id: item.id,
             success: false,
@@ -213,15 +216,42 @@ async function handleNotification(request: Request): Promise<Response> {
           continue;
         }
 
+        const { data: paidRows, error: paidError } = await admin
+          .from("pembayaran")
+          .select("jumlah")
+          .eq("tagihan_id", tagihanAktif.id);
+        if (paidError) {
+          hasilItems.push({
+            item_id: item.id,
+            success: false,
+            error: "Gagal menghitung sisa tagihan: " + paidError.message,
+          });
+          continue;
+        }
+
+        const totalSudahBayar = (paidRows || []).reduce(
+          (sum, row) => sum + Number(row.jumlah || 0),
+          0
+        );
         const nominalTagihan = Math.round(Number(tagihanAktif.nominal) || 0);
+        const sisaTagihan = Math.max(nominalTagihan - totalSudahBayar, 0);
         const nominalTransaksi = Math.round(Number(item.jumlah) || 0);
-        if (nominalTagihan <= 0 || nominalTransaksi !== nominalTagihan) {
+        const cicilanDiizinkan =
+          (item.bulan === 0 || item.bulan == null) &&
+          tagihanAktif.status !== "terjadwal";
+
+        if (
+          sisaTagihan <= 0 ||
+          nominalTransaksi <= 0 ||
+          nominalTransaksi > sisaTagihan ||
+          (!cicilanDiizinkan && nominalTransaksi !== sisaTagihan)
+        ) {
           hasilItems.push({
             item_id: item.id,
             success: false,
             error:
               "Nominal transaksi Rp " + nominalTransaksi.toLocaleString("id-ID") +
-              " tidak sama dengan tagihan bersih Rp " + nominalTagihan.toLocaleString("id-ID"),
+              " tidak valid terhadap sisa tagihan Rp " + sisaTagihan.toLocaleString("id-ID"),
           });
           continue;
         }
