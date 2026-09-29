@@ -212,7 +212,10 @@ export const getRekapKasirSaya = createServerFn({ method: "POST" })
         "id, jumlah, tanggal_bayar, bulan, keterangan, siswa_id, jenis_pembayaran:jenis_id(nama), siswa:siswa_id(nama, nis, nisn, status, kelas_siswa(aktif, kelas:kelas_id(nama))), departemen:departemen_id(kode, nama), jurnal:jurnal_id(nomor)"
       )
       .eq("tanggal_bayar", tanggal)
-      .eq("petugas_id", profile.pegawai_id);
+      // Pembayaran loket saat ini menyimpan auth user id sebagai petugas_id.
+      // Data historis/legacy dapat menyimpan pegawai_id, jadi terima keduanya
+      // agar Rekap Kasir Saya tetap terbatas pada identitas petugas yang sama.
+      .in("petugas_id", [userId, profile.pegawai_id]);
 
     if (error) {
       throw new Error("Gagal mengambil rekap kasir: " + error.message);
