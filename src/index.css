@@ -235,25 +235,10 @@
     margin: 0 auto !important;
   }
 
-  /* Saat kuitansi dibuka dari Dialog, jangan ikut mencetak ukuran/posisi modal.
-   * Modal max-w-sm + transform adalah penyebab kuitansi terlihat sangat kecil
-   * dan berada di tengah halaman pada print preview. */
-  [role="dialog"]:has(#kuitansi-print) {
-    position: static !important;
-    inset: auto !important;
-    display: block !important;
-    width: auto !important;
-    max-width: none !important;
-    max-height: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: visible !important;
-    border: 0 !important;
-    background: white !important;
-    transform: none !important;
-  }
-
-  [role="dialog"]:has(#kuitansi-print) > *:not(#kuitansi-print) {
+  /* Kuitansi dirender langsung ke <body> (di luar modal) agar hasil cetak
+   * stabil seperti halaman kuitansi mandiri. Saat mencetak kuitansi, sembunyikan
+   * seluruh UI aplikasi dan sisakan hanya dokumen kuitansi. */
+  body:has(> #kuitansi-print) > *:not(#kuitansi-print) {
     display: none !important;
   }
 
