@@ -12,7 +12,7 @@ const pembayaranServer = readFileSync(resolve(process.cwd(), "src/server/pembaya
 const spmbRoute = readFileSync(resolve(process.cwd(), "src/routes/_protected._app.keuangan.pembayaran-spmb.tsx"), "utf8");
 const rekapRoute = readFileSync(resolve(process.cwd(), "src/routes/_protected._app.keuangan.rekap-kasir.tsx"), "utf8");
 
-describe("Kasir payment access contract", () => {
+// Siswa nonaktif hanya boleh dilayani untuk pelunasan tunggakan yang sudah tercatat.\ndescribe("Kasir payment access contract", () => {
   it("exposes only the intended cashier operational menu", () => {
     expect(sidebar).toContain('{ title: "Input Pembayaran", url: "/keuangan/pembayaran", roles: ["admin", "keuangan", "kasir"] }');
     expect(sidebar).toContain('{ title: "Pembayaran SPMB", url: "/keuangan/pembayaran-spmb", roles: ["admin", "keuangan", "kasir"] }');
