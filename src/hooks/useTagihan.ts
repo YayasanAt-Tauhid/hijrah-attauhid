@@ -47,7 +47,7 @@ export function useTagihanBySiswa(
         .select("id, nominal, status, jurnal_piutang_id, tahun_ajaran_id")
         .eq("siswa_id", siswaId!)
         .eq("jenis_id", jenisId!)
-        .eq("status", "belum_bayar");
+        .in("status", ["belum_bayar", "terjadwal"]);
 
       if (tahunBukuId) q = q.eq("tahun_ajaran_id", tahunBukuId);
 
