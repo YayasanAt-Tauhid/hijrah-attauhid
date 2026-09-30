@@ -1053,6 +1053,104 @@ export default function SPMB() {
 
   const columns: DataTableColumn<Record<string, unknown>>[] = [
     {
+      key: "id",
+      label: "Aksi",
+      className: "w-72",
+      render: (_, row) => {
+        const status = row.status as string;
+        const internalStudent = row._spmbInternal === true;
+        const loading = nisLoadingId === (row.id as string);
+        const kesiapan = getKesiapanPenerimaan(row);
+        const detail = row._spmbDetail as Record<string, any> | undefined;
+        const tesLoading = milestoneLoadingId === `${row.id}:tes`;
+        const lulusLoading = milestoneLoadingId === `${row.id}:lulus`;
+        const daftarUlangLoading = milestoneLoadingId === `${row.id}:daftar_ulang`;
+        const targetYearForRow = detail?.tahun_ajaran_id
+          ? tahunList.find((item: any) => item.id === detail.tahun_ajaran_id)
+          : undefined;
+        const activationStart = targetYearForRow?.tanggal_mulai
+          ? new Date(`${targetYearForRow.tanggal_mulai}T00:00:00`)
+          : null;
+        const activationDateReady = !activationStart || Date.now() >= activationStart.getTime();
+        const internalReadyForActivation = internalStudent
+          && status === "diterima"
+          && detail?.spmb_status_kelulusan === "lulus"
+          && Boolean(detail?.spmb_tanggal_daftar_ulang)
+          && !detail?.spmb_tanggal_aktivasi;
+        return (
+          <div className="flex flex-wrap gap-1" onClick={(event) => event.stopPropagation()}>
+            <Button size="sm" variant="outline" onClick={() => openSpmbDetail(row)} title="Lihat detail pendaftaran SPMB"><Eye className="h-3 w-3" /></Button>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/akademik/siswa/${row.id}/edit`)} title="Edit data lengkap"><Pencil className="h-3 w-3" /></Button>
+            {canChangeSpmbTarget
+              && !detail?.spmb_tanggal_aktivasi
+              && detail?.spmb_status_pendaftaran !== "selesai"
+              && (internalStudent || row._academicStatus !== "aktif")
+              && (
+                <span title={row._pmbLunas && !row._pmbGratis ? "Sudah ada pembayaran pendaftaran; koreksi tujuan harus diselesaikan bersama bagian keuangan." : "Ubah lembaga/jenjang tujuan SPMB"}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={Boolean(row._pmbLunas && !row._pmbGratis)}
+                    onClick={() => openTargetChange(row)}
+                  >
+                    <ArrowRightLeft className="h-3 w-3" />
+                  </Button>
+                </span>
+              )}
+            {!detail?.spmb_tanggal_tes && <Button size="sm" variant="outline" disabled={tesLoading} onClick={() => handleMilestone(row, "tes", "Sudah Tes")}>{tesLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Sudah Tes"}</Button>}
+            {detail?.spmb_tanggal_tes && !detail?.spmb_status_kelulusan && <>
+              <Button size="sm" variant="outline" disabled={lulusLoading} onClick={() => handleMilestone(row, "lulus", "Lulus")}>{lulusLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Lulus"}</Button>
+              <Button size="sm" variant="outline" className="border-destructive/40 text-destructive" disabled={milestoneLoadingId === `${row.id}:tidak_lulus`} onClick={() => handleMilestone(row, "tidak_lulus", "Tidak Lulus")}>{milestoneLoadingId === `${row.id}:tidak_lulus` ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Tidak Lulus"}</Button>
+            </>}
+            {detail?.spmb_status_kelulusan === "lulus" && !detail?.spmb_tanggal_daftar_ulang && <Button size="sm" variant="outline" disabled={daftarUlangLoading} onClick={() => handleMilestone(row, "daftar_ulang", "Daftar Ulang")}>{daftarUlangLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Daftar Ulang"}</Button>}
+            {status === "calon" && (
+              <span title={kesiapan.kekurangan.length ? `Lengkapi: ${kesiapan.kekurangan.join(", ")}` : "Terima calon murid"}>
+                <Button size="sm" variant="outline" disabled={loading || !kesiapan.siap} onClick={() => handleTerima(row)}>{loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Terima"}</Button>
+              </span>
+            )}
+            {!internalStudent && status === "diterima" && !row.nis && <Button size="sm" variant="outline" className="border-warning/50 text-warning hover:bg-warning/10" disabled={loading} onClick={() => handleBuatNIS(row)}>{loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <><RefreshCw className="mr-1 h-3 w-3" />Buat NIS</>}</Button>}
+            {!internalStudent && status === "diterima" && (
+              <span title={!row.nis ? "Buat NIS terlebih dahulu" : "Aktifkan murid"}>
+                <Button size="sm" disabled={loading || !row.nis} onClick={() => handleAktifkan(row)}>Aktifkan</Button>
+              </span>
+            )}
+            {internalReadyForActivation && (
+              <span title={activationDateReady ? "Pilih kelas tujuan dan selesaikan perpindahan jenjang" : `Aktivasi baru dapat dilakukan mulai ${formatTanggal(targetYearForRow?.tanggal_mulai)}`}>
+                <Button
+                  size="sm"
+                  disabled={!activationDateReady}
+                  onClick={() => openInternalActivation(row)}
+                >
+                  Aktifkan ke Jenjang
+                </Button>
+              </span>
+            )}
+            {internalStudent && detail?.spmb_tanggal_aktivasi && (
+              <span className="inline-flex items-center rounded-md border border-success/30 bg-success/10 px-2 py-1 text-xs text-success" title={`Diaktifkan ${formatTanggal(detail.spmb_tanggal_aktivasi)}`}>
+                Aktif di Tujuan
+              </span>
+            )}
+            {role === "admin"
+              && detail?.spmb_status_kelulusan === "lulus"
+              && (
+                (!internalStudent && row._academicStatus === "aktif")
+                || (internalStudent && Boolean(detail?.spmb_tanggal_aktivasi))
+              )
+              && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigate(`/keuangan/rencana-siswa-baru?siswa=${row.id}`)}
+                  title="Atur tagihan awal dan SPP sampai akhir jenjang"
+                >
+                  Atur Tagihan
+                </Button>
+              )}
+          </div>
+        );
+      },
+    },
+    {
       key: "nama",
       label: "Nama",
       sortable: true,
@@ -1198,104 +1296,7 @@ export default function SPMB() {
         );
       },
     },
-    {
-      key: "id",
-      label: "Aksi",
-      className: "w-80",
-      render: (_, row) => {
-        const status = row.status as string;
-        const internalStudent = row._spmbInternal === true;
-        const loading = nisLoadingId === (row.id as string);
-        const kesiapan = getKesiapanPenerimaan(row);
-        const detail = row._spmbDetail as Record<string, any> | undefined;
-        const tesLoading = milestoneLoadingId === `${row.id}:tes`;
-        const lulusLoading = milestoneLoadingId === `${row.id}:lulus`;
-        const daftarUlangLoading = milestoneLoadingId === `${row.id}:daftar_ulang`;
-        const targetYearForRow = detail?.tahun_ajaran_id
-          ? tahunList.find((item: any) => item.id === detail.tahun_ajaran_id)
-          : undefined;
-        const activationStart = targetYearForRow?.tanggal_mulai
-          ? new Date(`${targetYearForRow.tanggal_mulai}T00:00:00`)
-          : null;
-        const activationDateReady = !activationStart || Date.now() >= activationStart.getTime();
-        const internalReadyForActivation = internalStudent
-          && status === "diterima"
-          && detail?.spmb_status_kelulusan === "lulus"
-          && Boolean(detail?.spmb_tanggal_daftar_ulang)
-          && !detail?.spmb_tanggal_aktivasi;
-        return (
-          <div className="flex flex-wrap gap-1" onClick={(event) => event.stopPropagation()}>
-            <Button size="sm" variant="outline" onClick={() => openSpmbDetail(row)} title="Lihat detail pendaftaran SPMB"><Eye className="h-3 w-3" /></Button>
-            <Button size="sm" variant="outline" onClick={() => navigate(`/akademik/siswa/${row.id}/edit`)} title="Edit data lengkap"><Pencil className="h-3 w-3" /></Button>
-            {canChangeSpmbTarget
-              && !detail?.spmb_tanggal_aktivasi
-              && detail?.spmb_status_pendaftaran !== "selesai"
-              && (internalStudent || row._academicStatus !== "aktif")
-              && (
-                <span title={row._pmbLunas && !row._pmbGratis ? "Sudah ada pembayaran pendaftaran; koreksi tujuan harus diselesaikan bersama bagian keuangan." : "Ubah lembaga/jenjang tujuan SPMB"}>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={Boolean(row._pmbLunas && !row._pmbGratis)}
-                    onClick={() => openTargetChange(row)}
-                  >
-                    <ArrowRightLeft className="mr-1 h-3 w-3" />Ubah Tujuan
-                  </Button>
-                </span>
-              )}
-            {!detail?.spmb_tanggal_tes && <Button size="sm" variant="outline" disabled={tesLoading} onClick={() => handleMilestone(row, "tes", "Sudah Tes")}>{tesLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Sudah Tes"}</Button>}
-            {detail?.spmb_tanggal_tes && !detail?.spmb_status_kelulusan && <>
-              <Button size="sm" variant="outline" disabled={lulusLoading} onClick={() => handleMilestone(row, "lulus", "Lulus")}>{lulusLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Lulus"}</Button>
-              <Button size="sm" variant="outline" className="border-destructive/40 text-destructive" disabled={milestoneLoadingId === `${row.id}:tidak_lulus`} onClick={() => handleMilestone(row, "tidak_lulus", "Tidak Lulus")}>{milestoneLoadingId === `${row.id}:tidak_lulus` ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Tidak Lulus"}</Button>
-            </>}
-            {detail?.spmb_status_kelulusan === "lulus" && !detail?.spmb_tanggal_daftar_ulang && <Button size="sm" variant="outline" disabled={daftarUlangLoading} onClick={() => handleMilestone(row, "daftar_ulang", "Daftar Ulang")}>{daftarUlangLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Daftar Ulang"}</Button>}
-            {status === "calon" && (
-              <span title={kesiapan.kekurangan.length ? `Lengkapi: ${kesiapan.kekurangan.join(", ")}` : "Terima calon murid"}>
-                <Button size="sm" variant="outline" disabled={loading || !kesiapan.siap} onClick={() => handleTerima(row)}>{loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Terima"}</Button>
-              </span>
-            )}
-            {!internalStudent && status === "diterima" && !row.nis && <Button size="sm" variant="outline" className="border-warning/50 text-warning hover:bg-warning/10" disabled={loading} onClick={() => handleBuatNIS(row)}>{loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <><RefreshCw className="mr-1 h-3 w-3" />Buat NIS</>}</Button>}
-            {!internalStudent && status === "diterima" && (
-              <span title={!row.nis ? "Buat NIS terlebih dahulu" : "Aktifkan murid"}>
-                <Button size="sm" disabled={loading || !row.nis} onClick={() => handleAktifkan(row)}>Aktifkan</Button>
-              </span>
-            )}
-            {internalReadyForActivation && (
-              <span title={activationDateReady ? "Pilih kelas tujuan dan selesaikan perpindahan jenjang" : `Aktivasi baru dapat dilakukan mulai ${formatTanggal(targetYearForRow?.tanggal_mulai)}`}>
-                <Button
-                  size="sm"
-                  disabled={!activationDateReady}
-                  onClick={() => openInternalActivation(row)}
-                >
-                  Aktifkan ke Jenjang
-                </Button>
-              </span>
-            )}
-            {internalStudent && detail?.spmb_tanggal_aktivasi && (
-              <span className="inline-flex items-center rounded-md border border-success/30 bg-success/10 px-2 py-1 text-xs text-success" title={`Diaktifkan ${formatTanggal(detail.spmb_tanggal_aktivasi)}`}>
-                Aktif di Tujuan
-              </span>
-            )}
-            {role === "admin"
-              && detail?.spmb_status_kelulusan === "lulus"
-              && (
-                (!internalStudent && row._academicStatus === "aktif")
-                || (internalStudent && Boolean(detail?.spmb_tanggal_aktivasi))
-              )
-              && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => navigate(`/keuangan/rencana-siswa-baru?siswa=${row.id}`)}
-                  title="Atur tagihan awal dan SPP sampai akhir jenjang"
-                >
-                  Atur Tagihan
-                </Button>
-              )}
-          </div>
-        );
-      },
-    },
+
   ];
 
   const optionsLoading = angkatanQuery.isLoading || departemenQuery.isLoading || tahunQuery.isLoading;
