@@ -29,6 +29,8 @@ export interface SimpanTarifGenerateAtomikInput {
   angkatan_id?: string | null;
   sampai_akhir_jenjang?: boolean;
   rencana_mulai?: string | null;
+  rencana_rows?: Array<{ siswa_id: string; nominal: number }>;
+  bulan_terakhir?: number;
 }
 
 export interface SimpanTarifGenerateAtomikResult {
@@ -38,6 +40,8 @@ export interface SimpanTarifGenerateAtomikResult {
   skipped: number;
   scheduled: number;
   sampai_akhir_jenjang?: boolean;
+  rencana_count?: number;
+  rencana_massal?: Array<{ siswa_id: string; selesai: string }>;
   rencana?: {
     rencana_id: string;
     mulai: string;
@@ -51,7 +55,17 @@ export function useSimpanTarifGenerateAtomik() {
 
   return useMutation({
     mutationFn: async (input: SimpanTarifGenerateAtomikInput) => {
-      const { data, error } = await (supabase as any).rpc(
+      const { data, error } = input.rencana_rows
+        ? await (supabase as any).rpc("simpan_tarif_generate_rencana_massal_atomik", {
+            p_tarif_rows: input.tarif_rows,
+            p_tahun_akademik_id: input.tahun_akademik_id,
+            p_jenis_id: input.jenis_id,
+            p_generate_groups: input.generate_groups,
+            p_rencana_rows: input.rencana_rows,
+            p_rencana_mulai: input.rencana_mulai,
+            p_bulan_terakhir: input.bulan_terakhir ?? 6,
+          })
+        : await (supabase as any).rpc(
         "simpan_tarif_generate_dan_rencana_atomik",
         {
           p_tarif_rows: input.tarif_rows,
@@ -74,11 +88,14 @@ export function useSimpanTarifGenerateAtomik() {
       qc.invalidateQueries({ queryKey: ["tarif_tagihan"] });
       qc.invalidateQueries({ queryKey: ["tagihan"] });
       qc.invalidateQueries({ queryKey: ["jurnal"] });
+      qc.invalidateQueries({ queryKey: ["rencana_tagihan_siswa"] });
 
       const scheduledInfo = data.scheduled > 0
         ? `, ${data.scheduled} belum jatuh tempo`
         : "";
-      const rencanaInfo = data.sampai_akhir_jenjang && data.rencana?.selesai
+      const rencanaInfo = data.rencana_count
+        ? ` · ${data.rencana_count} rencana SPP sampai akhir jenjang`
+        : data.sampai_akhir_jenjang && data.rencana?.selesai
         ? ` · otomatis sampai akhir jenjang (${new Date(`${data.rencana.selesai}T00:00:00`).toLocaleDateString("id-ID")})`
         : "";
 
