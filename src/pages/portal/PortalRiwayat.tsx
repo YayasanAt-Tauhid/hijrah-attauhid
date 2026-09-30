@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,9 +22,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Copy, Printer } from "lucide-react";
+import { Copy, Download, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan";
+import { canDownloadReceipt, downloadReceiptPdf, type PortalReceipt } from "@/lib/receiptDownload";
+import { portalReceiptIdentity } from "@/lib/portalReceiptData";
 
 const formatRupiah = (n: number) =>
   new Intl.NumberFormat("id-ID", {
@@ -32,14 +35,6 @@ const formatRupiah = (n: number) =>
     currency: "IDR",
     minimumFractionDigits: 0,
   }).format(n);
-
-const escapeHtml = (value: unknown) =>
-  String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   paid: { label: "Lunas", variant: "default" },
@@ -56,6 +51,7 @@ interface RiwayatItem {
   status: string;
   total_amount: number;
   biaya_admin: number;
+  receipt: PortalReceipt;
   items: { id: string; nama_item: string; jumlah: number }[];
 }
 
@@ -65,6 +61,7 @@ export default function PortalRiwayat() {
   const highlightOrder = searchParams.get("order");
   const queryClient = useQueryClient();
   const syncedOrderRef = useRef<string | null>(null);
+  const [downloadTarget, setDownloadTarget] = useState<RiwayatItem | null>(null);
 
   const { data: anakIds = [] } = useQuery({
     queryKey: ["portal-anak-ids", user?.id],
@@ -78,23 +75,28 @@ export default function PortalRiwayat() {
     enabled: !!user,
   });
 
-  const { data: transaksi = [], isLoading } = useQuery({
+  const { data: transaksi = [], isLoading, isError } = useQuery({
     queryKey: ["portal-riwayat", user?.id, anakIds],
     queryFn: async (): Promise<RiwayatItem[]> => {
-      const [{ data: online }, { data: manual }] = await Promise.all([
+      const [onlineResult, manualResult] = await Promise.all([
         supabase
           .from("transaksi_midtrans")
-          .select("*, transaksi_midtrans_item(*)")
+          .select("*, transaksi_midtrans_item(*, siswa:siswa_id(nama, nis, nisn, kelas_siswa(aktif, kelas:kelas_id(nama))), departemen:departemen_id(nama))")
           .eq("user_id", user!.id)
           .order("created_at", { ascending: false }),
         anakIds.length > 0
           ? supabase
               .from("pembayaran")
-              .select("id, jumlah, tanggal_bayar, keterangan")
+              .select("id, jumlah, bulan, tanggal_bayar, keterangan, siswa:siswa_id(nama, nis, nisn, kelas_siswa(aktif, kelas:kelas_id(nama))), departemen:departemen_id(nama), jenis_pembayaran:jenis_id(nama), jurnal:jurnal_id(nomor)")
               .in("siswa_id", anakIds)
               .order("tanggal_bayar", { ascending: false })
           : Promise.resolve({ data: [] }),
       ]);
+
+      if (onlineResult.error) throw onlineResult.error;
+      if ("error" in manualResult && manualResult.error) throw manualResult.error;
+      const online = onlineResult.data;
+      const manual = manualResult.data;
 
       // Pembayaran online yang sudah sukses juga tercatat di tabel `pembayaran`
       // (proses_pembayaran_midtrans_atomik ikut insert ke sana supaya jurnal &
@@ -130,6 +132,17 @@ export default function PortalRiwayat() {
           total_amount: Number(tx.total_amount) + biayaAdmin,
           biaya_admin: biayaAdmin,
           items,
+          receipt: {
+            ...portalReceiptIdentity(tx.transaksi_midtrans_item || []),
+            nomorBukti: tx.order_id,
+            tanggalBayar: tx.paid_at || tx.created_at,
+            metode: tx.payment_type || "Online",
+            petugasNama: "Pembayaran Online",
+            keterangan: tx.order_id ? `Order ID: ${tx.order_id}` : undefined,
+            items: items.map((item: { id: string; nama_item: string; jumlah: number }) => ({
+              id: item.id, jenisNama: item.nama_item, jumlah: item.jumlah, bulan: 0,
+            })),
+          },
         };
       });
 
@@ -146,7 +159,15 @@ export default function PortalRiwayat() {
           status: "paid",
           total_amount: Number(p.jumlah),
           biaya_admin: 0,
-          items: [{ id: p.id, nama_item: p.keterangan || "Pembayaran", jumlah: Number(p.jumlah) }],
+          items: [{ id: p.id, nama_item: p.keterangan || p.jenis_pembayaran?.nama || "Pembayaran", jumlah: Number(p.jumlah) }],
+          receipt: {
+            ...portalReceiptIdentity([p]),
+            nomorBukti: p.jurnal?.nomor || `HT-${format(new Date(p.tanggal_bayar), "yyyyMMdd")}-${p.id.replace(/-/g, "").slice(0, 10).toUpperCase()}`,
+            tanggalBayar: p.tanggal_bayar,
+            metode: "Kasir",
+            keterangan: p.keterangan || undefined,
+            items: [{ id: p.id, jenisNama: p.jenis_pembayaran?.nama || "Pembayaran", jumlah: Number(p.jumlah), bulan: Number(p.bulan || 0) }],
+          },
         }));
 
       return [...onlineItems, ...manualItems].sort((a, b) => {
@@ -198,71 +219,22 @@ export default function PortalRiwayat() {
     }
   }, [highlightOrder, transaksi, queryClient, user?.id]);
 
-  // Cetak di popup terpisah. Semua data DB di-escape sebelum masuk ke HTML
-  // karena about:blank mewarisi origin halaman pembuka; tanpa escape, data
-  // seperti keterangan pembayaran dapat menjadi stored XSS saat dicetak.
-  const printBukti = (tx: RiwayatItem) => {
-    const items = tx.items;
-    const w = window.open("", "_blank", "width=620,height=650");
-    if (!w) { toast.error("Popup diblokir. Izinkan popup untuk mencetak."); return; }
-    w.opener = null;
-
-    const safeOrder = escapeHtml(tx.order_id || tx.key);
-    const safeDate = escapeHtml(
-      tx.tanggal ? new Date(tx.tanggal).toLocaleString("id-ID") : "-"
-    );
-    const safePaymentType = escapeHtml(tx.payment_type || "-");
-    const rows = items
-      .map(
-        (i) =>
-          `<tr><td>${escapeHtml(i.nama_item)}</td><td style="text-align:right">${escapeHtml(
-            i.jumlah.toLocaleString("id-ID", {
-              style: "currency",
-              currency: "IDR",
-              minimumFractionDigits: 0,
-            })
-          )}</td></tr>`
-      )
-      .join("");
-    const safeTotal = escapeHtml(
-      tx.total_amount.toLocaleString("id-ID", {
-        style: "currency",
-        currency: "IDR",
-        minimumFractionDigits: 0,
-      })
-    );
-
-    w.document.write(`
-      <!doctype html>
-      <html><head>
-      <meta charset="utf-8">
-      <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
-      <title>Bukti Pembayaran ${safeOrder}</title>
-      <style>
-        body{font-family:sans-serif;padding:24px;color:#111}
-        h2{margin-bottom:4px}
-        table{width:100%;border-collapse:collapse;margin-top:12px}
-        th,td{border:1px solid #ccc;padding:8px;text-align:left}
-        th{background:#f0f0f0}
-        .total{font-weight:bold}
-        .footer{margin-top:24px;font-size:12px;color:#666}
-      </style>
-      </head><body>
-      <h2>Bukti Pembayaran</h2>
-      ${tx.order_id ? `<p><b>Order ID:</b> ${safeOrder}</p>` : ""}
-      <p><b>Tanggal:</b> ${safeDate}</p>
-      <p><b>Metode:</b> ${safePaymentType}</p>
-      <table>
-        <thead><tr><th>Item</th><th style="text-align:right">Jumlah</th></tr></thead>
-        <tbody>${rows}</tbody>
-        <tfoot><tr class="total"><td>TOTAL</td><td style="text-align:right">${safeTotal}</td></tr></tfoot>
-      </table>
-      <p class="footer">Terima kasih telah melakukan pembayaran.</p>
-      </body></html>`);
-    w.document.close();
-    w.focus();
-    w.print();
+  const downloadKwitansi = (tx: RiwayatItem) => {
+    if (!canDownloadReceipt(tx.status) || downloadTarget) return;
+    setDownloadTarget(tx);
   };
+
+  const handleExportReady = useCallback(async (element: HTMLElement) => {
+    if (!downloadTarget || !canDownloadReceipt(downloadTarget.status)) return;
+    try {
+      await downloadReceiptPdf(element, downloadTarget.order_id || downloadTarget.key);
+      toast.success("Kwitansi berhasil diunduh");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Kwitansi gagal diunduh. Silakan coba lagi.");
+    } finally {
+      setDownloadTarget(null);
+    }
+  }, [downloadTarget]);
 
   // Bug 5b fix: copyOrderId function selesai (sesi lalu terpotong)
   const copyOrderId = (orderId: string) => {
@@ -278,6 +250,10 @@ export default function PortalRiwayat() {
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" />
       </div>
     );
+  }
+
+  if (isError) {
+    return <p className="py-8 text-center text-destructive">Riwayat pembayaran gagal dimuat. Silakan muat ulang halaman.</p>;
   }
 
   return (
@@ -384,22 +360,34 @@ export default function PortalRiwayat() {
                         ))}
                       </TableBody>
                     </Table>
-                    <div className="mt-3 flex justify-end">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => printBukti(tx)}
-                      >
-                        <Printer className="h-4 w-4 mr-1.5" />
-                        Cetak Bukti
-                      </Button>
-                    </div>
+                    {canDownloadReceipt(tx.status) && (
+                      <div className="mt-3 flex justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={!!downloadTarget}
+                          onClick={() => downloadKwitansi(tx)}
+                        >
+                          {downloadTarget?.key === tx.key
+                            ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                            : <Download className="mr-1.5 h-4 w-4" />}
+                          {downloadTarget?.key === tx.key ? "Menyiapkan PDF..." : "Download kwitansi"}
+                        </Button>
+                      </div>
+                    )}
                   </AccordionContent>
                 </Card>
               </AccordionItem>
             );
           })}
         </Accordion>
+      )}
+      {downloadTarget && canDownloadReceipt(downloadTarget.status) && (
+        <PrintKuitansiGabungan
+          {...downloadTarget.receipt}
+          exportMode
+          onExportReady={handleExportReady}
+        />
       )}
     </div>
   );

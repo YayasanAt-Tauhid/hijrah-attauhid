@@ -62,23 +62,24 @@ export function PrintKuitansi({
 
   return createPortal(
     <div
+      style={{ fontFamily: '"Times New Roman", Times, serif' }}
       id="kuitansi-print"
-      className="hidden print:!block bg-white text-black mx-auto w-full max-w-[213mm] p-5 print:p-0 text-[10.5pt] leading-snug"
+      className="hidden print:!block bg-white text-black mx-auto w-full max-w-[213mm] p-5 print:p-0 text-[12pt] leading-[1.25]"
     >
-      <div className="flex items-start justify-between gap-5 border-b-2 border-black pb-3">
+      <div className="flex items-start justify-between gap-5 border-b-2 border-black pb-2">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <img
             src={YAYASAN_LOGO_URL}
             alt="Logo Yayasan At-Tauhid"
-            className="h-[58px] w-[58px] shrink-0 object-contain"
+            className="h-[64px] w-[64px] shrink-0 object-contain"
           />
           <div className="min-w-0">
-            <h1 className="text-[13.5pt] font-extrabold uppercase tracking-tight">
+            <h1 className="text-[15pt] font-extrabold uppercase tracking-tight">
               YAYASAN AT-TAUHID AL ISLAMY BANGKA BELITUNG
             </h1>
-            {sekolah?.alamat && <p className="mt-0.5 text-[9.5pt]">{sekolah.alamat}</p>}
+            {sekolah?.alamat && <p className="mt-0.5 text-[11pt]">{sekolah.alamat}</p>}
             {(sekolah?.telepon || sekolah?.email) && (
-              <p className="text-[9pt]">
+              <p className="text-[10.5pt]">
                 {[sekolah?.telepon ? `Telp: ${sekolah.telepon}` : "", sekolah?.email || ""]
                   .filter(Boolean)
                   .join(" · ")}
@@ -86,19 +87,19 @@ export function PrintKuitansi({
             )}
           </div>
         </div>
-        <div className="shrink-0 border-y-2 border-black px-5 py-2 text-center text-[11pt] font-extrabold tracking-wide">
+        <div className="shrink-0 border-y-2 border-black px-5 py-2 text-center text-[12.5pt] font-extrabold tracking-wide">
           BUKTI PEMBAYARAN
         </div>
       </div>
 
-      <div className="mt-3 font-bold tracking-wide">{nomorBukti}</div>
+      <div className="mt-2 font-bold tracking-wide">{nomorBukti}</div>
 
-      <table className="mt-2 w-full table-fixed text-[10pt]">
+      <table className="mt-1 w-full table-fixed text-[11.5pt]">
         <tbody>
           <tr>
-            <td className="w-[105px] py-1 align-top">Nama Siswa</td>
+            <td className="w-[115px] py-1 align-top">Nama Siswa</td>
             <td className="py-1 align-top font-semibold">{payment.siswa.nama}</td>
-            <td className="w-[90px] py-1 align-top">Tgl. Bayar</td>
+            <td className="w-[100px] py-1 align-top">Tgl. Bayar</td>
             <td className="w-[150px] py-1 align-top">
               {format(tanggal, "dd MMM yyyy", { locale: idLocale })}
             </td>
@@ -122,11 +123,11 @@ export function PrintKuitansi({
         </tbody>
       </table>
 
-      <div className="my-3 border-y border-black py-1.5 text-[10pt] font-bold">
+      <div className="my-2 border-y border-black py-1.5 text-[11.5pt] font-bold">
         Dengan rincian pembayaran sebagai berikut:
       </div>
 
-      <table className="w-full text-[10pt]">
+      <table className="w-full text-[11.5pt]">
         <tbody>
           <tr>
             <td className="w-[28px] py-1.5 align-top">1.</td>
@@ -135,37 +136,37 @@ export function PrintKuitansi({
             <td className="w-[120px] py-1.5 text-right align-top">{formatAngka(payment.jumlah)}</td>
           </tr>
           <tr className="border-t-2 border-black font-extrabold">
-            <td className="py-2 text-right" colSpan={2}>JUMLAH</td>
-            <td className="py-2">Rp</td>
-            <td className="py-2 text-right">{formatAngka(payment.jumlah)}</td>
+            <td className="py-1.5 pr-3 text-right" colSpan={2}>JUMLAH</td>
+            <td className="py-1.5">Rp</td>
+            <td className="py-1.5 text-right">{formatAngka(payment.jumlah)}</td>
           </tr>
         </tbody>
       </table>
 
-      <div className="mt-2 text-[9.5pt]">
+      <div className="mt-2 text-[11pt]">
         <span className="font-semibold">Terbilang:</span>{" "}
         <span className="italic">{terbilang(payment.jumlah)}</span>
       </div>
       {payment.keterangan && (
-        <div className="mt-1 text-[9.5pt]">
+        <div className="mt-1 text-[11pt]">
           <span className="font-semibold">Keterangan:</span> {payment.keterangan}
         </div>
       )}
 
-      <div className="mt-8 grid grid-cols-[1.6fr_1fr] items-end gap-8">
-        <div className="text-[8.5pt] leading-snug">
+      <div className="mt-3 grid grid-cols-[1.6fr_1fr] items-end gap-8">
+        <div className="text-[10pt] leading-snug">
           <p className="italic">
             This is a computer generated message and requires no signature.
           </p>
           <p className="italic">
             Informasi ini merupakan hasil cetakan komputer dan tidak memerlukan tanda tangan petugas.
           </p>
-          <p className="mt-3 font-medium">Powered by Hijrah At-Tauhid</p>
+          <p className="mt-2 font-medium">Powered by Hijrah At-Tauhid</p>
         </div>
 
-        <div className="text-center text-[9.5pt]">
+        <div className="text-center text-[11pt]">
           <p>Penyetor,</p>
-          <div className="h-14" />
+          <div className="h-6" />
           <p>(....................................)</p>
         </div>
       </div>
