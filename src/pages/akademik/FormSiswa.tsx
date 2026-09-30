@@ -275,7 +275,12 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
   };
 
   useEffect(() => {
-    if (departemenList.length && !wajibAsrama && form.getValues("status_asrama")) form.setValue("status_asrama", "");
+    if (
+      departemenList.length &&
+      selectedDept &&
+      !wajibAsrama &&
+      form.getValues("status_asrama")
+    ) form.setValue("status_asrama", "");
   }, [wajibAsrama, departemenList, form]);
 
   useEffect(() => {
@@ -376,7 +381,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
       dokumen_rapor_path: values.dokumen_rapor_path || null, dokumen_ijazah_path: values.dokumen_ijazah_path || null,
       tahun_ajaran_id: values.spmb_tahun_ajaran_id || null, jenis_pendaftaran: values.jenis_pendaftaran || null,
       nik: values.nik || null, no_kk: values.no_kk || null, kategori: values.kategori || null,
-      status_asrama: wajibAsrama ? values.status_asrama || null : null,
+      status_asrama: wajibAsrama ? values.status_asrama || detail?.status_asrama || null : null,
       anak_ke: numberOrNull(values.anak_ke), jumlah_bersaudara: numberOrNull(values.jumlah_bersaudara),
       tinggi_badan_cm: numberOrNull(values.tinggi_badan_cm), berat_badan_kg: numberOrNull(values.berat_badan_kg),
       lingkar_kepala_cm: numberOrNull(values.lingkar_kepala_cm), ukuran_baju: values.ukuran_baju || null,
