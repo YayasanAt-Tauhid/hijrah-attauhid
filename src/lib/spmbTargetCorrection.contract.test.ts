@@ -40,7 +40,7 @@ describe("SPMB target correction contract", () => {
 
   it("exposes a dedicated correction UI", () => {
     expect(page).toContain("Ubah Lembaga/Jenjang Tujuan SPMB");
-    expect(page).toContain("Ubah Tujuan");
+    expect(page).toContain("Ubah lembaga/jenjang tujuan SPMB");
     expect(page).toContain('rpc("spmb_change_registration_target"');
     expect(page).toContain("Pendaftaran yang sama tetap dipakai");
   });
