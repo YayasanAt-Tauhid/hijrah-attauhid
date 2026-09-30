@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { RupiahInput } from "@/components/shared/RupiahInput";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart, CheckCheck, X } from "lucide-react";
 import { BULAN_ORDER_AKADEMIK } from "@/hooks/useKeuangan";
 
 const NAMA_BULAN = [
@@ -259,7 +259,7 @@ export default function PortalTagihan() {
           const first = items[0];
           const allKeys = items.map(getKey);
           const allChecked = allKeys.every((k) => selected.has(k));
-          const someChecked = allKeys.some((k) => selected.has(k));
+          const selectedCount = allKeys.filter((k) => selected.has(k)).length;
           const subtotal = items
             .filter((t) => selected.has(getKey(t)))
             .reduce((s, t) => s + amountFor(t), 0);
@@ -267,23 +267,31 @@ export default function PortalTagihan() {
           return (
             <Card key={siswaId} className="min-w-0 rounded-2xl shadow-sm">
               <CardHeader className="px-4 pb-3 pt-5 sm:px-6">
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    id={`select-student-${siswaId}`}
-                    className="mt-1 h-5 w-5 rounded-full border-emerald-700/60 data-[state=checked]:bg-emerald-700 data-[state=indeterminate]:bg-emerald-100"
-                    checked={allChecked ? true : someChecked ? "indeterminate" : false}
-                    onCheckedChange={() => selectAllForSiswa(siswaId)}
-                    aria-label={`Pilih semua tagihan ${first.nama_siswa}`}
-                  />
-                  <label htmlFor={`select-student-${siswaId}`} className="min-w-0 flex-1 cursor-pointer">
-                    <CardTitle className="break-words text-base leading-snug">
-                      {first.nama_siswa}
-                    </CardTitle>
-                    <p className="mt-1 break-words text-xs text-muted-foreground">
-                      {first.departemen_nama} — {first.kelas_nama} • NIS:{" "}
-                      {first.nis || "-"}
-                    </p>
-                  </label>
+                <div className="min-w-0">
+                  <CardTitle className="break-words text-base leading-snug">
+                    {first.nama_siswa}
+                  </CardTitle>
+                  <p className="mt-1 break-words text-xs text-muted-foreground">
+                    {first.departemen_nama} — {first.kelas_nama} • NIS:{" "}
+                    {first.nis || "-"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                  <p className="text-xs text-muted-foreground" aria-live="polite" aria-atomic="true">
+                    {selectedCount} dari {items.length} tagihan dipilih
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="ml-auto h-9 shrink-0 gap-1.5 rounded-full border-emerald-600/50 bg-emerald-50/70 px-3 text-xs font-medium text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
+                    onClick={() => selectAllForSiswa(siswaId)}
+                    aria-pressed={allChecked}
+                    aria-label={`${allChecked ? "Batalkan pilihan" : "Pilih semua tagihan"} ${first.nama_siswa}`}
+                  >
+                    {allChecked ? <X className="h-4 w-4" /> : <CheckCheck className="h-4 w-4" />}
+                    {allChecked ? "Batalkan pilihan" : "Pilih semua"}
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent className="px-4 pb-4 sm:px-6">

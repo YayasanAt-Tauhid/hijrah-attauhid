@@ -43,7 +43,7 @@ describe("PortalTagihan selection and installment checkout", () => {
 
   it("selects each child's bills independently and preserves an installment when reselected", () => {
     render(<PortalTagihan />);
-    fireEvent.click(screen.getByRole("checkbox", { name: /Pilih semua tagihan Anak Pertama/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Pilih semua tagihan Anak Pertama/ }));
     expect(screen.getByText("2 tagihan dipilih")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /Pilih SPP SD/ })).not.toBeChecked();
     fireEvent.change(screen.getByLabelText("Bayar cicilan"), { target: { value: "250.000" } });
@@ -51,6 +51,28 @@ describe("PortalTagihan selection and installment checkout", () => {
     expect(screen.queryByLabelText("Bayar cicilan")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ }));
     expect(screen.getByLabelText("Bayar cicilan")).toHaveValue("250.000");
+  });
+
+  it("selects and clears only the chosen child's bills and updates its button label", () => {
+    render(<PortalTagihan />);
+    expect(screen.getByText("0 dari 2 tagihan dipilih")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Pilih SPP SMP/ }));
+    expect(screen.getByText("1 dari 2 tagihan dipilih")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Pilih semua tagihan Anak Pertama/ }));
+    expect(screen.getByText("2 dari 2 tagihan dipilih")).toBeInTheDocument();
+    const clearFirst = screen.getByRole("button", { name: /Batalkan pilihan Anak Pertama/ });
+    expect(clearFirst).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: /Pilih semua tagihan Anak Kedua/ }));
+    fireEvent.click(clearFirst);
+    expect(screen.getByText("0 dari 2 tagihan dipilih")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Pilih SPP SD/ })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Pilih SPP SMP/ })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: /Pilih semua tagihan Anak Pertama/ })).toHaveAttribute("aria-pressed", "false");
+    const checkout = screen.getAllByRole("button", { name: /Ke Keranjang/ });
+    fireEvent.click(checkout[checkout.length - 1]);
+    const cart = JSON.parse(sessionStorage.getItem("keranjang_tagihan")!);
+    expect(cart).toHaveLength(1);
+    expect(cart[0]).toMatchObject({ tagihan_id: "other", jumlah: 200000 });
   });
 
   it("does not proceed to checkout with a zero installment", () => {
