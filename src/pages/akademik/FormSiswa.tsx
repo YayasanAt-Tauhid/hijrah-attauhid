@@ -288,9 +288,15 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
   const angkatanList = allAngkatanList.filter((a: any) => !watchDept || a.departemen_id === watchDept);
   const selectedDept = departemenList.find((d: any) => d.id === watchDept) as any;
   const selectedDeptCode = String(selectedDept?.kode || selectedDept?.nama || "").trim().toUpperCase();
-  const wajibAsrama = perluPilihanAsrama(selectedDept);
+  // Internal applicants keep their current class while SPMB targets the next school.
+  // Boarding validation must use the same target as the database trigger.
+  const boardingDept = detail?.spmb_departemen_tujuan_id
+    ? departemenList.find((d: any) => d.id === detail.spmb_departemen_tujuan_id)
+    : selectedDept;
+  const boardingDeptCode = String(boardingDept?.kode || boardingDept?.nama || "").trim().toUpperCase();
+  const wajibAsrama = perluPilihanAsrama(boardingDept);
   const wajibNisn = ["SMP", "SMA", "MTA"].some((kode) => selectedDeptCode === kode || selectedDeptCode.startsWith(kode + " "));
-  const mtaWajibAsrama = (selectedDeptCode === "MTA" || selectedDeptCode.startsWith("MTA ")) && watchJenisPendaftaran !== "alumni_internal";
+  const mtaWajibAsrama = (boardingDeptCode === "MTA" || boardingDeptCode.startsWith("MTA ")) && watchJenisPendaftaran !== "alumni_internal";
   const siswaPindahan = watchKategori === "MURID PINDAHAN" || watchJenisPendaftaran === "pindahan";
   const nisParamsComplete = !!(watchDept && watchAngkatan && watchKelas);
   const dokumenSpmb: Array<readonly ["kk" | "akta" | "rapor" | "ijazah", string]> = [
@@ -339,8 +345,8 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
       resetVerification("status_asrama");
       return;
     }
-    if (departemenList.length && selectedDept && !wajibAsrama && form.getValues("status_asrama")) form.setValue("status_asrama", "");
-  }, [wajibAsrama, mtaWajibAsrama, selectedDept, departemenList, form]);
+    if (departemenList.length && boardingDept && !wajibAsrama && form.getValues("status_asrama")) form.setValue("status_asrama", "");
+  }, [wajibAsrama, mtaWajibAsrama, boardingDept, departemenList, form]);
 
   useEffect(() => {
     if (!isEdit || !siswa || detailRaw === undefined) return;
