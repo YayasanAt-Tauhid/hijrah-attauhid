@@ -1151,6 +1151,43 @@ export default function SPMB() {
       },
     },
     {
+      key: "status",
+      label: "Status",
+      sortable: true,
+      render: (value, row) => {
+        const status = value as string;
+        const colors: Record<string, string> = {
+          calon: "bg-warning/15 text-warning border-warning/30",
+          diterima: "bg-info/15 text-info border-info/30",
+          selesai: "bg-success/15 text-success border-success/30",
+        };
+        return (
+          <div className="flex items-center gap-1.5">
+            <span className={`rounded-full border px-2 py-0.5 text-xs ${colors[status] || ""}`}>{status}</span>
+            {row._spmbInternal && (
+              <span className="rounded-full border border-info/30 bg-info/10 px-1.5 py-0.5 text-xs text-info" title={`Siswa internal masih aktif di ${row._academicLembagaNama || "lembaga asal"}`}>Internal</span>
+            )}
+            {row.terverifikasi && (
+              <span className="inline-flex items-center gap-0.5 rounded-full border border-success/30 bg-success/15 px-1.5 py-0.5 text-xs text-success" title="Sudah diverifikasi pada Data SPMB">
+                <CheckCircle2 className="h-3 w-3" />Verified
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: "_kesiapanSort",
+      label: "Kesiapan",
+      sortable: true,
+      render: (_, row) => {
+        const kesiapan = getKesiapanPenerimaan(row);
+        return kesiapan.siap
+          ? <span className="inline-flex items-center gap-1 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5" />Siap diterima</span>
+          : <span className="inline-flex cursor-help items-center gap-1 text-xs text-warning" title={`Belum lengkap: ${kesiapan.kekurangan.join(", ")}`}><AlertTriangle className="h-3.5 w-3.5" />{kesiapan.kekurangan.length} belum lengkap</span>;
+      },
+    },
+    {
       key: "nama",
       label: "Nama",
       sortable: true,
@@ -1259,43 +1296,8 @@ export default function SPMB() {
         return <span className="text-xs text-destructive">Belum bayar</span>;
       },
     },
-    {
-      key: "_kesiapanSort",
-      label: "Kesiapan",
-      sortable: true,
-      render: (_, row) => {
-        const kesiapan = getKesiapanPenerimaan(row);
-        return kesiapan.siap
-          ? <span className="inline-flex items-center gap-1 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5" />Siap diterima</span>
-          : <span className="inline-flex cursor-help items-center gap-1 text-xs text-warning" title={`Belum lengkap: ${kesiapan.kekurangan.join(", ")}`}><AlertTriangle className="h-3.5 w-3.5" />{kesiapan.kekurangan.length} belum lengkap</span>;
-      },
-    },
-    {
-      key: "status",
-      label: "Status",
-      sortable: true,
-      render: (value, row) => {
-        const status = value as string;
-        const colors: Record<string, string> = {
-          calon: "bg-warning/15 text-warning border-warning/30",
-          diterima: "bg-info/15 text-info border-info/30",
-          selesai: "bg-success/15 text-success border-success/30",
-        };
-        return (
-          <div className="flex items-center gap-1.5">
-            <span className={`rounded-full border px-2 py-0.5 text-xs ${colors[status] || ""}`}>{status}</span>
-            {row._spmbInternal && (
-              <span className="rounded-full border border-info/30 bg-info/10 px-1.5 py-0.5 text-xs text-info" title={`Siswa internal masih aktif di ${row._academicLembagaNama || "lembaga asal"}`}>Internal</span>
-            )}
-            {row.terverifikasi && (
-              <span className="inline-flex items-center gap-0.5 rounded-full border border-success/30 bg-success/15 px-1.5 py-0.5 text-xs text-success" title="Sudah diverifikasi pada Data SPMB">
-                <CheckCircle2 className="h-3 w-3" />Verified
-              </span>
-            )}
-          </div>
-        );
-      },
-    },
+
+
 
   ];
 
