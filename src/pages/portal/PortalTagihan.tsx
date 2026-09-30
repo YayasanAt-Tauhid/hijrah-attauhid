@@ -5,9 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@/lib/router-compat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { RupiahInput } from "@/components/shared/RupiahInput";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { ShoppingCart } from "lucide-react";
 import { BULAN_ORDER_AKADEMIK } from "@/hooks/useKeuangan";
@@ -230,9 +229,9 @@ export default function PortalTagihan() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className={`space-y-6 animate-fade-in ${selectedItems.length > 0 ? "pb-32 md:pb-0" : ""}`}>
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-foreground">Tagihan</h1>
           <p className="text-sm text-muted-foreground">
             Pilih tagihan yang ingin dibayar
@@ -241,10 +240,10 @@ export default function PortalTagihan() {
         {selectedItems.length > 0 && (
           <Button
             onClick={handleCheckout}
-            className="bg-emerald-600 hover:bg-emerald-700"
+            className="hidden shrink-0 bg-emerald-600 hover:bg-emerald-700 md:inline-flex"
           >
-            <ShoppingCart className="h-4 w-4 mr-2" />
-            Bayar {selectedItems.length} item — {formatRupiah(totalSelected)}
+            <ShoppingCart className="mr-2 h-4 w-4" />
+            Ke Keranjang · {formatRupiah(totalSelected)}
           </Button>
         )}
       </div>
@@ -260,105 +259,101 @@ export default function PortalTagihan() {
           const first = items[0];
           const allKeys = items.map(getKey);
           const allChecked = allKeys.every((k) => selected.has(k));
+          const someChecked = allKeys.some((k) => selected.has(k));
           const subtotal = items
             .filter((t) => selected.has(getKey(t)))
             .reduce((s, t) => s + amountFor(t), 0);
 
           return (
-            <Card key={siswaId}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
+            <Card key={siswaId} className="min-w-0 rounded-2xl shadow-sm">
+              <CardHeader className="px-4 pb-3 pt-5 sm:px-6">
+                <div className="flex items-start gap-3">
                   <Checkbox
-                    checked={allChecked}
+                    id={`select-student-${siswaId}`}
+                    className="mt-1 h-5 w-5 rounded-full border-emerald-700/60 data-[state=checked]:bg-emerald-700 data-[state=indeterminate]:bg-emerald-100"
+                    checked={allChecked ? true : someChecked ? "indeterminate" : false}
                     onCheckedChange={() => selectAllForSiswa(siswaId)}
+                    aria-label={`Pilih semua tagihan ${first.nama_siswa}`}
                   />
-                  <div>
-                    <CardTitle className="text-base">
+                  <label htmlFor={`select-student-${siswaId}`} className="min-w-0 flex-1 cursor-pointer">
+                    <CardTitle className="break-words text-base leading-snug">
                       {first.nama_siswa}
                     </CardTitle>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="mt-1 break-words text-xs text-muted-foreground">
                       {first.departemen_nama} — {first.kelas_nama} • NIS:{" "}
                       {first.nis || "-"}
                     </p>
-                  </div>
+                  </label>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4 pb-4 sm:px-6">
                 <div className="divide-y">
                   {items.map((t) => {
                     const key = getKey(t);
+                    const isSelected = selected.has(key);
                     return (
                       <div
                         key={key}
-                        className="flex items-center gap-3 py-2.5 cursor-pointer hover:bg-muted/30 px-1 rounded"
-                        onClick={() => toggleItem(key)}
+                        className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-3 py-4"
                       >
-                        <Checkbox checked={selected.has(key)} />
-                        <div className="flex-1">
-                          <span className="text-sm font-medium">
+                        <Checkbox
+                          id={`select-bill-${key}`}
+                          className="mt-0.5 h-5 w-5 rounded-full border-emerald-700/60 data-[state=checked]:bg-emerald-700"
+                          checked={isSelected}
+                          onCheckedChange={() => toggleItem(key)}
+                          aria-label={`Pilih ${t.jenis_nama} ${t.bulan === 0 ? t.tahun_ajaran_nama : labelBulanTA(t.bulan, t.tahun_ajaran_mulai)} untuk ${t.nama_siswa}`}
+                        />
+                        <label
+                          htmlFor={`select-bill-${key}`}
+                          className="grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1"
+                        >
+                          <span className="min-w-0 break-words text-sm font-medium leading-snug">
                             {t.jenis_nama}
                           </span>
-                        <span className="text-xs text-muted-foreground ml-2">
+                          <span className="whitespace-nowrap text-sm font-semibold tabular-nums leading-snug">
+                            {formatRupiah(t.nominal || 0)}
+                          </span>
+                          <span className="col-span-2 text-xs text-muted-foreground">
                             {t.bulan === 0
                               ? `Sekali Bayar — TA ${t.tahun_ajaran_nama}`
                               : labelBulanTA(t.bulan, t.tahun_ajaran_mulai)}
                           </span>
-                          {/* Bedakan tagihan yang sudah lewat tempo dari yang
-                              memang belum waktunya, supaya daftar tagihan
-                              bertahun-tahun ke depan tidak terbaca sebagai
-                              tunggakan. Keduanya tetap boleh dibayar. */}
                           {t.menunggak ? (
-                            <span className="ml-2 text-[10px] font-medium rounded px-1.5 py-0.5 bg-destructive/10 text-destructive">
+                            <span className="col-span-2 mt-1 w-fit whitespace-nowrap rounded bg-destructive/10 px-2 py-1 text-[10px] font-medium text-destructive">
                               Lewat jatuh tempo
                             </span>
                           ) : t.jatuh_tempo ? (
-                            <span className="ml-2 text-[10px] rounded px-1.5 py-0.5 bg-muted text-muted-foreground">
+                            <span className="col-span-2 mt-1 w-fit whitespace-nowrap rounded bg-muted px-2 py-1 text-[10px] text-muted-foreground">
                               Jatuh tempo {labelTanggal(t.jatuh_tempo)}
                             </span>
                           ) : null}
-                          {cicilanDiizinkan(t) && (
-                            <div
-                              className="mt-2 flex max-w-sm items-center gap-2"
-                              onClick={(event) => event.stopPropagation()}
-                            >
-                              <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                                Bayar cicilan
-                              </span>
-                              <Input
-                                type="number"
-                                min={1}
-                                max={Number(t.nominal || 0)}
-                                value={partialAmounts[key] ?? Number(t.nominal || 0)}
-                                onChange={(event) => {
-                                  const value = Number(event.target.value);
-                                  setPartialAmounts((prev) => ({ ...prev, [key]: value }));
-                                  setSelected((prev) => {
-                                    const next = new Set(prev);
-                                    next.add(key);
-                                    return next;
-                                  });
-                                }}
-                                className="h-8 w-36 text-xs"
-                              />
-                              <span className="text-[10px] text-muted-foreground">
-                                maks. {formatRupiah(Number(t.nominal || 0))}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <span className="text-sm font-semibold">
-                          {formatRupiah(t.nominal || 0)}
-                        </span>
+                        </label>
+                        {cicilanDiizinkan(t) && isSelected && (
+                          <div className="col-start-2 mt-3 grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5">
+                            <label htmlFor={`installment-${key}`} className="text-xs text-muted-foreground">
+                              Bayar cicilan
+                            </label>
+                            <RupiahInput
+                              id={`installment-${key}`}
+                              value={String(partialAmounts[key] ?? Number(t.nominal || 0))}
+                              onChange={(raw) => {
+                                setPartialAmounts((prev) => ({ ...prev, [key]: Number(raw) }));
+                              }}
+                              className="min-w-0 max-w-56 [&_input]:h-9 [&_input]:bg-muted/40 [&_input]:text-sm"
+                            />
+                            <span className="col-start-2 text-[10px] text-muted-foreground">
+                              Maks. {formatRupiah(Number(t.nominal || 0))}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
                 {subtotal > 0 && (
-                  <div className="mt-3 pt-3 border-t flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      Subtotal {first.nama_siswa}
-                    </span>
-                    <span className="font-bold text-emerald-700">
+                  <div className="mt-1 flex items-center justify-between gap-3 border-t pt-3 text-sm">
+                    <span className="text-muted-foreground">Subtotal dipilih</span>
+                    <span className="whitespace-nowrap font-semibold tabular-nums text-emerald-700">
                       {formatRupiah(subtotal)}
                     </span>
                   </div>
@@ -369,16 +364,23 @@ export default function PortalTagihan() {
         })
       )}
 
-      {/* Floating checkout button mobile */}
       {selectedItems.length > 0 && (
-        <div className="fixed bottom-4 left-4 right-4 md:hidden z-40">
-          <Button
-            onClick={handleCheckout}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 shadow-lg h-12 text-base"
-          >
-            <ShoppingCart className="h-5 w-5 mr-2" />
-            Bayar {selectedItems.length} item — {formatRupiah(totalSelected)}
-          </Button>
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.04)] md:hidden">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+            <div className="min-w-0" aria-live="polite" aria-atomic="true">
+              <p className="text-xs text-muted-foreground">{selectedItems.length} tagihan dipilih</p>
+              <p className="break-words text-lg font-bold tabular-nums leading-tight">
+                {formatRupiah(totalSelected)}
+              </p>
+            </div>
+            <Button
+              onClick={handleCheckout}
+              className="h-11 shrink-0 gap-2 bg-emerald-600 px-3 hover:bg-emerald-700 sm:px-5"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Ke Keranjang
+            </Button>
+          </div>
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { Outlet, useNavigate } from "@/lib/router-compat";
+import { Outlet, useNavigate, useLocation } from "@/lib/router-compat";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -27,6 +27,9 @@ const navItems = [
 export default function PortalLayout() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const isActive = (href: string) =>
+    href === "/portal" ? pathname === href : pathname.startsWith(href);
   const queryClient = useQueryClient();
 
   // Bug 6 fix: unread count refetch tiap 30 detik
@@ -102,7 +105,7 @@ export default function PortalLayout() {
           </div>
 
           {/* Center Nav */}
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden xl:flex items-center gap-1">
             {navItems.map((item) => (
               <Button
                 key={item.href}
@@ -209,13 +212,14 @@ export default function PortalLayout() {
         </div>
 
         {/* Mobile Nav */}
-        <nav className="md:hidden flex items-center justify-around border-t border-white/20 py-1">
+        <nav className="xl:hidden grid grid-cols-6 items-center gap-1 border-t border-white/20 px-1 py-1">
           {navItems.map((item) => (
             <Button
               key={item.href}
               variant="ghost"
               size="sm"
-              className="text-white/80 hover:text-white hover:bg-white/10 flex-col h-auto py-1 gap-0.5 text-[10px]"
+              aria-current={isActive(item.href) ? "page" : undefined}
+              className={`min-w-0 text-white/80 hover:text-white hover:bg-white/10 flex-col h-auto px-1 py-1 gap-0.5 text-[10px] ${isActive(item.href) ? "bg-white/10 text-white" : ""}`}
               onClick={() => navigate(item.href)}
             >
               <item.icon className="h-4 w-4" />
