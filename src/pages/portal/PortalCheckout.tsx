@@ -303,7 +303,7 @@ export default function PortalCheckout() {
           ) : (
             <CreditCard className="h-5 w-5 mr-2" />
           )}
-          {isMidtransLoading ? "Memuat..." : "Lanjut ke Pembayaran"}
+          {isMidtransLoading ? "Memuat..." : "Lanjutkan Pembayaran"}
         </Button>
       </div>
     </div>
