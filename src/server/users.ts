@@ -63,8 +63,9 @@ export const adminCreateUser = createServerFn({ method: "POST" })
       const newId = created.user.id;
 
       // Baris users_profile biasanya sudah dibuat trigger handle_new_user
-      // (role default 'siswa'), tapi upsert di sini jaga-jaga trigger itu
-      // tidak jalan -- update pada baris yang belum ada tidak menghasilkan
+      // dengan role NULL (belum diklasifikasikan). Upsert di sini menetapkan
+      // role resmi yang dipilih admin sekaligus berjaga bila trigger tidak
+      // jalan -- update pada baris yang belum ada tidak menghasilkan
       // error di Supabase JS (0 rows affected), jadi bisa lolos tanpa profil
       // sama sekali kalau hanya pakai .update().
       const { error: updErr } = await admin
