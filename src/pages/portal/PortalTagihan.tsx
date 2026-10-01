@@ -8,8 +8,14 @@ import { Button } from "@/components/ui/button";
 import { RupiahInput } from "@/components/shared/RupiahInput";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { ShoppingCart, CheckCheck, X } from "lucide-react";
+import { ShoppingCart, CheckCheck, Lock, X } from "lucide-react";
 import { BULAN_ORDER_AKADEMIK } from "@/hooks/useKeuangan";
+import {
+  billingPeriodLabel,
+  findBillingPrerequisite,
+  sortBillingSequence,
+  type BillingSequenceBill,
+} from "@/lib/billingSequence";
 
 const NAMA_BULAN = [
   "",
@@ -151,11 +157,81 @@ export default function PortalTagihan() {
   const getKey = (t: TagihanItem) =>
     `${t.siswa_id}-${t.jenis_id}-${t.tahun_ajaran_id}-${t.bulan}`;
 
-  const toggleItem = (key: string) => {
+  const sequenceBills = useMemo<BillingSequenceBill[]>(
+    () =>
+      tagihan
+        .filter((t) => t.bulan > 0)
+        .map((t) => ({
+          id: t.tagihan_id,
+          siswa_id: t.siswa_id,
+          jenis_id: t.jenis_id,
+          bulan: t.bulan,
+          jatuh_tempo: t.jatuh_tempo,
+          tahun_ajaran_mulai: t.tahun_ajaran_mulai,
+        })),
+    [tagihan],
+  );
+
+  const selectedItems = tagihan.filter((t) => selected.has(getKey(t)));
+  const selectedTagihanIds = useMemo(
+    () => new Set(selectedItems.map((t) => t.tagihan_id)),
+    [selectedItems],
+  );
+
+  const getPrerequisite = (
+    t: TagihanItem,
+    selectedIds: ReadonlySet<string> = selectedTagihanIds,
+  ) => {
+    if (t.bulan <= 0) return null;
+    const target = sequenceBills.find((bill) => bill.id === t.tagihan_id);
+    return target
+      ? findBillingPrerequisite(target, sequenceBills, selectedIds)
+      : null;
+  };
+
+  const toggleItem = (t: TagihanItem) => {
+    const key = getKey(t);
+    const isSelected = selected.has(key);
+
+    if (!isSelected) {
+      const prerequisite = getPrerequisite(t);
+      if (prerequisite) {
+        toast.warning(
+          `Selesaikan ${t.jenis_nama} ${billingPeriodLabel(prerequisite)} terlebih dahulu`,
+        );
+        return;
+      }
+    }
+
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      if (!next.has(key)) {
+        next.add(key);
+        return next;
+      }
+
+      next.delete(key);
+      if (t.bulan <= 0) return next;
+
+      // Jika periode lama dilepas, periode setelahnya pada rangkaian yang sama
+      // ikut dilepas agar keranjang tidak pernah membentuk lompatan bulan.
+      const sameSequence = sortBillingSequence(
+        sequenceBills.filter(
+          (bill) =>
+            bill.siswa_id === t.siswa_id && bill.jenis_id === t.jenis_id,
+        ),
+      );
+      const targetIndex = sameSequence.findIndex(
+        (bill) => bill.id === t.tagihan_id,
+      );
+      if (targetIndex >= 0) {
+        const laterIds = new Set(
+          sameSequence.slice(targetIndex + 1).map((bill) => bill.id),
+        );
+        for (const row of tagihan) {
+          if (laterIds.has(row.tagihan_id)) next.delete(getKey(row));
+        }
+      }
       return next;
     });
   };
@@ -171,7 +247,6 @@ export default function PortalTagihan() {
     });
   };
 
-  const selectedItems = tagihan.filter((t) => selected.has(getKey(t)));
   const cicilanDiizinkan = (t: TagihanItem) =>
     t.bulan === 0 && t.status !== "terjadwal";
   const amountFor = (t: TagihanItem) => {
@@ -195,6 +270,17 @@ export default function PortalTagihan() {
     });
     if (invalidPartial) {
       toast.error("Nominal cicilan harus lebih dari 0 dan tidak boleh melebihi sisa tagihan");
+      return;
+    }
+
+    const skipped = selectedItems
+      .filter((t) => t.bulan > 0)
+      .map((t) => ({ item: t, prerequisite: getPrerequisite(t, selectedTagihanIds) }))
+      .find((entry) => entry.prerequisite);
+    if (skipped?.prerequisite) {
+      toast.error(
+        `Selesaikan ${skipped.item.jenis_nama} ${billingPeriodLabel(skipped.prerequisite)} terlebih dahulu`,
+      );
       return;
     }
 
@@ -299,6 +385,8 @@ export default function PortalTagihan() {
                   {items.map((t) => {
                     const key = getKey(t);
                     const isSelected = selected.has(key);
+                    const prerequisite = isSelected ? null : getPrerequisite(t);
+                    const isLocked = !!prerequisite;
                     return (
                       <div
                         key={key}
@@ -308,12 +396,13 @@ export default function PortalTagihan() {
                           id={`select-bill-${key}`}
                           className="mt-0.5 h-5 w-5 rounded-full border-emerald-700/60 data-[state=checked]:bg-emerald-700"
                           checked={isSelected}
-                          onCheckedChange={() => toggleItem(key)}
-                          aria-label={`Pilih ${t.jenis_nama} ${t.bulan === 0 ? t.tahun_ajaran_nama : labelBulanTA(t.bulan, t.tahun_ajaran_mulai)} untuk ${t.nama_siswa}`}
+                          disabled={isLocked}
+                          onCheckedChange={() => toggleItem(t)}
+                          aria-label={`${isLocked ? "Terkunci" : "Pilih"} ${t.jenis_nama} ${t.bulan === 0 ? t.tahun_ajaran_nama : labelBulanTA(t.bulan, t.tahun_ajaran_mulai)} untuk ${t.nama_siswa}`}
                         />
                         <label
                           htmlFor={`select-bill-${key}`}
-                          className="grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1"
+                          className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 ${isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
                         >
                           <span className="min-w-0 break-words text-sm font-medium leading-snug">
                             {t.jenis_nama}
@@ -326,7 +415,12 @@ export default function PortalTagihan() {
                               ? `Sekali Bayar — TA ${t.tahun_ajaran_nama}`
                               : labelBulanTA(t.bulan, t.tahun_ajaran_mulai)}
                           </span>
-                          {t.menunggak ? (
+                          {isLocked && prerequisite ? (
+                            <span className="col-span-2 mt-1 flex w-fit items-center gap-1 rounded bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                              <Lock className="h-3 w-3" />
+                              Selesaikan {t.jenis_nama} {billingPeriodLabel(prerequisite)} terlebih dahulu
+                            </span>
+                          ) : t.menunggak ? (
                             <span className="col-span-2 mt-1 w-fit whitespace-nowrap rounded bg-destructive/10 px-2 py-1 text-[10px] font-medium text-destructive">
                               Lewat jatuh tempo
                             </span>

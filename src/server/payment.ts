@@ -8,6 +8,11 @@
  * untuk app mobile Portal Ortu.
  */
 import { createServerFn } from "@tanstack/react-start";
+import {
+  billingPeriodLabel,
+  findBillingPrerequisite,
+  type BillingSequenceBill,
+} from "@/lib/billingSequence";
 import { authMiddleware, requireContext } from "./auth";
 import { createAdminClient, readEnv } from "./supabase";
 
@@ -210,6 +215,62 @@ export async function buatTransaksiSnap(params: {
       departemen_id: item.departemen_id || undefined,
       tahun_ajaran_id: tagihan.tahun_ajaran_id || item.tahun_ajaran_id || undefined,
     });
+  }
+
+  // Tagihan bulanan wajib dibayar berurutan per siswa + jenis pembayaran.
+  // Beberapa bulan boleh dibayar dalam satu transaksi selama pilihan tersebut
+  // merupakan prefix berurutan dari tagihan terbuka yang paling lama.
+  const periodicGroups = new Map<string, TagihanItem[]>();
+  for (const item of validatedItems) {
+    if (item.bulan <= 0 || !item.tagihan_id) continue;
+    const key = `${item.siswa_id}:${item.jenis_id}`;
+    const group = periodicGroups.get(key) ?? [];
+    group.push(item);
+    periodicGroups.set(key, group);
+  }
+
+  for (const groupItems of periodicGroups.values()) {
+    const first = groupItems[0];
+    const { data: openRows, error: openError } = await admin
+      .from("tagihan")
+      .select(
+        "id, siswa_id, jenis_id, bulan, jatuh_tempo, tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai)"
+      )
+      .eq("siswa_id", first.siswa_id)
+      .eq("jenis_id", first.jenis_id)
+      .not("bulan", "is", null)
+      .in("status", ["belum_bayar", "sebagian", "terjadwal"]);
+
+    if (openError) {
+      throw new Error("Gagal memeriksa urutan tagihan: " + openError.message);
+    }
+
+    const openBills = (openRows ?? []) as unknown as BillingSequenceBill[];
+    const selectedIds = new Set(
+      groupItems
+        .map((item) => item.tagihan_id)
+        .filter((id): id is string => Boolean(id)),
+    );
+
+    for (const item of groupItems) {
+      const target = openBills.find((bill) => bill.id === item.tagihan_id);
+      if (!target) {
+        throw new Error(
+          `Tagihan ${item.jenis_nama} untuk ${item.nama_siswa} sudah berubah. Silakan pilih ulang tagihan.`
+        );
+      }
+
+      const prerequisite = findBillingPrerequisite(
+        target,
+        openBills,
+        selectedIds,
+      );
+      if (prerequisite) {
+        throw new Error(
+          `Selesaikan ${item.jenis_nama} ${billingPeriodLabel(prerequisite)} terlebih dahulu sebelum membayar ${billingPeriodLabel(target)}.`
+        );
+      }
+    }
   }
 
   const totalAmount = validatedItems.reduce((sum, i) => sum + i.jumlah, 0);
