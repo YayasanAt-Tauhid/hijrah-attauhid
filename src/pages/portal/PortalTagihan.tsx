@@ -389,7 +389,7 @@ export default function PortalTagihan() {
             className="hidden shrink-0 bg-emerald-600 hover:bg-emerald-700 md:inline-flex"
           >
             <ShoppingCart className="mr-2 h-4 w-4" />
-            Ke Keranjang · {formatRupiah(totalSelected)}
+            Masukkan ke Keranjang · {formatRupiah(totalSelected)}
           </Button>
         )}
       </div>
@@ -660,7 +660,7 @@ export default function PortalTagihan() {
               className="h-11 shrink-0 gap-2 bg-emerald-600 px-3 hover:bg-emerald-700 sm:px-5"
             >
               <ShoppingCart className="h-4 w-4" />
-              Ke Keranjang
+              Masukkan ke Keranjang
             </Button>
           </div>
         </div>

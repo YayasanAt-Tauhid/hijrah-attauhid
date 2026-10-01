@@ -34,7 +34,7 @@ describe("PortalTagihan selection and installment checkout", () => {
     fireEvent.change(input, { target: { value: "500.000" } });
     expect(input).toHaveValue("500.000");
     expect(screen.getByText("2 tagihan dipilih")).toBeInTheDocument();
-    const buttons = screen.getAllByRole("button", { name: /Ke Keranjang/ });
+    const buttons = screen.getAllByRole("button", { name: /Masukkan ke Keranjang/ });
     fireEvent.click(buttons[buttons.length - 1]);
     const cart = JSON.parse(sessionStorage.getItem("keranjang_tagihan")!);
     expect(cart.map((item: { tagihan_id: string; jumlah: number }) => [item.tagihan_id, item.jumlah])).toEqual([["monthly", 450000], ["one-time", 500000]]);
@@ -68,7 +68,7 @@ describe("PortalTagihan selection and installment checkout", () => {
     expect(screen.getByRole("checkbox", { name: /Pilih SPP SD/ })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: /Pilih SPP SMP/ })).not.toBeChecked();
     expect(screen.getByRole("button", { name: /Pilih semua tagihan Anak Pertama/ })).toHaveAttribute("aria-pressed", "false");
-    const checkout = screen.getAllByRole("button", { name: /Ke Keranjang/ });
+    const checkout = screen.getAllByRole("button", { name: /Masukkan ke Keranjang/ });
     fireEvent.click(checkout[checkout.length - 1]);
     const cart = JSON.parse(sessionStorage.getItem("keranjang_tagihan")!);
     expect(cart).toHaveLength(1);
@@ -89,7 +89,7 @@ describe("PortalTagihan selection and installment checkout", () => {
     render(<PortalTagihan />);
     fireEvent.click(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ }));
     fireEvent.change(screen.getByLabelText("Bayar cicilan"), { target: { value: "" } });
-    const buttons = screen.getAllByRole("button", { name: /Ke Keranjang/ });
+    const buttons = screen.getAllByRole("button", { name: /Masukkan ke Keranjang/ });
     fireEvent.click(buttons[buttons.length - 1]);
     expect(sessionStorage.getItem("keranjang_tagihan")).toBeNull();
     expect(mocks.navigate).not.toHaveBeenCalled();
