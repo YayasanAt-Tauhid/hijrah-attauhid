@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormSection } from "@/components/shared/FormSection";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import { AlertCircle, CheckCircle2, Clock3, CreditCard, RefreshCw, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -285,7 +286,7 @@ export default function PMBDaftarOnline() {
   const showAsal = form.jenis_pendaftaran !== "baru";
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 p-4 py-8"><div className="mx-auto max-w-2xl">
-      <div className="mb-6 text-center"><div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 font-bold text-white text-xl shadow-lg">J</div><h1 className="text-2xl font-bold text-emerald-800">Pendaftaran Siswa Baru</h1><p className="mt-1 text-sm text-emerald-600/80">Hijrah At-Tauhid — Sistem Manajemen Sekolah Islam</p></div>
+      <div className="mb-6 text-center"><BrandLogo className="mx-auto mb-3 h-20 w-20 rounded-2xl shadow-lg" /><h1 className="text-2xl font-bold text-emerald-800">Pendaftaran Siswa Baru</h1><p className="mt-1 text-sm text-emerald-600/80">Hijrah At-Tauhid — Sistem Manajemen Sekolah Islam</p></div>
       <Card className="shadow-lg border-emerald-200"><CardHeader className="pb-2"><p className="text-sm text-muted-foreground">Lengkapi data calon siswa. Setelah pendaftaran berhasil, uang pendaftaran dapat dibayar online.</p></CardHeader><CardContent>
         <form onSubmit={submit} className="space-y-6">
           <FormSection title="Jenis Pendaftaran" description="Pilih jenis pendaftaran siswa">

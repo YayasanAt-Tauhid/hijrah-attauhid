@@ -1,6 +1,7 @@
 import { Link } from "@/lib/router-compat";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import {
   ArrowRight,
   GraduationCap,
@@ -14,9 +15,7 @@ export default function AccessGateway() {
     <main className="min-h-screen bg-gradient-to-br from-emerald-50 via-background to-slate-50 px-4 py-8 sm:py-12">
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-4xl flex-col justify-center">
         <div className="mb-8 text-center sm:mb-10">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-600 text-2xl font-bold text-white shadow-lg">
-            H
-          </div>
+          <BrandLogo className="mx-auto mb-4 h-20 w-20 rounded-2xl shadow-lg" />
           <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             Hijrah At-Tauhid
           </h1>

@@ -18,6 +18,7 @@ import {
   SidebarHeader, useSidebar,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 
 interface SubMenuItem {
   title: string;
@@ -320,9 +321,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary font-bold text-sidebar-primary-foreground text-sm">
-            H
-          </div>
+          <BrandLogo className="h-9 w-9 shrink-0 rounded-lg bg-white" />
           {!collapsed && (
             <div className="flex flex-col">
               <span className="text-sm font-bold text-sidebar-foreground">Hijrah At-Tauhid</span>

@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { LogIn, Eye, EyeOff, UsersRound } from "lucide-react";
 import { GoogleIcon } from "@/components/shared/GoogleIcon";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import { toast } from "sonner";
 
 const loginSchema = z.object({
@@ -64,9 +65,7 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary font-bold text-primary-foreground text-2xl shadow-lg">
-            H
-          </div>
+          <BrandLogo className="mx-auto mb-4 h-20 w-20 rounded-2xl shadow-lg" />
           <h1 className="text-2xl font-bold text-foreground">Hijrah At-Tauhid</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Sistem Manajemen Sekolah Islam At-Tauhid

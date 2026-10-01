@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormSection } from "@/components/shared/FormSection";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import { UserPlus, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -108,9 +109,7 @@ export default function PMBDaftar() {
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 p-4 py-8">
       <div className="mx-auto max-w-2xl">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 font-bold text-white text-xl shadow-lg">
-            J
-          </div>
+          <BrandLogo className="mx-auto mb-3 h-20 w-20 rounded-2xl shadow-lg" />
           <h1 className="text-2xl font-bold text-emerald-800">Pendaftaran Siswa Baru</h1>
           <p className="mt-1 text-sm text-emerald-600/80">
             Hijrah At-Tauhid — Sistem Manajemen Sekolah Islam
