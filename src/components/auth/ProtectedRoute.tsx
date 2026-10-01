@@ -1,5 +1,6 @@
-import { Navigate, Outlet } from "@tanstack/react-router";
+import { Navigate, Outlet, useLocation } from "@tanstack/react-router";
 import { useAuth, UserRole } from "@/contexts/AuthContext";
+import AccessGateway from "@/pages/AccessGateway";
 
 interface ProtectedRouteProps {
   allowedRoles?: UserRole[];
@@ -18,13 +19,15 @@ function LoadingScreen() {
 
 export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   const { user, role, isLoading } = useAuth();
+  const location = useLocation();
+  const isRoot = location.pathname === "/";
 
   if (isLoading) {
     return <LoadingScreen />;
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return isRoot ? <AccessGateway /> : <Navigate to="/login" replace />;
   }
 
   // Fail closed: setelah sesi user tersedia, role bisa masih null beberapa saat
@@ -32,6 +35,10 @@ export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   // dibatasi role sebelum role tersebut benar-benar sudah ter-resolve.
   if (allowedRoles && !role) {
     return <LoadingScreen />;
+  }
+
+  if (role === "ortu" && isRoot) {
+    return <Navigate to="/portal" replace />;
   }
 
   if (allowedRoles && role && !allowedRoles.includes(role)) {
