@@ -30,11 +30,17 @@ import { useAuth } from "@/contexts/AuthContext";
 import Unauthorized from "@/pages/Unauthorized";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search, Printer, Plus, Check, X, ShoppingCart, Trash2, WalletCards, History, Info } from "lucide-react";
+import { Search, Printer, Plus, Check, X, ShoppingCart, Trash2, WalletCards, History, Info, Lock } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { calculateRemainingBill, isSppPaymentName } from "@/lib/installment";
+import {
+  billingPeriodLabel,
+  findBillingPrerequisite,
+  sortBillingSequence,
+  type BillingSequenceBill,
+} from "@/lib/billingSequence";
 
 import type {
   SiswaWithKelas,
@@ -75,6 +81,7 @@ type PaymentCartItem = {
   isBayarDimuka: boolean;
   status: string | null;
   tahunLabel: string;
+  sisaTagihan: number;
 };
 
 type OpenBillRow = {
@@ -520,6 +527,25 @@ function InputPembayaranContent() {
     },
   });
 
+  // Untuk kasir, urutan pembayaran bulanan diperiksa lintas tahun ajaran.
+  // Jadi SPP lama tetap harus selesai walaupun layar sedang menampilkan tahun
+  // ajaran yang lebih baru. Admin/keuangan tidak dibatasi oleh UI ini karena
+  // mereka dapat membutuhkan koreksi historis.
+  const { data: sequenceOpenBills = [] } = useQuery<BillingSequenceBill[]>({
+    queryKey: ["open_bills_sequence", selectedSiswa?.id, isSiswaNonaktif],
+    enabled: !!selectedSiswa && isKasir,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tagihan")
+        .select("id, siswa_id, jenis_id, bulan, jatuh_tempo, tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai)")
+        .eq("siswa_id", selectedSiswa!.id)
+        .not("bulan", "is", null)
+        .in("status", payableTagihanStatuses);
+      if (error) throw error;
+      return (data ?? []) as unknown as BillingSequenceBill[];
+    },
+  });
+
   const { data: riwayat, isLoading: loadRiwayat } = useQuery<PembayaranRiwayat[]>({
     queryKey: ["pembayaran_siswa", selectedSiswa?.id],
     enabled: !!selectedSiswa,
@@ -681,6 +707,71 @@ function InputPembayaranContent() {
       : "Sekali Bayar" + (year ? " " + year : "");
   }, []);
 
+  const fullySelectedPeriodicIds = useMemo(
+    () =>
+      new Set(
+        cartItems
+          .filter(
+            (item) =>
+              !!item.tagihanId &&
+              item.bulan > 0 &&
+              item.sisaTagihan > 0 &&
+              item.jumlah >= item.sisaTagihan,
+          )
+          .map((item) => item.tagihanId as string),
+      ),
+    [cartItems],
+  );
+
+  const getKasirSequencePrerequisite = useCallback(
+    (
+      billId: string | undefined,
+      selectedIds: ReadonlySet<string> = fullySelectedPeriodicIds,
+    ) => {
+      if (!isKasir || !billId) return null;
+      const target = sequenceOpenBills.find((bill) => bill.id === billId);
+      return target
+        ? findBillingPrerequisite(target, sequenceOpenBills, selectedIds)
+        : null;
+    },
+    [isKasir, sequenceOpenBills, fullySelectedPeriodicIds],
+  );
+
+  const directPaymentPrerequisite = useMemo(() => {
+    if (!isKasir || isSekali || !form.jenisId) return null;
+    if (existingTagihan?.id) {
+      const target = sequenceOpenBills.find(
+        (bill) => bill.id === existingTagihan.id,
+      );
+      return target
+        ? findBillingPrerequisite(target, sequenceOpenBills)
+        : null;
+    }
+    return (
+      sortBillingSequence(
+        sequenceOpenBills.filter(
+          (bill) => bill.jenis_id === form.jenisId && Number(bill.bulan ?? 0) > 0,
+        ),
+      )[0] ?? null
+    );
+  }, [
+    isKasir,
+    isSekali,
+    form.jenisId,
+    existingTagihan?.id,
+    sequenceOpenBills,
+  ]);
+
+  const cartPaymentPrerequisite = useMemo(() => {
+    if (!isKasir || isSekali || !existingTagihan?.id) return null;
+    return getKasirSequencePrerequisite(existingTagihan.id);
+  }, [
+    isKasir,
+    isSekali,
+    existingTagihan?.id,
+    getKasirSequencePrerequisite,
+  ]);
+
   const billToPrintItem = useCallback((bill: OpenBillRow): PrintTagihanItem | null => {
     if (!selectedSiswa || !bill.jenis_pembayaran) return null;
     return {
@@ -747,6 +838,7 @@ function InputPembayaranContent() {
       isBayarDimuka,
       status: bill.status,
       tahunLabel: yearLabel,
+      sisaTagihan: bill.sisa,
     };
   };
 
@@ -760,10 +852,44 @@ function InputPembayaranContent() {
 
   const handleToggleBillPay = (bill: OpenBillRow, checked: boolean) => {
     if (!selectedSiswa) return;
+
     if (!checked) {
-      setCartItems(prev => prev.filter(item => item.key !== bill.id));
+      setCartItems((prev) => {
+        if (!isKasir || !bill.bulan) {
+          return prev.filter((item) => item.key !== bill.id);
+        }
+
+        const target = sequenceOpenBills.find((row) => row.id === bill.id);
+        if (!target) return prev.filter((item) => item.key !== bill.id);
+
+        const sameSequence = sortBillingSequence(
+          sequenceOpenBills.filter(
+            (row) =>
+              row.siswa_id === target.siswa_id &&
+              row.jenis_id === target.jenis_id,
+          ),
+        );
+        const index = sameSequence.findIndex((row) => row.id === bill.id);
+        const removeIds = new Set(
+          index >= 0
+            ? sameSequence.slice(index).map((row) => row.id)
+            : [bill.id],
+        );
+        return prev.filter(
+          (item) => !item.tagihanId || !removeIds.has(item.tagihanId),
+        );
+      });
       return;
     }
+
+    const prerequisite = getKasirSequencePrerequisite(bill.id);
+    if (prerequisite) {
+      toast.warning(
+        `Selesaikan ${bill.jenis_pembayaran?.nama ?? "tagihan"} ${billingPeriodLabel(prerequisite)} terlebih dahulu`,
+      );
+      return;
+    }
+
     const item = buildCartItemFromBill(bill);
     if (!item) return;
     setCartItems(prev => (prev.some(row => row.key === item.key) ? prev : [...prev, item]));
@@ -776,12 +902,85 @@ function InputPembayaranContent() {
       setCartItems(prev => prev.filter(item => !visibleIds.has(item.key)));
       return;
     }
-    const items = openBills
-      .map(buildCartItemFromBill)
-      .filter((item): item is PaymentCartItem => !!item);
-    setCartItems(prev => {
-      const existing = new Set(prev.map(row => row.key));
-      return [...prev, ...items.filter(item => !existing.has(item.key))];
+
+    if (!isKasir) {
+      const items = openBills
+        .map(buildCartItemFromBill)
+        .filter((item): item is PaymentCartItem => !!item);
+      setCartItems(prev => {
+        const existing = new Set(prev.map(row => row.key));
+        return [...prev, ...items.filter(item => !existing.has(item.key))];
+      });
+      return;
+    }
+
+    // Tambahkan hanya prefix yang sah. Bila ada tunggakan dari tahun ajaran
+    // sebelumnya, tagihan yang lebih baru tetap terkunci sampai tunggakan itu
+    // benar-benar ada di keranjang dengan nominal penuh.
+    setCartItems((prev) => {
+      const next = [...prev];
+      const existingKeys = new Set(next.map((row) => row.key));
+      const selectedIds = new Set(
+        next
+          .filter(
+            (item) =>
+              !!item.tagihanId &&
+              item.bulan > 0 &&
+              item.sisaTagihan > 0 &&
+              item.jumlah >= item.sisaTagihan,
+          )
+          .map((item) => item.tagihanId as string),
+      );
+
+      const monthly = sortBillingSequence(
+        openBills
+          .filter((bill) => !!bill.bulan)
+          .map((bill) => ({
+            id: bill.id,
+            jenis_id: bill.jenis_id,
+            bulan: bill.bulan,
+            jatuh_tempo: bill.jatuh_tempo,
+            tahun_ajaran: bill.tahun_ajaran,
+          })),
+      );
+
+      const orderedVisibleIds = new Set(monthly.map((bill) => bill.id));
+      const candidates = [
+        ...openBills.filter((bill) => !bill.bulan),
+        ...monthly
+          .map((row) => openBills.find((bill) => bill.id === row.id))
+          .filter((bill): bill is OpenBillRow => !!bill),
+      ];
+
+      for (const bill of candidates) {
+        if (existingKeys.has(bill.id)) continue;
+        const prerequisite = bill.bulan
+          ? (() => {
+              const target = sequenceOpenBills.find((row) => row.id === bill.id);
+              return target
+                ? findBillingPrerequisite(
+                    target,
+                    sequenceOpenBills,
+                    selectedIds,
+                  )
+                : null;
+            })()
+          : null;
+        if (prerequisite) continue;
+
+        const item = buildCartItemFromBill(bill);
+        if (!item) continue;
+        next.push(item);
+        existingKeys.add(item.key);
+        if (item.tagihanId && item.bulan > 0 && item.jumlah >= item.sisaTagihan) {
+          selectedIds.add(item.tagihanId);
+        }
+      }
+
+      // Variabel ini sengaja memastikan urutan bulanan sudah dihitung sebelum
+      // kandidat diproses, sekaligus menjaga tipe hasil sort eksplisit.
+      void orderedVisibleIds;
+      return next;
     });
   };
 
@@ -790,7 +989,31 @@ function InputPembayaranContent() {
     const bill = openBills.find(row => row.id === key);
     let amount = digits ? Number(digits) : 0;
     if (bill && amount > bill.sisa) amount = bill.sisa;
-    setCartItems(prev => prev.map(item => (item.key === key ? { ...item, jumlah: amount } : item)));
+
+    setCartItems((prev) => {
+      let next = prev.map(item => (item.key === key ? { ...item, jumlah: amount } : item));
+      if (!isKasir || !bill?.bulan || amount >= bill.sisa) return next;
+
+      // Cicilan SPP lama boleh diterima, tetapi periode setelahnya tidak boleh
+      // ikut dibayar sampai sisa periode lama benar-benar lunas.
+      const target = sequenceOpenBills.find((row) => row.id === bill.id);
+      if (!target) return next;
+      const sameSequence = sortBillingSequence(
+        sequenceOpenBills.filter(
+          (row) =>
+            row.siswa_id === target.siswa_id &&
+            row.jenis_id === target.jenis_id,
+        ),
+      );
+      const index = sameSequence.findIndex((row) => row.id === bill.id);
+      const laterIds = new Set(
+        index >= 0 ? sameSequence.slice(index + 1).map((row) => row.id) : [],
+      );
+      next = next.filter(
+        (item) => !item.tagihanId || !laterIds.has(item.tagihanId),
+      );
+      return next;
+    });
   };
 
   // Cetak tagihan yang dicentang; jika belum ada yang dicentang, cetak semua tagihan terbuka.
@@ -811,6 +1034,18 @@ function InputPembayaranContent() {
     if (isSekali && pembayaranSekali?.lunas) { toast.error("Pembayaran ini sudah lunas"); return; }
     if (!isSekali && bulanLunas.has(form.bulan)) {
       toast.error("Pembayaran bulan ini sudah lunas");
+      return;
+    }
+    if (isKasir && !isSekali && cartPaymentPrerequisite) {
+      toast.error(
+        `Selesaikan ${selectedJenis.nama} ${billingPeriodLabel(cartPaymentPrerequisite)} terlebih dahulu`,
+      );
+      return;
+    }
+    if (isKasir && !isSekali && !existingTagihan?.id && directPaymentPrerequisite) {
+      toast.error(
+        `Selesaikan ${selectedJenis.nama} ${billingPeriodLabel(directPaymentPrerequisite)} terlebih dahulu`,
+      );
       return;
     }
 
@@ -840,6 +1075,7 @@ function InputPembayaranContent() {
       isBayarDimuka,
       status: existingTagihan?.status ?? null,
       tahunLabel: selectedTahunLabel,
+      sisaTagihan: sisaTagihanDipilih > 0 ? sisaTagihanDipilih : jumlah,
     }]);
 
     // Untuk pembayaran bulanan, pindahkan pilihan ke bulan tagihan berikutnya
@@ -944,6 +1180,12 @@ function InputPembayaranContent() {
     if (!selectedSiswa || !form.jenisId || !form.jumlah || tarifTidakAda) return;
     if (!tahunAktif?.id) { toast.error("Tahun ajaran aktif belum dikonfigurasi"); return; }
     if (isSekali && pembayaranSekali?.lunas) { toast.error("Pembayaran ini sudah lunas"); return; }
+    if (isKasir && !isSekali && directPaymentPrerequisite) {
+      toast.error(
+        `Selesaikan ${selectedJenis?.nama ?? "tagihan"} ${billingPeriodLabel(directPaymentPrerequisite)} terlebih dahulu`,
+      );
+      return;
+    }
     const jumlahInput = Number(form.jumlah);
     if (!Number.isFinite(jumlahInput) || jumlahInput <= 0) {
       toast.error("Jumlah pembayaran harus lebih dari 0");
@@ -1262,6 +1504,11 @@ function InputPembayaranContent() {
                     openBills.map(bill => {
                       const cartItem = cartItems.find(item => item.key === bill.id);
                       const partialOk = canPartialBill(bill);
+                      const prerequisite =
+                        !cartItem && bill.bulan
+                          ? getKasirSequencePrerequisite(bill.id)
+                          : null;
+                      const sequenceLocked = !!prerequisite;
                       return (
                         <tr key={bill.id} className={cn("hover:bg-muted/20", cartItem && "bg-primary/5")}>
                           <td className="px-4 py-3">
@@ -1269,7 +1516,7 @@ function InputPembayaranContent() {
                               type="checkbox"
                               aria-label={"Pilih tagihan " + (bill.jenis_pembayaran?.nama ?? "")}
                               checked={!!cartItem}
-                              disabled={isCartPaying}
+                              disabled={isCartPaying || sequenceLocked}
                               onChange={event => handleToggleBillPay(bill, event.target.checked)}
                               className="h-4 w-4"
                             />
@@ -1281,6 +1528,12 @@ function InputPembayaranContent() {
                               <span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
                                 Sebagian
                               </span>
+                            )}
+                            {sequenceLocked && prerequisite && (
+                              <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                                <Lock className="h-3 w-3" />
+                                Selesaikan {bill.jenis_pembayaran?.nama ?? "tagihan"} {billingPeriodLabel(prerequisite)} terlebih dahulu
+                              </div>
                             )}
                           </td>
                           <td className="px-3 py-3 text-right">
@@ -1492,6 +1745,12 @@ function InputPembayaranContent() {
                         {sudahBayar} lunas · {belumBayar} jatuh tempo · {terjadwal} terjadwal
                       </p>
                     )}
+                    {isKasir && !isSekali && directPaymentPrerequisite && (
+                      <p className="flex items-start gap-1 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                        <Lock className="mt-0.5 h-3 w-3 shrink-0" />
+                        Selesaikan {selectedJenis?.nama ?? "tagihan"} {billingPeriodLabel(directPaymentPrerequisite)} terlebih dahulu.
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
@@ -1560,7 +1819,9 @@ function InputPembayaranContent() {
                       isCartPaying ||
                       currentAlreadyInCart ||
                       (isSekali && !!pembayaranSekali?.lunas) ||
-                      (!isSekali && bulanLunas.has(form.bulan))
+                      (!isSekali && bulanLunas.has(form.bulan)) ||
+                      (isKasir && !isSekali && !!cartPaymentPrerequisite) ||
+                      (isKasir && !isSekali && !existingTagihan?.id && !!directPaymentPrerequisite)
                     }
                   >
                     <ShoppingCart className="mr-2 h-4 w-4" />
@@ -1577,7 +1838,8 @@ function InputPembayaranContent() {
                       isCartPaying ||
                       currentAlreadyInCart ||
                       (isSekali && !!pembayaranSekali?.lunas) ||
-                      (!isSekali && bulanLunas.has(form.bulan))
+                      (!isSekali && bulanLunas.has(form.bulan)) ||
+                      (isKasir && !isSekali && !!directPaymentPrerequisite)
                     }
                   >
                     {prosesMutation.isPending ? (
