@@ -203,3 +203,12 @@ Ringkasan (detail lengkap ada di versi lama file ini: `git log -p SESI_NOTES.md`
 - Tagihan **sekali bayar/nonperiodik** (mis. Uang Pangkal, buku, seragam, kegiatan) tidak otomatis memblokir SPP atau jenis periodik lain.
 - Portal orang tua selalu mengikuti aturan ini. Di loket, aturan dipaksa untuk role **kasir**; **admin/keuangan** tetap memiliki fleksibilitas koreksi historis/audit yang memang membutuhkan pembayaran tidak berurutan.
 - Cicilan SPP periode lama tetap diperbolehkan sesuai aturan cicilan yang sudah ada, tetapi periode berikutnya baru terbuka setelah sisa periode lama benar-benar lunas.
+
+
+## Pintu masuk aplikasi di / (1 Oktober 2026)
+
+- Saat belum login, URL utama `/` menjadi halaman pemilihan akses agar orang tua tidak salah masuk ke jalur pegawai.
+- Pilihan utama: **Orang Tua / Wali Siswa** -> `/portal/login`; pilihan kedua: **Pegawai / Guru / Admin** -> `/login`.
+- Route dashboard pegawai tidak dipindah: pegawai yang sudah login tetap membuka dashboard saat mengakses `/`.
+- Jika sesi aktif memiliki role `ortu` lalu membuka `/`, aplikasi otomatis mengarahkan ke `/portal`.
+- Protected route selain `/` tetap mengarahkan pengguna yang belum login ke `/login`, sehingga perilaku route internal lama tidak berubah.
