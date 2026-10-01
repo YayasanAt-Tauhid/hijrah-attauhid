@@ -7,9 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RupiahInput } from "@/components/shared/RupiahInput";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ShoppingCart, CheckCheck, Lock, X } from "lucide-react";
 import { BULAN_ORDER_AKADEMIK } from "@/hooks/useKeuangan";
+import { isSppPaymentName } from "@/lib/installment";
 import {
   billingPeriodLabel,
   findBillingPrerequisite,
@@ -247,6 +249,64 @@ export default function PortalTagihan() {
     });
   };
 
+  const selectSppThrough = (
+    siswaId: string,
+    jenisId: string,
+    tahunAjaranId: string,
+    targetTagihanId: string,
+  ) => {
+    const sameYear = tagihan
+      .filter(
+        (t) =>
+          t.siswa_id === siswaId &&
+          t.jenis_id === jenisId &&
+          t.tahun_ajaran_id === tahunAjaranId &&
+          t.bulan > 0 &&
+          isSppPaymentName(t.jenis_nama),
+      )
+      .sort(
+        (a, b) =>
+          BULAN_ORDER_AKADEMIK.indexOf(a.bulan) -
+          BULAN_ORDER_AKADEMIK.indexOf(b.bulan),
+      );
+
+    const targetIndex = sameYear.findIndex((t) => t.tagihan_id === targetTagihanId);
+    if (targetIndex < 0) return;
+
+    setSelected((prev) => {
+      const next = new Set(prev);
+
+      // Aksi "bayar sampai" hanya mengatur rangkaian SPP pada TA yang sama.
+      // Tagihan lain (uang pangkal, seragam, dsb.) tidak disentuh.
+      sameYear.forEach((t) => next.delete(getKey(t)));
+      sameYear.slice(0, targetIndex + 1).forEach((t) => next.add(getKey(t)));
+      return next;
+    });
+  };
+
+  const selectSppFullAcademicYear = (
+    siswaId: string,
+    jenisId: string,
+    tahunAjaranId: string,
+  ) => {
+    const sameYear = tagihan
+      .filter(
+        (t) =>
+          t.siswa_id === siswaId &&
+          t.jenis_id === jenisId &&
+          t.tahun_ajaran_id === tahunAjaranId &&
+          t.bulan > 0 &&
+          isSppPaymentName(t.jenis_nama),
+      )
+      .sort(
+        (a, b) =>
+          BULAN_ORDER_AKADEMIK.indexOf(a.bulan) -
+          BULAN_ORDER_AKADEMIK.indexOf(b.bulan),
+      );
+    const last = sameYear.at(-1);
+    if (last) selectSppThrough(siswaId, jenisId, tahunAjaranId, last.tagihan_id);
+  };
+
   const cicilanDiizinkan = (t: TagihanItem) =>
     t.bulan === 0 && t.status !== "terjadwal";
   const amountFor = (t: TagihanItem) => {
@@ -350,6 +410,25 @@ export default function PortalTagihan() {
             .filter((t) => selected.has(getKey(t)))
             .reduce((s, t) => s + amountFor(t), 0);
 
+          const sppQuickGroups = Array.from(
+            items
+              .filter((t) => t.bulan > 0 && isSppPaymentName(t.jenis_nama))
+              .reduce((map, item) => {
+                const groupKey = `${item.jenis_id}:${item.tahun_ajaran_id}`;
+                const list = map.get(groupKey) || [];
+                list.push(item);
+                map.set(groupKey, list);
+                return map;
+              }, new Map<string, TagihanItem[]>()),
+          ).map(([groupKey, groupItems]) => ({
+            groupKey,
+            items: [...groupItems].sort(
+              (a, b) =>
+                BULAN_ORDER_AKADEMIK.indexOf(a.bulan) -
+                BULAN_ORDER_AKADEMIK.indexOf(b.bulan),
+            ),
+          }));
+
           return (
             <Card key={siswaId} className="min-w-0 rounded-2xl shadow-sm">
               <CardHeader className="px-4 pb-3 pt-5 sm:px-6">
@@ -381,6 +460,107 @@ export default function PortalTagihan() {
                 </div>
               </CardHeader>
               <CardContent className="px-4 pb-4 sm:px-6">
+                {sppQuickGroups.length > 0 && (
+                  <div className="mb-4 space-y-3">
+                    {sppQuickGroups.map(({ groupKey, items: sppItems }) => {
+                      const sppFirst = sppItems[0];
+                      const semester1Items = sppItems.filter((t) =>
+                        [7, 8, 9, 10, 11, 12].includes(t.bulan),
+                      );
+                      const semester1Target = semester1Items.at(-1);
+                      const totalOpenSpp = sppItems.reduce(
+                        (sum, t) => sum + Number(t.nominal || 0),
+                        0,
+                      );
+
+                      return (
+                        <div
+                          key={groupKey}
+                          className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900 dark:bg-emerald-950/20"
+                        >
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                                Pembayaran SPP Cepat
+                              </p>
+                              <p className="text-xs text-emerald-800/75 dark:text-emerald-200/70">
+                                TA {sppFirst.tahun_ajaran_nama} · maksimal 2 semester (Juli–Juni)
+                              </p>
+                            </div>
+                            <p className="text-xs font-medium tabular-nums text-emerald-800 dark:text-emerald-200">
+                              Sisa tersedia {formatRupiah(totalOpenSpp)}
+                            </p>
+                          </div>
+
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={!semester1Target}
+                              className="h-10 justify-start border-emerald-300 bg-white/80 text-emerald-800 hover:bg-emerald-100 dark:bg-background"
+                              onClick={() =>
+                                semester1Target &&
+                                selectSppThrough(
+                                  siswaId,
+                                  sppFirst.jenis_id,
+                                  sppFirst.tahun_ajaran_id,
+                                  semester1Target.tagihan_id,
+                                )
+                              }
+                            >
+                              Semester 1 · Jul–Des
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-10 justify-start border-emerald-300 bg-white/80 text-emerald-800 hover:bg-emerald-100 dark:bg-background"
+                              onClick={() =>
+                                selectSppFullAcademicYear(
+                                  siswaId,
+                                  sppFirst.jenis_id,
+                                  sppFirst.tahun_ajaran_id,
+                                )
+                              }
+                            >
+                              2 Semester · Jul–Jun
+                            </Button>
+                          </div>
+
+                          <div className="mt-2">
+                            <Select
+                              onValueChange={(tagihanId) =>
+                                selectSppThrough(
+                                  siswaId,
+                                  sppFirst.jenis_id,
+                                  sppFirst.tahun_ajaran_id,
+                                  tagihanId,
+                                )
+                              }
+                            >
+                              <SelectTrigger className="h-10 bg-background">
+                                <SelectValue placeholder="Atau bayar sampai bulan tertentu..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {sppItems.map((t) => (
+                                  <SelectItem key={t.tagihan_id} value={t.tagihan_id}>
+                                    Sampai {labelBulanTA(t.bulan, t.tahun_ajaran_mulai)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <p className="mt-2 text-[11px] leading-relaxed text-emerald-800/70 dark:text-emerald-200/60">
+                            Bulan yang sudah lunas otomatis dilewati. Pemilihan tetap berurutan dari tagihan SPP paling lama dan tidak memasukkan Uang Pangkal, Seragam, atau tagihan lainnya.
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <div className="divide-y">
                   {items.map((t) => {
                     const key = getKey(t);

@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { CalendarDays, Users, BookOpen, AlertTriangle, Clock } from "lucide-react";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 
 export default function Anjungan() {
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -91,9 +92,7 @@ export default function Anjungan() {
       <header className="bg-black/30 backdrop-blur border-b border-white/10">
         <div className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500 font-bold text-xl">
-              J
-            </div>
+            <BrandLogo className="h-12 w-12 rounded-xl bg-white shadow-sm" />
             <div>
               <h1 className="text-xl font-bold">{sekolah?.nama || "Hijrah At-Tauhid"}</h1>
               <p className="text-sm text-emerald-300">{sekolah?.alamat || "Anjungan Informasi"}</p>

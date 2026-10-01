@@ -22,6 +22,7 @@ import {
 import { LogIn, Eye, EyeOff, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { GoogleIcon } from "@/components/shared/GoogleIcon";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 
 const loginSchema = z.object({
   email: z.string().email("Format email tidak valid"),
@@ -161,9 +162,7 @@ export default function PortalLogin() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 p-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-600 font-bold text-white text-2xl shadow-lg">
-            H
-          </div>
+          <BrandLogo className="mx-auto mb-4 h-20 w-20 rounded-2xl shadow-lg" />
           <h1 className="text-2xl font-bold text-emerald-800">
             Portal Orang Tua
           </h1>

@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 
 const navItems = [
   { label: "Beranda", href: "/portal", icon: Home },
@@ -96,9 +97,7 @@ export default function PortalLayout() {
             className="flex items-center gap-2 cursor-pointer"
             onClick={() => navigate("/portal")}
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 font-bold text-sm">
-              H
-            </div>
+            <BrandLogo className="h-9 w-9 rounded-lg bg-white" />
             <span className="font-semibold text-sm hidden sm:inline">
               Hijrah At-Tauhid <span className="font-normal opacity-80">| Portal Orang Tua</span>
             </span>

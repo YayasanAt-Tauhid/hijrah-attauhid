@@ -75,6 +75,16 @@ describe("PortalTagihan selection and installment checkout", () => {
     expect(cart[0]).toMatchObject({ tagihan_id: "other", jumlah: 200000 });
   });
 
+  it("selects SPP for the academic year without including one-time bills", () => {
+    render(<PortalTagihan />);
+    const yearButtons = screen.getAllByRole("button", { name: /2 Semester · Jul–Jun/ });
+    fireEvent.click(yearButtons[0]);
+
+    expect(screen.getByRole("checkbox", { name: /Pilih SPP SMP/ })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ })).not.toBeChecked();
+    expect(screen.getByText("1 tagihan dipilih")).toBeInTheDocument();
+  });
+
   it("does not proceed to checkout with a zero installment", () => {
     render(<PortalTagihan />);
     fireEvent.click(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ }));
