@@ -165,7 +165,12 @@ function InputPembayaranContent() {
   const queryClient = useQueryClient();
   const [searchTerm,    setSearchTerm]    = useState("");
   const [selectedSiswa, setSelectedSiswa] = useState<SiswaWithKelas | null>(null);
-  const [departemenId,  setDepartemenId]  = useState("");
+  // Filter lembaga pada kolom pencarian. Hanya berubah jika kasir memilihnya
+  // sendiri; tidak ikut berubah saat siswa dipilih supaya pencarian siswa
+  // berikutnya (lembaga lain) tetap menemukan hasil.
+  const [filterLembagaId, setFilterLembagaId] = useState("");
+  const siswaDepartemenId = getKelasAktif(selectedSiswa)?.kelas?.departemen_id ?? "";
+  const departemenId = siswaDepartemenId || filterLembagaId;
   const [form, setForm] = useState<FormPembayaran>(FORM_DEFAULT);
   const [selectedTahunAjaranId, setSelectedTahunAjaranId] = useState("");
   const [showKuitansi, setShowKuitansi] = useState(false);
@@ -269,8 +274,8 @@ function InputPembayaranContent() {
     },
   });
 
-  const { data: searchResults } = useQuery<SiswaWithKelas[]>({
-    queryKey: ["search_siswa", searchTerm, departemenId],
+  const { data: searchResults, isFetching: isSearching } = useQuery<SiswaWithKelas[]>({
+    queryKey: ["search_siswa", searchTerm, filterLembagaId],
     enabled: searchTerm.trim().length >= 2,
     queryFn: async () => {
       const result = await cariSiswaPembayaran({
@@ -278,7 +283,7 @@ function InputPembayaranContent() {
           search: searchTerm,
           status: "aktif",
           include_nonaktif_with_open_bills: true,
-          departemen_id: departemenId || undefined,
+          departemen_id: filterLembagaId || undefined,
           limit: 10,
         },
       });
@@ -705,8 +710,9 @@ function InputPembayaranContent() {
     setCartItems([]);
     setTagihanPrintItems([]);
     setShowTagihanPrint(false);
-    const dept = getKelasAktif(s)?.kelas?.departemen_id;
-    if (dept && !departemenId) setDepartemenId(dept);
+    // Lembaga mengikuti siswa terpilih, jadi pilihan jenis dari siswa
+    // sebelumnya (mungkin lembaga lain) harus direset.
+    setField("jenisId", "");
     // Reset filter tahun ajaran ke tahun aktif setiap ganti siswa.
     // Tanpa ini, jika kasir sebelumnya membuka tahun ajaran lama (mis. untuk
     // cek/bayar tunggakan), pemilihan itu akan "nyangkut" dan pembayaran
@@ -714,7 +720,7 @@ function InputPembayaranContent() {
     // tidak match ke tagihan di tahun ajaran yang benar dan tetap muncul
     // sebagai belum lunas di portal ortu.
     if (tahunAktif?.id) setSelectedTahunAjaranId(tahunAktif.id);
-  }, [departemenId, tahunAktif?.id]);
+  }, [setField, tahunAktif?.id]);
 
   const handleToggleBillPrint = (bill: OpenBillRow, checked: boolean) => {
     const item = billToPrintItem(bill);
@@ -1040,12 +1046,18 @@ function InputPembayaranContent() {
               ))}
             </div>
           )}
+          {searchResults && searchResults.length === 0 && !isSearching && searchTerm.trim().length >= 2 && (
+            <div className="absolute z-50 mt-1 w-full rounded-lg border bg-popover px-4 py-3 text-sm text-muted-foreground shadow-lg">
+              Siswa tidak ditemukan
+              {filterLembagaId ? " pada lembaga yang difilter. Ubah filter ke \"Semua Lembaga\"." : "."}
+            </div>
+          )}
         </div>
 
         <Select
-          value={departemenId || "__all__"}
+          value={filterLembagaId || "__all__"}
           onValueChange={value => {
-            setDepartemenId(value === "__all__" ? "" : value);
+            setFilterLembagaId(value === "__all__" ? "" : value);
             setSelectedSiswa(null);
             setCartItems([]);
             setTagihanPrintItems([]);
