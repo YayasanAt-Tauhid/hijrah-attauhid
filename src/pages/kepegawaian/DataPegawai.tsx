@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -19,6 +19,9 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { ImportPegawaiDialog } from "@/pages/kepegawaian/ImportPegawaiDialog";
 import { Plus, Pencil, Trash2, Users, UserCheck, GraduationCap, Briefcase, Eye, Upload } from "lucide-react";
 import { useNavigate } from "@/lib/router-compat";
+
+import { maskPegawaiNik, validatePegawaiNik, savePegawaiWithNik } from "@/lib/pegawaiNik";
+import { assertPegawaiNikAvailable, writePegawaiNik } from "@/lib/pegawaiNikStorage";
 
 const AGAMA_OPTIONS = ["Islam", "Kristen", "Katolik", "Hindu", "Buddha", "Konghucu"];
 
@@ -61,6 +64,9 @@ export default function DataPegawai() {
     agama: "", jabatan: "", alamat: "", telepon: "", email: "",
     departemen_id: "__yayasan", status: "aktif",
   });
+  const savedEmployeeId = useRef<string | undefined>();
+  const [nikInput, setNikInput] = useState("");
+  const [nikLoading, setNikLoading] = useState(false);
   const [fotoFile, setFotoFile] = useState<File | null>(null);
 
   const { data: lembagaList } = useLembaga();
@@ -89,6 +95,16 @@ export default function DataPegawai() {
     },
   });
 
+  const { data: nikMasks, error: nikListError } = useQuery({
+    queryKey: ["pegawai_nik_masked", role],
+    enabled: canEdit,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("pegawai_nik").select("pegawai_id,nik");
+      if (error) throw new Error("NIK belum dapat ditampilkan. Periksa akses admin.");
+      return Object.fromEntries((data || []).map(item => [item.pegawai_id, maskPegawaiNik(item.nik)]));
+    },
+  });
+
   const filtered = filterStatus === "all"
     ? pegawaiList || []
     : (pegawaiList || []).filter((p) => p.status === filterStatus);
@@ -101,7 +117,9 @@ export default function DataPegawai() {
 
   // Mutations
   const saveMut = useMutation({
-    mutationFn: async (values: any) => {
+    mutationFn: async ({ values, nik }: { values: Record<string, unknown>; nik: string }) => {
+      if (!canEdit) throw new Error("Hanya admin yang dapat menyimpan NIK.");
+      await assertPegawaiNikAvailable(nik, savedEmployeeId.current);
       let foto_url = editItem?.foto_url || null;
 
       if (fotoFile) {
@@ -115,16 +133,25 @@ export default function DataPegawai() {
 
       const payload = { ...values, foto_url };
 
-      if (editItem) {
-        const { error } = await supabase.from("pegawai").update(payload).eq("id", editItem.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("pegawai").insert(payload);
-        if (error) throw error;
-      }
+      await savePegawaiWithNik(savedEmployeeId.current, nik, {
+        writeEmployee: async (id) => {
+          const query = id
+            ? supabase.from("pegawai").update(payload).eq("id", id)
+            : supabase.from("pegawai").insert(payload as { nama: string });
+          const { data, error } = await query.select("id").single();
+          if (error) throw error;
+          return data.id;
+        },
+        onEmployeeSaved: (id) => {
+          savedEmployeeId.current = id;
+          void qc.invalidateQueries({ queryKey: ["pegawai_list"] });
+        },
+        writeNik: writePegawaiNik,
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pegawai_list"] });
+      qc.invalidateQueries({ queryKey: ["pegawai_nik_masked"] });
       toast.success(editItem ? "Pegawai berhasil diperbarui" : "Pegawai berhasil ditambahkan");
       setDialogOpen(false);
     },
@@ -144,6 +171,8 @@ export default function DataPegawai() {
   });
 
   const openAdd = () => {
+    savedEmployeeId.current = undefined;
+    setNikInput("");
     setEditItem(null);
     setForm({
       nip: "", nama: "", jenis_kelamin: "", tempat_lahir: "", tanggal_lahir: "",
@@ -154,7 +183,20 @@ export default function DataPegawai() {
     setDialogOpen(true);
   };
 
-  const openEdit = (p: PegawaiRow) => {
+  const openEdit = async (p: PegawaiRow) => {
+    if (!canEdit || nikLoading) return;
+    setNikLoading(true);
+    try {
+      const { data, error } = await supabase.from("pegawai_nik").select("nik").eq("pegawai_id", p.id).maybeSingle();
+      if (error) throw new Error("NIK pegawai tidak dapat dibaca. Form belum dibuka agar data lama tetap aman.");
+      savedEmployeeId.current = p.id;
+      setNikInput(data?.nik || "");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal membaca NIK.");
+      return;
+    } finally {
+      setNikLoading(false);
+    }
     setEditItem(p);
     setForm({
       nip: p.nip || "", nama: p.nama, jenis_kelamin: p.jenis_kelamin || "",
@@ -170,10 +212,13 @@ export default function DataPegawai() {
   const handleSave = () => {
     if (!form.nama.trim()) { toast.error("Nama wajib diisi"); return; }
     if (!form.jabatan.trim()) { toast.error("Jabatan wajib diisi"); return; }
+    if (!canEdit) return;
+    const validation = validatePegawaiNik(nikInput);
+    if (validation.error) { toast.error(validation.error); return; }
     const { departemen_id, ...rest } = form;
     saveMut.mutate({
-      ...rest,
-      departemen_id: departemen_id === "__yayasan" ? null : departemen_id,
+      nik: validation.nik,
+      values: { ...rest, departemen_id: departemen_id === "__yayasan" ? null : departemen_id },
     });
   };
 
@@ -210,6 +255,11 @@ export default function DataPegawai() {
     },
   ];
 
+  if (canEdit) columns.push({
+    key: "nik_masked", label: "NIK",
+    render: (_v, row) => nikListError ? "Tidak tersedia" : nikMasks?.[row.id] || "—",
+  });
+
   columns.push({
     key: "_aksi", label: "Aksi",
     render: (_v, row) => (
@@ -218,7 +268,7 @@ export default function DataPegawai() {
           <Eye className="h-4 w-4" />
         </Button>
         {canEdit && (
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(row)}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={nikLoading || saveMut.isPending} onClick={() => void openEdit(row)}>
             <Pencil className="h-4 w-4" />
           </Button>
         )}
@@ -240,10 +290,10 @@ export default function DataPegawai() {
         </div>
         {canEdit && (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Button variant="outline" disabled={nikLoading || saveMut.isPending} onClick={() => setImportOpen(true)}>
               <Upload className="h-4 w-4 mr-2" />Import Data Pegawai
             </Button>
-            <Button onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Tambah Pegawai</Button>
+            <Button disabled={nikLoading || saveMut.isPending} onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Tambah Pegawai</Button>
           </div>
         )}
       </div>
@@ -284,6 +334,7 @@ export default function DataPegawai() {
         <StatsCard title="Tenaga Kependidikan" value={totalTenaga} icon={Briefcase} color="warning" />
       </div>
 
+      {canEdit && nikListError && <p role="alert" className="text-sm text-destructive">{nikListError.message}</p>}
       {/* Table */}
       <Card>
         <CardContent className="pt-6">
@@ -300,15 +351,18 @@ export default function DataPegawai() {
         </CardContent>
       </Card>
 
-      <ImportPegawaiDialog
+      {canEdit && <ImportPegawaiDialog
         open={importOpen}
         onOpenChange={setImportOpen}
         lembagaList={(lembagaList || []) as any[]}
-        onImported={() => qc.invalidateQueries({ queryKey: ["pegawai_list"] })}
-      />
+        onImported={() => {
+          void qc.invalidateQueries({ queryKey: ["pegawai_list"] });
+          void qc.invalidateQueries({ queryKey: ["pegawai_nik_masked"] });
+        }}
+      />}
 
       {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!saveMut.isPending) setDialogOpen(open); }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editItem ? "Edit Pegawai" : "Tambah Pegawai"}</DialogTitle>
@@ -325,6 +379,12 @@ export default function DataPegawai() {
               </div>
             </div>
 
+            {canEdit && <div className="space-y-1.5">
+              <Label htmlFor="pegawai-nik">NIK</Label>
+              <Input id="pegawai-nik" type="text" inputMode="numeric" autoComplete="off"
+                value={nikInput} onChange={(e) => setNikInput(e.target.value)} />
+              <p className="text-xs text-muted-foreground">Opsional, tepat 16 digit. Spasi/titik dibersihkan. Kosong berarti NIK lama tetap disimpan. Hanya admin yang dapat mengisi.</p>
+            </div>}
             <div className="space-y-1.5">
               <Label>Lembaga</Label>
               <Select value={form.departemen_id} onValueChange={(v) => setForm({ ...form, departemen_id: v })}>
@@ -409,8 +469,8 @@ export default function DataPegawai() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleSave} disabled={saveMut.isPending}>
+            <Button variant="outline" disabled={saveMut.isPending} onClick={() => setDialogOpen(false)}>Batal</Button>
+            <Button onClick={handleSave} disabled={!canEdit || saveMut.isPending || nikLoading}>
               {saveMut.isPending ? "Menyimpan..." : "Simpan"}
             </Button>
           </DialogFooter>
