@@ -667,7 +667,9 @@ function InputPembayaranContent() {
   const cicilanSekaliDiizinkan =
     isSekali && !!existingTagihan && existingTagihan.status !== "terjadwal";
   const cicilanSppDiizinkan =
-    isSpp && !!existingTagihan && existingTagihan.status !== "terjadwal";
+    isSpp && !!existingTagihan &&
+    (existingTagihan.status !== "terjadwal" ||
+      (!!existingTagihan.jatuh_tempo && existingTagihan.jatuh_tempo <= form.tanggalBayar));
   const cicilanDiizinkan = cicilanSekaliDiizinkan || cicilanSppDiizinkan;
   const sisaTagihanDipilih =
     selectedOpenBill?.sisa ??
@@ -842,12 +844,13 @@ function InputPembayaranContent() {
     };
   };
 
-  // Cicilan hanya sah untuk SPP dan Sekali Bayar yang tidak terjadwal.
+  // SPP tetap dapat dicicil sejak jatuh tempo meski pengakuannya menunggu akhir bulan.
   // Aturan yang sama dipaksa oleh server (prosesPembayaran), jadi ini hanya
   // menentukan apakah kolom jumlah boleh diubah kasir.
   const canPartialBill = (bill: OpenBillRow) =>
     !!bill.jenis_pembayaran &&
-    bill.status !== "terjadwal" &&
+    (bill.status !== "terjadwal" ||
+      (isSppPaymentName(bill.jenis_pembayaran.nama) && !!bill.jatuh_tempo && bill.jatuh_tempo <= form.tanggalBayar)) &&
     (bill.jenis_pembayaran.tipe === "sekali" || isSppPaymentName(bill.jenis_pembayaran.nama));
 
   const handleToggleBillPay = (bill: OpenBillRow, checked: boolean) => {

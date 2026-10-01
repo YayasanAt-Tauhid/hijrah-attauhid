@@ -1,3 +1,4 @@
+import { isMonthlySppRevenue } from "@/lib/recognitionDate";
 /**
  * Server functions: prosesPembayaran, batalkanPembayaran
  * Migrasi dari supabase/functions/proses-pembayaran & batalkan-pembayaran.
@@ -440,11 +441,14 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       jenis_id: string;
       bulan: number | null;
       nominal: number;
+      jatuh_tempo: string | null;
+      jurnal_piutang_id: string | null;
+      pengakuan_spp_selesai: boolean;
     } | null = null;
     if (tagihan_id) {
       const { data: tagihanData, error: tagihanError } = await admin
         .from("tagihan")
-        .select("id, status, tahun_ajaran_id, siswa_id, jenis_id, bulan, nominal")
+        .select("id, status, tahun_ajaran_id, siswa_id, jenis_id, bulan, nominal, jatuh_tempo, jurnal_piutang_id, pengakuan_spp_selesai")
         .eq("id", tagihan_id)
         .maybeSingle();
       if (tagihanError) throw new Error("Gagal mengambil tagihan: " + tagihanError.message);
@@ -467,7 +471,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     if (!tagihanTerpilih && isSekali) {
       const { data: openOnceRows, error: openOnceError } = await admin
         .from("tagihan")
-        .select("id, status, tahun_ajaran_id, siswa_id, jenis_id, bulan, nominal")
+        .select("id, status, tahun_ajaran_id, siswa_id, jenis_id, bulan, nominal, jatuh_tempo, jurnal_piutang_id, pengakuan_spp_selesai")
         .eq("siswa_id", siswa_id)
         .eq("jenis_id", jenis_id)
         .eq("tahun_ajaran_id", tahun_ajaran_id)
@@ -635,7 +639,9 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       );
       const { remaining } = calculateRemainingBill(tagihanTerpilih.nominal, totalSudahBayar);
       const allowPartial =
-        tagihanTerpilih.status !== "terjadwal" && (isSekali || isSpp);
+        (tagihanTerpilih.status !== "terjadwal" ||
+          (isSpp && !!tagihanTerpilih.jatuh_tempo && tagihanTerpilih.jatuh_tempo <= tanggal_bayar))
+        && (isSekali || isSpp);
       jumlahValid = resolveInstallmentAmount({
         requestedAmount: data.jumlah,
         remainingAmount: remaining,
@@ -750,16 +756,17 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     if (!kasAkunId)
       throw new Error("Akun Kas Tunai belum dikonfigurasi di Pengaturan Akun");
 
-    // Tagihan 'terjadwal' belum pernah dibukukan sebagai piutang. Untuk jenis
-    // yang memang perlu pendapatan dimuka, pembayaran sebelum jatuh tempo masuk
+    // Tagihan SPP tanpa jurnal piutang menunggu pengakuan akhir bulan. Untuk jenis
+    // yang memang perlu pendapatan dimuka, pembayaran sebelum pengakuan masuk
     // liabilitas. Untuk jenis yang perlu_dimuka=false (mis. biaya pendaftaran),
     // pembayaran langsung diakui sebagai pendapatan dan tidak boleh mengkredit
     // Piutang yang belum pernah dibentuk.
+    const usesSppRecognition = isMonthlySppRevenue(jenis.nama, jenis.tipe);
     let tagihanFound = tagihanTerpilih;
     if (!tagihanFound) {
       let tagihanQuery = admin
         .from("tagihan")
-        .select("id, status, tahun_ajaran_id, siswa_id, jenis_id, bulan, nominal")
+        .select("id, status, tahun_ajaran_id, siswa_id, jenis_id, bulan, nominal, jatuh_tempo, jurnal_piutang_id, pengakuan_spp_selesai")
         .eq("siswa_id", siswa_id)
         .eq("jenis_id", jenis_id)
         .eq("tahun_ajaran_id", tahunAjaranEfektifId)
@@ -774,12 +781,17 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     if (/^UANG PANGKAL (TK|SD|SMP|SMA|MTA)$/i.test(jenis.nama.trim()) && !tagihanFound) {
       throw new Error("Buat dan pilih tagihan uang pangkal dengan tahun ajaran target terlebih dahulu");
     }
+    if (usesSppRecognition && !tagihanFound) {
+      throw new Error("Buat dan pilih tagihan SPP dengan periode layanan terlebih dahulu");
+    }
     const belumJatuhTempo = tagihanFound?.status === "terjadwal";
     const tagihanSudahDiakuiPiutang =
-      tagihanFound?.status === "belum_bayar" || tagihanFound?.status === "sebagian";
+      usesSppRecognition
+        ? !!tagihanFound?.jurnal_piutang_id || !!tagihanFound?.pengakuan_spp_selesai
+        : tagihanFound?.status === "belum_bayar" || tagihanFound?.status === "sebagian";
     const pakaiDimuka =
       !tagihanSudahDiakuiPiutang &&
-      jenis.perlu_dimuka !== false && (is_bayar_dimuka || belumJatuhTempo);
+      (usesSppRecognition || (jenis.perlu_dimuka !== false && (is_bayar_dimuka || belumJatuhTempo)));
     // Tagihan efektif = yang dikirim caller, atau yang ditemukan lewat
     // siswa+jenis+bulan+tahun_ajaran di atas (mis. pembayaran massal tunggakan
     // yang tidak mengirim tagihan_id sama sekali). Tanpa fallback ini,

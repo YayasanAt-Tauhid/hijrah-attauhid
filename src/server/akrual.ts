@@ -1,15 +1,15 @@
 /**
  * Server function: jalankanAkrualJatuhTempo
  *
- * Menjalankan proses akrual untuk tagihan yang jatuh temponya sudah tiba:
+ * Menjalankan akrual pada tanggal pengakuan: SPP akhir bulan layanan, jenis lain sesuai jadwal.
  *
  *   1. Tagihan berstatus 'terjadwal' (di-input di muka, belum pernah dijurnal)
- *      diakui jadi piutang:  (D) Piutang Siswa  (K) Pendapatan  — status
+ *      dibukukan sisa piutangnya: (D) Piutang Siswa (K) Pendapatan  — status
  *      berpindah ke 'belum_bayar'. Kalau setelah ini tetap tidak dibayar,
  *      tagihan tsb menjadi TUNGGAKAN; tunggakan tidak butuh jurnal tambahan
  *      karena akunnya sama, yang berubah hanya umur piutangnya.
  *
- *   2. Pembayaran yang masuk sebelum jatuh tempo (dicatat sebagai liabilitas
+ *   2. Pembayaran yang masuk sebelum pengakuan (dicatat sebagai liabilitas
  *      Pendapatan Diterima di Muka) diakui jadi pendapatan:
  *      (D) Pendapatan Diterima di Muka  (K) Pendapatan.
  *

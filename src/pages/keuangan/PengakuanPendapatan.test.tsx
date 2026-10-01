@@ -5,14 +5,14 @@ import PengakuanPendapatan from "./PengakuanPendapatan";
 
 const { fixture } = vi.hoisted(() => ({
   fixture: {
-    id: "advance-1", status: "pending", bulan: null, jumlah: 4200000,
+    id: "advance-1", status: "pending", bulan: null as number | null, jumlah: 4200000,
     pembayaran_id: "payment-1", tanggal_pengakuan: null,
     siswa: { nama: "Siswa Uji", nis: "UJI" },
-    jenis: { nama: "UANG PANGKAL TK", hari_jatuh_tempo: null },
+    jenis: { nama: "UANG PANGKAL TK", tipe: "sekali", hari_jatuh_tempo: null as number | null },
     tahun_pembayaran: { nama: "Tahun 2026" },
     tahun_target: { nama: "Tahun 2027", tanggal_mulai: "2027-01-01" },
     pembayaran: {
-      tagihan: { jatuh_tempo: "2027-07-01", tahun_akademik: { nama: "2027/2028" } },
+      tagihan: { tanggal_pengakuan: null as string | null, jatuh_tempo: "2027-07-01", tahun_akademik: { nama: "2027/2028" } },
     },
   },
 }));
@@ -45,6 +45,10 @@ vi.mock("@/components/shared/DataTable", () => ({
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
+  fixture.bulan = null;
+  fixture.jenis = { nama: "UANG PANGKAL TK", tipe: "sekali", hari_jatuh_tempo: null };
+  fixture.pembayaran.tagihan.jatuh_tempo = "2027-07-01";
+  fixture.pembayaran.tagihan.tanggal_pengakuan = null;
 });
 afterEach(() => {
   cleanup();
@@ -61,7 +65,7 @@ describe("Pengakuan pendapatan uang pangkal", () => {
     vi.setSystemTime(new Date("2027-01-10T05:00:00Z"));
     renderPage();
     expect(await screen.findByRole("button", { name: /^Akui$/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Akui Semua yang Jatuh Tempo" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Akui Semua yang Siap" })).toBeDisabled();
     expect(screen.getByText("Tahun Buku Penerimaan")).toBeInTheDocument();
     expect(screen.getByText("Tahun Ajaran")).toBeInTheDocument();
     expect(screen.getByText("2027/2028")).toBeInTheDocument();
@@ -71,6 +75,31 @@ describe("Pengakuan pendapatan uang pangkal", () => {
     vi.setSystemTime(new Date("2027-07-01T01:00:00Z"));
     renderPage();
     expect(await screen.findByRole("button", { name: /^Akui$/ })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Akui Semua yang Jatuh Tempo" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Akui Semua yang Siap" })).toBeEnabled();
+  });
+});
+
+
+describe("Pengakuan SPP", () => {
+  function spp() {
+    fixture.bulan = 2;
+    fixture.jenis = { nama: "SPP TK", tipe: "bulanan", hari_jatuh_tempo: 10 };
+    fixture.pembayaran.tagihan.jatuh_tempo = "2027-02-10";
+    fixture.pembayaran.tagihan.tanggal_pengakuan = "2027-02-28";
+  }
+  it("menutup tombol tanggal 10 meski pembayaran sudah jatuh tempo", async () => {
+    spp();
+    vi.setSystemTime(new Date("2027-02-10T01:00:00Z"));
+    renderPage();
+    expect(await screen.findByRole("button", { name: /^Akui$/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Akui Semua yang Siap" })).toBeDisabled();
+    expect(screen.getByText("28 Feb 2027")).toBeInTheDocument();
+  });
+  it("membuka tombol pada akhir bulan menurut waktu Jakarta", async () => {
+    spp();
+    vi.setSystemTime(new Date("2027-02-27T17:01:00Z"));
+    renderPage();
+    expect(await screen.findByRole("button", { name: /^Akui$/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Akui Semua yang Siap" })).toBeEnabled();
   });
 });

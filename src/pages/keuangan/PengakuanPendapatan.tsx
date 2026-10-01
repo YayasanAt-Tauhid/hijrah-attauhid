@@ -23,12 +23,13 @@ type RevenueAdvanceRow = {
   pembayaran_id: string;
   tanggal_pengakuan: string | null;
   siswa: { nama: string; nis: string | null } | null;
-  jenis: { nama: string; hari_jatuh_tempo: number | null } | null;
+  jenis: { nama: string; tipe: string; hari_jatuh_tempo: number | null } | null;
   tahun_pembayaran: { nama: string } | null;
   tahun_target: { nama: string; tanggal_mulai: string } | null;
   pembayaran: {
     tagihan: {
       jatuh_tempo: string | null;
+      tanggal_pengakuan: string | null;
       tahun_akademik: { nama: string } | null;
     } | null;
   } | null;
@@ -51,10 +52,10 @@ export default function PengakuanPendapatan() {
         .select(`
           *,
           siswa:siswa_id(id, nama, nis),
-          jenis:jenis_id(id, nama, hari_jatuh_tempo),
+          jenis:jenis_id(id, nama, tipe, hari_jatuh_tempo),
           tahun_pembayaran:tahun_ajaran_pembayaran_id(id, nama),
           tahun_target:tahun_ajaran_target_id(id, nama, tanggal_mulai),
-          pembayaran:pembayaran_id(id, tanggal_bayar, jumlah, tagihan:tagihan_id(jatuh_tempo, tahun_akademik:tahun_akademik_id(nama)))
+          pembayaran:pembayaran_id(id, tanggal_bayar, jumlah, tagihan:tagihan_id(jatuh_tempo, tanggal_pengakuan, tahun_akademik:tahun_akademik_id(nama)))
         `)
         .order("created_at", { ascending: false });
 
@@ -89,6 +90,9 @@ export default function PengakuanPendapatan() {
   });
 
   const dueFor = (item: RevenueAdvanceRow) => recognitionDueDate({
+    billRecognitionDate: item.pembayaran?.tagihan?.tanggal_pengakuan,
+    paymentName: item.jenis?.nama,
+    paymentType: item.jenis?.tipe,
     billDueDate: item.pembayaran?.tagihan?.jatuh_tempo,
     targetBookStart: item.tahun_target?.tanggal_mulai,
     month: item.bulan,
@@ -107,7 +111,7 @@ export default function PengakuanPendapatan() {
       qc.invalidateQueries({ queryKey: ["pendapatan_dimuka"] });
       qc.invalidateQueries({ queryKey: ["jurnal"] });
     },
-    onSuccess: () => toast.success("Pendapatan yang sudah jatuh tempo berhasil diakui"),
+    onSuccess: () => toast.success("Pendapatan yang sudah mencapai tanggal pengakuan berhasil diakui"),
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -193,7 +197,7 @@ export default function PengakuanPendapatan() {
       <div>
         <h1 className="text-2xl font-bold text-foreground">Pengakuan Pendapatan</h1>
         <p className="text-sm text-muted-foreground">
-          Kelola pendapatan diterima di muka (Unearned Revenue) dan akui sebagai pendapatan setelah tanggal pengakuan tiba
+          SPP diakui penuh pada akhir bulan layanan. Jatuh tempo pembayaran tetap mengikuti batas pembayaran yang ditetapkan.
         </p>
       </div>
 
@@ -235,7 +239,7 @@ export default function PengakuanPendapatan() {
               className="w-full"
             >
               <CheckCircle className="h-4 w-4 mr-2" />
-              Akui Semua yang Jatuh Tempo
+              Akui Semua yang Siap
             </Button>
           </CardContent>
         </Card>
@@ -288,7 +292,7 @@ export default function PengakuanPendapatan() {
       <ConfirmDialog
         open={confirmBulk}
         onOpenChange={() => setConfirmBulk(false)}
-        title="Akui Semua Pendapatan yang Jatuh Tempo"
+        title="Akui Semua Pendapatan yang Siap"
         description={`Semua pendapatan di muka yang sudah mencapai tanggal pengakuan (${readyItems.length} item, total ${formatRupiah(readyItems.reduce((s: number, d: RevenueAdvanceRow) => s + Number(d.jumlah || 0), 0))}) akan diakui. Lanjutkan?`}
         onConfirm={() => {
           bulkRecognizeMutation.mutate();

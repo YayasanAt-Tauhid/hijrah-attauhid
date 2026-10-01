@@ -1,3 +1,22 @@
+## SPP akhir bulan — persiapan, belum diterapkan (2 Oktober 2026)
+
+Pengguna meminta pengakuan penuh SPP dipisahkan dari batas pembayaran tanggal
+10. Pengakuan menggunakan akhir bulan layanan; kas mengikuti tanggal bayar.
+Cicilan setelah jatuh tempo tetap bisa diterima sebagai kewajiban sampai akhir
+bulan. Sisa piutang dan potongan dibukukan satu kali pada tagihan, sedangkan PD
+per pembayaran diakui netto. Pembatalan pembayaran yang periodenya telah diakui
+memulihkan piutang dan mempertahankan pendapatan layanan.
+
+Produksi cmvzcpeiuompqgdvflky hanya dibaca pada sesi ini. SQL migration baru
+harus ditampilkan dan disetujui sebelum apply/merge/deploy. Batas validasi dan
+rollout ada di docs/spp-pengakuan-akhir-bulan.md. 37 catatan historis tanpa jurnal
+penerimaan tetap membutuhkan audit terpisah; tidak diperbaiki secara massal.
+
+Koreksi catatan sesi 1 Oktober di bawah: migration uang pangkal telah disetujui
+dan berhasil diterapkan ke produksi, PR #104 di-merge sebagai 3cb4cdffed79f64cd8eecd134396d62f27b8987c,
+GitHub Actions 36876604546 berhasil. Tahun Buku 2028 juga telah ditambahkan
+2 Oktober atas persetujuan eksplisit pengguna; Tahun Buku aktif tetap 2026.
+
 ## Uang pangkal lintas tahun — siap ditinjau, belum diterapkan (1 Oktober 2026)
 
 User meminta uang pangkal TA 2027/2028 yang diterima pada 2026 dipisahkan antara
