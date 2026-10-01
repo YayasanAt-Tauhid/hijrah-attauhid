@@ -24,6 +24,18 @@ afterEach(cleanup);
 beforeEach(() => { sessionStorage.clear(); vi.clearAllMocks(); });
 
 describe("PortalTagihan selection and installment checkout", () => {
+  it("keeps the cart action visible but disabled before a bill is selected", () => {
+    render(<PortalTagihan />);
+    const buttons = screen.getAllByRole("button", { name: /Masukkan ke Keranjang/ });
+    expect(buttons).toHaveLength(1);
+    buttons.forEach((button) => expect(button).toBeDisabled());
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Pilih SPP SMP/ }));
+    screen.getAllByRole("button", { name: /Masukkan ke Keranjang/ }).forEach((button) =>
+      expect(button).not.toBeDisabled(),
+    );
+  });
+
   it("keeps formatted installment amounts and selected items intact in the cart", () => {
     render(<PortalTagihan />);
     expect(screen.queryByLabelText("Bayar cicilan")).not.toBeInTheDocument();
