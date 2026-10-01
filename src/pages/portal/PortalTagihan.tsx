@@ -375,7 +375,7 @@ export default function PortalTagihan() {
   }
 
   return (
-    <div className={`space-y-6 animate-fade-in ${selectedItems.length > 0 ? "pb-32 md:pb-0" : ""}`}>
+    <div className={`space-y-6 animate-fade-in ${tagihan.length > 0 ? "pb-32 md:pb-0" : ""}`}>
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-foreground">Tagihan</h1>
@@ -383,9 +383,10 @@ export default function PortalTagihan() {
             Pilih tagihan yang ingin dibayar
           </p>
         </div>
-        {selectedItems.length > 0 && (
+        {tagihan.length > 0 && (
           <Button
             onClick={handleCheckout}
+            disabled={selectedItems.length === 0}
             className="hidden shrink-0 bg-emerald-600 hover:bg-emerald-700 md:inline-flex"
           >
             <ShoppingCart className="mr-2 h-4 w-4" />
@@ -646,7 +647,7 @@ export default function PortalTagihan() {
         })
       )}
 
-      {selectedItems.length > 0 && (
+      {tagihan.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.04)] md:hidden">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
             <div className="min-w-0" aria-live="polite" aria-atomic="true">
@@ -657,6 +658,7 @@ export default function PortalTagihan() {
             </div>
             <Button
               onClick={handleCheckout}
+              disabled={selectedItems.length === 0}
               className="h-11 shrink-0 gap-2 bg-emerald-600 px-3 hover:bg-emerald-700 sm:px-5"
             >
               <ShoppingCart className="h-4 w-4" />
