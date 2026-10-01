@@ -3,14 +3,14 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AnakPtk from "./AnakPtk";
 
-const mocks = vi.hoisted(() => ({ role: "admin", fetch: vi.fn() }));
+const mocks = vi.hoisted(() => ({ role: "admin", fetch: vi.fn(), export: vi.fn() }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ role: mocks.role, user: { id: "fixture-user" } }) }));
 vi.mock("@/server/anakPtk", () => ({ getAnakPtkData: mocks.fetch }));
 vi.mock("@/components/shared/SearchableSelect", () => ({
   SearchableSelect: ({ options, onValueChange, value, placeholder }: { options: { value: string; label: string }[]; onValueChange: (value: string) => void; value: string; placeholder: string }) =>
     <select aria-label={placeholder} value={value || ""} onChange={event => onValueChange(event.target.value)}><option value="">Pilih</option>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>,
 }));
-vi.mock("@/components/shared/ExportButton", () => ({ ExportButton: () => <button>Export daftar</button> }));
+vi.mock("@/components/shared/ExportButton", () => ({ ExportButton: (props: { data: unknown[]; filename: string; columns: unknown[] }) => <button onClick={() => mocks.export(props)}>Export daftar</button> }));
 
 const fixture = () => ({
   selection: { tahunAjaranId: "ta", tahunBukuId: "tb", jenisId: "jenis" },
@@ -54,6 +54,14 @@ describe("halaman kandidat anak PTK", () => {
     await screen.findByRole("alert");
     expect(screen.queryByText("Fixture TK")).not.toBeInTheDocument();
     expect(screen.getByText("Laporan belum tersedia.")).toBeInTheDocument();
+  });
+  it("ekspor menyertakan tahun dan jenis tagihan agar daftar kerja tidak tertukar", async () => {
+    mount(); await screen.findByText("Fixture TK");
+    fireEvent.click(screen.getByRole("button", { name: "Export daftar" }));
+    const result = mocks.export.mock.calls[0][0];
+    expect(result.filename).toContain("2027");
+    expect(result.data[0]).toMatchObject({ tahunAjaranDisplay: "2026/2027", tahunBukuDisplay: "2027", jenisDisplay: "UANG DAFTAR ULANG TK" });
+    expect(result.columns).toContainEqual({ key: "tahunBukuDisplay", label: "Tahun Buku" });
   });
   it("mengirim TA dan Tahun Buku sebagai pilihan terpisah", async () => {
     mount(); await screen.findByText("Fixture TK");
