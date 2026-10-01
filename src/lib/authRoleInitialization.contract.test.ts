@@ -9,6 +9,13 @@ const migration = readFileSync(
   ),
   "utf8",
 );
+const orphanCleanupMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "supabase/migrations/20261001090046_reset_orphan_siswa_roles.sql",
+  ),
+  "utf8",
+);
 const loginPage = readFileSync(
   resolve(process.cwd(), "src/pages/Login.tsx"),
   "utf8",
@@ -38,6 +45,25 @@ describe("auth role initialization contract", () => {
   it("keeps parent signup role-explicit after child verification", () => {
     expect(portalServer).toContain('role: "ortu"');
     expect(portalServer).toContain("cariSiswaTervalidasi");
+  });
+
+  it("allows only unlinked legacy accounts to recover as parents", () => {
+    expect(portalServer).toContain('select("role,siswa_id,pegawai_id")');
+    expect(portalServer).toContain('from("ortu_siswa")');
+    expect(portalServer).toContain("const akunOrphan");
+    expect(portalServer).toContain("!profile?.siswa_id");
+    expect(portalServer).toContain("!profile?.pegawai_id");
+    expect(portalServer).toContain("!existingParentLink");
+    expect(portalServer).not.toContain("JENDELA_SIGNUP_BARU_MS");
+  });
+
+  it("resets only unlinked legacy siswa-role accounts", () => {
+    expect(orphanCleanupMigration).toContain("SET role = NULL");
+    expect(orphanCleanupMigration).toContain("up.role = 'siswa'");
+    expect(orphanCleanupMigration).toContain("up.siswa_id IS NULL");
+    expect(orphanCleanupMigration).toContain("up.pegawai_id IS NULL");
+    expect(orphanCleanupMigration).toContain("NOT EXISTS");
+    expect(orphanCleanupMigration).toContain("public.ortu_siswa");
   });
 
   it("clearly routes parents away from the staff login page", () => {
