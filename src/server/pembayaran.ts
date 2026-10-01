@@ -10,6 +10,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { resolvePaymentBookYear } from "@/lib/paymentBookYear";
 import { resolvePaymentAmount } from "@/lib/paymentTariff";
 import { calculateRemainingBill, isSppPaymentName, resolveInstallmentAmount } from "@/lib/installment";
+import {
+  billingPeriodLabel,
+  findBillingPrerequisite,
+  sortBillingSequence,
+  type BillingSequenceBill,
+} from "@/lib/billingSequence";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
 
@@ -488,6 +494,55 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         }
         if ((settledOnceRows ?? []).length > 0) {
           throw new Error("Pembayaran ini sudah lunas");
+        }
+      }
+    }
+
+    // Di loket kasir, tagihan bulanan harus diselesaikan berurutan per
+    // siswa + jenis pembayaran. Admin/keuangan tetap dapat melakukan koreksi
+    // historis bila memang diperlukan.
+    if (role === "kasir" && !isSekali) {
+      const { data: sequenceRows, error: sequenceError } = await admin
+        .from("tagihan")
+        .select(
+          "id, siswa_id, jenis_id, bulan, jatuh_tempo, tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai)"
+        )
+        .eq("siswa_id", siswa_id)
+        .eq("jenis_id", jenis_id)
+        .not("bulan", "is", null)
+        .in("status", ["belum_bayar", "sebagian", "terjadwal"]);
+
+      if (sequenceError) {
+        throw new Error(
+          "Gagal memeriksa urutan tagihan: " + sequenceError.message
+        );
+      }
+
+      const sequenceBills =
+        (sequenceRows ?? []) as unknown as BillingSequenceBill[];
+
+      if (tagihanTerpilih) {
+        const target = sequenceBills.find(
+          (bill) => bill.id === tagihanTerpilih?.id
+        );
+        if (!target) {
+          throw new Error(
+            "Tagihan sudah berubah. Muat ulang data tagihan sebelum memproses pembayaran."
+          );
+        }
+
+        const prerequisite = findBillingPrerequisite(target, sequenceBills);
+        if (prerequisite) {
+          throw new Error(
+            `Selesaikan ${jenis.nama} ${billingPeriodLabel(prerequisite)} terlebih dahulu sebelum membayar ${billingPeriodLabel(target)}.`
+          );
+        }
+      } else {
+        const oldestOpen = sortBillingSequence(sequenceBills)[0];
+        if (oldestOpen) {
+          throw new Error(
+            `Selesaikan ${jenis.nama} ${billingPeriodLabel(oldestOpen)} terlebih dahulu. Pilih tagihan yang sudah tersedia, jangan melompati periode.`
+          );
         }
       }
     }
