@@ -12,6 +12,9 @@ vi.mock("@/contexts/AuthContext", () => ({
 
 vi.mock("@/lib/router-compat", () => ({
   useNavigate: () => mockNavigate,
+  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
+    <a href={to}>{children}</a>
+  ),
 }));
 
 function renderLogin() {
@@ -26,7 +29,11 @@ describe("Login", () => {
   it("renders login form with email and password fields", () => {
     renderLogin();
     expect(screen.getByText("Hijrah At-Tauhid")).toBeInTheDocument();
-    expect(screen.getByText("Masuk ke Akun")).toBeInTheDocument();
+    expect(screen.getByText("Login Pegawai / Guru / Admin")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Masuk Portal Orang Tua/i })).toHaveAttribute(
+      "href",
+      "/portal/login",
+    );
     expect(screen.getByLabelText("Email")).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Masuk" })).toBeInTheDocument();
