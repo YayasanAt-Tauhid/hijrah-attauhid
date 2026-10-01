@@ -92,3 +92,20 @@ export const jalankanAkrualJatuhTempo = createServerFn({ method: "POST" })
           : undefined,
     };
   });
+
+
+/** Pengakuan manual memakai transaksi yang sama dengan cron, termasuk guard tanggal. */
+export const akuiPendapatanDimuka = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: { id: string }) => d)
+  .handler(async ({ data, context }): Promise<void> => {
+    const admin = createAdminClient();
+    const { userId } = requireContext(context);
+    await requireRole(admin, userId, ["admin", "keuangan"]);
+    if (!data?.id) throw new Error("Pendapatan diterima di muka wajib dipilih");
+    const { error } = await admin.rpc("akui_pendapatan_dimuka_atomik", {
+      p_dimuka_id: data.id,
+      p_user_id: userId,
+    });
+    if (error) throw new Error(error.message);
+  });

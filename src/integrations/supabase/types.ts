@@ -3968,6 +3968,7 @@ export type Database = {
           siswa_diskon_id: string | null
           siswa_id: string
           status: string
+          tahun_akademik_id: string | null
           tahun_ajaran_id: string
           write_off_id: string | null
         }
@@ -3991,6 +3992,7 @@ export type Database = {
           siswa_diskon_id?: string | null
           siswa_id: string
           status?: string
+          tahun_akademik_id?: string | null
           tahun_ajaran_id: string
           write_off_id?: string | null
         }
@@ -4014,10 +4016,18 @@ export type Database = {
           siswa_diskon_id?: string | null
           siswa_id?: string
           status?: string
+          tahun_akademik_id?: string | null
           tahun_ajaran_id?: string
           write_off_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "tagihan_tahun_akademik_id_fkey"
+            columns: ["tahun_akademik_id"]
+            isOneToOne: false
+            referencedRelation: "tahun_ajaran"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tagihan_jenis_id_fkey"
             columns: ["jenis_id"]
@@ -4963,6 +4973,11 @@ export type Database = {
       }
     }
     Functions: {
+      akui_pendapatan_dimuka_atomik: {
+        Args: { p_dimuka_id: string; p_user_id?: string }
+        Returns: Json
+      }
+
       akui_pendapatan_dimuka_jatuh_tempo: {
         Args: {
           p_limit?: number

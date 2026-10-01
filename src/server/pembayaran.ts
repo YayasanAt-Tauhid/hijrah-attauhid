@@ -771,10 +771,14 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       const { data: tagihanRows } = await tagihanQuery.limit(1);
       tagihanFound = tagihanRows?.[0] ?? null;
     }
+    if (/^UANG PANGKAL (TK|SD|SMP|SMA|MTA)$/i.test(jenis.nama.trim()) && !tagihanFound) {
+      throw new Error("Buat dan pilih tagihan uang pangkal dengan tahun ajaran target terlebih dahulu");
+    }
     const belumJatuhTempo = tagihanFound?.status === "terjadwal";
     const tagihanSudahDiakuiPiutang =
       tagihanFound?.status === "belum_bayar" || tagihanFound?.status === "sebagian";
     const pakaiDimuka =
+      !tagihanSudahDiakuiPiutang &&
       jenis.perlu_dimuka !== false && (is_bayar_dimuka || belumJatuhTempo);
     // Tagihan efektif = yang dikirim caller, atau yang ditemukan lewat
     // siswa+jenis+bulan+tahun_ajaran di atas (mis. pembayaran massal tunggakan
