@@ -66,8 +66,10 @@ export default function PortalOAuthCallback() {
         return;
       }
 
-      // role null / "siswa" default dari trigger handle_new_user → kemungkinan
-      // signup Google baru, perlu lengkapi data anak untuk verifikasi.
+      // role null = akun baru yang belum diklasifikasikan. Role "siswa"
+      // tetap diterima sementara untuk kompatibilitas akun legacy yang dulu
+      // otomatis diberi role siswa saat OAuth pertama kali.
+      // Keduanya perlu lengkapi data anak untuk verifikasi.
       setStatus("lengkapi");
     })();
   }, [user, isLoading, navigate, signOut]);

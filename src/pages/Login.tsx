@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "@/lib/router-compat";
+import { Link, useNavigate } from "@/lib/router-compat";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { LogIn, Eye, EyeOff } from "lucide-react";
+import { LogIn, Eye, EyeOff, UsersRound } from "lucide-react";
 import { GoogleIcon } from "@/components/shared/GoogleIcon";
 import { toast } from "sonner";
 
@@ -75,10 +75,30 @@ export default function Login() {
 
         <Card className="shadow-lg">
           <CardHeader className="pb-4 text-center">
-            <h2 className="text-lg font-semibold text-foreground">Masuk ke Akun</h2>
-            <p className="text-xs text-muted-foreground">Gunakan email dan password yang terdaftar</p>
+            <h2 className="text-lg font-semibold text-foreground">Login Pegawai / Guru / Admin</h2>
+            <p className="text-xs text-muted-foreground">
+              Gunakan akun internal sekolah yang sudah didaftarkan administrator
+            </p>
           </CardHeader>
           <CardContent>
+            <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+              <div className="flex items-start gap-2">
+                <UsersRound className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700 dark:text-emerald-300" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                    Orang Tua / Wali Siswa?
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-emerald-700/90 dark:text-emerald-300/90">
+                    Jangan masuk melalui halaman pegawai. Gunakan Portal Orang Tua untuk
+                    mendaftar atau masuk ke akun Anda.
+                  </p>
+                  <Button asChild variant="link" className="mt-1 h-auto p-0 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                    <Link to="/portal/login">Masuk Portal Orang Tua →</Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             {error && (
               <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
@@ -161,10 +181,13 @@ export default function Login() {
               ) : (
                 <>
                   <GoogleIcon />
-                  Masuk dengan Google
+                  Masuk dengan Google (akun pegawai)
                 </>
               )}
             </Button>
+            <p className="mt-2 text-center text-[11px] text-muted-foreground">
+              Google hanya untuk akun pegawai yang sudah didaftarkan admin.
+            </p>
           </CardContent>
         </Card>
 
