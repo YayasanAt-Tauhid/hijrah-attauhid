@@ -1,3 +1,4 @@
+import { recognitionDueDate, isMonthlySppRevenue } from "@/lib/recognitionDate";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -134,9 +135,11 @@ interface TagihanTerjadwal {
   bulan: number | null;
   status: string;
   jatuh_tempo: string | null;
+  tanggal_pengakuan: string | null;
+  pembayaran: { jumlah: number }[];
   siswa: { id: string; nis: string | null; nama: string | null; departemen_id: string | null } | null;
-  jenis: { nama: string | null } | null;
-  tahun_ajaran: { nama: string | null } | null;
+  jenis: { nama: string | null; tipe: string } | null;
+  tahun_ajaran: { nama: string | null; tanggal_mulai: string } | null;
 }
 
 // Tagihan yang sudah di-input tapi BELUM jatuh tempo — masih sekadar jadwal,
@@ -149,16 +152,22 @@ function useTagihanTerjadwalList(departemenId?: string) {
       const { data, error } = await supabase
         .from("tagihan")
         .select(`
-          id, nominal, bulan, status, jatuh_tempo,
+          id, nominal, bulan, status, jatuh_tempo, tanggal_pengakuan,
+          pembayaran:pembayaran!pembayaran_tagihan_id_fkey(jumlah),
           siswa:siswa_id(id, nis, nama, departemen_id),
-          jenis:jenis_id(nama),
-          tahun_ajaran:tahun_ajaran_id(nama)
+          jenis:jenis_id(nama,tipe),
+          tahun_ajaran:tahun_ajaran_id(nama,tanggal_mulai)
         `)
-        .eq("status", "terjadwal")
+        .in("status", ["terjadwal", "belum_bayar", "sebagian", "lunas"])
+        .is("jurnal_piutang_id", null)
+        .eq("pengakuan_spp_selesai", false)
         .order("jatuh_tempo", { ascending: true })
         .limit(1000);
       if (error) throw error;
-      let rows = (data || []) as unknown as TagihanTerjadwal[];
+      let rows = ((data || []) as unknown as TagihanTerjadwal[])
+        .filter((row) => row.status === "terjadwal" || isMonthlySppRevenue(row.jenis?.nama, row.jenis?.tipe))
+        .map((row) => ({ ...row, nominal: Math.max(0, Number(row.nominal) -
+          (row.pembayaran || []).reduce((sum, payment) => sum + Number(payment.jumlah), 0)) }));
       if (departemenId) rows = rows.filter((r) => r.siswa?.departemen_id === departemenId);
       return rows;
     },
@@ -170,6 +179,17 @@ async function generateNomorJurnal(prefix: string, tahun: number) {
   if (error) throw error;
   if (!data) throw new Error("Gagal mendapatkan nomor jurnal");
   return data as string;
+}
+
+function recognitionForScheduledBill(t: TagihanTerjadwal): string | null {
+  return recognitionDueDate({
+    billRecognitionDate: t.tanggal_pengakuan,
+    billDueDate: t.jatuh_tempo,
+    targetBookStart: t.tahun_ajaran?.tanggal_mulai,
+    month: t.bulan,
+    paymentName: t.jenis?.nama,
+    paymentType: t.jenis?.tipe,
+  });
 }
 
 // ─── Komponen Utama ─────────────────────────────────────────────────────────
@@ -246,7 +266,7 @@ export default function PiutangManajemen() {
   // Tagihan yang jatuh temponya sudah lewat/tiba tapi statusnya masih
   // 'terjadwal' = piutangnya belum diakui; itulah yang akan diproses.
   const terjadwalJatuhTempo = useMemo(
-    () => (terjadwalList || []).filter((t) => t.jatuh_tempo && t.jatuh_tempo <= hariIni),
+    () => (terjadwalList || []).filter((t) => { const due = recognitionForScheduledBill(t); return due && due <= hariIni; }),
     [terjadwalList, hariIni]
   );
   const totalTerjadwal = useMemo(
@@ -287,7 +307,7 @@ export default function PiutangManajemen() {
   const tagihanBelumBayar = useMemo(
     () => [
       ...(tagihanList || []).filter((t: any) => t.status === "belum_bayar"),
-      ...(terjadwalList || []),
+      ...(terjadwalList || []).filter((t) => t.status === "terjadwal"),
     ],
     [tagihanList, terjadwalList]
   );
@@ -636,6 +656,11 @@ export default function PiutangManajemen() {
           </span>
         );
       }},
+    { key: "tanggal_pengakuan", label: "Tanggal Pengakuan",
+      render: (_, r) => {
+        const due = recognitionForScheduledBill(r);
+        return due ? format(new Date(due + "T00:00:00"), "d MMM yyyy", { locale: idLocale }) : "-";
+      }},
     { key: "siswa", label: "Siswa", render: (_, r) => `${r.siswa?.nis || "-"} — ${r.siswa?.nama || "-"}` },
     { key: "jenis", label: "Jenis", render: (_, r) => {
         const bln = r.bulan ? namaBulanTahun(r.bulan, { tahunBukuNama: r.tahun_ajaran?.nama }) : "";
@@ -644,9 +669,9 @@ export default function PiutangManajemen() {
     { key: "nominal", label: "Nominal", render: (v) => formatRupiah(Number(v)) },
     { key: "status", label: "Keterangan",
       render: (_, r) => (
-        r.jatuh_tempo && r.jatuh_tempo <= hariIni
+        recognitionForScheduledBill(r) && recognitionForScheduledBill(r)! <= hariIni
           ? <Badge variant="outline" className="bg-warning/15 text-warning border-warning/30">Siap diakui jadi piutang</Badge>
-          : <Badge variant="outline" className="bg-muted text-muted-foreground">Belum jatuh tempo</Badge>
+          : <Badge variant="outline" className="bg-muted text-muted-foreground">Menunggu tanggal pengakuan</Badge>
       )},
   ];
 
@@ -700,39 +725,39 @@ export default function PiutangManajemen() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="akrual">Akrual Jatuh Tempo</TabsTrigger>
+          <TabsTrigger value="akrual">Akrual Pendapatan</TabsTrigger>
           <TabsTrigger value="penyisihan">Penyisihan Piutang</TabsTrigger>
           <TabsTrigger value="writeoff">Write-Off Piutang</TabsTrigger>
           <TabsTrigger value="koreksi">Koreksi / Pembatalan Tagihan</TabsTrigger>
         </TabsList>
 
-        {/* ── Tab Akrual Jatuh Tempo ── */}
+        {/* ── Tab Akrual Pendapatan ── */}
         <TabsContent value="akrual" className="space-y-3 mt-3">
           <div className="rounded-md border border-info/30 bg-info/5 p-3 text-xs text-muted-foreground space-y-1">
             <p className="font-medium text-foreground">
-              Tagihan yang di-input di muka belum jadi piutang sampai jatuh temponya tiba.
+              SPP dibukukan pada akhir bulan layanan; jatuh tempo pembayaran tetap tanggal yang ditetapkan.
             </p>
             <p>
-              • <strong>Belum jatuh tempo</strong> — tagihan hanya berupa jadwal (status{" "}
+              • <strong>Belum mencapai tanggal pengakuan</strong> — tagihan hanya berupa jadwal (status{" "}
               <em>terjadwal</em>): <strong>tidak ada jurnal sama sekali</strong>, tidak muncul di neraca
               maupun laporan pendapatan. Kalau orang tua membayarnya lebih awal, uangnya dicatat sebagai{" "}
               <strong>Pendapatan Diterima di Muka</strong> (liabilitas), bukan pendapatan.
             </p>
             <p>
-              • <strong>Saat jatuh tempo</strong> — proses ini memposting{" "}
+              • <strong>Saat tanggal pengakuan tiba</strong> — proses ini memposting{" "}
               <strong>(D) Piutang Siswa / (K) Pendapatan</strong> dan mengubah status jadi{" "}
               <em>belum bayar</em>. Untuk yang sudah dibayar di muka, yang diposting{" "}
               <strong>(D) Pendapatan Diterima di Muka / (K) Pendapatan</strong>.
             </p>
             <p>
               • <strong>Lewat jatuh tempo tanpa bayar</strong> = <strong>tunggakan</strong>. Tidak ada
-              jurnal tambahan — akunnya tetap Piutang Siswa, yang berubah hanya umur piutangnya.
+              setelah pengakuan, akunnya tetap Piutang Siswa. Sebelum akhir bulan, SPP dapat terlambat bayar meski belum dibukukan sebagai piutang.
             </p>
             <p>Proses ini aman dijalankan berulang kali; baris yang sudah diproses tidak diproses lagi.</p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <StatsCard title="Tagihan Terjadwal (belum jadi piutang)" value={formatRupiah(totalTerjadwal)}
+            <StatsCard title="Sisa tagihan menunggu pengakuan" value={formatRupiah(totalTerjadwal)}
               icon={CalendarClock} color="info" />
             <StatsCard title="Siap diakui jadi piutang hari ini" value={formatRupiah(totalSiapDiakui)}
               icon={AlertTriangle} color="warning" />
@@ -743,7 +768,7 @@ export default function PiutangManajemen() {
               disabled={akrualMutation.isPending}
               onClick={() => setKonfirmAkrual(true)}>
               <PlayCircle className="h-3.5 w-3.5 mr-1.5" />
-              {akrualMutation.isPending ? "Memproses…" : "Jalankan Akrual Jatuh Tempo"}
+              {akrualMutation.isPending ? "Memproses…" : "Jalankan Akrual Pendapatan"}
             </Button>
           </div>
 
@@ -780,7 +805,7 @@ export default function PiutangManajemen() {
             <p className="font-medium text-foreground">Panduan: perbaiki kesalahan input tagihan yang BELUM dibayar.</p>
             <p>• <strong>Batalkan tagihan</strong> — jika tagihan tidak seharusnya ada (salah siswa, dobel, salah jenis).</p>
             <p>• <strong>Koreksi nominal</strong> — jika tagihan benar tapi angkanya salah; isi nominal yang benar.</p>
-            <p>Keduanya otomatis membuat <strong>jurnal pembalik (posted)</strong> — kecuali untuk tagihan status <em>terjadwal</em> (lihat tab <strong>Akrual Jatuh Tempo</strong>), yang belum pernah berjurnal sama sekali sehingga langsung diproses tanpa jurnal. Wajib isi alasan; tercatat di <strong>Audit Perubahan Data</strong>.</p>
+            <p>Keduanya otomatis membuat <strong>jurnal pembalik (posted)</strong> — kecuali untuk tagihan status <em>terjadwal</em> (lihat tab <strong>Akrual Pendapatan</strong>), yang belum pernah berjurnal sama sekali sehingga langsung diproses tanpa jurnal. Wajib isi alasan; tercatat di <strong>Audit Perubahan Data</strong>.</p>
             <p>Tagihan yang <strong>sudah dibayar</strong> tidak muncul di sini — perbaiki lewat <strong>Input Pembayaran → tabel Riwayat → Batalkan</strong>.</p>
           </div>
           <div className="flex justify-end">
@@ -1169,13 +1194,13 @@ export default function PiutangManajemen() {
         loading={deletePenyisihan.isPending} />
 
       <ConfirmDialog open={konfirmAkrual} onOpenChange={setKonfirmAkrual}
-        title="Jalankan Akrual Jatuh Tempo"
+        title="Jalankan Akrual Pendapatan"
         variant="default"
         confirmLabel="Ya, Jalankan"
         description={
           terjadwalJatuhTempo.length > 0
             ? `${terjadwalJatuhTempo.length} tagihan (${formatRupiah(totalSiapDiakui)}) akan diakui jadi piutang dengan jurnal posted per hari ini. Pembayaran yang sudah diterima di muka untuk periode yang sama juga akan diakui jadi pendapatan.`
-            : "Tidak ada tagihan terjadwal yang jatuh tempo hari ini. Proses tetap akan memeriksa pendapatan diterima di muka yang sudah waktunya diakui."
+            : "Tidak ada tagihan yang mencapai tanggal pengakuan hari ini. Proses tetap akan memeriksa pendapatan diterima di muka yang sudah waktunya diakui."
         }
         onConfirm={() => { setKonfirmAkrual(false); akrualMutation.mutate(); }}
         loading={akrualMutation.isPending} />

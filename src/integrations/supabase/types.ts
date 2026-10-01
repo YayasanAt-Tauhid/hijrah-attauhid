@@ -3956,6 +3956,8 @@ export type Database = {
           dibatalkan_at: string | null
           dibatalkan_oleh: string | null
           id: string
+          tanggal_pengakuan: string | null
+          pengakuan_spp_selesai: boolean
           jatuh_tempo: string | null
           jenis_id: string
           jurnal_pembalik_id: string | null
@@ -3980,6 +3982,8 @@ export type Database = {
           dibatalkan_at?: string | null
           dibatalkan_oleh?: string | null
           id?: string
+          tanggal_pengakuan?: string | null
+          pengakuan_spp_selesai?: boolean
           jatuh_tempo?: string | null
           jenis_id: string
           jurnal_pembalik_id?: string | null
@@ -4004,6 +4008,8 @@ export type Database = {
           dibatalkan_at?: string | null
           dibatalkan_oleh?: string | null
           id?: string
+          tanggal_pengakuan?: string | null
+          pengakuan_spp_selesai?: boolean
           jatuh_tempo?: string | null
           jenis_id?: string
           jurnal_pembalik_id?: string | null

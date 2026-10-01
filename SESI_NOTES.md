@@ -1,4 +1,22 @@
-## Uang pangkal lintas tahun — siap ditinjau, belum diterapkan (1 Oktober 2026)
+## SPP awal bulan — revisi kebijakan, belum diterapkan (2 Oktober 2026)
+
+Pengguna menetapkan SPP diakui sejak tanggal 1 bulan layanan, mengikuti kebijakan
+bulanan sekolah. Rancangan akhir bulan pada PR105 diganti sebelum diterapkan.
+Jatuh tempo tetap tanggal 10. Kasir/Midtrans membukukan tagihan bulan berjalan
+atomik bila cron belum berjalan; SPP bulan mendatang tetap diterima di muka.
+Cicilan bulan berjalan dimulai tanggal 1, pembatalan mempertahankan piutang yang
+sudah diakui walaupun belum tanggal 10. Tidak ada perubahan transaksi produksi.
+16 skenario SQL, dua uji paralel, regression uang pangkal, dan 282 tes aplikasi lulus.
+Build dijalankan ulang.
+SQL produksi baru wajib mendapat persetujuan sesudah ditampilkan pada commit final.
+Detail: docs/spp-pengakuan-awal-bulan.md. 37 penerimaan tanpa jurnal tetap diblokir
+hingga audit dan persetujuan terpisah. Kebijakan akuntansi laporan ditentukan sekolah.
+
+## Uang pangkal lintas tahun — catatan persiapan historis (1 Oktober 2026)
+
+Status aktual: PR104 sudah diterapkan dan deploy berhasil; ledger migration
+20261001142759. Tahun Buku 2028 telah ditambahkan dengan persetujuan pengguna.
+Paragraf berikut merekam kondisi sebelum rollout.
 
 User meminta uang pangkal TA 2027/2028 yang diterima pada 2026 dipisahkan antara
 kas tahun buku dan pengakuan pendapatan. Kebijakan pengakuan memakai awal tahun
