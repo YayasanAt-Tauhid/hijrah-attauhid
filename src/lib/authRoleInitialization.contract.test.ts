@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 const migration = readFileSync(
   resolve(
     process.cwd(),
-    "supabase/migrations/20261001083506_stop_default_siswa_role.sql",
+    "supabase/migrations/20261001084253_stop_default_siswa_role.sql",
   ),
   "utf8",
 );
