@@ -5,8 +5,8 @@
  *  - portalOrtuTambahAnak: orang tua yang sudah login menghubungkan anak
  *    tambahan ke akunnya sendiri.
  *  - portalOrtuCompleteGoogleSignup: melengkapi akun yang baru dibuat lewat
- *    Google OAuth (default role 'siswa' dari trigger handle_new_user) agar
- *    naik jadi role 'ortu' + terhubung ke anaknya.
+ *    Google OAuth (role NULL untuk akun baru; legacy bisa masih 'siswa')
+ *    agar menjadi role 'ortu' + terhubung ke anaknya.
  *
  * Verifikasi identitas anak memakai kombinasi NIS + nama + tanggal lahir
  * (bukan NIS+nama saja) karena NIS & nama relatif mudah diketahui pihak lain
@@ -171,7 +171,7 @@ export const portalOrtuTambahAnak = createServerFn({ method: "POST" })
     return { success: true, nama: siswa.nama };
   });
 
-// ─── Lengkapi akun yang baru dibuat via Google OAuth jadi akun orang tua ───
+// ─── Lengkapi akun Google baru/belum terklasifikasi jadi akun orang tua ───
 export interface PortalOrtuCompleteGoogleSignupInput {
   nis: string;
   nama_siswa: string;
