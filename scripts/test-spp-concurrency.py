@@ -34,14 +34,15 @@ BEGIN
  SELECT * INTO t FROM tagihan WHERE jenis_id=jp;
  -- Override kalender hanya dalam fixture untuk menguji balapan pada hari nyata.
  UPDATE tagihan SET jatuh_tempo=(now() AT TIME ZONE 'Asia/Jakarta')::date,
-   tanggal_pengakuan=(now() AT TIME ZONE 'Asia/Jakarta')::date,
-   nominal_bruto=500000,nominal_diskon=50000 WHERE id=t.id;
+   tanggal_pengakuan=(now() AT TIME ZONE 'Asia/Jakarta')::date+1,
+   nominal_bruto=500000,nominal_diskon=50000,status='sebagian' WHERE id=t.id;
  r:=proses_pembayaran_atomik(t.siswa_id,jp,2,100000,
   (now() AT TIME ZONE 'Asia/Jakarta')::date,'Cicilan A',NULL,
   '00000000-0000-0000-0000-000000002026',false,t.id,kas,rev,'Pendapatan','JP',NULL,'SPP TK');
  r:=proses_pembayaran_atomik(t.siswa_id,jp,2,200000,
   (now() AT TIME ZONE 'Asia/Jakarta')::date,'Cicilan B',NULL,
   '00000000-0000-0000-0000-000000002026',false,t.id,kas,rev,'Pendapatan','JP',NULL,'SPP TK');
+UPDATE tagihan SET tanggal_pengakuan=(now() AT TIME ZONE 'Asia/Jakarta')::date WHERE id=t.id;
 END; $fixture$;
 """)
 ids=query("SELECT id FROM pendapatan_dimuka ORDER BY created_at,id").splitlines()
@@ -72,14 +73,15 @@ BEGIN
    '[{"siswa_id":"00000000-0000-0000-0000-000000000002","kelas_id":null}]',NULL);
  SELECT * INTO t FROM tagihan WHERE siswa_id='00000000-0000-0000-0000-000000000002' AND jenis_id=jp;
  UPDATE tagihan SET jatuh_tempo=(now() AT TIME ZONE 'Asia/Jakarta')::date,
-   tanggal_pengakuan=(now() AT TIME ZONE 'Asia/Jakarta')::date,
-   nominal_bruto=500000,nominal_diskon=50000 WHERE id=t.id;
+   tanggal_pengakuan=(now() AT TIME ZONE 'Asia/Jakarta')::date+1,
+   nominal_bruto=500000,nominal_diskon=50000,status='sebagian' WHERE id=t.id;
  PERFORM proses_pembayaran_atomik(t.siswa_id,jp,2,100000,
    (now() AT TIME ZONE 'Asia/Jakarta')::date,'Race A',NULL,
    '00000000-0000-0000-0000-000000002026',false,t.id,kas,rev,'Pendapatan','JP',NULL,'SPP TK');
  PERFORM proses_pembayaran_atomik(t.siswa_id,jp,2,200000,
    (now() AT TIME ZONE 'Asia/Jakarta')::date,'Race B',NULL,
    '00000000-0000-0000-0000-000000002026',false,t.id,kas,rev,'Pendapatan','JP',NULL,'SPP TK');
+UPDATE tagihan SET tanggal_pengakuan=(now() AT TIME ZONE 'Asia/Jakarta')::date WHERE id=t.id;
 END; $fixture$;
 """)
 bill=query("SELECT id FROM tagihan WHERE siswa_id='00000000-0000-0000-0000-000000000002'")

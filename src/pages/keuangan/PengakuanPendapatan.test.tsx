@@ -85,19 +85,19 @@ describe("Pengakuan SPP", () => {
     fixture.bulan = 2;
     fixture.jenis = { nama: "SPP TK", tipe: "bulanan", hari_jatuh_tempo: 10 };
     fixture.pembayaran.tagihan.jatuh_tempo = "2027-02-10";
-    fixture.pembayaran.tagihan.tanggal_pengakuan = "2027-02-28";
+    fixture.pembayaran.tagihan.tanggal_pengakuan = "2027-02-01";
   }
-  it("menutup tombol tanggal 10 meski pembayaran sudah jatuh tempo", async () => {
+  it("menutup tombol sebelum bulan layanan dimulai", async () => {
     spp();
-    vi.setSystemTime(new Date("2027-02-10T01:00:00Z"));
+    vi.setSystemTime(new Date("2027-01-31T16:59:00Z"));
     renderPage();
     expect(await screen.findByRole("button", { name: /^Akui$/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Akui Semua yang Siap" })).toBeDisabled();
-    expect(screen.getByText("28 Feb 2027")).toBeInTheDocument();
+    expect(screen.getByText("01 Feb 2027")).toBeInTheDocument();
   });
-  it("membuka tombol pada akhir bulan menurut waktu Jakarta", async () => {
+  it("membuka tombol pada awal bulan menurut waktu Jakarta", async () => {
     spp();
-    vi.setSystemTime(new Date("2027-02-27T17:01:00Z"));
+    vi.setSystemTime(new Date("2027-01-31T17:01:00Z"));
     renderPage();
     expect(await screen.findByRole("button", { name: /^Akui$/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Akui Semua yang Siap" })).toBeEnabled();

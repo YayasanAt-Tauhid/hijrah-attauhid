@@ -669,7 +669,7 @@ function InputPembayaranContent() {
   const cicilanSppDiizinkan =
     isSpp && !!existingTagihan &&
     (existingTagihan.status !== "terjadwal" ||
-      (!!existingTagihan.jatuh_tempo && existingTagihan.jatuh_tempo <= form.tanggalBayar));
+      (!!existingTagihan.jatuh_tempo && existingTagihan.jatuh_tempo.slice(0, 7) + "-01" <= form.tanggalBayar));
   const cicilanDiizinkan = cicilanSekaliDiizinkan || cicilanSppDiizinkan;
   const sisaTagihanDipilih =
     selectedOpenBill?.sisa ??
@@ -850,7 +850,7 @@ function InputPembayaranContent() {
   const canPartialBill = (bill: OpenBillRow) =>
     !!bill.jenis_pembayaran &&
     (bill.status !== "terjadwal" ||
-      (isSppPaymentName(bill.jenis_pembayaran.nama) && !!bill.jatuh_tempo && bill.jatuh_tempo <= form.tanggalBayar)) &&
+      (isSppPaymentName(bill.jenis_pembayaran.nama) && !!bill.jatuh_tempo && bill.jatuh_tempo.slice(0, 7) + "-01" <= form.tanggalBayar)) &&
     (bill.jenis_pembayaran.tipe === "sekali" || isSppPaymentName(bill.jenis_pembayaran.nama));
 
   const handleToggleBillPay = (bill: OpenBillRow, checked: boolean) => {

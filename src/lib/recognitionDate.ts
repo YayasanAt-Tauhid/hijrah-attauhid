@@ -3,7 +3,7 @@ export function isMonthlySppRevenue(name: unknown, type: unknown): boolean {
   return type === "bulanan" && /^spp([\s-]|$)/i.test(String(name ?? "").trim());
 }
 
-/** Jadwal pengakuan terpisah dari jatuh tempo; SPP penuh pada akhir bulan layanan. */
+/** Jadwal pengakuan terpisah dari jatuh tempo; SPP penuh pada awal bulan layanan. */
 export function recognitionDueDate(input: {
   billRecognitionDate?: string | null;
   billDueDate?: string | null;
@@ -18,8 +18,7 @@ export function recognitionDueDate(input: {
     if (!input.month || input.month < 1 || input.month > 12) return null;
     const periodStart = hitungJatuhTempo(input.targetBookStart, input.month, 1);
     if (!periodStart) return null;
-    const [year, month] = periodStart.split("-").map(Number);
-    return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    return periodStart;
   }
   return input.billDueDate || hitungJatuhTempo(input.targetBookStart, input.month, input.dueDay);
 }

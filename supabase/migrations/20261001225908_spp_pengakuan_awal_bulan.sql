@@ -30,7 +30,7 @@ CREATE INDEX tagihan_spp_pengakuan_pending_idx
  ON public.tagihan(tanggal_pengakuan,id)
  WHERE NOT pengakuan_spp_selesai AND jurnal_piutang_id IS NULL;
 
--- Rumus kalender sama dengan jatuh tempo; yang berbeda hanya hari akhir bulan.
+-- Rumus kalender sama dengan jatuh tempo; yang berbeda hanya hari pertama bulan.
 CREATE FUNCTION public.hitung_pengakuan_spp(p_periode_id uuid,p_bulan integer)
 RETURNS date LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path=''
 AS $fn$
@@ -38,7 +38,7 @@ DECLARE v_due date;
 BEGIN
  IF p_bulan IS NULL OR p_bulan NOT BETWEEN 1 AND 12 THEN RETURN NULL; END IF;
  v_due := public.hitung_jatuh_tempo_tagihan(p_periode_id,p_bulan,1);
- RETURN (date_trunc('month',v_due) + interval '1 month - 1 day')::date;
+ RETURN v_due;
 END;
 $fn$;
 REVOKE ALL ON FUNCTION public.hitung_pengakuan_spp(uuid,integer) FROM PUBLIC,anon,authenticated;
@@ -80,7 +80,7 @@ BEGIN
  END IF;
  v_due := public.tanggal_pengakuan_tagihan(t.id);
  IF v_due IS NULL OR v_due>v_today THEN
-  RAISE EXCEPTION 'SPP belum dapat diakui sebelum akhir bulan layanan (%)',v_due;
+  RAISE EXCEPTION 'SPP belum dapat diakui sebelum awal bulan layanan (%)',v_due;
  END IF;
  -- Jangan membangun piutang/pendapatan di atas penerimaan historis tanpa bukti jurnal.
  IF EXISTS (
@@ -114,7 +114,7 @@ BEGIN
  IF v_gross>0 THEN
   v_nomor:=public.generate_nomor_jurnal('JPI',extract(year FROM v_today)::integer);
   INSERT INTO public.jurnal(nomor,tanggal,keterangan,referensi,departemen_id,total_debit,total_kredit,status,dibuat_oleh)
-  VALUES(v_nomor,v_today,'Pengakuan akhir bulan '||jp.nama||'-B'||t.bulan||' - '||COALESCE(v_nama,t.siswa_id::text),
+  VALUES(v_nomor,v_today,'Pengakuan awal bulan '||jp.nama||'-B'||t.bulan||' - '||COALESCE(v_nama,t.siswa_id::text),
     t.id::text,v_dept,v_gross,v_gross,'posted',v_pegawai) RETURNING id INTO v_jurnal;
   IF v_net>0 THEN
    INSERT INTO public.jurnal_detail(jurnal_id,akun_id,keterangan,debit,kredit,urutan)
@@ -350,7 +350,7 @@ BEGIN
         SELECT departemen_id INTO v_dept_id FROM siswa WHERE id = v_row.siswa_id;
       END IF;
 
-      -- SPP menunggu akhir bulan layanan; jatuh tempo tetap tanggal 10.
+      -- SPP menunggu awal bulan layanan; jatuh tempo tetap tanggal 10.
       IF v_belum_jatuh_tempo THEN
         v_jurnal_id := NULL;
       ELSE
@@ -501,11 +501,9 @@ BEGIN
       RAISE EXCEPTION 'Jumlah pembayaran melebihi sisa tagihan';
     END IF;
 
-    -- Partial advance payment is intentionally not enabled yet because the
-    -- scheduled-bill recognition flow currently expects either unpaid or fully
-    -- paid before maturity.
+    -- Cicilan SPP diizinkan sejak bulan layanan; pembayaran sebelum layanan tetap penuh.
     IF v_tagihan.status = 'terjadwal'
-       AND NOT (v_is_spp AND COALESCE(v_tagihan.jatuh_tempo <= p_tanggal_bayar,false))
+       AND NOT (v_is_spp AND COALESCE(public.tanggal_pengakuan_tagihan(v_tagihan.id) <= p_tanggal_bayar,false))
        AND p_jumlah < (v_tagihan.nominal - v_total_sebelum) THEN
       RAISE EXCEPTION 'Tagihan yang belum jatuh tempo harus dibayar penuh';
     END IF;
@@ -518,6 +516,14 @@ BEGIN
     IF v_departemen_asal IS NOT NULL THEN
       v_departemen_efektif := v_departemen_asal;
     END IF;
+  END IF;
+
+  -- Tagihan bulan berjalan diakui atomik saat dibayar, tanpa menunggu cron.
+  IF v_is_spp AND v_tagihan.jurnal_piutang_id IS NULL AND NOT v_tagihan.pengakuan_spp_selesai
+     AND public.tanggal_pengakuan_tagihan(v_tagihan.id) <= p_tanggal_bayar
+     AND public.tanggal_pengakuan_tagihan(v_tagihan.id) <= (now() AT TIME ZONE 'Asia/Jakarta')::date THEN
+    PERFORM public.posting_spp_tagihan_atomik(v_tagihan.id,NULL);
+    SELECT * INTO v_tagihan FROM public.tagihan WHERE id=p_tagihan_id;
   END IF;
 
   -- SQL menentukan akun berdasarkan jurnal yang benar-benar sudah ada.
@@ -724,7 +730,7 @@ BEGIN
     END IF;
 
     IF v_tagihan.status = 'terjadwal'
-       AND NOT (v_is_spp AND COALESCE(v_tagihan.jatuh_tempo <= p_tanggal_bayar,false))
+       AND NOT (v_is_spp AND COALESCE(public.tanggal_pengakuan_tagihan(v_tagihan.id) <= p_tanggal_bayar,false))
        AND p_jumlah < (v_tagihan.nominal - v_total_sebelum) THEN
       RAISE EXCEPTION 'Tagihan yang belum jatuh tempo harus dibayar penuh';
     END IF;
@@ -759,7 +765,7 @@ BEGIN
     SELECT COALESCE(SUM(jumlah),0) INTO v_total_sebelum FROM public.pembayaran WHERE tagihan_id=v_tagihan_id;
     IF p_jumlah > v_tagihan.nominal-v_total_sebelum THEN RAISE EXCEPTION 'Jumlah pembayaran melebihi sisa tagihan'; END IF;
     IF v_tagihan.status='terjadwal'
-       AND NOT (v_is_spp AND COALESCE(v_tagihan.jatuh_tempo<=p_tanggal_bayar,false))
+       AND NOT (v_is_spp AND COALESCE(public.tanggal_pengakuan_tagihan(v_tagihan.id)<=p_tanggal_bayar,false))
        AND p_jumlah<v_tagihan.nominal-v_total_sebelum THEN
       RAISE EXCEPTION 'Tagihan yang belum jatuh tempo harus dibayar penuh';
     END IF;
@@ -774,6 +780,13 @@ BEGIN
     IF FOUND THEN
       RAISE EXCEPTION 'Pembayaran bulan % untuk jenis ini sudah ada', v_bulan_norm;
     END IF;
+  END IF;
+
+  IF v_is_spp AND v_tagihan.jurnal_piutang_id IS NULL AND NOT v_tagihan.pengakuan_spp_selesai
+     AND public.tanggal_pengakuan_tagihan(v_tagihan.id) <= p_tanggal_bayar
+     AND public.tanggal_pengakuan_tagihan(v_tagihan.id) <= (now() AT TIME ZONE 'Asia/Jakarta')::date THEN
+    PERFORM public.posting_spp_tagihan_atomik(v_tagihan.id,NULL);
+    SELECT * INTO v_tagihan FROM public.tagihan WHERE id=v_tagihan_id;
   END IF;
 
   v_dimuka := COALESCE(v_perlu_dimuka, true)
@@ -1330,6 +1343,7 @@ BEGIN
     v_status_baru := CASE
       WHEN v_total_sisa >= v_tagihan.nominal THEN 'lunas'
       WHEN v_total_sisa > 0 THEN 'sebagian'
+      WHEN v_tagihan.jurnal_piutang_id IS NOT NULL OR v_tagihan.pengakuan_spp_selesai THEN 'belum_bayar'
       WHEN v_tagihan.jatuh_tempo IS NOT NULL AND v_tagihan.jatuh_tempo > CURRENT_DATE THEN 'terjadwal'
       ELSE 'belum_bayar'
     END;

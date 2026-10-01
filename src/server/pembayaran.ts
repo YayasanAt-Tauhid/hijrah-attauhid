@@ -640,7 +640,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       const { remaining } = calculateRemainingBill(tagihanTerpilih.nominal, totalSudahBayar);
       const allowPartial =
         (tagihanTerpilih.status !== "terjadwal" ||
-          (isSpp && !!tagihanTerpilih.jatuh_tempo && tagihanTerpilih.jatuh_tempo <= tanggal_bayar))
+          (isSpp && !!tagihanTerpilih.jatuh_tempo && tagihanTerpilih.jatuh_tempo.slice(0, 7) + "-01" <= tanggal_bayar))
         && (isSekali || isSpp);
       jumlahValid = resolveInstallmentAmount({
         requestedAmount: data.jumlah,

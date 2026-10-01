@@ -197,7 +197,7 @@ export default function PengakuanPendapatan() {
       <div>
         <h1 className="text-2xl font-bold text-foreground">Pengakuan Pendapatan</h1>
         <p className="text-sm text-muted-foreground">
-          SPP diakui penuh pada akhir bulan layanan. Jatuh tempo pembayaran tetap mengikuti batas pembayaran yang ditetapkan.
+          SPP diakui mulai tanggal 1 bulan layanan sesuai kebijakan sekolah. Jatuh tempo pembayaran tetap mengikuti batas pembayaran yang ditetapkan.
         </p>
       </div>
 

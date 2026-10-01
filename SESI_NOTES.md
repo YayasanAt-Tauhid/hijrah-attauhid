@@ -1,23 +1,22 @@
-## SPP akhir bulan — persiapan, belum diterapkan (2 Oktober 2026)
+## SPP awal bulan — revisi kebijakan, belum diterapkan (2 Oktober 2026)
 
-Pengguna meminta pengakuan penuh SPP dipisahkan dari batas pembayaran tanggal
-10. Pengakuan menggunakan akhir bulan layanan; kas mengikuti tanggal bayar.
-Cicilan setelah jatuh tempo tetap bisa diterima sebagai kewajiban sampai akhir
-bulan. Sisa piutang dan potongan dibukukan satu kali pada tagihan, sedangkan PD
-per pembayaran diakui netto. Pembatalan pembayaran yang periodenya telah diakui
-memulihkan piutang dan mempertahankan pendapatan layanan.
+Pengguna menetapkan SPP diakui sejak tanggal 1 bulan layanan, mengikuti kebijakan
+bulanan sekolah. Rancangan akhir bulan pada PR105 diganti sebelum diterapkan.
+Jatuh tempo tetap tanggal 10. Kasir/Midtrans membukukan tagihan bulan berjalan
+atomik bila cron belum berjalan; SPP bulan mendatang tetap diterima di muka.
+Cicilan bulan berjalan dimulai tanggal 1, pembatalan mempertahankan piutang yang
+sudah diakui walaupun belum tanggal 10. Tidak ada perubahan transaksi produksi.
+16 skenario SQL, dua uji paralel, regression uang pangkal, dan 282 tes aplikasi lulus.
+Build dijalankan ulang.
+SQL produksi baru wajib mendapat persetujuan sesudah ditampilkan pada commit final.
+Detail: docs/spp-pengakuan-awal-bulan.md. 37 penerimaan tanpa jurnal tetap diblokir
+hingga audit dan persetujuan terpisah. Kebijakan akuntansi laporan ditentukan sekolah.
 
-Produksi cmvzcpeiuompqgdvflky hanya dibaca pada sesi ini. SQL migration baru
-harus ditampilkan dan disetujui sebelum apply/merge/deploy. Batas validasi dan
-rollout ada di docs/spp-pengakuan-akhir-bulan.md. 37 catatan historis tanpa jurnal
-penerimaan tetap membutuhkan audit terpisah; tidak diperbaiki secara massal.
+## Uang pangkal lintas tahun — catatan persiapan historis (1 Oktober 2026)
 
-Koreksi catatan sesi 1 Oktober di bawah: migration uang pangkal telah disetujui
-dan berhasil diterapkan ke produksi, PR #104 di-merge sebagai 3cb4cdffed79f64cd8eecd134396d62f27b8987c,
-GitHub Actions 36876604546 berhasil. Tahun Buku 2028 juga telah ditambahkan
-2 Oktober atas persetujuan eksplisit pengguna; Tahun Buku aktif tetap 2026.
-
-## Uang pangkal lintas tahun — siap ditinjau, belum diterapkan (1 Oktober 2026)
+Status aktual: PR104 sudah diterapkan dan deploy berhasil; ledger migration
+20261001142759. Tahun Buku 2028 telah ditambahkan dengan persetujuan pengguna.
+Paragraf berikut merekam kondisi sebelum rollout.
 
 User meminta uang pangkal TA 2027/2028 yang diterima pada 2026 dipisahkan antara
 kas tahun buku dan pengakuan pendapatan. Kebijakan pengakuan memakai awal tahun

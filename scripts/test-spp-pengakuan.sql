@@ -12,7 +12,7 @@ $$;
 DO $clock$ DECLARE r record; BEGIN
  FOR r IN SELECT pg_get_functiondef(oid) AS def FROM pg_proc
   WHERE pronamespace='public'::regnamespace AND proname IN
-   ('generate_tagihan_batch','posting_spp_tagihan_atomik','posting_piutang_jatuh_tempo',
+   ('proses_pembayaran_atomik','proses_pembayaran_midtrans_atomik','generate_tagihan_batch','posting_spp_tagihan_atomik','posting_piutang_jatuh_tempo',
     'akui_pendapatan_dimuka_atomik','akui_pendapatan_dimuka_jatuh_tempo','batalkan_pembayaran_atomik')
  LOOP EXECUTE replace(replace(r.def,'now()','public.fixture_now()'),'CURRENT_DATE',$date$(public.fixture_now() AT TIME ZONE 'Asia/Jakarta')::date$date$); END LOOP;
 END; $clock$;
@@ -46,34 +46,34 @@ BEGIN
  SELECT id INTO rev FROM akun_rekening WHERE kode='4101';
  SELECT id INTO rec FROM akun_rekening WHERE kode='1300';
  SELECT id INTO disc FROM akun_rekening WHERE kode='4602';
- PERFORM set_config('test.today','2027-02-01',true);
- ASSERT public.hitung_pengakuan_spp(book,2)='2027-02-28';
- ASSERT public.hitung_pengakuan_spp('00000000-0000-0000-0000-000000102027',2)='2028-02-29';
+ PERFORM set_config('test.today','2027-01-31',true);
+ ASSERT public.hitung_pengakuan_spp(book,2)='2027-02-01';
+ ASSERT public.hitung_pengakuan_spp('00000000-0000-0000-0000-000000102027',2)='2028-02-01';
  ASSERT public.hitung_pengakuan_spp(book,NULL) IS NULL;
  ASSERT NOT has_function_privilege('anon','public.posting_spp_tagihan_atomik(uuid,uuid)','EXECUTE');
  ASSERT NOT has_function_privilege('authenticated','public.posting_spp_tagihan_atomik(uuid,uuid)','EXECUTE');
- RAISE NOTICE 'PASS 1: akhir bulan, tahun akademik kabisat, dan privilege';
+ RAISE NOTICE 'PASS 1: awal bulan, tahun akademik kabisat, dan privilege';
 
  SELECT * INTO g FROM generate_tagihan_batch(j,book,2,NULL,
   '[{"siswa_id":"00000000-0000-0000-0000-000000000001","kelas_id":null}]',NULL);
  ASSERT g.generated=1 AND g.scheduled=1 AND cardinality(g.errors)=0;
  SELECT id INTO t1 FROM tagihan WHERE siswa_id='00000000-0000-0000-0000-000000000001' AND jenis_id=j;
  SELECT * INTO t FROM tagihan WHERE id=t1;
- ASSERT t.jatuh_tempo='2027-02-10' AND t.tanggal_pengakuan='2027-02-28' AND t.jurnal_piutang_id IS NULL;
+ ASSERT t.jatuh_tempo='2027-02-10' AND t.tanggal_pengakuan='2027-02-01' AND t.jurnal_piutang_id IS NULL;
  r:=proses_pembayaran_atomik(t.siswa_id,j,2,450000,'2027-02-05','Kasir',NULL,book,false,t1,kas,rev,'Pendapatan','JP',NULL,'SPP TK');
  SELECT id INTO pd1 FROM pendapatan_dimuka WHERE pembayaran_id=(r->>'pembayaran_id')::uuid;
  ASSERT pd1 IS NOT NULL AND (r->>'diterima_dimuka')::boolean;
  ASSERT COALESCE((SELECT sum(kredit) FROM jurnal_detail WHERE akun_id=rev),0)=0;
  RAISE NOTICE 'PASS 2: tanggal 10 tetap, kasir dipaksa kredit kewajiban meski caller meminta pendapatan';
 
- PERFORM set_config('test.today','2027-02-10',true);
+ PERFORM set_config('test.today','2027-01-31',true);
  rejected:=false;
  BEGIN PERFORM akui_pendapatan_dimuka_atomik(pd1,NULL); EXCEPTION WHEN OTHERS THEN
   ASSERT SQLERRM LIKE 'Pendapatan belum dapat diakui%'; rejected:=true; END;
  ASSERT rejected;
  SELECT * INTO g FROM akui_pendapatan_dimuka_jatuh_tempo('2027-03-10',NULL,5000);
  ASSERT g.diakui=0 AND COALESCE((SELECT sum(kredit) FROM jurnal_detail WHERE akun_id=rev),0)=0;
- RAISE NOTICE 'PASS 3: tanggal 10 dan cutoff masa depan tidak mempercepat pengakuan';
+ RAISE NOTICE 'PASS 3: sebelum bulan layanan dan cutoff masa depan tidak mempercepat pengakuan';
 
  FOR s IN SELECT id FROM siswa WHERE id IN
  ('00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000003',
@@ -99,18 +99,18 @@ BEGIN
  r:=proses_pembayaran_atomik('00000000-0000-0000-0000-000000000006',j,2,100000,'2027-02-10','Cicilan pending',NULL,book,false,t6,kas,rev,'Pendapatan','JP',NULL,'SPP TK');
  p6:=(r->>'pembayaran_id')::uuid;
  ASSERT COALESCE((SELECT sum(kredit) FROM jurnal_detail WHERE akun_id=rev),0)=0;
- RAISE NOTICE 'PASS 4: cicilan tanggal 10-27 tetap kewajiban, diskon belum diakui';
+ RAISE NOTICE 'PASS 4: pembayaran sebelum layanan tetap kewajiban, diskon belum diakui';
 
- PERFORM set_config('test.today','2027-02-27',true);
+ PERFORM set_config('test.today','2027-01-31',true);
  SELECT * INTO g FROM posting_piutang_jatuh_tempo('2027-03-01',NULL,5000);
  ASSERT g.diposting=0;
- PERFORM set_config('test.today','2027-02-28',true);
+ PERFORM set_config('test.today','2027-02-01',true);
  r:=akui_pendapatan_dimuka_atomik(pd1,NULL);
  ASSERT (r->>'diakui')::boolean AND (SELECT pengakuan_spp_selesai FROM tagihan WHERE id=t1);
  cnt:=(SELECT count(*) FROM jurnal);
  r:=akui_pendapatan_dimuka_atomik(pd1,NULL);
  ASSERT NOT (r->>'diakui')::boolean AND (SELECT count(*) FROM jurnal)=cnt;
- RAISE NOTICE 'PASS 5: akhir bulan mengakui lunas tanpa piutang, pengakuan ulang idempoten';
+ RAISE NOTICE 'PASS 5: awal bulan mengakui lunas tanpa piutang, pengakuan ulang idempoten';
 
  r:=akui_pendapatan_dimuka_atomik(pd2,NULL);
  SELECT * INTO t FROM tagihan WHERE id=t2;
@@ -161,12 +161,12 @@ BEGIN
  SELECT * INTO pd FROM pendapatan_dimuka WHERE pembayaran_id=(r->>'pembayaran_id')::uuid;
  ASSERT pd.tahun_ajaran_pembayaran_id=book AND pd.tahun_ajaran_target_id=s;
  ASSERT (SELECT tanggal FROM jurnal WHERE id=(r->>'jurnal_id')::uuid)='2027-12-15';
- PERFORM set_config('test.today','2028-01-10',true);
+ PERFORM set_config('test.today','2027-12-31',true);
  rejected:=false; BEGIN PERFORM akui_pendapatan_dimuka_atomik(pd.id,NULL);
  EXCEPTION WHEN OTHERS THEN rejected:=true; END; ASSERT rejected;
- PERFORM set_config('test.today','2028-01-31',true);
+ PERFORM set_config('test.today','2028-01-01',true);
  PERFORM akui_pendapatan_dimuka_atomik(pd.id,NULL);
- RAISE NOTICE 'PASS 9: Midtrans lintas tahun tetap kas 2027, target 2028 dan pengakuan 31 Januari';
+ RAISE NOTICE 'PASS 9: Midtrans lintas tahun tetap kas 2027, target 2028 dan pengakuan 1 Januari';
 
  -- Saldo piutang lama yang telah terbit tidak direklasifikasi.
  PERFORM set_config('test.today','2027-02-10',true);
@@ -180,14 +180,14 @@ BEGIN
 
 
  -- Pembatalan setelah akrual sisa piutang tetapi sebelum PD diakui.
- PERFORM set_config('test.today','2027-02-10',true);
+ PERFORM set_config('test.today','2027-01-31',true);
  SELECT * INTO g FROM generate_tagihan_batch(j,book,2,NULL,
   '[{"siswa_id":"00000000-0000-0000-0000-000000000010","kelas_id":null}]',NULL);
  SELECT * INTO t FROM tagihan WHERE siswa_id='00000000-0000-0000-0000-000000000010' AND jenis_id=j;
  r:=proses_pembayaran_atomik(t.siswa_id,j,2,100000,'2027-02-10','Pending PD',NULL,book,false,t.id,kas,rev,'Pendapatan','JP',NULL,'SPP TK');
  p6:=(r->>'pembayaran_id')::uuid;
  SELECT sum(kredit-debit) INTO balance_before FROM jurnal_detail WHERE akun_id=rev;
- PERFORM set_config('test.today','2027-02-28',true);
+ PERFORM set_config('test.today','2027-02-01',true);
  PERFORM posting_spp_tagihan_atomik(t.id,NULL);
  ASSERT (SELECT status FROM pendapatan_dimuka WHERE pembayaran_id=p6)='pending';
  PERFORM batalkan_pembayaran_atomik(p6,'Uji pending','2027-02-28',NULL);
@@ -197,12 +197,12 @@ BEGIN
  RAISE NOTICE 'PASS 12: pembatalan di antara akrual sisa piutang dan pengakuan PD tetap menjaga pendapatan layanan';
 
  -- Beasiswa penuh tanpa uang masuk.
- PERFORM set_config('test.today','2027-02-10',true);
+ PERFORM set_config('test.today','2027-01-31',true);
  SELECT * INTO g FROM generate_tagihan_batch(j,book,2,NULL,
   '[{"siswa_id":"00000000-0000-0000-0000-000000000009","kelas_id":null}]',NULL);
  SELECT * INTO t FROM tagihan WHERE siswa_id='00000000-0000-0000-0000-000000000009' AND jenis_id=j;
  ASSERT t.nominal=0 AND t.nominal_diskon=450000 AND t.jurnal_piutang_id IS NULL;
- PERFORM set_config('test.today','2027-02-28',true);
+ PERFORM set_config('test.today','2027-02-01',true);
  PERFORM posting_spp_tagihan_atomik(t.id,NULL);
  SELECT * INTO t FROM tagihan WHERE id=t.id;
  ASSERT t.status='lunas' AND t.pengakuan_spp_selesai;
@@ -212,7 +212,7 @@ BEGIN
  RAISE NOTICE 'PASS 13: potongan 100 persen diakui bruto/kontra tanpa penerimaan kas';
 
  -- Midtrans cicilan sesudah tanggal 10 + fallback lama sebelum tanggal 10.
- PERFORM set_config('test.today','2027-02-10',true);
+ PERFORM set_config('test.today','2027-01-31',true);
  FOR s IN SELECT id FROM siswa WHERE id IN
  ('00000000-0000-0000-0000-000000000011','00000000-0000-0000-0000-000000000012')
  LOOP
@@ -225,7 +225,7 @@ BEGIN
  r:=proses_pembayaran_midtrans_atomik(item,t.siswa_id,j,2,100000,'2027-02-10',NULL,book,'TEST-CICILAN','qris',bank,rev,'SPP TK');
  ASSERT (r->>'diterima_dimuka')::boolean AND (r->>'sisa_tagihan')::numeric=350000;
  SELECT id INTO pd1 FROM pendapatan_dimuka WHERE pembayaran_id=(r->>'pembayaran_id')::uuid;
- PERFORM set_config('test.today','2027-02-28',true);
+ PERFORM set_config('test.today','2027-02-01',true);
  PERFORM akui_pendapatan_dimuka_atomik(pd1,NULL);
  ASSERT (SELECT status FROM tagihan WHERE id=t.id)='sebagian';
  SELECT * INTO t FROM tagihan WHERE siswa_id='00000000-0000-0000-0000-000000000012' AND jenis_id=j;
@@ -233,7 +233,7 @@ BEGIN
  VALUES(gen_random_uuid(),t.siswa_id,j,2,100000,'Fallback lama') RETURNING id INTO item;
  cnt:=(SELECT count(*) FROM jurnal); rejected:=false;
  BEGIN
-  PERFORM proses_pembayaran_midtrans_atomik(item,t.siswa_id,j,2,100000,'2027-02-05',NULL,book,'TEST-FALLBACK','qris',bank,rev,'SPP TK');
+  PERFORM proses_pembayaran_midtrans_atomik(item,t.siswa_id,j,2,100000,'2027-01-31',NULL,book,'TEST-FALLBACK','qris',bank,rev,'SPP TK');
  EXCEPTION WHEN OTHERS THEN
   ASSERT SQLERRM LIKE 'Tagihan yang belum jatuh tempo harus dibayar penuh%'; rejected:=true;
  END;
@@ -250,6 +250,26 @@ BEGIN
  EXCEPTION WHEN OTHERS THEN rejected:=true; END;
  ASSERT rejected AND (SELECT count(*) FROM jurnal)=cnt;
  RAISE NOTICE 'PASS 15: penerimaan historis tanpa jurnal diblokir tanpa membuat jurnal';
+
+ -- Tagihan terjadwal yang belum diproses cron: kasir/Midtrans mengakui bulan berjalan atomik.
+ PERFORM set_config('test.today','2027-09-30',true);
+ SELECT * INTO g FROM generate_tagihan_batch(j,book,10,NULL,
+  '[{"siswa_id":"00000000-0000-0000-0000-000000000001","kelas_id":null},{"siswa_id":"00000000-0000-0000-0000-000000000003","kelas_id":null}]',NULL);
+ ASSERT g.generated=2 AND g.scheduled=2;
+ PERFORM set_config('test.today','2027-10-02',true);
+ SELECT * INTO t FROM tagihan WHERE siswa_id='00000000-0000-0000-0000-000000000001' AND jenis_id=j AND bulan=10;
+ ASSERT t.tanggal_pengakuan='2027-10-01' AND t.jatuh_tempo='2027-10-10';
+ r:=proses_pembayaran_atomik(t.siswa_id,j,10,100000,'2027-10-02','Bulan berjalan',NULL,book,true,t.id,kas,liab,'Dimuka','JD',NULL,'SPP TK');
+ ASSERT NOT (r->>'diterima_dimuka')::boolean;
+ ASSERT (SELECT pengakuan_spp_selesai FROM tagihan WHERE id=t.id);
+ ASSERT NOT EXISTS(SELECT 1 FROM pendapatan_dimuka WHERE pembayaran_id=(r->>'pembayaran_id')::uuid);
+ SELECT * INTO t FROM tagihan WHERE siswa_id='00000000-0000-0000-0000-000000000003' AND jenis_id=j AND bulan=10;
+ INSERT INTO transaksi_midtrans_item(transaksi_id,siswa_id,jenis_id,bulan,jumlah,nama_item,tagihan_id)
+ VALUES(gen_random_uuid(),t.siswa_id,j,10,100000,'SPP Oktober',t.id) RETURNING id INTO item;
+ r:=proses_pembayaran_midtrans_atomik(item,t.siswa_id,j,10,100000,'2027-10-02',NULL,book,'TEST-OCTOBER','qris',bank,rev,'SPP TK');
+ ASSERT NOT (r->>'diterima_dimuka')::boolean;
+ ASSERT (SELECT pengakuan_spp_selesai FROM tagihan WHERE id=t.id);
+ RAISE NOTICE 'PASS 16: kasir dan Midtrans tanggal 2 mengakui SPP Oktober tanpa menunggu cron atau tanggal 10';
 
  -- Seluruh jurnal harus balance, termasuk pembalik dan potongan.
  ASSERT NOT EXISTS (SELECT 1 FROM jurnal_detail GROUP BY jurnal_id HAVING sum(debit)<>sum(kredit));
