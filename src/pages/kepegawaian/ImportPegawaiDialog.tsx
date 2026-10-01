@@ -12,6 +12,10 @@ import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CheckCircle2, Download, FileSpreadsheet, Loader2, Upload, XCircle } from "lucide-react";
 
+import { useAuth } from "@/contexts/AuthContext";
+import { validateImportNiks, savePegawaiWithNik } from "@/lib/pegawaiNik";
+import { loadPegawaiNiks, assertPegawaiNikAvailable, writePegawaiNik } from "@/lib/pegawaiNikStorage";
+
 type LembagaRef = { id: string; kode?: string | null; nama?: string | null };
 
 interface ImportPegawaiDialogProps {
@@ -24,6 +28,7 @@ interface ImportPegawaiDialogProps {
 type PegawaiImportRow = Record<string, unknown> & {
   pegawai_id?: unknown;
   nip?: unknown;
+  nik?: unknown;
   nama?: unknown;
   jenis_kelamin?: unknown;
   tempat_lahir?: unknown;
@@ -53,6 +58,8 @@ type PreparedRow = {
   action: "insert" | "update";
   existingId?: string;
   payload: Record<string, unknown>;
+  nik: string;
+  employeeSaved?: boolean;
   errors: string[];
   runStatus: "pending" | "success" | "error";
   runMessage?: string;
@@ -131,15 +138,16 @@ function errorMessage(error: unknown): string {
   return "Gagal menyimpan baris";
 }
 
-function makeTemplateWorkbook() {
+export function makeTemplateWorkbook() {
   const columns = [
-    "pegawai_id", "nip", "nama", "jenis_kelamin", "tempat_lahir", "tanggal_lahir",
+    "pegawai_id", "nip", "nik", "nama", "jenis_kelamin", "tempat_lahir", "tanggal_lahir",
     "agama", "alamat", "telepon", "email", "jabatan", "departemen", "status",
     "tanggal_masuk", "tanggal_pensiun", "golongan_terakhir", "foto_url",
   ];
   const sample = {
     pegawai_id: "",
     nip: "19870001",
+    nik: "",
     nama: "Ahmad Fulan",
     jenis_kelamin: "L",
     tempat_lahir: "Pangkalpinang",
@@ -166,6 +174,7 @@ function makeTemplateWorkbook() {
     ["Departemen", "Boleh memakai kode, nama, atau UUID departemen yang tersedia di aplikasi."],
     ["Jenis kelamin", "L / P, atau Laki-laki / Perempuan."],
     ["Status", "aktif / nonaktif."],
+    ["NIK", "Opsional, tepat 16 digit. Format sel sebagai Text sebelum mengetik; Excel bisa membulatkan digit pada sel numerik. Spasi/titik dibersihkan. NIK harus unik. NIK kosong tidak menghapus data lama."],
     ["Tanggal", "Gunakan format YYYY-MM-DD, misalnya 2026-07-01."],
     ["Catatan", "Nama/email/telepon tidak dipakai sebagai kunci update otomatis untuk menghindari salah taut."],
   ]);
@@ -179,6 +188,8 @@ export function ImportPegawaiDialog({
   open, onOpenChange, lembagaList, onImported,
 }: ImportPegawaiDialogProps) {
   const queryClient = useQueryClient();
+  const { role } = useAuth();
+  const canImport = role === "admin";
   const [rows, setRows] = useState<PreparedRow[]>([]);
   const [rawRows, setRawRows] = useState<PegawaiImportRow[]>([]);
   const [updateExisting, setUpdateExisting] = useState(false);
@@ -191,7 +202,7 @@ export function ImportPegawaiDialog({
   const importGuardRef = useRef(false);
 
   const busy = validating || importing || exportingCurrent;
-  const hasSuccessfulRows = rows.some((row) => row.runStatus === "success");
+  const hasSuccessfulRows = rows.some((row) => row.runStatus === "success" || row.employeeSaved);
   const executableRows = rows.filter((row) => row.errors.length === 0 && row.runStatus !== "success");
   const validationErrorRows = rows.filter((row) => row.errors.length > 0);
   const previewRows = validationErrorRows.length
@@ -223,7 +234,8 @@ export function ImportPegawaiDialog({
   };
 
   const prepareRows = async (data: PegawaiImportRow[], allowUpdate: boolean): Promise<PreparedRow[]> => {
-    const existing = await loadExistingPegawai();
+    if (!canImport) throw new Error("Import NIK hanya tersedia untuk admin.");
+    const [existing, existingNiks] = await Promise.all([loadExistingPegawai(), loadPegawaiNiks()]);
     const byId = new Map(existing.map((item) => [item.id, item]));
     const byNip = new Map(existing.filter((item) => text(item.nip)).map((item) => [key(item.nip), item]));
 
@@ -236,9 +248,16 @@ export function ImportPegawaiDialog({
       if (nip) nipCounts.set(nip, (nipCounts.get(nip) || 0) + 1);
     }
 
+    const nikValidations = validateImportNiks(data.map(raw => ({
+      nik: raw.nik,
+      existingId: (byId.get(text(raw.pegawai_id)) || byNip.get(key(raw.nip)))?.id,
+    })), existingNiks);
+
     return data.map((raw, index) => {
       const rowNumber = index + 2;
       const errors: string[] = [];
+      const nikValidation = nikValidations[index];
+      if (nikValidation.error) errors.push(nikValidation.error);
       const employeeId = text(raw.pegawai_id);
       const nip = text(raw.nip);
       const idMatch = employeeId ? byId.get(employeeId) : undefined;
@@ -312,7 +331,7 @@ export function ImportPegawaiDialog({
       assign("golongan_terakhir", raw.golongan_terakhir);
       assign("foto_url", raw.foto_url);
 
-      if (action === "update" && Object.keys(payload).length === 0) {
+      if (action === "update" && Object.keys(payload).length === 0 && !nikValidation.nik) {
         errors.push("Tidak ada nilai yang dapat diperbarui pada baris ini.");
       }
 
@@ -322,6 +341,7 @@ export function ImportPegawaiDialog({
         action,
         existingId: existingMatch?.id,
         payload,
+        nik: nikValidation.nik,
         errors,
         runStatus: "pending",
       };
@@ -353,7 +373,7 @@ export function ImportPegawaiDialog({
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const workbook = XLSX.read(ev.target?.result, { type: "array", cellDates: false });
+        const workbook = XLSX.read(ev.target?.result, { type: "array", cellDates: false, raw: true });
         const sheetName = workbook.SheetNames.includes("Template") ? "Template" : workbook.SheetNames[0];
         const parsed = XLSX.utils
           .sheet_to_json<PegawaiImportRow>(workbook.Sheets[sheetName], { defval: "", raw: true })
@@ -405,6 +425,7 @@ export function ImportPegawaiDialog({
       const exportRows = (data || []).map((item: any) => ({
         pegawai_id: item.id,
         nip: item.nip || "",
+        nik: "",
         nama: item.nama || "",
         jenis_kelamin: item.jenis_kelamin || "",
         tempat_lahir: item.tempat_lahir || "",
@@ -439,7 +460,7 @@ export function ImportPegawaiDialog({
   };
 
   const handleImport = async () => {
-    if (importGuardRef.current || importing || validating || !executableRows.length) return;
+    if (!canImport || importGuardRef.current || importing || validating || !executableRows.length) return;
     importGuardRef.current = true;
     setImporting(true);
     setProgress(0);
@@ -452,24 +473,34 @@ export function ImportPegawaiDialog({
     let inserted = rows.filter((row) => row.runStatus === "success" && row.action === "insert").length;
     let updated = rows.filter((row) => row.runStatus === "success" && row.action === "update").length;
     let failedThisRun = 0;
+    let employeeChanged = false;
     const validationFailures = rows.filter((row) => row.errors.length > 0).length;
 
     try {
       for (let cursor = 0; cursor < pending.length; cursor++) {
         const { row, index } = pending[cursor];
         try {
-          if (row.action === "update") {
-            if (!row.existingId) throw new Error("ID pegawai existing tidak ditemukan.");
-            const { error } = await (supabase as any).from("pegawai").update(row.payload).eq("id", row.existingId);
-            if (error) throw error;
-            updated++;
-            updateRow(index, { runStatus: "success", runMessage: "Berhasil diperbarui" });
-          } else {
-            const { error } = await (supabase as any).from("pegawai").insert(row.payload);
-            if (error) throw error;
-            inserted++;
-            updateRow(index, { runStatus: "success", runMessage: "Berhasil ditambahkan" });
-          }
+          if (row.action === "update" && !row.existingId) throw new Error("ID pegawai existing tidak ditemukan.");
+          await assertPegawaiNikAvailable(row.nik, row.existingId);
+          await savePegawaiWithNik(row.existingId, row.nik, {
+            writeEmployee: async (id) => {
+              if (id && Object.keys(row.payload).length === 0) return id;
+              const query = id
+                ? (supabase as any).from("pegawai").update(row.payload).eq("id", id)
+                : (supabase as any).from("pegawai").insert(row.payload);
+              const { data, error } = await query.select("id").single();
+              if (error) throw error;
+              return data.id;
+            },
+            onEmployeeSaved: (id) => {
+              employeeChanged = true;
+              updateRow(index, { existingId: id, employeeSaved: true });
+            },
+            writeNik: writePegawaiNik,
+          });
+          if (row.action === "update") updated++;
+          else inserted++;
+          updateRow(index, { runStatus: "success", runMessage: row.action === "update" ? "Berhasil diperbarui" : "Berhasil ditambahkan" });
         } catch (error) {
           failedThisRun++;
           updateRow(index, { runStatus: "error", runMessage: errorMessage(error) });
@@ -480,9 +511,10 @@ export function ImportPegawaiDialog({
       const failed = validationFailures + failedThisRun;
       setResult({ success: inserted, updated, error: failed });
 
-      if (inserted || updated) {
+      if (inserted || updated || employeeChanged) {
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ["pegawai_list"] }),
+          queryClient.invalidateQueries({ queryKey: ["pegawai_nik_masked"] }),
           queryClient.invalidateQueries({ queryKey: ["pegawai_statistik"] }),
           queryClient.invalidateQueries({ queryKey: ["kepegawaian_rekap_pegawai"] }),
           queryClient.invalidateQueries({ queryKey: ["pegawai_for_jadwal"] }),
@@ -504,6 +536,7 @@ export function ImportPegawaiDialog({
       pegawai_id: text(row.raw.pegawai_id),
       nip: text(row.raw.nip),
       nama: text(row.raw.nama),
+      data_pegawai_tersimpan: row.employeeSaved ? "ya" : "",
       aksi: row.action === "update" ? "update" : "baru",
       hasil: row.errors.length
         ? "gagal_validasi"
@@ -535,6 +568,8 @@ export function ImportPegawaiDialog({
     }
     onOpenChange(nextOpen);
   };
+
+  if (!canImport) return null;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -583,13 +618,15 @@ export function ImportPegawaiDialog({
           </div>
 
           <p className="text-xs text-muted-foreground">
+            NIK opsional dan harus diisi sebagai teks 16 digit. Spasi/titik dibersihkan; NIK salah atau duplikat dilaporkan per baris.
+            Kolom NIK pada unduhan data saat ini sengaja kosong untuk diisi bila diperlukan.
             Untuk keamanan, nama, email, dan nomor HP tidak dipakai sebagai kunci update otomatis. Pada mode update, sel kosong tidak menghapus data lama.
             Untuk memindahkan pegawai menjadi pegawai yayasan/lintas lembaga, isi kolom departemen dengan <strong>Yayasan</strong>.
           </p>
 
           {hasSuccessfulRows && (
             <p className="text-xs text-muted-foreground">
-              File dan opsi update dikunci setelah ada baris berhasil. Tutup dialog untuk memulai file baru; baris sukses pada proses ini tidak akan dijalankan ulang.
+              File dan opsi update dikunci setelah ada data pegawai tersimpan. Tutup dialog untuk memulai file baru; baris sukses pada proses ini tidak akan dijalankan ulang.
             </p>
           )}
 

@@ -1789,6 +1789,18 @@ export type Database = {
           },
         ]
       }
+      pegawai_nik: {
+        Row: { pegawai_id: string; nik: string; updated_at: string; updated_by: string | null }
+        Insert: { pegawai_id: string; nik: string; updated_at?: string; updated_by?: string | null }
+        Update: { pegawai_id?: string; nik?: string; updated_at?: string; updated_by?: string | null }
+        Relationships: [{
+          foreignKeyName: "pegawai_nik_pegawai_id_fkey"
+          columns: ["pegawai_id"]
+          isOneToOne: true
+          referencedRelation: "pegawai"
+          referencedColumns: ["id"]
+        }]
+      }
       pegawai_mapel: {
         Row: {
           id: string
