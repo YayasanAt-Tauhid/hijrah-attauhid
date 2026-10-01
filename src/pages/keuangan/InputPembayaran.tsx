@@ -29,7 +29,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import Unauthorized from "@/pages/Unauthorized";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search, Printer, Check, X, ShoppingCart, Trash2, Clock3, WalletCards, UserRound, History, ReceiptText, GraduationCap, Info } from "lucide-react";
+import { Search, Printer, Check, X, ShoppingCart, Trash2, WalletCards, History, ReceiptText, Info } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -694,7 +694,8 @@ function InputPembayaranContent() {
 
   const tagihanPrintTotal = tagihanPrintItems.reduce((sum, item) => sum + Number(item.sisa || 0), 0);
   const allVisibleBillsSelected = openBills.length > 0 &&
-    openBills.every(bill => tagihanPrintItems.some(item => item.id === bill.id));
+    openBills.every(bill => cartItems.some(item => item.key === bill.id));
+  const cartInvalid = cartItems.some(item => !Number.isFinite(item.jumlah) || item.jumlah <= 0);
   const kelasNama      = getKelasAktif(selectedSiswa)?.kelas?.nama ?? "-";
   const lembagaNama    = lembagaList?.find(l => l.id === departemenId)?.nama ?? "-";
 
@@ -722,53 +723,18 @@ function InputPembayaranContent() {
     if (tahunAktif?.id) setSelectedTahunAjaranId(tahunAktif.id);
   }, [setField, tahunAktif?.id]);
 
-  const handleToggleBillPrint = (bill: OpenBillRow, checked: boolean) => {
-    const item = billToPrintItem(bill);
-    if (!item) return;
-    setTagihanPrintItems(prev => {
-      if (checked) {
-        if (prev.some(row => row.id === item.id)) return prev;
-        return [...prev, item];
-      }
-      return prev.filter(row => row.id !== item.id);
-    });
-  };
-
-  const handleToggleAllBillsPrint = (checked: boolean) => {
-    if (!checked) {
-      const visibleIds = new Set(openBills.map(bill => bill.id));
-      setTagihanPrintItems(prev => prev.filter(item => !visibleIds.has(item.id)));
-      return;
-    }
-
-    const items = openBills
-      .map(billToPrintItem)
-      .filter((item): item is PrintTagihanItem => !!item);
-    setTagihanPrintItems(prev => {
-      const byId = new Map(prev.map(item => [item.id, item]));
-      for (const item of items) byId.set(item.id, item);
-      return Array.from(byId.values());
-    });
-  };
-
-  const handleAddBillToCart = (bill: OpenBillRow) => {
-    if (!selectedSiswa || !bill.jenis_pembayaran || bill.sisa <= 0) return;
-    if (cartItems.some(item => item.key === bill.id)) {
-      toast.info("Tagihan ini sudah ada di keranjang");
-      return;
-    }
-
+  const buildCartItemFromBill = (bill: OpenBillRow): PaymentCartItem | null => {
+    if (!bill.jenis_pembayaran || bill.sisa <= 0) return null;
     const yearLabel =
       bill.tahun_ajaran?.tanggal_mulai?.slice(0, 4) ||
       bill.tahun_ajaran?.nama ||
       selectedTahunLabel;
-
-    setCartItems(prev => [...prev, {
+    return {
       key: bill.id,
       tagihanId: bill.id,
       jenisId: bill.jenis_id,
-      jenisNama: bill.jenis_pembayaran!.nama,
-      jenisTipe: bill.jenis_pembayaran!.tipe,
+      jenisNama: bill.jenis_pembayaran.nama,
+      jenisTipe: bill.jenis_pembayaran.tipe,
       bulan: bill.bulan ?? 0,
       jumlah: bill.sisa,
       tahunAjaranId: bill.tahun_ajaran_id,
@@ -776,9 +742,62 @@ function InputPembayaranContent() {
       isBayarDimuka,
       status: bill.status,
       tahunLabel: yearLabel,
-    }]);
+    };
+  };
 
-    toast.success("Tagihan ditambahkan ke keranjang");
+  // Cicilan hanya sah untuk SPP dan Sekali Bayar yang tidak terjadwal.
+  // Aturan yang sama dipaksa oleh server (prosesPembayaran), jadi ini hanya
+  // menentukan apakah kolom jumlah boleh diubah kasir.
+  const canPartialBill = (bill: OpenBillRow) =>
+    !!bill.jenis_pembayaran &&
+    bill.status !== "terjadwal" &&
+    (bill.jenis_pembayaran.tipe === "sekali" || isSppPaymentName(bill.jenis_pembayaran.nama));
+
+  const handleToggleBillPay = (bill: OpenBillRow, checked: boolean) => {
+    if (!selectedSiswa) return;
+    if (!checked) {
+      setCartItems(prev => prev.filter(item => item.key !== bill.id));
+      return;
+    }
+    const item = buildCartItemFromBill(bill);
+    if (!item) return;
+    setCartItems(prev => (prev.some(row => row.key === item.key) ? prev : [...prev, item]));
+  };
+
+  const handleToggleAllBillsPay = (checked: boolean) => {
+    if (!selectedSiswa) return;
+    const visibleIds = new Set(openBills.map(bill => bill.id));
+    if (!checked) {
+      setCartItems(prev => prev.filter(item => !visibleIds.has(item.key)));
+      return;
+    }
+    const items = openBills
+      .map(buildCartItemFromBill)
+      .filter((item): item is PaymentCartItem => !!item);
+    setCartItems(prev => {
+      const existing = new Set(prev.map(row => row.key));
+      return [...prev, ...items.filter(item => !existing.has(item.key))];
+    });
+  };
+
+  const handleCartAmountChange = (key: string, raw: string) => {
+    const digits = raw.replace(/\D/g, "");
+    const bill = openBills.find(row => row.id === key);
+    let amount = digits ? Number(digits) : 0;
+    if (bill && amount > bill.sisa) amount = bill.sisa;
+    setCartItems(prev => prev.map(item => (item.key === key ? { ...item, jumlah: amount } : item)));
+  };
+
+  // Cetak tagihan yang dicentang; jika belum ada yang dicentang, cetak semua tagihan terbuka.
+  const handlePrintTagihan = () => {
+    const picked = openBills.filter(bill => cartItems.some(item => item.key === bill.id));
+    const source = picked.length > 0 ? picked : openBills;
+    const items = source
+      .map(billToPrintItem)
+      .filter((item): item is PrintTagihanItem => !!item);
+    if (items.length === 0) return;
+    setTagihanPrintItems(items);
+    setShowTagihanPrint(true);
   };
 
   const handleAddToCart = () => {
@@ -1107,147 +1126,266 @@ function InputPembayaranContent() {
 
       {selectedSiswa ? (
         <div className="space-y-4">
-          <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-            <div className="space-y-3">
-              <div className="rounded-xl border bg-card shadow-sm">
-                <div className="flex items-center justify-between border-b px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                      <UserRound className="h-4 w-4" />
-                    </div>
-                    <h2 className="font-semibold">Kartu Siswa</h2>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    title="Tutup siswa"
-                    onClick={() => {
-                      setSelectedSiswa(null);
-                      setCartItems([]);
-                      setTagihanPrintItems([]);
-                      setShowTagihanPrint(false);
-                      setField("jenisId", "");
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                <div className="p-4">
-                  <div className="flex items-center gap-3 border-b pb-4">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xl font-bold text-primary">
-                      {selectedSiswa.nama?.[0]}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="truncate font-semibold">{selectedSiswa.nama}</h3>
-                        {isSiswaNonaktif && (
-                          <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                            {formatStatusSiswa(selectedSiswa.status)}
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        NIS: {selectedSiswa.nis ?? "-"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-[110px_1fr] gap-y-3 text-sm">
-                    <span className="flex items-center gap-2 text-muted-foreground">
-                      <GraduationCap className="h-4 w-4" /> Kelas
-                    </span>
-                    <span className="font-medium">{kelasNama}</span>
-                    <span className="text-muted-foreground">Lembaga</span>
-                    <span className="font-medium">{lembagaNama}</span>
-                    <span className="text-muted-foreground">Status</span>
-                    <span className="font-medium">{formatStatusSiswa(selectedSiswa.status)}</span>
-                  </div>
-
+          <div className="rounded-xl border bg-card px-4 py-3 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-base font-bold text-primary">
+                {selectedSiswa.nama?.[0]}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="truncate text-base font-semibold">{selectedSiswa.nama}</h2>
                   {isSiswaNonaktif && (
-                    <p className="mt-4 rounded-lg border bg-muted/30 p-2.5 text-xs text-muted-foreground">
-                      Siswa nonaktif hanya dapat membayar tunggakan lama yang masih terbuka.
-                    </p>
+                    <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      {formatStatusSiswa(selectedSiswa.status)}
+                    </span>
                   )}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  NIS: {selectedSiswa.nis ?? "-"} · Kelas {kelasNama} · {lembagaNama}
+                </p>
               </div>
-
-              <div className="rounded-xl border bg-card shadow-sm">
-                <div className="flex items-center justify-between border-b px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                      <History className="h-4 w-4" />
-                    </div>
-                    <h2 className="font-semibold">Riwayat Terakhir</h2>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs text-primary"
-                    onClick={() => document.getElementById("riwayat-pembayaran")?.scrollIntoView({ behavior: "smooth" })}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                title="Tutup siswa"
+                onClick={() => {
+                  setSelectedSiswa(null);
+                  setCartItems([]);
+                  setTagihanPrintItems([]);
+                  setShowTagihanPrint(false);
+                  setField("jenisId", "");
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            {isSiswaNonaktif && (
+              <p className="mt-3 rounded-lg border bg-muted/30 p-2.5 text-xs text-muted-foreground">
+                Siswa nonaktif hanya dapat membayar tunggakan lama yang masih terbuka.
+              </p>
+            )}
+          </div>
+          {legacyBreakdown.length > 0 && (
+            <div className="rounded-xl border bg-card p-4 shadow-sm">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Rincian dari Aplikasi Lama
+              </h3>
+              <div className="space-y-2">
+                {legacyBreakdown.map((row, index) => (
+                  <div
+                    key={(row.kode_lama ?? "legacy") + "-" + row.nama_lama + "-" + index}
+                    className="flex items-start justify-between gap-2 border-b pb-2 text-xs last:border-0"
                   >
-                    Lihat Semua
-                  </Button>
-                </div>
-                <div className="p-4">
-                  {loadRiwayat ? (
-                    <p className="text-xs text-muted-foreground">Memuat...</p>
-                  ) : riwayat?.length ? (
-                    <div className="space-y-3">
-                      {riwayat.slice(0, 3).map(row => (
-                        <div key={row.id} className="flex items-start justify-between gap-3 border-b pb-3 last:border-0 last:pb-0">
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-medium">{row.jenis_pembayaran?.nama ?? "-"}</p>
-                            <p className="mt-0.5 text-[11px] text-muted-foreground">
-                              {row.periodeTagihanLabel ||
-                                (row.bulan
-                                  ? namaBulanTahun(row.bulan, { tanggalTransaksi: row.tanggal_bayar })
-                                  : "Sekali Bayar")}
-                              {" · "}
-                              {row.tanggal_bayar ? format(new Date(row.tanggal_bayar), "dd/MM/yy") : "-"}
-                            </p>
-                          </div>
-                          <span className="shrink-0 text-xs font-semibold text-primary">
-                            {formatRupiah(Number(row.jumlah))}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Belum ada riwayat pembayaran.</p>
-                  )}
+                    <span className="min-w-0 font-medium">
+                      {row.kode_lama ? row.kode_lama + " — " : ""}
+                      {row.nama_lama}
+                    </span>
+                    <span className="shrink-0 font-semibold">{formatRupiah(row.nominal)}</span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-1 text-xs font-semibold">
+                  <span>Total rincian legacy</span>
+                  <span>{formatRupiah(legacyBreakdown[0]?.breakdown_total ?? 0)}</span>
                 </div>
               </div>
+            </div>
+          )}
 
-              {legacyBreakdown.length > 0 && (
-                <div className="rounded-xl border bg-card p-4 shadow-sm">
-                  <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Rincian dari Aplikasi Lama
-                  </h3>
-                  <div className="space-y-2">
-                    {legacyBreakdown.map((row, index) => (
-                      <div
-                        key={(row.kode_lama ?? "legacy") + "-" + row.nama_lama + "-" + index}
-                        className="flex items-start justify-between gap-2 border-b pb-2 text-xs last:border-0"
-                      >
-                        <span className="min-w-0 font-medium">
-                          {row.kode_lama ? row.kode_lama + " — " : ""}
-                          {row.nama_lama}
-                        </span>
-                        <span className="shrink-0 font-semibold">{formatRupiah(row.nominal)}</span>
-                      </div>
-                    ))}
-                    <div className="flex items-center justify-between pt-1 text-xs font-semibold">
-                      <span>Total rincian legacy</span>
-                      <span>{formatRupiah(legacyBreakdown[0]?.breakdown_total ?? 0)}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
+          <div className="rounded-xl border bg-card shadow-sm">
+            <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-semibold">Tagihan Siswa</h2>
+                <p className="text-xs text-muted-foreground">
+                  Centang tagihan yang dibayar, lalu cek jumlah bayarnya.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                disabled={openBills.length === 0}
+                title="Mencetak tagihan yang dicentang, atau semua tagihan jika belum ada yang dicentang"
+                onClick={handlePrintTagihan}
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                Cetak Tagihan
+              </Button>
             </div>
 
-            <div className="rounded-xl border bg-card shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
+                  <tr>
+                    <th className="w-12 px-4 py-3">
+                      <input
+                        type="checkbox"
+                        aria-label="Pilih semua tagihan"
+                        checked={allVisibleBillsSelected}
+                        onChange={event => handleToggleAllBillsPay(event.target.checked)}
+                        className="h-4 w-4"
+                      />
+                    </th>
+                    <th className="px-3 py-3 font-medium">Jenis</th>
+                    <th className="px-3 py-3 font-medium">Periode</th>
+                    <th className="px-3 py-3 text-right font-medium">Sisa Tagihan</th>
+                    <th className="px-4 py-3 text-right font-medium">Jumlah Bayar</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {loadOpenBills ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                        Memuat tagihan...
+                      </td>
+                    </tr>
+                  ) : openBills.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                        Tidak ada tagihan terbuka pada tahun ajaran ini.
+                      </td>
+                    </tr>
+                  ) : (
+                    openBills.map(bill => {
+                      const cartItem = cartItems.find(item => item.key === bill.id);
+                      const partialOk = canPartialBill(bill);
+                      return (
+                        <tr key={bill.id} className={cn("hover:bg-muted/20", cartItem && "bg-primary/5")}>
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              aria-label={"Pilih tagihan " + (bill.jenis_pembayaran?.nama ?? "")}
+                              checked={!!cartItem}
+                              disabled={isCartPaying}
+                              onChange={event => handleToggleBillPay(bill, event.target.checked)}
+                              className="h-4 w-4"
+                            />
+                          </td>
+                          <td className="px-3 py-3 font-medium">{bill.jenis_pembayaran?.nama ?? "-"}</td>
+                          <td className="px-3 py-3 text-muted-foreground">
+                            {billPeriodLabel(bill)}
+                            {bill.status === "sebagian" && (
+                              <span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                                Sebagian
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            <div className="font-medium">{formatRupiah(bill.sisa)}</div>
+                            {bill.terbayar > 0 && (
+                              <div className="text-[10px] text-muted-foreground">
+                                dari {formatRupiah(bill.nominal)} · terbayar {formatRupiah(bill.terbayar)}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {!cartItem ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : partialOk ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <div className="relative w-36">
+                                  <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                                    Rp
+                                  </span>
+                                  <Input
+                                    inputMode="numeric"
+                                    aria-label={"Jumlah bayar " + (bill.jenis_pembayaran?.nama ?? "")}
+                                    className="h-9 pl-8 text-right font-medium"
+                                    disabled={isCartPaying}
+                                    value={cartItem.jumlah ? new Intl.NumberFormat("id-ID").format(cartItem.jumlah) : ""}
+                                    onChange={event => handleCartAmountChange(bill.id, event.target.value)}
+                                  />
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-9"
+                                  disabled={isCartPaying || cartItem.jumlah === bill.sisa}
+                                  onClick={() => handleCartAmountChange(bill.id, String(bill.sisa))}
+                                >
+                                  Penuh
+                                </Button>
+                              </div>
+                            ) : (
+                              <div>
+                                <span className="font-semibold">{formatRupiah(cartItem.jumlah)}</span>
+                                <span className="ml-2 text-[10px] text-muted-foreground">bayar penuh</span>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {cartItems.length > 0 && (
+            <div className="sticky bottom-0 z-20 rounded-xl border bg-card p-3 shadow-lg">
+              <details className="mb-2 text-xs">
+                <summary className="cursor-pointer select-none text-muted-foreground">Lihat rincian</summary>
+                <div className="mt-2 max-h-40 space-y-1.5 overflow-y-auto">
+                  {cartItems.map(item => (
+                    <div
+                      key={item.key}
+                      className="flex items-center justify-between gap-2 rounded-lg border bg-background px-3 py-1.5"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{item.jenisNama}</p>
+                        <p className="text-muted-foreground">
+                          {item.bulan ? namaBulan(item.bulan) + " " + item.tahunLabel : "Sekali Bayar"}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="font-semibold">{formatRupiah(item.jumlah)}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive"
+                          disabled={isCartPaying}
+                          onClick={() => setCartItems(prev => prev.filter(row => row.key !== item.key))}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">{cartItems.length} tagihan dipilih</p>
+                  <p className="text-xl font-bold">{formatRupiah(cartTotal)}</p>
+                </div>
+                <Button className="h-11 px-6" onClick={handlePayCart} disabled={isCartPaying || cartInvalid}>
+                  {isCartPaying ? (
+                    <span className="flex items-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Memproses {cartProgress?.done ?? 0}/{cartProgress?.total ?? cartItems.length}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <Check className="h-4 w-4" />
+                      Proses Pembayaran
+                    </span>
+                  )}
+                </Button>
+              </div>
+              {cartInvalid && (
+                <p className="mt-2 text-xs text-destructive">Isi jumlah bayar lebih dari 0 untuk semua tagihan yang dicentang.</p>
+              )}
+            </div>
+          )}
+
+          <details className="rounded-xl border bg-card shadow-sm">
+            <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium">
+              Bayar jenis lain, bayar di muka, atau tagihan yang belum terbit
+            </summary>
+            <div className="border-t">
               <div className="flex items-center gap-2 border-b px-4 py-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
                   <ReceiptText className="h-4 w-4" />
@@ -1449,200 +1587,9 @@ function InputPembayaranContent() {
                     )}
                   </Button>
                 </div>
-
-                {cartItems.length > 0 && (
-                  <div className="rounded-xl border bg-muted/20 p-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <ShoppingCart className="h-4 w-4" />
-                        <span className="text-sm font-semibold">Keranjang Pembayaran</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">{cartItems.length} item</span>
-                    </div>
-
-                    <div className="max-h-48 space-y-2 overflow-y-auto">
-                      {cartItems.map(item => (
-                        <div
-                          key={item.key}
-                          className="flex items-center justify-between gap-2 rounded-lg border bg-background px-3 py-2 text-xs"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">{item.jenisNama}</p>
-                            <p className="text-muted-foreground">
-                              {item.bulan
-                                ? namaBulan(item.bulan) + " " + item.tahunLabel
-                                : "Sekali Bayar"}
-                              {item.status === "terjadwal" ? " · Terjadwal" : ""}
-                            </p>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <span className="font-semibold">{formatRupiah(item.jumlah)}</span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-destructive"
-                              disabled={isCartPaying}
-                              onClick={() => setCartItems(prev => prev.filter(row => row.key !== item.key))}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between border-t pt-3 text-sm">
-                      <span className="font-medium">Total</span>
-                      <span className="font-bold">{formatRupiah(cartTotal)}</span>
-                    </div>
-
-                    <Button className="mt-3 h-10 w-full" onClick={handlePayCart} disabled={isCartPaying}>
-                      {isCartPaying ? (
-                        <span className="flex items-center gap-2">
-                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                          Memproses {cartProgress?.done ?? 0}/{cartProgress?.total ?? cartItems.length}
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          <Check className="h-4 w-4" />
-                          Bayar Semua · {formatRupiah(cartTotal)}
-                        </span>
-                      )}
-                    </Button>
-                  </div>
-                )}
               </div>
             </div>
-          </div>
-
-          <div className="rounded-xl border bg-card shadow-sm">
-            <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                  <ReceiptText className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2 className="font-semibold">Tagihan Siswa</h2>
-                  <p className="text-xs text-muted-foreground">
-                    Pilih tagihan untuk dibayarkan atau dicetak.
-                  </p>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9"
-                disabled={tagihanPrintItems.length === 0}
-                onClick={() => setShowTagihanPrint(true)}
-              >
-                <Printer className="mr-2 h-4 w-4" />
-                Cetak Tagihan Terpilih
-                {tagihanPrintItems.length > 0 ? " (" + tagihanPrintItems.length + ")" : ""}
-              </Button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-sm">
-                <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-                  <tr>
-                    <th className="w-12 px-4 py-3">
-                      <input
-                        type="checkbox"
-                        aria-label="Pilih semua tagihan"
-                        checked={allVisibleBillsSelected}
-                        onChange={event => handleToggleAllBillsPrint(event.target.checked)}
-                        className="h-4 w-4"
-                      />
-                    </th>
-                    <th className="px-3 py-3 font-medium">Jenis</th>
-                    <th className="px-3 py-3 font-medium">Periode</th>
-                    <th className="px-3 py-3 font-medium">Nominal</th>
-                    <th className="px-3 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 text-right font-medium">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {loadOpenBills ? (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                        Memuat tagihan...
-                      </td>
-                    </tr>
-                  ) : openBills.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                        Tidak ada tagihan terbuka pada tahun ajaran ini.
-                      </td>
-                    </tr>
-                  ) : (
-                    openBills.map(bill => {
-                      const checked = tagihanPrintItems.some(item => item.id === bill.id);
-                      const inCart = cartItems.some(item => item.key === bill.id);
-                      const statusClass =
-                        bill.status === "terjadwal"
-                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                          : bill.status === "sebagian"
-                          ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-                          : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300";
-                      const statusLabel =
-                        bill.status === "terjadwal"
-                          ? "Siap Dibayar"
-                          : bill.status === "sebagian"
-                          ? "Sebagian"
-                          : "Belum Bayar";
-
-                      return (
-                        <tr key={bill.id} className="hover:bg-muted/20">
-                          <td className="px-4 py-3">
-                            <input
-                              type="checkbox"
-                              aria-label={"Pilih tagihan " + (bill.jenis_pembayaran?.nama ?? "")}
-                              checked={checked}
-                              onChange={event => handleToggleBillPrint(bill, event.target.checked)}
-                              className="h-4 w-4"
-                            />
-                          </td>
-                          <td className="px-3 py-3 font-medium">{bill.jenis_pembayaran?.nama ?? "-"}</td>
-                          <td className="px-3 py-3 text-muted-foreground">{billPeriodLabel(bill)}</td>
-                          <td className="px-3 py-3">
-                            <div className="font-medium">{formatRupiah(bill.sisa)}</div>
-                            {bill.terbayar > 0 && (
-                              <div className="text-[10px] text-muted-foreground">
-                                dari {formatRupiah(bill.nominal)} · terbayar {formatRupiah(bill.terbayar)}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-3 py-3">
-                            <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium", statusClass)}>
-                              {bill.status === "terjadwal" ? (
-                                <Check className="h-3 w-3" />
-                              ) : (
-                                <Clock3 className="h-3 w-3" />
-                              )}
-                              {statusLabel}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8"
-                              disabled={inCart}
-                              onClick={() => handleAddBillToCart(bill)}
-                            >
-                              <ShoppingCart className="mr-1.5 h-3.5 w-3.5" />
-                              {inCart ? "Di Keranjang" : "Tambah ke Keranjang"}
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          </details>
 
           <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
@@ -1684,6 +1631,7 @@ function InputPembayaranContent() {
                 columns={riwayatColumns}
                 data={filteredRiwayat}
                 isLoading={loadRiwayat}
+                searchable={false}
                 emptyMessage="Belum ada pembayaran"
               />
             </div>
