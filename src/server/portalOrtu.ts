@@ -179,11 +179,11 @@ export interface PortalOrtuCompleteGoogleSignupInput {
   hubungan: string;
 }
 
-// Jendela waktu sejak akun auth dibuat yang masih dianggap "baru saja
-// signup lewat Google" -- proteksi agar akun lama (mis. siswa yang sudah
-// lama punya login dengan role 'siswa') tidak bisa "naik" jadi ortu hanya
-// dengan menebak NIS+nama+tanggal lahir siswa lain.
-const JENDELA_SIGNUP_BARU_MS = 10 * 60 * 1000;
+// Akun lama hasil salah masuk jalur staff dapat memiliki role legacy "siswa"
+// walau tidak pernah terhubung ke siswa/pegawai. Akun orphan seperti itu
+// boleh dipulihkan lewat Portal Orang Tua setelah verifikasi anak yang sama
+// ketatnya dengan pendaftaran baru. Akun siswa/staff yang benar-benar punya
+// relasi tidak boleh dikonversi.
 
 export const portalOrtuCompleteGoogleSignup = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -194,7 +194,7 @@ export const portalOrtuCompleteGoogleSignup = createServerFn({ method: "POST" })
 
     const { data: profile } = await admin
       .from("users_profile")
-      .select("role")
+      .select("role,siswa_id,pegawai_id")
       .eq("id", userId)
       .single();
     if (profile?.role === "ortu") {
@@ -206,11 +206,21 @@ export const portalOrtuCompleteGoogleSignup = createServerFn({ method: "POST" })
       );
     }
 
-    const { data: authUser } = await admin.auth.admin.getUserById(userId);
-    const createdAt = authUser?.user?.created_at ? new Date(authUser.user.created_at).getTime() : 0;
-    if (!createdAt || Date.now() - createdAt > JENDELA_SIGNUP_BARU_MS) {
+    const { data: existingParentLink } = await admin
+      .from("ortu_siswa")
+      .select("id")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle();
+
+    const akunOrphan =
+      !profile?.siswa_id &&
+      !profile?.pegawai_id &&
+      !existingParentLink;
+
+    if (!akunOrphan) {
       throw new Error(
-        "Akun ini bukan pendaftaran orang tua baru. Hubungi admin sekolah bila ini keliru."
+        "Akun ini sudah terhubung ke data siswa atau pegawai dan tidak bisa dikonversi menjadi akun orang tua."
       );
     }
 
