@@ -194,3 +194,12 @@ Ringkasan (detail lengkap ada di versi lama file ini: `git log -p SESI_NOTES.md`
 - **Tahap 2 (Edge Functions):** `proses-pembayaran` query ke `tahun_buku`; sudah di-deploy
 - **Tahap 3 (Frontend):** hook `useTahunBuku`/`useTahunBukuAktif` + CRUD di `useKeuangan.ts`; halaman keuangan pindah hook; halaman akademik tetap `useTahunAjaran`
 - **Koreksi pasca:** `TabTahunAjaran` di Referensi Akademik dikembalikan ke full CRUD (dengan guard hapus cek `kelas_siswa`)
+
+
+## Keputusan pembayaran berurutan (1 Oktober 2026)
+
+- Untuk tagihan **bulanan/periodik**, urutan pembayaran berlaku **per siswa + jenis pembayaran** dan melintasi tahun ajaran: periode yang lebih lama harus diselesaikan sebelum periode berikutnya.
+- Beberapa bulan tetap boleh dibayar sekaligus selama membentuk rangkaian berurutan mulai dari tagihan terbuka paling lama; tidak boleh melompati bulan di tengah.
+- Tagihan **sekali bayar/nonperiodik** (mis. Uang Pangkal, buku, seragam, kegiatan) tidak otomatis memblokir SPP atau jenis periodik lain.
+- Portal orang tua selalu mengikuti aturan ini. Di loket, aturan dipaksa untuk role **kasir**; **admin/keuangan** tetap memiliki fleksibilitas koreksi historis/audit yang memang membutuhkan pembayaran tidak berurutan.
+- Cicilan SPP periode lama tetap diperbolehkan sesuai aturan cicilan yang sudah ada, tetapi periode berikutnya baru terbuka setelah sisa periode lama benar-benar lunas.
