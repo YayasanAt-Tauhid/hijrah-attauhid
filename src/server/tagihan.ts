@@ -249,6 +249,7 @@ export const generateTagihan = createServerFn({ method: "POST" })
             p_siswa_list: kelasSiswaList.map((ks) => ({
               siswa_id: ks.siswa_id,
               kelas_id: ks.kelas_id || null,
+              tahun_akademik_id: tahun_akademik_id || null,
             })),
             p_created_by: userId,
           }

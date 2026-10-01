@@ -1,3 +1,21 @@
+## Uang pangkal lintas tahun — siap ditinjau, belum diterapkan (1 Oktober 2026)
+
+User meminta uang pangkal TA 2027/2028 yang diterima pada 2026 dipisahkan antara
+kas tahun buku dan pengakuan pendapatan. Kebijakan pengakuan memakai awal tahun
+ajaran target (1 Juli 2027); akun 2106 sudah tersedia tetapi jenis uang pangkal
+utama sebelumnya perlu_dimuka=false. Kolom tahun_ajaran_id keuangan adalah FK
+Tahun Buku, jadi metadata akademik ditambahkan secara eksplisit pada tagihan.
+
+Produksi cmvzcpeiuompqgdvflky hanya diperiksa read-only. Tidak ada tagihan uang
+pangkal tahun buku 2027 saat audit. Migration dan kode di branch
+fix/uang-pangkal-dimuka; migration BELUM diterapkan. User mensyaratkan SQL
+produksi ditampilkan dan disetujui dulu. Jangan merge/deploy sebelum migration
+berhasil. Definisi RPC diperiksa ulang lewat preflight MD5 agar perubahan sesi
+lain tidak tertimpa. Rincian kebijakan, pengujian, dan rollout ada di
+docs/uang-pangkal-lintas-tahun.md.
+Audit juga menemukan 37 dari 115 pendapatan dimuka pending tanpa jurnal penerimaan;
+alur pengakuan menahannya. Tidak ada koreksi data lama yang dilakukan.
+
 # Catatan Sesi — terakhir diperbarui 28 Juli 2026
 
 > File ini dibaca otomatis oleh Claude Code di awal sesi (lihat CLAUDE.md → Kontinuitas Antar Sesi).

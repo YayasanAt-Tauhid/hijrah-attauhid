@@ -69,6 +69,7 @@ export function useGenerateTagihan() {
   return useMutation({
     mutationFn: async (params: {
       tahun_ajaran_id: string;
+      tahun_akademik_id?: string;
       jenis_id: string;
       bulan?: number;
       bulan_list?: number[];
