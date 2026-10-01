@@ -184,6 +184,7 @@ const menuItems: MenuItem[] = [
         icon: UserCog,
         items: [
           { title: "Data Pegawai", url: "/kepegawaian/pegawai" },
+          { title: "Kandidat Anak PTK", url: "/kepegawaian/anak-ptk" },
           { title: "Struktur Organisasi", url: "/kepegawaian/struktur" },
           { title: "DUK", url: "/kepegawaian/duk" },
           { title: "Statistik Pegawai", url: "/kepegawaian/statistik" },

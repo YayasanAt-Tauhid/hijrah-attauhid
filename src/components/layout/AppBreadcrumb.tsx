@@ -66,6 +66,7 @@ const routeMap: Record<string, string> = {
   // Kepegawaian
   "/kepegawaian": "Kepegawaian",
   "/kepegawaian/pegawai": "Data Pegawai",
+  "/kepegawaian/anak-ptk": "Kandidat Anak PTK",
   "/kepegawaian/presensi": "Presensi Pegawai",
   "/kepegawaian/jadwal": "Jadwal Pegawai",
   "/kepegawaian/duk": "DUK",
