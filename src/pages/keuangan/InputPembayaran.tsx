@@ -590,7 +590,9 @@ function InputPembayaranContent() {
           (isSekali && ringkasanTagihanSekali
             ? ringkasanTagihanSekali.remaining
             : Number(existingTagihan.nominal)))
-      : tarifNominal;
+      : isSekali && tarifNominal != null
+        ? Math.max(Number(tarifNominal) - (pembayaranSekali?.totalBayar ?? 0), 0)
+        : tarifNominal;
     if (nominal != null && Number.isFinite(nominal) && nominal > 0) {
       setField("jumlah", String(nominal));
     }
@@ -603,6 +605,7 @@ function InputPembayaranContent() {
     isSekali,
     ringkasanTagihanSekali?.remaining,
     selectedOpenBill?.sisa,
+    pembayaranSekali?.totalBayar,
   ]);
 
   useEffect(() => {

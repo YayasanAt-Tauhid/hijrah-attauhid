@@ -587,29 +587,53 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         allowPartial,
       });
     } else {
-      jumlahValid = resolvePaymentAmount(undefined, tarifNominalRaw, jenis.nominal);
-      if (!Number.isFinite(jumlahValid) || jumlahValid <= 0) {
+      const nominalTarif = resolvePaymentAmount(
+        undefined,
+        tarifNominalRaw,
+        jenis.nominal
+      );
+      if (!Number.isFinite(nominalTarif) || nominalTarif <= 0) {
         throw new Error("Tarif pembayaran belum dikonfigurasi untuk siswa ini");
+      }
+
+      if (isSekali) {
+        // Jenis sekali bayar dapat dicicil walaupun tagihan belum sempat
+        // digenerate. Dalam kondisi ini nominal frontend tetap harus dihormati,
+        // sementara server menghitung sisa dari tarif penuh dikurangi seluruh
+        // pembayaran sebelumnya pada tahun buku yang sama.
+        const { data: existingPay, error: existingPayError } = await admin
+          .from("pembayaran")
+          .select("jumlah")
+          .eq("siswa_id", siswa_id)
+          .eq("jenis_id", jenis_id)
+          .eq("tahun_ajaran_id", tahunBukuTagihanId);
+        if (existingPayError) {
+          throw new Error(
+            "Gagal menghitung cicilan pembayaran sekali: " +
+              existingPayError.message
+          );
+        }
+        const totalSudahBayar = (existingPay || []).reduce(
+          (sum, row) => sum + Number(row.jumlah || 0),
+          0
+        );
+        const { remaining } = calculateRemainingBill(
+          nominalTarif,
+          totalSudahBayar
+        );
+        jumlahValid = resolveInstallmentAmount({
+          requestedAmount: data.jumlah,
+          remainingAmount: remaining,
+          allowPartial: true,
+        });
+      } else {
+        jumlahValid = nominalTarif;
       }
     }
 
-    // Cek duplikasi. Pembayaran sekali bayar dengan tagihan exact sengaja
-    // boleh memiliki banyak baris pembayaran (cicilan).
-    if (isSekali && !tagihanTerpilih) {
-      const { data: existingPay } = await admin
-        .from("pembayaran")
-        .select("jumlah")
-        .eq("siswa_id", siswa_id)
-        .eq("jenis_id", jenis_id)
-        .eq("tahun_ajaran_id", tahunBukuTagihanId);
-      const totalSudahBayar = (existingPay || []).reduce(
-        (sum, row) => sum + Number(row.jumlah || 0),
-        0
-      );
-      if (totalSudahBayar >= jumlahValid) {
-        throw new Error("Pembayaran ini sudah lunas");
-      }
-    } else if (!isSekali) {
+    // Cek duplikasi. Pembayaran sekali bayar tanpa tagihan sudah divalidasi
+    // terhadap sisa tarif di atas, sehingga beberapa baris cicilan memang sah.
+    if (!isSekali) {
       // SPP yang sudah jatuh tempo boleh memiliki beberapa pembayaran yang
       // semuanya menempel ke tagihan bulanan exact. Jenis bulanan lain tetap
       // mengikuti aturan satu pembayaran penuh per periode.
