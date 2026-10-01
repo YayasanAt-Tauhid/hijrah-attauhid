@@ -40,6 +40,16 @@ describe("auth role initialization contract", () => {
     expect(portalServer).toContain("cariSiswaTervalidasi");
   });
 
+  it("allows only unlinked legacy accounts to recover as parents", () => {
+    expect(portalServer).toContain('select("role,siswa_id,pegawai_id")');
+    expect(portalServer).toContain('from("ortu_siswa")');
+    expect(portalServer).toContain("const akunOrphan");
+    expect(portalServer).toContain("!profile?.siswa_id");
+    expect(portalServer).toContain("!profile?.pegawai_id");
+    expect(portalServer).toContain("!existingParentLink");
+    expect(portalServer).not.toContain("JENDELA_SIGNUP_BARU_MS");
+  });
+
   it("clearly routes parents away from the staff login page", () => {
     expect(loginPage).toContain("Login Pegawai / Guru / Admin");
     expect(loginPage).toContain("Orang Tua / Wali Siswa?");
