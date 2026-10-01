@@ -383,16 +383,7 @@ export default function PortalTagihan() {
             Pilih tagihan yang ingin dibayar
           </p>
         </div>
-        {tagihan.length > 0 && (
-          <Button
-            onClick={handleCheckout}
-            disabled={selectedItems.length === 0}
-            className="hidden shrink-0 bg-emerald-600 hover:bg-emerald-700 md:inline-flex"
-          >
-            <ShoppingCart className="mr-2 h-4 w-4" />
-            Masukkan ke Keranjang · {formatRupiah(totalSelected)}
-          </Button>
-        )}
+
       </div>
 
       {tagihan.length === 0 ? (
@@ -648,7 +639,7 @@ export default function PortalTagihan() {
       )}
 
       {tagihan.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.04)] md:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/90">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
             <div className="min-w-0" aria-live="polite" aria-atomic="true">
               <p className="text-xs text-muted-foreground">{selectedItems.length} tagihan dipilih</p>

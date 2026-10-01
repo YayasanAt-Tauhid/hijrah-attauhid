@@ -27,7 +27,7 @@ describe("PortalTagihan selection and installment checkout", () => {
   it("keeps the cart action visible but disabled before a bill is selected", () => {
     render(<PortalTagihan />);
     const buttons = screen.getAllByRole("button", { name: /Masukkan ke Keranjang/ });
-    expect(buttons.length).toBeGreaterThan(0);
+    expect(buttons).toHaveLength(1);
     buttons.forEach((button) => expect(button).toBeDisabled());
 
     fireEvent.click(screen.getByRole("checkbox", { name: /Pilih SPP SMP/ }));
