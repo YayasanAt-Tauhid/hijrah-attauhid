@@ -37,12 +37,19 @@ export default function AnakPtk() {
   if (role !== "admin") return <p role="alert">Halaman ini hanya tersedia untuk admin.</p>;
 
   const jenis = data?.options.jenis.find(row => row.id === data.selection.jenisId);
+  const tahunAjaranName = data?.options.tahunAjaran.find(row => row.id === data.selection.tahunAjaranId)?.nama || "";
+  const tahunBukuName = data?.options.tahunBuku.find(row => row.id === data.selection.tahunBukuId)?.nama || "";
+  const exportContext = (tahunBukuName + "-" + (jenis?.nama || "")).replace(/[^a-zA-Z0-9-]+/g, "-").slice(0, 100);
   const departmentId = department === "jenis" ? jenis?.departemen_id : department === "all" ? null : department;
   const relevant = (error ? [] : data?.items || []).filter(row => !departmentId || row.departemenId === departmentId);
   const filtered = relevant.filter(row => tarifFilter === "all"
     || (tarifFilter === "peringatan" ? row.peringatan.length > 0 : row.tarifStatus === tarifFilter));
   const rows = filtered.map(row => ({
     ...row,
+    tahunAjaranDisplay: tahunAjaranName,
+    tahunBukuDisplay: tahunBukuName,
+    jenisDisplay: jenis?.nama || "",
+    dibacaDisplay: data ? new Date(data.dibacaPada).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }) + " WIB" : "",
     orangTuaDisplay: row.orangTua.map(parent => parent.nama + " (" + parent.hubungan + ", " + parent.status + ")").join("; "),
     tarifDisplay: statusLabels[row.tarifStatus],
     nominalDisplay: row.nominalTarif === null ? "—" : rupiah(row.nominalTarif),
@@ -111,7 +118,14 @@ export default function AnakPtk() {
     </p>}
     <Card><CardContent className="pt-6"><DataTable columns={columns} data={rows} loading={isPending}
       searchPlaceholder="Cari nama siswa, NIS, kelas, atau pegawai..." pageSize={20}
-      exportable={!error && Boolean(data)} exportFilename="kandidat-anak-ptk"
+      exportable={!error && Boolean(data)} exportFilename={"kandidat-anak-ptk-" + exportContext}
+      exportColumns={[
+        { key: "tahunAjaranDisplay", label: "Tahun Ajaran" },
+        { key: "tahunBukuDisplay", label: "Tahun Buku" },
+        { key: "jenisDisplay", label: "Jenis tagihan" },
+        ...columns.map(column => ({ key: column.key, label: column.label })),
+        { key: "dibacaDisplay", label: "Data dibaca pada" },
+      ]}
       emptyMessage={error ? "Laporan belum tersedia." : "Tidak ada kandidat sesuai filter. Periksa cakupan dan kelengkapan data."} /></CardContent></Card>
     {data && !error && <p className="text-xs text-muted-foreground">Data dibaca: {new Date(data.dibacaPada).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} WIB. Muat ulang setelah perubahan data pegawai, orang tua, kelas, atau tarif.</p>}
   </div>;
