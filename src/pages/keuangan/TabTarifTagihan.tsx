@@ -1,3 +1,4 @@
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useState, useMemo, useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -88,7 +89,13 @@ function buildTarifSchema(opts: { isEditMode: boolean; jenisById: Map<string, an
   });
 }
 
-export default function TabTarifTagihan() {
+interface TabTarifTagihanProps {
+  initialSiswa?: SiswaRingkas;
+  dialogOnly?: boolean;
+  onClose?: () => void;
+}
+
+export default function TabTarifTagihan({ initialSiswa, dialogOnly = false, onClose }: TabTarifTagihanProps = {}) {
   const { data: tarifList, isLoading } = useAllTarifTagihan();
   const { data: jenisList } = useAllJenisPembayaran();
   const { data: kelasList } = useKelas();
@@ -102,7 +109,7 @@ export default function TabTarifTagihan() {
   const nonaktifMut = useNonaktifkanTarifTagihan();
   const atomicMut = useSimpanTarifGenerateAtomik();
 
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(dialogOnly);
   const [editItem, setEditItem] = useState<any>(null);
   const [nonaktifItem, setNonaktifItem] = useState<any | null>(null);
   const [nonaktifAlasan, setNonaktifAlasan] = useState("");
@@ -115,7 +122,7 @@ export default function TabTarifTagihan() {
   const form = useForm<TarifFormValues>({
     resolver: zodResolver(buildTarifSchema({ isEditMode: !!editItem, jenisById })),
     mode: "onChange",
-    defaultValues: tarifFormDefaults,
+    defaultValues: { ...tarifFormDefaults, siswa: initialSiswa ?? null, deptId: initialSiswa?.departemen_id ?? "" },
   });
   const deptId = form.watch("deptId");
   const jenisId = form.watch("jenisId");
@@ -123,6 +130,12 @@ export default function TabTarifTagihan() {
   const kelasId = form.watch("kelasId");
   const angkatanId = form.watch("angkatanId");
   const tahunAjaranId = form.watch("tahunAjaranId");
+
+  useEffect(() => {
+    if (!dialogOnly || form.getValues("tahunAjaranId")) return;
+    const activeYear = tahunAjaranList?.find((year) => year.aktif);
+    if (activeYear) form.setValue("tahunAjaranId", activeYear.id, { shouldValidate: true });
+  }, [dialogOnly, tahunAjaranList, form]);
 
   const selectedJenisForm = jenisById.get(jenisId);
   const effectiveDeptId = deptId || selectedJenisForm?.departemen_id || "";
@@ -331,6 +344,12 @@ export default function TabTarifTagihan() {
   const canSave = form.formState.isValid && validationErrors.length === 0;
   const isSaving = createMut.isPending || updateMut.isPending || atomicMut.isPending;
 
+  const changeDialogOpen = (open: boolean) => {
+    if (isSaving) return;
+    setDialogOpen(open);
+    if (!open) onClose?.();
+  };
+
   const performSave = async (data: TarifFormValues) => {
     const nominalNum = Number(data.nominal || 0);
     const isSekaliData = data.jenisId ? jenisById.get(data.jenisId)?.tipe === "sekali" : false;
@@ -389,6 +408,7 @@ export default function TabTarifTagihan() {
         }
       }
       setDialogOpen(false);
+      onClose?.();
     } catch {
       // Toast mutation sudah menjelaskan error; form tetap terbuka agar input tidak hilang.
     }
@@ -416,13 +436,13 @@ export default function TabTarifTagihan() {
 
   const tarifColumns: DataTableColumn<any>[] = [
     { key: "jenis", label: "Jenis Pembayaran", className: "min-w-[150px]", render: (_, r) => (r as any).jenis?.nama || "-", sortable: true },
-    { key: "level", label: "Level Override", className: "min-w-[120px]", render: (_, r) => getLevelBadge(r) },
+    { key: "level", label: "Berlaku untuk", className: "min-w-[120px]", render: (_, r) => getLevelBadge(r) },
     { key: "siswa", label: "Siswa", className: "min-w-[180px]", render: (_, r) => { const s = (r as any).siswa; return s ? <span>{s.nama} <span className="text-muted-foreground text-xs">({s.nis || '-'})</span></span> : <span className="text-muted-foreground">—</span>; } },
     { key: "kelas", label: "Kelas", className: "min-w-[100px]", render: (_, r) => (r as any).kelas?.nama || <span className="text-muted-foreground">—</span> },
     { key: "angkatan", label: "Angkatan", className: "min-w-[110px]", render: (_, r) => (r as any).angkatan?.nama || <span className="text-muted-foreground">—</span> },
     { key: "tahun_ajaran", label: "Tahun Buku", className: "min-w-[140px]", render: (_, r) => (r as any).tahun_ajaran?.nama || <span className="text-muted-foreground">—</span> },
     { key: "nominal_default", label: "Nominal Default", className: "min-w-[130px]", render: (_, r) => { const def = (r as any).jenis?.nominal; return def ? <span className="text-muted-foreground">{formatRupiah(Number(def))}</span> : "-"; } },
-    { key: "nominal", label: "Nominal Override", className: "min-w-[140px]", render: (v) => <span className="font-semibold text-primary">{formatRupiah(Number(v))}</span> },
+    { key: "nominal", label: "Nominal Khusus", className: "min-w-[140px]", render: (v) => <span className="font-semibold text-primary">{formatRupiah(Number(v))}</span> },
     { key: "keterangan", label: "Keterangan", className: "min-w-[160px]", render: (v) => (v as string) || "-" },
     {
       key: "aksi", label: "Aksi", className: "min-w-[90px]",
@@ -455,6 +475,10 @@ export default function TabTarifTagihan() {
       key: "status", label: "Status", className: "min-w-[110px]",
       render: (v) => v === "lunas"
         ? <Badge className="bg-emerald-100 text-emerald-700 border-emerald-300">Lunas</Badge>
+        : v === "sebagian"
+          ? <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">Sebagian</Badge>
+        : v === "dihapusbuku"
+          ? <Badge variant="outline">Dihapusbuku</Badge>
         : v === "terjadwal"
           ? <Badge variant="secondary">Terjadwal</Badge>
           : v === "dibatalkan"
@@ -465,35 +489,50 @@ export default function TabTarifTagihan() {
 
   return (
     <>
+      {!dialogOnly && <>
       <Card className="mt-4">
         <CardContent className="space-y-4 px-3 pt-4 sm:px-6 sm:pt-6">
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription className="text-xs leading-relaxed sm:text-sm">
-              Tarif dapat dioverride per <strong>siswa</strong>, <strong>kelas</strong>, <strong>angkatan</strong>, dan/atau periode.
-              Saat input berdasarkan Tahun Ajaran Juli–Juni, sistem menyimpan tarif ke Tahun Buku Jan–Des yang sesuai agar jurnal dan laporan ISAK 35 tetap benar.
+              Atur nominal tagihan untuk <strong>siswa</strong>, <strong>kelas</strong>, atau <strong>angkatan</strong>.
+              Pilih Tahun Ajaran yang sesuai; sistem menempatkan tagihan pada Tahun Buku secara otomatis.
             </AlertDescription>
           </Alert>
           <div className="flex flex-wrap gap-2 items-end">
             <div className="w-full sm:w-64">
               <Label className="text-xs">Filter Jenis Pembayaran</Label>
-              <Select value={filterJenis || "__all__"} onValueChange={(v) => setFilterJenis(v === "__all__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Semua jenis" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Semua Jenis</SelectItem>
-                  {jenisList?.map((j: any) => <SelectItem key={j.id} value={j.id}>{j.nama}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={filterJenis || "__all__"}
+                onValueChange={(v) => setFilterJenis(v === "__all__" ? "" : v)}
+                placeholder="Semua jenis"
+                groupPaymentTypes
+                options={[
+                  { value: "__all__", label: <>Semua Jenis</> },
+                  ...(jenisList?.map((j: any) => ({ value: j.id, label: <>{j.nama}</> })) ??
+                    []),
+                ]}
+              />
             </div>
             <div className="w-full sm:w-48">
               <Label className="text-xs">Filter Kelas</Label>
-              <Select value={filterTarifKelas || "__all__"} onValueChange={(v) => setFilterTarifKelas(v === "__all__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Semua kelas" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Semua Kelas</SelectItem>
-                  {kelasList?.map((k: any) => <SelectItem key={k.id} value={k.id}>{k.nama}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={filterTarifKelas || "__all__"}
+                onValueChange={(v) => setFilterTarifKelas(v === "__all__" ? "" : v)}
+                placeholder="Semua kelas"
+                options={[
+                  { value: "__all__", label: <>Semua Kelas</> },
+                  ...(kelasList?.map((k: any) => ({
+                    value: k.id,
+                    label: (
+                      <>
+                        {k.nama}
+                        {k.departemen?.nama ? ` — ${k.departemen.nama}` : ""}
+                      </>
+                    ),
+                  })) ?? []),
+                ]}
+              />
             </div>
             <div className="w-full sm:w-48">
               <Label className="text-xs">Filter Tahun Buku</Label>
@@ -552,13 +591,17 @@ export default function TabTarifTagihan() {
             </div>
             <div className="w-full sm:w-48">
               <Label className="text-xs">Jenis Pembayaran</Label>
-              <Select value={filterJenisId || "__all__"} onValueChange={(v) => setFilterJenisId(v === "__all__" ? "" : v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Semua</SelectItem>
-                  {jenisList?.map((j: any) => <SelectItem key={j.id} value={j.id}>{j.nama}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={filterJenisId || "__all__"}
+                onValueChange={(v) => setFilterJenisId(v === "__all__" ? "" : v)}
+                placeholder="Pilih atau cari..."
+                groupPaymentTypes
+                options={[
+                  { value: "__all__", label: <>Semua</> },
+                  ...(jenisList?.map((j: any) => ({ value: j.id, label: <>{j.nama}</> })) ??
+                    []),
+                ]}
+              />
             </div>
             <div className="w-full sm:w-40">
               <Label className="text-xs">Status</Label>
@@ -568,20 +611,32 @@ export default function TabTarifTagihan() {
                   <SelectItem value="__all__">Semua</SelectItem>
                   <SelectItem value="terjadwal">Terjadwal</SelectItem>
                   <SelectItem value="belum_bayar">Belum Bayar</SelectItem>
+                  <SelectItem value="sebagian">Sebagian</SelectItem>
                   <SelectItem value="lunas">Lunas</SelectItem>
+                  <SelectItem value="dihapusbuku">Dihapusbuku</SelectItem>
                   <SelectItem value="dibatalkan">Dibatalkan</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="w-full sm:w-48">
               <Label className="text-xs">Kelas</Label>
-              <Select value={filterTagihanKelas || "__all__"} onValueChange={(v) => setFilterTagihanKelas(v === "__all__" ? "" : v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Semua</SelectItem>
-                  {kelasList?.map((k: any) => <SelectItem key={k.id} value={k.id}>{k.nama}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={filterTagihanKelas || "__all__"}
+                onValueChange={(v) => setFilterTagihanKelas(v === "__all__" ? "" : v)}
+                placeholder="Pilih atau cari..."
+                options={[
+                  { value: "__all__", label: <>Semua</> },
+                  ...(kelasList?.map((k: any) => ({
+                    value: k.id,
+                    label: (
+                      <>
+                        {k.nama}
+                        {k.departemen?.nama ? ` — ${k.departemen.nama}` : ""}
+                      </>
+                    ),
+                  })) ?? []),
+                ]}
+              />
             </div>
             <div className="w-full sm:w-56">
               <Label className="text-xs">Siswa</Label>
@@ -599,10 +654,17 @@ export default function TabTarifTagihan() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      </>}
+      <Dialog open={dialogOpen} onOpenChange={changeDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editItem ? "Edit" : "Tambah"} Tarif Tagihan</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{dialogOnly ? "Tambah Tagihan" : `${editItem ? "Edit" : "Tambah"} Tarif Tagihan`}</DialogTitle></DialogHeader>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {dialogOnly && initialSiswa && (
+              <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                <p className="font-semibold">{initialSiswa.nama}</p>
+                <p className="text-xs text-muted-foreground">NIS: {initialSiswa.nis || "-"} · {lembagaList?.find((lembaga) => lembaga.id === initialSiswa.departemen_id)?.kode || "-"}</p>
+              </div>
+            )}
             {editItem ? (
               <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-1.5">
                 <div className="flex justify-between gap-4"><span className="text-muted-foreground">Jenis Pembayaran</span><span className="font-medium text-right">{editItem.jenis?.nama || "-"}</span></div>
@@ -616,30 +678,55 @@ export default function TabTarifTagihan() {
               </div>
             ) : (
               <>
+                {!dialogOnly && (
                 <div>
                   <Label>Lembaga (opsional)</Label>
-                  <Select value={deptId || "__none__"} onValueChange={handleLembagaChange}>
-                    <SelectTrigger><SelectValue placeholder="Semua lembaga" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">— Semua Lembaga —</SelectItem>
-                      {lembagaList?.map((l: any) => <SelectItem key={l.id} value={l.id}>{l.kode} — {l.nama}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={deptId || "__none__"}
+                    onValueChange={handleLembagaChange}
+                    placeholder="Semua lembaga"
+                    options={[
+                      { value: "__none__", label: <>— Semua Lembaga —</> },
+                      ...(lembagaList?.map((l: any) => ({
+                        value: l.id,
+                        label: (
+                          <>
+                            {l.kode} — {l.nama}
+                          </>
+                        ),
+                      })) ?? []),
+                    ]}
+                  />
                   <p className="text-xs text-muted-foreground mt-1">Memfilter pilihan jenis pembayaran, kelas, dan angkatan di bawah</p>
                 </div>
+                )}
                 <div>
                   <Label>Jenis Pembayaran *</Label>
                   <Controller control={form.control} name="jenisId" render={({ field }) => (
-                    <Select value={field.value} onValueChange={(v) => {
-                      field.onChange(v);
-                      form.setValue("genBulanList", [], { shouldValidate: true });
-                      form.setValue("sampaiAkhirJenjang", false, { shouldValidate: true });
-                    }}>
-                      <SelectTrigger><SelectValue placeholder="Pilih jenis pembayaran..." /></SelectTrigger>
-                      <SelectContent>{jenisListForForm?.map((j: any) => <SelectItem key={j.id} value={j.id}>{j.nama} {j.nominal ? `(Default: ${formatRupiah(Number(j.nominal))})` : ""}</SelectItem>)}</SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={field.value}
+                      onValueChange={(v) => {
+                        field.onChange(v);
+                        form.setValue("genBulanList", [], { shouldValidate: true });
+                        form.setValue("sampaiAkhirJenjang", false, { shouldValidate: true });
+                      }}
+                      placeholder="Pilih jenis pembayaran..."
+                      groupPaymentTypes
+                      options={[
+                        ...(jenisListForForm?.map((j: any) => ({
+                          value: j.id,
+                          label: (
+                            <>
+                              {j.nama}{" "}
+                              {j.nominal ? `(Default: ${formatRupiah(Number(j.nominal))})` : ""}
+                            </>
+                          ),
+                        })) ?? []),
+                      ]}
+                    />
                   )} />
                 </div>
+                {!dialogOnly && (
                 <div>
                   <Label>Siswa (opsional)</Label>
                   <Controller control={form.control} name="siswa" render={({ field }) => (
@@ -658,32 +745,58 @@ export default function TabTarifTagihan() {
                     />
                   )} />
                 </div>
+                )}
+                {!dialogOnly && (
+                <details className="rounded-lg border p-3" open={!siswa || undefined}>
+                  <summary className="cursor-pointer text-sm font-medium">Pengaturan tambahan: kelas dan angkatan</summary>
+                  <div className="mt-3 space-y-3">
                 <div>
                   <Label>Kelas (opsional)</Label>
                   <Controller control={form.control} name="kelasId" render={({ field }) => (
-                    <Select value={field.value || "__none__"} onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}>
-                      <SelectTrigger><SelectValue placeholder="Semua kelas" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">— Semua Kelas —</SelectItem>
-                        {filteredKelasList.map((k: any) => <SelectItem key={k.id} value={k.id}>{k.nama}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={field.value || "__none__"}
+                      onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}
+                      placeholder="Semua kelas"
+                      options={[
+                        { value: "__none__", label: <>— Semua Kelas —</> },
+                        ...(filteredKelasList?.map((k: any) => ({
+                          value: k.id,
+                          label: (
+                            <>
+                              {k.nama}
+                              {k.departemen?.nama ? ` — ${k.departemen.nama}` : ""}
+                            </>
+                          ),
+                        })) ?? []),
+                      ]}
+                    />
                   )} />
                 </div>
                 <div>
                   <Label>Angkatan (opsional)</Label>
                   <Controller control={form.control} name="angkatanId" render={({ field }) => (
-                    <Select value={field.value || "__none__"} onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}>
-                      <SelectTrigger><SelectValue placeholder="Semua angkatan" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">— Semua Angkatan —</SelectItem>
-                        {filteredAngkatanList.map((a: any) => (
-                          <SelectItem key={a.id} value={a.id}>{a.nama}{a.departemen ? ` — ${a.departemen.nama}` : ""}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={field.value || "__none__"}
+                      onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}
+                      placeholder="Semua angkatan"
+                      options={[
+                        { value: "__none__", label: <>— Semua Angkatan —</> },
+                        ...(filteredAngkatanList?.map((a: any) => ({
+                          value: a.id,
+                          label: (
+                            <>
+                              {a.nama}
+                              {a.departemen ? ` — ${a.departemen.nama}` : ""}
+                            </>
+                          ),
+                        })) ?? []),
+                      ]}
+                    />
                   )} />
                 </div>
+                  </div>
+                </details>
+                )}
                 <div>
                   <Label>Tahun Ajaran {autoGenerate ? "*" : "(opsional)"}</Label>
                   <Controller control={form.control} name="tahunAjaranId" render={({ field }) => (
@@ -710,30 +823,30 @@ export default function TabTarifTagihan() {
             )}
 
             <div>
-              <Label>Nominal Override *</Label>
+              <Label>{siswa ? "Nominal untuk siswa ini" : "Nominal tagihan"} *</Label>
               <Controller control={form.control} name="nominal" render={({ field }) => (
                 <RupiahInput value={field.value} onChange={field.onChange} />
               )} />
               <p className="text-xs text-muted-foreground mt-1">
-                Nominal ini akan menggantikan nominal default
+                Nominal tagihan sebelum potongan yang berlaku
                 {!editItem && selectedJenis?.nominal ? <> (default saat ini: <strong>{formatRupiah(Number(selectedJenis.nominal))}</strong>)</> : null}
               </p>
             </div>
             <div>
               <Label>Keterangan</Label>
-              <Textarea {...form.register("keterangan")} placeholder="Misal: Beasiswa prestasi, potongan 50%" />
+              <Textarea {...form.register("keterangan")} placeholder="Contoh: Uang Pangkal sesuai kesepakatan pendaftaran" />
             </div>
 
             {!editItem && (
               <>
                 <Separator />
                 <div className="space-y-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  {!dialogOnly && <label className="flex items-center gap-2 cursor-pointer">
                     <Controller control={form.control} name="autoGenerate" render={({ field }) => (
                       <Checkbox checked={field.value} onCheckedChange={(v) => field.onChange(!!v)} />
                     )} />
-                    <span className="text-sm font-medium">Generate tagihan otomatis</span>
-                  </label>
+                    <span className="text-sm font-medium">Buat tagihan setelah disimpan</span>
+                  </label>}
 
                   {autoGenerate && (
                     <div className="space-y-3 pl-4 sm:pl-6 border-l-2 border-primary/20">
@@ -753,9 +866,9 @@ export default function TabTarifTagihan() {
                       </Alert>
 
                       {jenisId && isSekali && (
-                        <p className="text-xs text-muted-foreground">
+                        <div className="text-xs text-muted-foreground">
                           Tipe <Badge variant="outline" className="text-xs">1x Bayar</Badge> — tagihan ditempatkan pada Tahun Buku yang memuat awal Tahun Ajaran.
-                        </p>
+                        </div>
                       )}
 
                       {jenisId && !isSekali && (
@@ -821,13 +934,22 @@ export default function TabTarifTagihan() {
                         <div>
                           <Label className="text-xs">Lembaga (opsional — filter generate)</Label>
                           <Controller control={form.control} name="genDeptId" render={({ field }) => (
-                            <Select value={field.value || "__all__"} onValueChange={(v) => field.onChange(v === "__all__" ? "" : v)}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__all__">Semua Lembaga</SelectItem>
-                                {lembagaList?.map((l: any) => <SelectItem key={l.id} value={l.id}>{l.kode} — {l.nama}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
+                            <SearchableSelect
+                              value={field.value || "__all__"}
+                              onValueChange={(v) => field.onChange(v === "__all__" ? "" : v)}
+                              placeholder="Pilih atau cari..."
+                              options={[
+                                { value: "__all__", label: <>Semua Lembaga</> },
+                                ...(lembagaList?.map((l: any) => ({
+                                  value: l.id,
+                                  label: (
+                                    <>
+                                      {l.kode} — {l.nama}
+                                    </>
+                                  ),
+                                })) ?? []),
+                              ]}
+                            />
                           )} />
                         </div>
                       )}
@@ -860,9 +982,9 @@ export default function TabTarifTagihan() {
             )}
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
+              <Button type="button" variant="outline" disabled={isSaving} onClick={() => changeDialogOpen(false)}>Batal</Button>
               <Button type="submit" disabled={!canSave || isSaving}>
-                {isSaving ? "Memproses..." : editItem ? "Simpan" : autoGenerate ? "Simpan & Generate" : "Simpan"}
+                {isSaving ? "Memproses..." : editItem ? "Simpan" : autoGenerate ? "Simpan & Buat Tagihan" : "Simpan Tarif"}
               </Button>
             </DialogFooter>
           </form>
@@ -909,7 +1031,7 @@ export default function TabTarifTagihan() {
                   <span className="text-right">{nonaktifItem.tahun_ajaran?.nama || "Semua periode"}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">Nominal Override</span>
+                  <span className="text-muted-foreground">Nominal Khusus</span>
                   <span className="font-semibold text-right">{formatRupiah(Number(nonaktifItem.nominal || 0))}</span>
                 </div>
                 <div className="flex justify-between gap-4">

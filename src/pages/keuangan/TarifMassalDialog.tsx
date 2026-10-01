@@ -1,3 +1,4 @@
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useState, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
@@ -507,36 +508,62 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Lembaga (opsional)</Label>
-              <Select value={deptId || "__none__"} onValueChange={(v) => {
-                const newDept = v === "__none__" ? "" : v;
-                setDeptId(newDept);
-                const jenisTerpilih = jenisList?.find((j: any) => j.id === jenisId);
-                if (newDept && jenisTerpilih?.departemen_id && jenisTerpilih.departemen_id !== newDept) {
-                  setJenisId("");
-                  toast.info("Pilihan Jenis Pembayaran direset karena tidak berlaku untuk lembaga yang dipilih.");
-                }
-              }}>
-                <SelectTrigger><SelectValue placeholder="Semua lembaga" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— Semua Lembaga —</SelectItem>
-                  {lembagaList?.map((l: any) => <SelectItem key={l.id} value={l.id}>{l.kode} — {l.nama}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={deptId || "__none__"}
+                onValueChange={(v) => {
+                  const newDept = v === "__none__" ? "" : v;
+                  setDeptId(newDept);
+                  const jenisTerpilih = jenisList?.find((j: any) => j.id === jenisId);
+                  if (
+                    newDept &&
+                    jenisTerpilih?.departemen_id &&
+                    jenisTerpilih.departemen_id !== newDept
+                  ) {
+                    setJenisId("");
+                    toast.info(
+                      "Pilihan Jenis Pembayaran direset karena tidak berlaku untuk lembaga yang dipilih.",
+                    );
+                  }
+                }}
+                placeholder="Semua lembaga"
+                options={[
+                  { value: "__none__", label: <>— Semua Lembaga —</> },
+                  ...(lembagaList?.map((l: any) => ({
+                    value: l.id,
+                    label: (
+                      <>
+                        {l.kode} — {l.nama}
+                      </>
+                    ),
+                  })) ?? []),
+                ]}
+              />
               <p className="text-xs text-muted-foreground mt-1">Memfilter pilihan jenis pembayaran</p>
             </div>
 
             <div>
               <Label>Jenis Pembayaran *</Label>
-              <Select value={jenisId} onValueChange={(v) => { setJenisId(v); setGenBulanList([]); setSampaiAkhirJenjang(false); }}>
-                <SelectTrigger><SelectValue placeholder="Pilih jenis pembayaran..." /></SelectTrigger>
-                <SelectContent>
-                  {jenisListForForm?.map((j: any) => (
-                    <SelectItem key={j.id} value={j.id}>
-                      {j.nama} {j.nominal ? `(Default: ${formatRupiah(Number(j.nominal))})` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={jenisId}
+                onValueChange={(v) => {
+                  setJenisId(v);
+                  setGenBulanList([]);
+                  setSampaiAkhirJenjang(false);
+                }}
+                placeholder="Pilih jenis pembayaran..."
+                groupPaymentTypes
+                options={[
+                  ...(jenisListForForm?.map((j: any) => ({
+                    value: j.id,
+                    label: (
+                      <>
+                        {j.nama}{" "}
+                        {j.nominal ? `(Default: ${formatRupiah(Number(j.nominal))})` : ""}
+                      </>
+                    ),
+                  })) ?? []),
+                ]}
+              />
             </div>
 
             <div>
@@ -585,15 +612,24 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
           <div className="flex flex-wrap items-end gap-2">
             <div className="flex-1 min-w-[220px]">
               <Label>Atau Tambah dari Kelas</Label>
-              <Select value={kelasPickId || "__none__"} onValueChange={(v) => setKelasPickId(v === "__none__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Pilih kelas..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— Pilih Kelas —</SelectItem>
-                  {(kelasList || []).map((k: any) => (
-                    <SelectItem key={k.id} value={k.id}>{k.nama} {k.tingkat?.nama ? `(${k.tingkat.nama})` : ""}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={kelasPickId || "__none__"}
+                onValueChange={(v) => setKelasPickId(v === "__none__" ? "" : v)}
+                placeholder="Pilih kelas..."
+                options={[
+                  { value: "__none__", label: <>— Pilih Kelas —</> },
+                  ...((kelasList || [])?.map((k: any) => ({
+                    value: k.id,
+                    label: (
+                      <>
+                        {k.nama}
+                        {k.departemen?.nama ? ` — ${k.departemen.nama}` : ""}{" "}
+                        {k.tingkat?.nama ? `(${k.tingkat.nama})` : ""}
+                      </>
+                    ),
+                  })) ?? []),
+                ]}
+              />
             </div>
             <Button variant="outline" size="sm" onClick={addFromKelas} disabled={!kelasPickId || loadingKelas}>
               <Users className="h-4 w-4 mr-1.5" />{loadingKelas ? "Memuat..." : "Tambah Semua Siswa Kelas"}
@@ -706,7 +742,7 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
                 setAutoGenerate(!!v);
                 if (!v) setSampaiAkhirJenjang(false);
               }} />
-              <span className="text-sm font-medium">Generate tagihan otomatis</span>
+              <span className="text-sm font-medium">Buat tagihan setelah disimpan</span>
             </label>
 
             {autoGenerate && (

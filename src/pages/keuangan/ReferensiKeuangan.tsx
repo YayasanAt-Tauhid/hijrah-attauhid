@@ -1,3 +1,4 @@
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -168,16 +169,23 @@ function TabJenisPembayaran() {
           <div className="flex flex-wrap items-end gap-2 mb-4">
             <div className="w-56">
               <Label className="text-xs">Filter Lembaga</Label>
-              <Select value={filterLembaga || "__all__"} onValueChange={(v) => setFilterLembaga(v === "__all__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Semua lembaga" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Semua Lembaga</SelectItem>
-                  <SelectItem value="__umum__">— Umum (semua lembaga) —</SelectItem>
-                  {lembagaList?.map((l: any) => (
-                    <SelectItem key={l.id} value={l.id}>{l.kode} — {l.nama}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={filterLembaga || "__all__"}
+                onValueChange={(v) => setFilterLembaga(v === "__all__" ? "" : v)}
+                placeholder="Semua lembaga"
+                options={[
+                  { value: "__all__", label: <>Semua Lembaga</> },
+                  { value: "__umum__", label: <>— Umum (semua lembaga) —</> },
+                  ...(lembagaList?.map((l: any) => ({
+                    value: l.id,
+                    label: (
+                      <>
+                        {l.kode} — {l.nama}
+                      </>
+                    ),
+                  })) ?? []),
+                ]}
+              />
             </div>
             {filterLembaga && (
               <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" onClick={() => setFilterLembaga("")}>
@@ -213,15 +221,22 @@ function TabJenisPembayaran() {
             </div>
             <div>
               <Label>Lembaga (kosongkan jika berlaku untuk semua)</Label>
-              <Select value={formDepartemenId || "__all__"} onValueChange={(v) => setFormDepartemenId(v === "__all__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Semua lembaga" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Semua Lembaga</SelectItem>
-                  {lembagaList?.map((l: any) => (
-                    <SelectItem key={l.id} value={l.id}>{l.kode} — {l.nama}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={formDepartemenId || "__all__"}
+                onValueChange={(v) => setFormDepartemenId(v === "__all__" ? "" : v)}
+                placeholder="Semua lembaga"
+                options={[
+                  { value: "__all__", label: <>Semua Lembaga</> },
+                  ...(lembagaList?.map((l: any) => ({
+                    value: l.id,
+                    label: (
+                      <>
+                        {l.kode} — {l.nama}
+                      </>
+                    ),
+                  })) ?? []),
+                ]}
+              />
             </div>
             <div>
               <Label>Tahun Masuk (kosongkan jika berlaku untuk semua tahun masuk)</Label>
@@ -236,15 +251,22 @@ function TabJenisPembayaran() {
             </div>
             <div>
               <Label>Akun Pendapatan (untuk jurnal otomatis)</Label>
-              <Select value={akunPendapatanId || "__none__"} onValueChange={(v) => setAkunPendapatanId(v === "__none__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Pilih akun pendapatan..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— Tidak diset —</SelectItem>
-                  {akunPendapatanList?.map((a: any) => (
-                    <SelectItem key={a.id} value={a.id}>{a.kode} - {a.nama}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={akunPendapatanId || "__none__"}
+                onValueChange={(v) => setAkunPendapatanId(v === "__none__" ? "" : v)}
+                placeholder="Pilih akun pendapatan..."
+                options={[
+                  { value: "__none__", label: <>— Tidak diset —</> },
+                  ...(akunPendapatanList?.map((a: any) => ({
+                    value: a.id,
+                    label: (
+                      <>
+                        {a.kode} - {a.nama}
+                      </>
+                    ),
+                  })) ?? []),
+                ]}
+              />
               <p className="text-xs text-muted-foreground mt-1">Akun yang di-kredit saat menerima pembayaran jenis ini</p>
             </div>
             <div className="space-y-2">
@@ -265,15 +287,22 @@ function TabJenisPembayaran() {
   {perluDimuka ? (
     <div>
       <Label>Akun Pendapatan Dimuka (untuk pembayaran di muka)</Label>
-      <Select value={akunDimukaId || "__none__"} onValueChange={(v) => setAkunDimukaId(v === "__none__" ? "" : v)}>
-        <SelectTrigger><SelectValue placeholder="Pilih akun dimuka..." /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__none__">— Pakai setting global —</SelectItem>
-          {akunLiabilitasList?.map((a: any) => (
-            <SelectItem key={a.id} value={a.id}>{a.kode} - {a.nama}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <SearchableSelect
+        value={akunDimukaId || "__none__"}
+        onValueChange={(v) => setAkunDimukaId(v === "__none__" ? "" : v)}
+        placeholder="Pilih akun dimuka..."
+        options={[
+          { value: "__none__", label: <>— Pakai setting global —</> },
+          ...(akunLiabilitasList?.map((a: any) => ({
+            value: a.id,
+            label: (
+              <>
+                {a.kode} - {a.nama}
+              </>
+            ),
+          })) ?? []),
+        ]}
+      />
       <p className="text-xs text-muted-foreground mt-1">Akun liabilitas yang di-kredit saat pembayaran memang harus ditangguhkan. Kosongkan untuk pakai setting AKUN_PENDAPATAN_DIMUKA.</p>
     </div>
   ) : (
@@ -365,27 +394,41 @@ function TabJenisPengeluaran() {
             <div><Label>Nama</Label><Input value={nama} onChange={(e) => setNama(e.target.value)} /></div>
             <div>
               <Label>Lembaga (kosongkan jika berlaku untuk semua)</Label>
-              <Select value={formDepartemenId || "__all__"} onValueChange={(v) => setFormDepartemenId(v === "__all__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Semua lembaga" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Semua Lembaga</SelectItem>
-                  {lembagaList?.map((l: any) => (
-                    <SelectItem key={l.id} value={l.id}>{l.kode} — {l.nama}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={formDepartemenId || "__all__"}
+                onValueChange={(v) => setFormDepartemenId(v === "__all__" ? "" : v)}
+                placeholder="Semua lembaga"
+                options={[
+                  { value: "__all__", label: <>Semua Lembaga</> },
+                  ...(lembagaList?.map((l: any) => ({
+                    value: l.id,
+                    label: (
+                      <>
+                        {l.kode} — {l.nama}
+                      </>
+                    ),
+                  })) ?? []),
+                ]}
+              />
             </div>
             <div>
               <Label>Akun Beban (untuk jurnal otomatis)</Label>
-              <Select value={akunBebanId || "__none__"} onValueChange={(v) => setAkunBebanId(v === "__none__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Pilih akun beban..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— Tidak diset —</SelectItem>
-                  {akunBebanList?.map((a: any) => (
-                    <SelectItem key={a.id} value={a.id}>{a.kode} - {a.nama}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={akunBebanId || "__none__"}
+                onValueChange={(v) => setAkunBebanId(v === "__none__" ? "" : v)}
+                placeholder="Pilih akun beban..."
+                options={[
+                  { value: "__none__", label: <>— Tidak diset —</> },
+                  ...(akunBebanList?.map((a: any) => ({
+                    value: a.id,
+                    label: (
+                      <>
+                        {a.kode} - {a.nama}
+                      </>
+                    ),
+                  })) ?? []),
+                ]}
+              />
               <p className="text-xs text-muted-foreground mt-1">Akun yang di-debit saat ada pengeluaran jenis ini</p>
             </div>
             <div><Label>Keterangan</Label><Textarea value={keterangan} onChange={(e) => setKeterangan(e.target.value)} /></div>
@@ -701,15 +744,22 @@ function TabAkunRekening() {
             </div>
             <div>
               <Label>Lembaga (kosongkan jika shared antar lembaga)</Label>
-              <Select value={formDepartemenId || "__all__"} onValueChange={(v) => setFormDepartemenId(v === "__all__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Shared (semua lembaga)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Shared (Semua Lembaga)</SelectItem>
-                  {lembagaList?.map((l: any) => (
-                    <SelectItem key={l.id} value={l.id}>{l.kode} — {l.nama}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={formDepartemenId || "__all__"}
+                onValueChange={(v) => setFormDepartemenId(v === "__all__" ? "" : v)}
+                placeholder="Shared (semua lembaga)"
+                options={[
+                  { value: "__all__", label: <>Shared (Semua Lembaga)</> },
+                  ...(lembagaList?.map((l: any) => ({
+                    value: l.id,
+                    label: (
+                      <>
+                        {l.kode} — {l.nama}
+                      </>
+                    ),
+                  })) ?? []),
+                ]}
+              />
             </div>
             <div>
               <Label>Saldo Normal</Label>

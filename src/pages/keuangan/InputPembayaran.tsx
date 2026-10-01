@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
+import { lazy, Suspense, useState, useMemo, useEffect, useCallback } from "react";
 import { PrintKuitansi } from "@/components/shared/PrintKuitansi";
 import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan";
 import { PrintTagihan, type PrintTagihanItem } from "@/components/shared/PrintTagihan";
@@ -29,7 +30,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import Unauthorized from "@/pages/Unauthorized";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search, Printer, Check, X, ShoppingCart, Trash2, WalletCards, History, ReceiptText, Info } from "lucide-react";
+import { Search, Printer, Plus, Check, X, ShoppingCart, Trash2, WalletCards, History, Info } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,8 @@ import type {
   FormPembayaran,
 } from "@/types/keuangan";
 import { isTipeSekali } from "@/types/keuangan";
+
+const TambahTagihanDialog = lazy(() => import("./TabTarifTagihan"));
 
 const FORM_DEFAULT: FormPembayaran = {
   jenisId: "",
@@ -175,6 +178,7 @@ function InputPembayaranContent() {
   const [selectedTahunAjaranId, setSelectedTahunAjaranId] = useState("");
   const [showKuitansi, setShowKuitansi] = useState(false);
   const [showTagihanPrint, setShowTagihanPrint] = useState(false);
+  const [showTambahTagihan, setShowTambahTagihan] = useState(false);
   const [tagihanPrintItems, setTagihanPrintItems] = useState<PrintTagihanItem[]>([]);
   const [riwayatPrintTarget, setRiwayatPrintTarget] = useState<PembayaranRiwayat | null>(null);
   const [riwayatSearch, setRiwayatSearch] = useState("");
@@ -707,6 +711,7 @@ function InputPembayaranContent() {
 
   const handleSelectSiswa = useCallback((s: SiswaWithKelas) => {
     setSelectedSiswa(s);
+    setShowTambahTagihan(false);
     setSearchTerm("");
     setCartItems([]);
     setTagihanPrintItems([]);
@@ -1073,9 +1078,9 @@ function InputPembayaranContent() {
           )}
         </div>
 
-        <Select
+        <SearchableSelect
           value={filterLembagaId || "__all__"}
-          onValueChange={value => {
+          onValueChange={(value) => {
             setFilterLembagaId(value === "__all__" ? "" : value);
             setSelectedSiswa(null);
             setCartItems([]);
@@ -1083,19 +1088,20 @@ function InputPembayaranContent() {
             setShowTagihanPrint(false);
             setField("jenisId", "");
           }}
-        >
-          <SelectTrigger className="h-10">
-            <SelectValue placeholder="Semua lembaga" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">Semua Lembaga</SelectItem>
-            {lembagaList?.map(lembaga => (
-              <SelectItem key={lembaga.id} value={lembaga.id}>
-                {lembaga.kode} — {lembaga.nama}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          className="h-10"
+          placeholder="Semua lembaga"
+          options={[
+            { value: "__all__", label: <>Semua Lembaga</> },
+            ...(lembagaList?.map((lembaga) => ({
+              value: lembaga.id,
+              label: (
+                <>
+                  {lembaga.kode} — {lembaga.nama}
+                </>
+              ),
+            })) ?? []),
+          ]}
+        />
 
         <Select
           value={selectedTahunAjaranId || tahunAktif?.id || ""}
@@ -1200,6 +1206,12 @@ function InputPembayaranContent() {
                   Centang tagihan yang dibayar, lalu cek jumlah bayarnya.
                 </p>
               </div>
+              <div className="flex flex-wrap gap-2">
+              {canBatal && !isSiswaNonaktif && (
+                <Button variant="outline" size="sm" className="h-9" onClick={() => setShowTambahTagihan(true)}>
+                  <Plus className="mr-2 h-4 w-4" />Tambah Tagihan
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -1211,6 +1223,7 @@ function InputPembayaranContent() {
                 <Printer className="mr-2 h-4 w-4" />
                 Cetak Tagihan
               </Button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -1383,15 +1396,10 @@ function InputPembayaranContent() {
 
           <details className="rounded-xl border bg-card shadow-sm">
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium">
-              Bayar jenis lain, bayar di muka, atau tagihan yang belum terbit
+              Pembayaran Lainnya
             </summary>
             <div className="border-t">
-              <div className="flex items-center gap-2 border-b px-4 py-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                  <ReceiptText className="h-4 w-4" />
-                </div>
-                <h2 className="font-semibold">Form Pembayaran</h2>
-              </div>
+              <p className="px-4 pt-3 text-xs text-muted-foreground">Untuk pembayaran di muka atau tagihan yang belum terbit.</p>
 
               <div className="space-y-4 p-4">
                 {isBayarDimuka && (
@@ -1403,24 +1411,22 @@ function InputPembayaranContent() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Jenis Pembayaran</Label>
-                    <Select
+                    <SearchableSelect
                       value={form.jenisId}
-                      onValueChange={value => {
+                      onValueChange={(value) => {
                         setField("jenisId", value);
                         setField("jumlah", "");
                       }}
-                    >
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder="Pilih jenis pembayaran" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {jenisList.map(jenis => (
-                          <SelectItem key={jenis.id} value={jenis.id}>
-                            {jenis.nama}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      className="h-10"
+                      placeholder="Pilih jenis pembayaran"
+                      groupPaymentTypes
+                      options={[
+                        ...(jenisList?.map((jenis) => ({
+                          value: jenis.id,
+                          label: <>{jenis.nama}</>,
+                        })) ?? []),
+                      ]}
+                    />
 
                     {loadingTarif && form.jenisId && (
                       <p className="text-[11px] text-muted-foreground">Mengambil tarif...</p>
@@ -1730,6 +1736,17 @@ function InputPembayaranContent() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {showTambahTagihan && selectedSiswa && canBatal && !isSiswaNonaktif && (
+        <Suspense fallback={<p role="status" className="text-sm text-muted-foreground">Membuka form tagihan...</p>}>
+        <TambahTagihanDialog
+          key={selectedSiswa.id}
+          dialogOnly
+          initialSiswa={{ id: selectedSiswa.id, nama: selectedSiswa.nama, nis: selectedSiswa.nis, departemen_id: siswaDepartemenId || null }}
+          onClose={() => setShowTambahTagihan(false)}
+        />
+        </Suspense>
       )}
 
       {/* ── Cetak kuitansi dari riwayat ───────────────────────────────────────── */}
