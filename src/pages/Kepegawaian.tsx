@@ -70,6 +70,9 @@ export default function Kepegawaian() {
         <Button variant="outline" size="sm" onClick={() => navigate("/kepegawaian/pegawai")}>
           <Users className="h-4 w-4 mr-2" />Data Pegawai
         </Button>
+        <Button variant="outline" size="sm" onClick={() => navigate("/kepegawaian/anak-ptk")}>
+          <UserCheck className="h-4 w-4 mr-2" />Kandidat Anak PTK
+        </Button>
         <Button variant="outline" size="sm" onClick={() => navigate("/kepegawaian/presensi")}>
           <ClipboardList className="h-4 w-4 mr-2" />Presensi
         </Button>
