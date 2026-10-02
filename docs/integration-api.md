@@ -114,6 +114,8 @@ Field dasar mencakup `id`, `siswa_id`, `status`, `tanggal_pendaftaran`, `unit`, 
 
 `status_kelulusan` bernilai `lulus`, `tidak_lulus`, atau `null` bila keputusan belum dibuat. `tanggal_keputusan` diisi saat keputusan Lulus/Tidak Lulus ditetapkan.
 
+Untuk kontrak pihak ketiga, `status_asrama` diekspor sebagai nilai sederhana **Ya/Tidak** tanpa mengubah data internal: `asrama` → `Ya`, `non_asrama` → `Tidak`, dan `null` bila status asrama tidak berlaku/belum tersedia.
+
 `pembayaran_pendaftaran` berbentuk:
 
 ```json

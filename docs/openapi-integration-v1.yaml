@@ -64,7 +64,7 @@ components:
             jenis_kelamin: { type: [string, 'null'] }
         jenis_pendaftaran: { type: [string, 'null'] }
         kategori: { type: [string, 'null'] }
-        status_asrama: { type: [string, 'null'] }
+        status_asrama: { type: [string, 'null'], enum: ['Ya', 'Tidak', null], description: "Ya = Asrama, Tidak = Non Asrama; null bila tidak berlaku/belum tersedia" }
         gelombang:
           type: [object, 'null']
           properties:
