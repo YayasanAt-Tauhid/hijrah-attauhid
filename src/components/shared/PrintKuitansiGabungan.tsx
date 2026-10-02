@@ -14,6 +14,7 @@ interface CombinedPaymentItem {
   bulan: number;
   jenisNama: string;
   periodeLabel?: string;
+  status?: "paid" | "void";
 }
 
 export interface PrintKuitansiGabunganProps {
@@ -29,6 +30,7 @@ export interface PrintKuitansiGabunganProps {
   petugasNama?: string;
   metode?: string;
   orientation?: ReceiptPrintOrientation;
+  receiptStatus?: "issued" | "reconciliation_required" | "partial_void" | "void";
 }
 
 function formatAngka(value: number) {
@@ -48,6 +50,7 @@ export function PrintKuitansiGabungan({
   exportMode = false,
   onExportReady,
   orientation = "landscape",
+  receiptStatus = "issued",
 }: PrintKuitansiGabunganProps) {
   const exportRef = useRef<HTMLDivElement>(null);
   const exportStarted = useRef(false);
@@ -115,7 +118,7 @@ export function PrintKuitansiGabungan({
         </div>
       </div>
 
-      <div className="mt-2 font-bold tracking-wide">{nomorBukti}</div>
+      <div className="mt-2 flex items-center justify-between gap-3 font-bold tracking-wide">\n        <span>{nomorBukti}</span>\n        {receiptStatus !== "issued" && (\n          <span className="text-[10pt] uppercase">\n            {receiptStatus === "void" ? "DIBATALKAN" : receiptStatus === "partial_void" ? "SEBAGIAN DIBATALKAN" : "PERLU REKONSILIASI"}\n          </span>\n        )}\n      </div>
 
       <table className="mt-1 w-full table-fixed text-[11.5pt]">
         <tbody>
@@ -164,7 +167,7 @@ export function PrintKuitansiGabungan({
             return (
               <tr key={item.id ?? index}>
                 <td className="w-[28px] py-1.5 align-top">{index + 1}.</td>
-                <td className="py-1.5 pr-3 align-top">{rincian}</td>
+                <td className={`py-1.5 pr-3 align-top ${item.status === "void" ? "line-through" : ""}`}>\n                  {rincian}{item.status === "void" ? " — DIBATALKAN" : ""}\n                </td>
                 <td className="w-[30px] py-1.5 align-top">Rp</td>
                 <td className={`${isPortrait ? "w-[88px]" : "w-[105px]"} py-1.5 text-right align-top`}>{formatAngka(item.jumlah)}</td>
               </tr>
