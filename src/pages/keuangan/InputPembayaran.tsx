@@ -2059,6 +2059,7 @@ function InputPembayaranContent() {
                   bulan: item.bulan ?? 0,
                   jenisNama: item.jenis_nama,
                   periodeLabel: item.periode_label || undefined,
+                  status: item.status,
                 }))}
                 tanggalBayar={riwayatPrintTarget.receiptGroup.payment_date}
                 siswa={{
@@ -2070,6 +2071,7 @@ function InputPembayaranContent() {
                 lembagaNama={riwayatPrintTarget.receiptGroup.lembaga_nama || lembagaNama}
                 petugasNama={riwayatPrintTarget.receiptGroup.petugas_nama || riwayatPrintTarget.petugas?.nama || undefined}
                 metode={riwayatPrintTarget.receiptGroup.payment_method || "Tunai"}
+                receiptStatus={riwayatPrintTarget.receiptGroup.status}
                 orientation={kuitansiOrientation}
               />
             ) : (
