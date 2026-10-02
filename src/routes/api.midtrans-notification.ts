@@ -144,7 +144,7 @@ async function handleNotification(request: Request): Promise<Response> {
     if (updateError) throw updateError;
 
     // 5. Jika PAID → proses pembayaran + jurnal SECARA ATOMIK per item
-    //    via RPC proses_pembayaran_midtrans_atomik. Setiap item sukses/gagal
+    //    via RPC proses_pembayaran_midtrans_dengan_kuitansi_atomik. Setiap item sukses/gagal
     //    independen (dicatat di hasilItems), tidak lagi ada silent-catch:
     //    kegagalan jurnal SELALU berarti pembayaran juga tidak tercatat untuk
     //    item itu (rollback RPC), dan errornya disimpan ke metadata transaksi.
@@ -262,8 +262,8 @@ async function handleNotification(request: Request): Promise<Response> {
           .eq("id", item.jenis_id)
           .single();
 
-        const { data: rpcResult, error: rpcErr } = await admin.rpc(
-          "proses_pembayaran_midtrans_atomik",
+        const { data: rpcResult, error: rpcErr } = await (admin as any).rpc(
+          "proses_pembayaran_midtrans_dengan_kuitansi_atomik",
           {
             p_transaksi_item_id: item.id,
             p_siswa_id: item.siswa_id,
