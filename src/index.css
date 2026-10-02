@@ -192,11 +192,11 @@
   margin: 15mm 18mm;
 }
 
-/* Named page khusus kuitansi agar Chromium dapat memilih C5 landscape otomatis
- * tanpa mengubah ukuran cetak dokumen lain yang tetap A4. */
+/* Named page khusus kuitansi untuk continuous form 9.5 x 5.5 inci
+ * (sekitar 241 x 140 mm), tanpa mengubah dokumen lain yang tetap A4. */
 @page kuitansi {
-  size: 229mm 162mm;
-  margin: 8mm;
+  size: 241mm 140mm;
+  margin: 6mm 10mm;
 }
 
 @media print {
@@ -223,16 +223,19 @@
     display: block !important;
   }
 
-  /* Kwitansi kasir: kertas C5 landscape (229 x 162 mm), mengikuti format bukti pembayaran yayasan. */
+  /* Kwitansi kasir: continuous form 9.5 x 5.5 inci; lebar konten dibuat konservatif agar area kanan aman dari batas printable dot-matrix. */
   body:has(#kuitansi-print) {
-    width: 213mm !important;
+    width: 201mm !important;
+    max-width: 201mm !important;
     min-height: 0 !important;
   }
   body:has(#kuitansi-print) #kuitansi-print {
     page: kuitansi;
-    width: 213mm !important;
-    max-width: 213mm !important;
+    width: 201mm !important;
+    max-width: 201mm !important;
     margin: 0 auto !important;
+    box-sizing: border-box !important;
+    overflow: visible !important;
   }
 
   /* Kuitansi dirender langsung ke <body> (di luar modal) agar hasil cetak
@@ -240,6 +243,18 @@
    * seluruh UI aplikasi dan sisakan hanya dokumen kuitansi. */
   body:has(> #kuitansi-print) > *:not(#kuitansi-print) {
     display: none !important;
+  }
+
+  /* Area aman printer continuous-form/dot-matrix: font tetap, tetapi konten
+   * ditarik ke dalam agar kolom kanan dan judul tidak terpotong oleh batas
+   * printable hardware. */
+  #kuitansi-print, #kuitansi-print * {
+    box-sizing: border-box !important;
+  }
+  #kuitansi-print td, #kuitansi-print th {
+    padding-left: 3pt !important;
+    padding-right: 3pt !important;
+    overflow-wrap: break-word;
   }
 
   /* Dokumen formal: hilangkan "chrome" UI (kartu, bayangan, sudut bulat) */
