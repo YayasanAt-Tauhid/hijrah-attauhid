@@ -11,6 +11,7 @@ interface PrintKuitansiProps {
   payment: {
     id?: string;
     nomorJurnal?: string;
+    nomorKuitansi?: string;
     jumlah: number;
     bulan: number;
     tanggal_bayar: string;
@@ -49,6 +50,7 @@ export function PrintKuitansi({
   const tanggal = new Date(payment.tanggal_bayar);
   const refPendek = payment.id?.replace(/-/g, "").slice(0, 10).toUpperCase() || "0000000000";
   const nomorBukti =
+    payment.nomorKuitansi ||
     payment.nomorJurnal ||
     `HT-${format(tanggal, "yyyyMMdd")}-${refPendek}`;
   const identitas = [payment.siswa.nis, payment.siswa.nisn].filter(Boolean).join(" / ") || "-";
