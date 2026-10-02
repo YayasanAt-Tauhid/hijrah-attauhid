@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { DataTable, type DataTableColumn } from "@/components/shared/DataTable";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { PrintKuitansi } from "@/components/shared/PrintKuitansi";
+import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/components/shared/ReceiptOrientationSelect";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function RekapKasirSaya() {
@@ -28,6 +29,7 @@ export default function RekapKasirSaya() {
 function RekapKasirSayaContent() {
   const [tanggal, setTanggal] = useState(format(new Date(), "yyyy-MM-dd"));
   const [printRow, setPrintRow] = useState<RekapKasirSayaRow | null>(null);
+  const [kuitansiOrientation, setKuitansiOrientation] = useState<ReceiptPrintOrientation>("landscape");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["rekap_kasir_saya", tanggal],
@@ -167,6 +169,12 @@ function RekapKasirSayaContent() {
               kelasNama={printRow.siswa_status === "calon" ? "Calon Murid" : printRow.kelas_nama || "-"}
               lembagaNama={printRow.departemen_nama}
               petugasNama={data?.petugas_nama || undefined}
+              orientation={kuitansiOrientation}
+            />
+            <ReceiptOrientationSelect
+              id="kuitansi-orientation-rekap"
+              value={kuitansiOrientation}
+              onValueChange={setKuitansiOrientation}
             />
             <DialogFooter>
               <Button variant="outline" onClick={() => setPrintRow(null)}>Tutup</Button>
