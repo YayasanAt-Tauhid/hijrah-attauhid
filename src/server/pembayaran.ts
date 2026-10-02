@@ -31,6 +31,8 @@ export interface ProsesPembayaranInput {
   tahun_ajaran_id: string;
   is_bayar_dimuka: boolean;
   tagihan_id?: string;
+  /** ID kuitansi yang sama untuk beberapa item dalam satu sesi pembayaran. */
+  receipt_id?: string;
 }
 
 export interface ProsesPembayaranResult {
@@ -42,6 +44,8 @@ export interface ProsesPembayaranResult {
   petugas_nama: string | null;
   status_tagihan: string | null;
   sisa_tagihan: number | null;
+  receipt_id: string;
+  receipt_number: string;
 }
 
 export interface LegacyOutstandingBreakdownRow {
@@ -376,6 +380,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       tahun_ajaran_id,
       is_bayar_dimuka,
       tagihan_id,
+      receipt_id,
     } = data;
 
     // Kasir tidak boleh mengubah tanggal transaksi. Server menjadi sumber
@@ -834,8 +839,8 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       ? `${keterangan} | ${autoKet}`
       : autoKet;
 
-    const { data: result, error: rpcErr } = await admin.rpc(
-      "proses_pembayaran_atomik",
+    const { data: result, error: rpcErr } = await (admin as any).rpc(
+      "proses_pembayaran_dengan_kuitansi_atomik",
       {
         p_siswa_id: siswa_id,
         p_jenis_id: jenis_id,
@@ -853,6 +858,9 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         p_prefix_jurnal: pakaiDimuka ? "JD" : "JP",
         p_petugas_id: userId,
         p_jenis_nama: jenis.nama,
+        p_receipt_id: receipt_id ?? null,
+        p_source: role === "kasir" ? "cashier" : "manual",
+        p_payment_method: "Tunai",
       }
     );
 
@@ -865,6 +873,8 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       nomor_jurnal: string;
       status_tagihan?: string | null;
       sisa_tagihan?: number | null;
+      receipt_id: string;
+      receipt_number: string;
     };
 
     const { data: petugasProfile } = await admin
@@ -891,7 +901,131 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       petugas_nama: petugasNama,
       status_tagihan: r.status_tagihan ?? null,
       sisa_tagihan: r.sisa_tagihan == null ? null : Number(r.sisa_tagihan),
+      receipt_id: r.receipt_id,
+      receipt_number: r.receipt_number,
     };
+  });
+
+
+export interface PaymentReceiptHistoryItem {
+  id: string;
+  payment_id: string | null;
+  jumlah: number;
+  bulan: number | null;
+  jenis_nama: string;
+  periode_label: string | null;
+  description: string;
+  status: "paid" | "void";
+}
+
+export interface PaymentReceiptHistoryGroup {
+  id: string;
+  receipt_number: string;
+  payment_date: string;
+  payment_method: string | null;
+  status: "issued" | "reconciliation_required" | "partial_void" | "void";
+  total_amount: number;
+  petugas_nama: string | null;
+  siswa: { nama: string; nis: string | null; nisn: string | null };
+  lembaga_nama: string | null;
+  items: PaymentReceiptHistoryItem[];
+}
+
+/**
+ * Ambil grup kuitansi untuk baris pembayaran yang tampil di riwayat kasir.
+ * Tabel kuitansi sengaja tidak dibuka via RLS ke browser; semua akses melalui server.
+ */
+export const getPaymentReceiptGroups = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: { payment_ids: string[] }) => d)
+  .handler(async ({ data, context }): Promise<Record<string, PaymentReceiptHistoryGroup>> => {
+    const admin = createAdminClient();
+    const { userId } = requireContext(context);
+    await requireRole(admin, userId, ["admin", "keuangan", "kasir"]);
+
+    const paymentIds = [...new Set((data.payment_ids || []).filter(Boolean))].slice(0, 100);
+    if (paymentIds.length === 0) return {};
+
+    const { data: links, error: linkError } = await (admin as any)
+      .from("payment_receipt_items")
+      .select("payment_id, receipt_id")
+      .in("payment_id", paymentIds);
+    if (linkError) throw new Error("Gagal membaca relasi kuitansi: " + linkError.message);
+
+    const receiptIds = [...new Set((links || []).map((row: any) => row.receipt_id).filter(Boolean))] as string[];
+    if (receiptIds.length === 0) return {};
+
+    const [{ data: receipts, error: receiptError }, { data: items, error: itemError }] = await Promise.all([
+      (admin as any)
+        .from("payment_receipts")
+        .select("id, receipt_number, payment_date, payment_method, status, total_amount, cashier_employee_id")
+        .in("id", receiptIds),
+      (admin as any)
+        .from("payment_receipt_items")
+        .select("id, receipt_id, payment_id, line_no, amount, bulan, payment_type_name, period_label, description, status, student_name, student_nis, student_nisn, department_name")
+        .in("receipt_id", receiptIds)
+        .order("line_no", { ascending: true }),
+    ]);
+    if (receiptError) throw new Error("Gagal membaca kuitansi: " + receiptError.message);
+    if (itemError) throw new Error("Gagal membaca item kuitansi: " + itemError.message);
+
+    const employeeIds = [...new Set((receipts || []).map((row: any) => row.cashier_employee_id).filter(Boolean))] as string[];
+    const employeeName = new Map<string, string>();
+    if (employeeIds.length > 0) {
+      const { data: employees, error: employeeError } = await admin
+        .from("pegawai")
+        .select("id, nama")
+        .in("id", employeeIds);
+      if (employeeError) throw new Error("Gagal membaca petugas kuitansi: " + employeeError.message);
+      for (const employee of employees || []) {
+        if (employee.nama) employeeName.set(employee.id, employee.nama);
+      }
+    }
+
+    const itemsByReceipt = new Map<string, any[]>();
+    for (const item of items || []) {
+      const bucket = itemsByReceipt.get(item.receipt_id) ?? [];
+      bucket.push(item);
+      itemsByReceipt.set(item.receipt_id, bucket);
+    }
+
+    const receiptById = new Map<string, PaymentReceiptHistoryGroup>();
+    for (const receipt of receipts || []) {
+      const receiptItems = itemsByReceipt.get(receipt.id) ?? [];
+      const first = receiptItems[0];
+      receiptById.set(receipt.id, {
+        id: receipt.id,
+        receipt_number: receipt.receipt_number,
+        payment_date: receipt.payment_date,
+        payment_method: receipt.payment_method ?? null,
+        status: receipt.status,
+        total_amount: Number(receipt.total_amount ?? 0),
+        petugas_nama: receipt.cashier_employee_id ? employeeName.get(receipt.cashier_employee_id) ?? null : null,
+        siswa: {
+          nama: first?.student_name ?? "-",
+          nis: first?.student_nis ?? null,
+          nisn: first?.student_nisn ?? null,
+        },
+        lembaga_nama: first?.department_name ?? null,
+        items: receiptItems.map((item: any) => ({
+          id: item.id,
+          payment_id: item.payment_id ?? null,
+          jumlah: Number(item.amount ?? 0),
+          bulan: item.bulan ?? null,
+          jenis_nama: item.payment_type_name ?? "Pembayaran",
+          periode_label: item.period_label ?? null,
+          description: item.description ?? item.payment_type_name ?? "Pembayaran",
+          status: item.status,
+        })),
+      });
+    }
+
+    const result: Record<string, PaymentReceiptHistoryGroup> = {};
+    for (const link of links || []) {
+      const group = receiptById.get(link.receipt_id);
+      if (link.payment_id && group) result[link.payment_id] = group;
+    }
+    return result;
   });
 
 export interface BatalkanPembayaranInput {
@@ -935,8 +1069,8 @@ export const batalkanPembayaran = createServerFn({ method: "POST" })
         );
       }
 
-      const { data: result, error: rpcErr } = await admin.rpc(
-        "batalkan_pembayaran_atomik",
+      const { data: result, error: rpcErr } = await (admin as any).rpc(
+        "batalkan_pembayaran_dengan_kuitansi_atomik",
         {
           p_pembayaran_id: pembayaran_id,
           p_alasan: alasan,
