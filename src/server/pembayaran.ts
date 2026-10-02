@@ -921,6 +921,8 @@ export interface PaymentReceiptHistoryItem {
 export interface PaymentReceiptHistoryGroup {
   id: string;
   receipt_number: string;
+  source: "cashier" | "manual" | "midtrans" | "legacy";
+  source_reference: string | null;
   payment_date: string;
   payment_method: string | null;
   status: "issued" | "reconciliation_required" | "partial_void" | "void";
@@ -958,7 +960,7 @@ export const getPaymentReceiptGroups = createServerFn({ method: "POST" })
     const [{ data: receipts, error: receiptError }, { data: items, error: itemError }] = await Promise.all([
       (admin as any)
         .from("payment_receipts")
-        .select("id, receipt_number, payment_date, payment_method, status, total_amount, cashier_employee_id")
+        .select("id, receipt_number, source, source_reference, payment_date, payment_method, status, total_amount, cashier_employee_id")
         .in("id", receiptIds),
       (admin as any)
         .from("payment_receipt_items")
@@ -993,20 +995,25 @@ export const getPaymentReceiptGroups = createServerFn({ method: "POST" })
     for (const receipt of receipts || []) {
       const receiptItems = itemsByReceipt.get(receipt.id) ?? [];
       const first = receiptItems[0];
+      const joinUnique = (values: Array<string | null | undefined>) =>
+        [...new Set(values.filter((value): value is string => !!value && value.trim() !== ""))].join(", ");
+
       receiptById.set(receipt.id, {
         id: receipt.id,
         receipt_number: receipt.receipt_number,
+        source: receipt.source,
+        source_reference: receipt.source_reference ?? null,
         payment_date: receipt.payment_date,
         payment_method: receipt.payment_method ?? null,
         status: receipt.status,
         total_amount: Number(receipt.total_amount ?? 0),
         petugas_nama: receipt.cashier_employee_id ? employeeName.get(receipt.cashier_employee_id) ?? null : null,
         siswa: {
-          nama: first?.student_name ?? "-",
-          nis: first?.student_nis ?? null,
-          nisn: first?.student_nisn ?? null,
+          nama: joinUnique(receiptItems.map((item: any) => item.student_name)) || first?.student_name || "-",
+          nis: joinUnique(receiptItems.map((item: any) => item.student_nis)) || null,
+          nisn: joinUnique(receiptItems.map((item: any) => item.student_nisn)) || null,
         },
-        lembaga_nama: first?.department_name ?? null,
+        lembaga_nama: joinUnique(receiptItems.map((item: any) => item.department_name)) || null,
         items: receiptItems.map((item: any) => ({
           id: item.id,
           payment_id: item.payment_id ?? null,
