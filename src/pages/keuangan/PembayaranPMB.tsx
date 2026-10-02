@@ -42,6 +42,7 @@ function PembayaranPMBContent() {
   const [lastPayment, setLastPayment] = useState<{
     id: string;
     nomorJurnal?: string;
+    nomorKuitansi?: string;
     jumlah: number;
     tanggalBayar: string;
     keterangan?: string;
@@ -153,6 +154,7 @@ function PembayaranPMBContent() {
         setLastPayment({
           id: result.pembayaran_id,
           nomorJurnal: result.nomor_jurnal,
+          nomorKuitansi: result.receipt_number,
           jumlah: result.jumlah,
           tanggalBayar,
           keterangan: keterangan || "Pembayaran SPMB",
@@ -411,6 +413,7 @@ function PembayaranPMBContent() {
               payment={{
                 id: lastPayment.id,
                 nomorJurnal: lastPayment.nomorJurnal,
+                nomorKuitansi: lastPayment.nomorKuitansi,
                 jumlah: lastPayment.jumlah,
                 bulan: 0,
                 tanggal_bayar: lastPayment.tanggalBayar,
