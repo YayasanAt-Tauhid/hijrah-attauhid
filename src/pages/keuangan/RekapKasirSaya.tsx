@@ -168,6 +168,7 @@ function RekapKasirSayaContent() {
                   bulan: item.bulan ?? 0,
                   jenisNama: item.jenis_nama,
                   periodeLabel: item.periode_label || undefined,
+                  status: item.status,
                 }))}
                 tanggalBayar={printReceipt.payment_date}
                 siswa={{
@@ -179,6 +180,7 @@ function RekapKasirSayaContent() {
                 lembagaNama={printReceipt.lembaga_nama || printRow.departemen_nama}
                 petugasNama={printReceipt.petugas_nama || data?.petugas_nama || undefined}
                 metode={printReceipt.payment_method || "Tunai"}
+                receiptStatus={printReceipt.status}
                 orientation={kuitansiOrientation}
               />
             ) : (
