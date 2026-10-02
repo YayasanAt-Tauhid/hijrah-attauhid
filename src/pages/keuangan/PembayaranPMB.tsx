@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { PrintKuitansi } from "@/components/shared/PrintKuitansi";
+import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/components/shared/ReceiptOrientationSelect";
 import { supabase } from "@/integrations/supabase/client";
 import { useLembaga, useJenisPembayaran, usePembayaranBySiswa, formatRupiah } from "@/hooks/useKeuangan";
 import { cariSiswaPembayaran, prosesPembayaran } from "@/server/pembayaran";
@@ -37,6 +38,7 @@ function PembayaranPMBContent() {
   const [tanggalBayar, setTanggalBayar] = useState(format(new Date(), "yyyy-MM-dd"));
   const [keterangan, setKeterangan] = useState("");
   const [showKuitansi, setShowKuitansi] = useState(false);
+  const [kuitansiOrientation, setKuitansiOrientation] = useState<ReceiptPrintOrientation>("landscape");
   const [lastPayment, setLastPayment] = useState<{
     id: string;
     nomorJurnal?: string;
@@ -423,6 +425,12 @@ function PembayaranPMBContent() {
               kelasNama="Calon Murid"
               lembagaNama={lastPayment.lembagaNama}
               petugasNama={lastPayment.petugasNama}
+              orientation={kuitansiOrientation}
+            />
+            <ReceiptOrientationSelect
+              id="kuitansi-orientation-spmb"
+              value={kuitansiOrientation}
+              onValueChange={setKuitansiOrientation}
             />
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowKuitansi(false)}>Tutup</Button>

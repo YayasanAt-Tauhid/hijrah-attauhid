@@ -5,6 +5,7 @@ import { terbilang, namaBulanTahun } from "@/hooks/useKeuangan";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { YAYASAN_PRINT_LOGO_URL } from "@/lib/branding";
+import type { ReceiptPrintOrientation } from "@/components/shared/ReceiptOrientationSelect";
 
 interface PrintKuitansiProps {
   payment: {
@@ -22,6 +23,7 @@ interface PrintKuitansiProps {
   lembagaNama: string;
   petugasNama?: string;
   metode?: string;
+  orientation?: ReceiptPrintOrientation;
 }
 
 function formatAngka(value: number) {
@@ -34,6 +36,7 @@ export function PrintKuitansi({
   lembagaNama,
   petugasNama,
   metode = "Tunai",
+  orientation = "landscape",
 }: PrintKuitansiProps) {
   const { data: sekolah } = useQuery({
     queryKey: ["sekolah_info"],
@@ -60,13 +63,16 @@ export function PrintKuitansi({
 
   if (typeof document === "undefined") return null;
 
+  const isPortrait = orientation === "portrait";
+
   return createPortal(
     <div
       style={{ fontFamily: '"Times New Roman", Times, serif' }}
       id="kuitansi-print"
-      className="hidden print:!block bg-white text-black mx-auto w-full max-w-[201mm] p-5 print:p-0 text-[12pt] leading-[1.25]"
+      data-print-orientation={orientation}
+      className={`hidden print:!block bg-white text-black mx-auto w-full p-5 print:p-0 text-[12pt] leading-[1.25] ${isPortrait ? "max-w-[120mm]" : "max-w-[201mm]"}`}
     >
-      <div className="flex items-start justify-between gap-4 border-b-2 border-black pb-2">
+      <div className={`flex items-start justify-between border-b-2 border-black pb-2 ${isPortrait ? "flex-col gap-2" : "gap-4"}`}>
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <img
             src={YAYASAN_PRINT_LOGO_URL}
@@ -87,7 +93,7 @@ export function PrintKuitansi({
             )}
           </div>
         </div>
-        <div className="shrink-0 border-y-2 border-black px-3 py-2 text-center text-[12.5pt] font-extrabold tracking-wide">
+        <div className={`shrink-0 border-y-2 border-black px-3 py-2 text-center text-[12.5pt] font-extrabold tracking-wide ${isPortrait ? "w-full" : ""}`}>
           BUKTI PEMBAYARAN
         </div>
       </div>
@@ -97,10 +103,10 @@ export function PrintKuitansi({
       <table className="mt-1 w-full table-fixed text-[11.5pt]">
         <tbody>
           <tr>
-            <td className="w-[115px] py-1 align-top">Nama Siswa</td>
+            <td className={`${isPortrait ? "w-[86px]" : "w-[115px]"} py-1 align-top`}>Nama Siswa</td>
             <td className="py-1 align-top font-semibold">{payment.siswa.nama}</td>
-            <td className="w-[92px] py-1 align-top">Tgl. Bayar</td>
-            <td className="w-[132px] py-1 align-top">
+            <td className={`${isPortrait ? "w-[70px]" : "w-[92px]"} py-1 align-top`}>Tgl. Bayar</td>
+            <td className={`${isPortrait ? "w-[100px]" : "w-[132px]"} py-1 align-top`}>
               {format(tanggal, "dd MMM yyyy", { locale: idLocale })}
             </td>
           </tr>
@@ -133,7 +139,7 @@ export function PrintKuitansi({
             <td className="w-[28px] py-1.5 align-top">1.</td>
             <td className="py-1.5 pr-3 align-top">{rincian}</td>
             <td className="w-[30px] py-1.5 align-top">Rp</td>
-            <td className="w-[105px] py-1.5 text-right align-top">{formatAngka(payment.jumlah)}</td>
+            <td className={`${isPortrait ? "w-[88px]" : "w-[105px]"} py-1.5 text-right align-top`}>{formatAngka(payment.jumlah)}</td>
           </tr>
           <tr className="border-t-2 border-black font-extrabold">
             <td className="py-1.5 pr-3 text-right" colSpan={2}>JUMLAH</td>

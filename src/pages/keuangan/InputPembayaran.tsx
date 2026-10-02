@@ -2,6 +2,7 @@ import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { lazy, Suspense, useState, useMemo, useEffect, useCallback } from "react";
 import { PrintKuitansi } from "@/components/shared/PrintKuitansi";
 import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan";
+import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/components/shared/ReceiptOrientationSelect";
 import { PrintTagihan, type PrintTagihanItem } from "@/components/shared/PrintTagihan";
 import { RupiahInput } from "@/components/shared/RupiahInput";
 import { Input } from "@/components/ui/input";
@@ -184,6 +185,7 @@ function InputPembayaranContent() {
   const [form, setForm] = useState<FormPembayaran>(FORM_DEFAULT);
   const [selectedTahunAjaranId, setSelectedTahunAjaranId] = useState("");
   const [showKuitansi, setShowKuitansi] = useState(false);
+  const [kuitansiOrientation, setKuitansiOrientation] = useState<ReceiptPrintOrientation>("landscape");
   const [showTagihanPrint, setShowTagihanPrint] = useState(false);
   const [showTambahTagihan, setShowTambahTagihan] = useState(false);
   const [tagihanPrintItems, setTagihanPrintItems] = useState<PrintTagihanItem[]>([]);
@@ -1991,6 +1993,12 @@ function InputPembayaranContent() {
               kelasNama={kelasNama}
               lembagaNama={lembagaNama}
               petugasNama={lastCartPayment.petugasNama}
+              orientation={kuitansiOrientation}
+            />
+            <ReceiptOrientationSelect
+              id="kuitansi-orientation-gabungan"
+              value={kuitansiOrientation}
+              onValueChange={setKuitansiOrientation}
             />
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowCartKuitansi(false)}>Tutup</Button>
@@ -2036,6 +2044,12 @@ function InputPembayaranContent() {
               kelasNama={kelasNama}
               lembagaNama={lembagaNama}
               petugasNama={riwayatPrintTarget.petugas?.nama || undefined}
+              orientation={kuitansiOrientation}
+            />
+            <ReceiptOrientationSelect
+              id="kuitansi-orientation-riwayat"
+              value={kuitansiOrientation}
+              onValueChange={setKuitansiOrientation}
             />
             <DialogFooter>
               <Button variant="outline" onClick={() => setRiwayatPrintTarget(null)}>Tutup</Button>
@@ -2094,6 +2108,12 @@ function InputPembayaranContent() {
               kelasNama={kelasNama}
               lembagaNama={lembagaNama}
               petugasNama={lastPayment.petugasNama}
+              orientation={kuitansiOrientation}
+            />
+            <ReceiptOrientationSelect
+              id="kuitansi-orientation-baru"
+              value={kuitansiOrientation}
+              onValueChange={setKuitansiOrientation}
             />
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowKuitansi(false)}>Tutup</Button>
