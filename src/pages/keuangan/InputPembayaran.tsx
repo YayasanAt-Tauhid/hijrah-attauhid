@@ -18,8 +18,9 @@ import {
   batalkanPembayaran,
   getLegacyOutstandingBreakdown,
   cariSiswaPembayaran,
+  getPaymentReceiptGroups,
 } from "@/server/pembayaran";
-import type { LegacyOutstandingBreakdownRow } from "@/server/pembayaran";
+import type { LegacyOutstandingBreakdownRow, PaymentReceiptHistoryGroup } from "@/server/pembayaran";
 import {
   useJenisPembayaran, useLembaga, useTahunBukuAktif,
   useTahunBuku, formatRupiah, terbilang, namaBulan, namaBulanTahun, BULAN_ORDER_AKADEMIK,
@@ -67,6 +68,7 @@ type PembayaranRiwayat = PembayaranWithJenis & {
   tagihan_id?: string | null;
   petugas?: { nama?: string | null } | null;
   jurnal?: { nomor?: string | null } | null;
+  receiptGroup?: PaymentReceiptHistoryGroup | null;
 };
 
 type PaymentCartItem = {
@@ -201,12 +203,16 @@ function InputPembayaranContent() {
     tanggal_bayar: string;
     keterangan?: string;
     petugasNama?: string;
+    receiptId?: string;
+    receiptNumber?: string;
   } | null>(null);
   const [lastPayment, setLastPayment] = useState<{
     pembayaran_id: string; jumlah: number; jenisNama: string;
     jenisTipe: string; siswa: SiswaWithKelas; bulan: number; tanggal_bayar: string;
     periodeLabel?: string;
     petugasNama?: string;
+    receiptId?: string;
+    receiptNumber?: string;
   } | null>(null);
 
   const setField = useCallback(
@@ -584,9 +590,14 @@ function InputPembayaranContent() {
         );
       }
 
+      const receiptGroups = await getPaymentReceiptGroups({
+        data: { payment_ids: ids },
+      });
+
       return rows.map(row => ({
         ...row,
         periodeTagihanLabel: periodeByPembayaran.get(row.id) ?? null,
+        receiptGroup: receiptGroups[row.id] ?? null,
       }));
     },
   });
@@ -1107,6 +1118,8 @@ function InputPembayaranContent() {
     const berhasilKeys = new Set<string>();
     const berhasilItems: Array<{ pembayaran_id: string; jumlah: number; jenisNama: string; bulan: number; tahunLabel: string }> = [];
     let petugasNama: string | undefined;
+    let receiptId: string | undefined;
+    let receiptNumber: string | undefined;
     const gagal: string[] = [];
 
     for (let i = 0; i < cartItems.length; i++) {
@@ -1124,9 +1137,12 @@ function InputPembayaranContent() {
             tahun_ajaran_id: item.tahunAjaranId,
             is_bayar_dimuka: item.isBayarDimuka,
             tagihan_id: item.tagihanId,
+            receipt_id: receiptId,
           },
         });
         berhasilKeys.add(item.key);
+        receiptId = receiptId || result.receipt_id;
+        receiptNumber = receiptNumber || result.receipt_number;
         petugasNama = petugasNama || result.petugas_nama || undefined;
         berhasilItems.push({
           pembayaran_id: result.pembayaran_id,
@@ -1164,6 +1180,8 @@ function InputPembayaranContent() {
         tanggal_bayar: form.tanggalBayar,
         keterangan: form.keterangan || undefined,
         petugasNama,
+        receiptId,
+        receiptNumber,
       });
       setShowCartKuitansi(true);
     }
@@ -1229,6 +1247,8 @@ function InputPembayaranContent() {
         ? `${namaBulan(form.bulan)} ${selectedTahunLabel}`
         : undefined,
       petugasNama: result.petugas_nama || undefined,
+      receiptId: result.receipt_id,
+      receiptNumber: result.receipt_number,
     });
     setShowKuitansi(true);
     resetForm();
@@ -1980,6 +2000,7 @@ function InputPembayaranContent() {
               <p className="text-xs text-muted-foreground">Setiap item tetap memiliki referensi pembayaran dan jurnal masing-masing.</p>
             </div>
             <PrintKuitansiGabungan
+              nomorBukti={lastCartPayment.receiptNumber}
               items={lastCartPayment.items.map(item => ({
                 id: item.pembayaran_id,
                 jumlah: item.jumlah,
@@ -2029,23 +2050,49 @@ function InputPembayaranContent() {
             <DialogHeader>
               <DialogTitle>Kuitansi Pembayaran</DialogTitle>
             </DialogHeader>
-            <PrintKuitansi
-              payment={{
-                id: riwayatPrintTarget.id,
-                nomorJurnal: riwayatPrintTarget.jurnal?.nomor || undefined,
-                jumlah: Number(riwayatPrintTarget.jumlah || 0),
-                bulan: Number(riwayatPrintTarget.bulan || 0),
-                tanggal_bayar: riwayatPrintTarget.tanggal_bayar || new Date().toISOString().slice(0, 10),
-                keterangan: riwayatPrintTarget.keterangan || undefined,
-                jenisNama: riwayatPrintTarget.jenis_pembayaran?.nama || "Pembayaran",
-                periodeLabel: riwayatPrintTarget.periodeTagihanLabel || undefined,
-                siswa: selectedSiswa,
-              }}
-              kelasNama={kelasNama}
-              lembagaNama={lembagaNama}
-              petugasNama={riwayatPrintTarget.petugas?.nama || undefined}
-              orientation={kuitansiOrientation}
-            />
+            {riwayatPrintTarget.receiptGroup ? (
+              <PrintKuitansiGabungan
+                nomorBukti={riwayatPrintTarget.receiptGroup.receipt_number}
+                items={riwayatPrintTarget.receiptGroup.items.map(item => ({
+                  id: item.id,
+                  jumlah: item.jumlah,
+                  bulan: item.bulan ?? 0,
+                  jenisNama: item.jenis_nama,
+                  periodeLabel: item.periode_label || undefined,
+                  status: item.status,
+                }))}
+                tanggalBayar={riwayatPrintTarget.receiptGroup.payment_date}
+                siswa={{
+                  nama: riwayatPrintTarget.receiptGroup.siswa.nama,
+                  nis: riwayatPrintTarget.receiptGroup.siswa.nis || undefined,
+                  nisn: riwayatPrintTarget.receiptGroup.siswa.nisn || undefined,
+                }}
+                kelasNama={kelasNama}
+                lembagaNama={riwayatPrintTarget.receiptGroup.lembaga_nama || lembagaNama}
+                petugasNama={riwayatPrintTarget.receiptGroup.petugas_nama || riwayatPrintTarget.petugas?.nama || undefined}
+                metode={riwayatPrintTarget.receiptGroup.payment_method || "Tunai"}
+                receiptStatus={riwayatPrintTarget.receiptGroup.status}
+                orientation={kuitansiOrientation}
+              />
+            ) : (
+              <PrintKuitansi
+                payment={{
+                  id: riwayatPrintTarget.id,
+                  nomorJurnal: riwayatPrintTarget.jurnal?.nomor || undefined,
+                  jumlah: Number(riwayatPrintTarget.jumlah || 0),
+                  bulan: Number(riwayatPrintTarget.bulan || 0),
+                  tanggal_bayar: riwayatPrintTarget.tanggal_bayar || new Date().toISOString().slice(0, 10),
+                  keterangan: riwayatPrintTarget.keterangan || undefined,
+                  jenisNama: riwayatPrintTarget.jenis_pembayaran?.nama || "Pembayaran",
+                  periodeLabel: riwayatPrintTarget.periodeTagihanLabel || undefined,
+                  siswa: selectedSiswa,
+                }}
+                kelasNama={kelasNama}
+                lembagaNama={lembagaNama}
+                petugasNama={riwayatPrintTarget.petugas?.nama || undefined}
+                orientation={kuitansiOrientation}
+              />
+            )}
             <ReceiptOrientationSelect
               id="kuitansi-orientation-riwayat"
               value={kuitansiOrientation}
@@ -2098,6 +2145,7 @@ function InputPembayaranContent() {
             <PrintKuitansi
               payment={{
                 id: lastPayment.pembayaran_id,
+                nomorKuitansi: lastPayment.receiptNumber,
                 jumlah: lastPayment.jumlah,
                 bulan: lastPayment.bulan,
                 tanggal_bayar: lastPayment.tanggal_bayar,

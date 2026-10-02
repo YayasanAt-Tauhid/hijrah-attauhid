@@ -56,6 +56,8 @@ export interface ProsesPembayaranRequest {
   is_bayar_dimuka: boolean;
   /** id tagihan existing jika ada piutang yang perlu dilunasi */
   tagihan_id?: string;
+  /** ID kuitansi yang sama untuk beberapa item dalam satu sesi pembayaran. */
+  receipt_id?: string;
 }
 
 /** Response dari Edge Function `proses-pembayaran` */
@@ -64,6 +66,8 @@ export interface ProsesPembayaranResponse {
   pembayaran_id: string;
   jurnal_id: string;
   nomor_jurnal: string;
+  receipt_id: string;
+  receipt_number: string;
 }
 
 // ─── Form state types ─────────────────────────────────────────────────────────

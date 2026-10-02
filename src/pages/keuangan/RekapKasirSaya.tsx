@@ -5,7 +5,7 @@ import { id as idLocale } from "date-fns/locale";
 import { GraduationCap, Printer, ReceiptText, Users, Wallet } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import Unauthorized from "@/pages/Unauthorized";
-import { getRekapKasirSaya, type RekapKasirSayaRow } from "@/server/pembayaran";
+import { getPaymentReceiptGroups, getRekapKasirSaya, type RekapKasirSayaRow } from "@/server/pembayaran";
 import { formatRupiah } from "@/hooks/useKeuangan";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { DataTable, type DataTableColumn } from "@/components/shared/DataTable";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { PrintKuitansi } from "@/components/shared/PrintKuitansi";
+import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan";
 import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/components/shared/ReceiptOrientationSelect";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -35,6 +36,13 @@ function RekapKasirSayaContent() {
     queryKey: ["rekap_kasir_saya", tanggal],
     queryFn: async () => getRekapKasirSaya({ data: { tanggal } }),
   });
+
+  const { data: printReceiptGroups = {} } = useQuery({
+    queryKey: ["rekap_kasir_receipt", printRow?.id],
+    enabled: !!printRow,
+    queryFn: async () => getPaymentReceiptGroups({ data: { payment_ids: [printRow!.id] } }),
+  });
+  const printReceipt = printRow ? printReceiptGroups[printRow.id] ?? null : null;
 
   const columns: DataTableColumn<RekapKasirSayaRow>[] = [
     {
@@ -151,26 +159,52 @@ function RekapKasirSayaContent() {
               <p className="font-semibold">{formatRupiah(printRow.jumlah)}</p>
               {printRow.jurnal_nomor && <p className="font-mono text-xs">{printRow.jurnal_nomor}</p>}
             </div>
-            <PrintKuitansi
-              payment={{
-                id: printRow.id,
-                nomorJurnal: printRow.jurnal_nomor || undefined,
-                jumlah: printRow.jumlah,
-                bulan: printRow.bulan || 0,
-                tanggal_bayar: printRow.tanggal_bayar || tanggal,
-                keterangan: printRow.keterangan || undefined,
-                jenisNama: printRow.jenis_nama,
-                siswa: {
-                  nama: printRow.siswa_nama,
-                  nis: printRow.siswa_nis || undefined,
-                  nisn: printRow.siswa_nisn || undefined,
-                },
-              }}
-              kelasNama={printRow.siswa_status === "calon" ? "Calon Murid" : printRow.kelas_nama || "-"}
-              lembagaNama={printRow.departemen_nama}
-              petugasNama={data?.petugas_nama || undefined}
-              orientation={kuitansiOrientation}
-            />
+            {printReceipt ? (
+              <PrintKuitansiGabungan
+                nomorBukti={printReceipt.receipt_number}
+                items={printReceipt.items.map(item => ({
+                  id: item.id,
+                  jumlah: item.jumlah,
+                  bulan: item.bulan ?? 0,
+                  jenisNama: item.jenis_nama,
+                  periodeLabel: item.periode_label || undefined,
+                  status: item.status,
+                }))}
+                tanggalBayar={printReceipt.payment_date}
+                siswa={{
+                  nama: printReceipt.siswa.nama,
+                  nis: printReceipt.siswa.nis || undefined,
+                  nisn: printReceipt.siswa.nisn || undefined,
+                }}
+                kelasNama={printRow.siswa_status === "calon" ? "Calon Murid" : printRow.kelas_nama || "-"}
+                lembagaNama={printReceipt.lembaga_nama || printRow.departemen_nama}
+                petugasNama={printReceipt.petugas_nama || data?.petugas_nama || undefined}
+                metode={printReceipt.payment_method || "Tunai"}
+                receiptStatus={printReceipt.status}
+                orientation={kuitansiOrientation}
+              />
+            ) : (
+              <PrintKuitansi
+                payment={{
+                  id: printRow.id,
+                  nomorJurnal: printRow.jurnal_nomor || undefined,
+                  jumlah: printRow.jumlah,
+                  bulan: printRow.bulan || 0,
+                  tanggal_bayar: printRow.tanggal_bayar || tanggal,
+                  keterangan: printRow.keterangan || undefined,
+                  jenisNama: printRow.jenis_nama,
+                  siswa: {
+                    nama: printRow.siswa_nama,
+                    nis: printRow.siswa_nis || undefined,
+                    nisn: printRow.siswa_nisn || undefined,
+                  },
+                }}
+                kelasNama={printRow.siswa_status === "calon" ? "Calon Murid" : printRow.kelas_nama || "-"}
+                lembagaNama={printRow.departemen_nama}
+                petugasNama={data?.petugas_nama || undefined}
+                orientation={kuitansiOrientation}
+              />
+            )}
             <ReceiptOrientationSelect
               id="kuitansi-orientation-rekap"
               value={kuitansiOrientation}
