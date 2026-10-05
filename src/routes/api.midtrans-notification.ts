@@ -12,6 +12,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createAdminClient, readEnv } from "@/server/supabase";
 import { kirimPushKeOrtu } from "@/server/push";
+import { isUangPangkalPaymentName } from "@/lib/installment";
 
 async function sha512(str: string): Promise<string> {
   const data = new TextEncoder().encode(str);
@@ -229,6 +230,12 @@ async function handleNotification(request: Request): Promise<Response> {
           continue;
         }
 
+        const { data: jenis } = await admin
+          .from("jenis_pembayaran")
+          .select("nama, akun_pendapatan_id")
+          .eq("id", item.jenis_id)
+          .single();
+
         const totalSudahBayar = (paidRows || []).reduce(
           (sum, row) => sum + Number(row.jumlah || 0),
           0
@@ -238,7 +245,8 @@ async function handleNotification(request: Request): Promise<Response> {
         const nominalTransaksi = Math.round(Number(item.jumlah) || 0);
         const cicilanDiizinkan =
           (item.bulan === 0 || item.bulan == null) &&
-          tagihanAktif.status !== "terjadwal";
+          (tagihanAktif.status !== "terjadwal" ||
+            isUangPangkalPaymentName(jenis?.nama));
 
         if (
           sisaTagihan <= 0 ||
@@ -255,12 +263,6 @@ async function handleNotification(request: Request): Promise<Response> {
           });
           continue;
         }
-
-        const { data: jenis } = await admin
-          .from("jenis_pembayaran")
-          .select("nama, akun_pendapatan_id")
-          .eq("id", item.jenis_id)
-          .single();
 
         const { data: rpcResult, error: rpcErr } = await (admin as any).rpc(
           "proses_pembayaran_midtrans_dengan_kuitansi_atomik",
