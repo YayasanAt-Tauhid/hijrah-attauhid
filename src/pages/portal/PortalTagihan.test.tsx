@@ -45,7 +45,7 @@ describe("PortalTagihan selection and installment checkout", () => {
     expect(input).toHaveValue("1.500.000");
     fireEvent.change(input, { target: { value: "500.000" } });
     expect(input).toHaveValue("500.000");
-    expect(screen.getByText("2 tagihan dipilih")).toBeInTheDocument();
+    expect(screen.getByText(/2 tagihan dari 1 anak dipilih/)).toBeInTheDocument();
     const buttons = screen.getAllByRole("button", { name: /Masukkan ke Keranjang/ });
     fireEvent.click(buttons[buttons.length - 1]);
     const cart = JSON.parse(sessionStorage.getItem("keranjang_tagihan")!);
@@ -56,7 +56,8 @@ describe("PortalTagihan selection and installment checkout", () => {
   it("selects each child's bills independently and preserves an installment when reselected", () => {
     render(<PortalTagihan />);
     fireEvent.click(screen.getByRole("button", { name: /Pilih semua tagihan Anak Pertama/ }));
-    expect(screen.getByText("2 tagihan dipilih")).toBeInTheDocument();
+    expect(screen.getByText(/2 tagihan dari 1 anak dipilih/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Buka tagihan Anak Kedua/ }));
     expect(screen.getByRole("checkbox", { name: /Pilih SPP SD/ })).not.toBeChecked();
     fireEvent.change(screen.getByLabelText("Bayar cicilan"), { target: { value: "250.000" } });
     fireEvent.click(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ }));
@@ -74,6 +75,7 @@ describe("PortalTagihan selection and installment checkout", () => {
     expect(screen.getByText("2 dari 2 tagihan dipilih")).toBeInTheDocument();
     const clearFirst = screen.getByRole("button", { name: /Batalkan pilihan Anak Pertama/ });
     expect(clearFirst).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: /Buka tagihan Anak Kedua/ }));
     fireEvent.click(screen.getByRole("button", { name: /Pilih semua tagihan Anak Kedua/ }));
     fireEvent.click(clearFirst);
     expect(screen.getByText("0 dari 2 tagihan dipilih")).toBeInTheDocument();
@@ -94,7 +96,7 @@ describe("PortalTagihan selection and installment checkout", () => {
 
     expect(screen.getByRole("checkbox", { name: /Pilih SPP SMP/ })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ })).not.toBeChecked();
-    expect(screen.getByText("1 tagihan dipilih")).toBeInTheDocument();
+    expect(screen.getByText(/1 tagihan dari 1 anak dipilih/)).toBeInTheDocument();
   });
 
   it("keeps one academic-year SPP group across different financial books", () => {
@@ -124,8 +126,10 @@ describe("PortalTagihan selection and installment checkout", () => {
       fireEvent.click(yearButtons[0]);
 
       expect(screen.getByRole("checkbox", { name: /SPP SMP Juli 2026/ })).toBeChecked();
+      const sppGroups = screen.getAllByRole("button", { name: /SPP SMP 1 tagihan/ });
+      fireEvent.click(sppGroups[sppGroups.length - 1]);
       expect(screen.getByRole("checkbox", { name: /SPP SMP Januari 2027/ })).toBeChecked();
-      expect(screen.getByText("2 tagihan dipilih")).toBeInTheDocument();
+      expect(screen.getByText(/2 tagihan dari 1 anak dipilih/)).toBeInTheDocument();
     } finally {
       mocks.rows.pop();
     }

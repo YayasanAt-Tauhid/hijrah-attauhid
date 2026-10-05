@@ -3,13 +3,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@/lib/router-compat";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { RupiahInput } from "@/components/shared/RupiahInput";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ShoppingCart, CheckCheck, Lock, X } from "lucide-react";
+import { ShoppingCart, CheckCheck, Lock, X, AlertTriangle, CalendarDays, Users } from "lucide-react";
 import { BULAN_ORDER_AKADEMIK } from "@/hooks/useKeuangan";
 import { isSppPaymentName } from "@/lib/installment";
 import {
@@ -82,6 +83,26 @@ interface TagihanItem {
   jatuh_tempo: string | null;
   /** Sudah lewat jatuh tempo dan belum lunas. */
   menunggak: boolean | null;
+}
+
+type BillBucketKey = "overdue" | "current" | "future";
+
+const BILL_BUCKET_LABELS: Record<BillBucketKey, string> = {
+  overdue: "Tunggakan",
+  current: "Bulan Ini",
+  future: "Mendatang",
+};
+
+function getBillBucket(t: TagihanItem, now = new Date()): BillBucketKey {
+  if (t.menunggak) return "overdue";
+  if (!t.jatuh_tempo) return "current";
+
+  const due = new Date(t.jatuh_tempo);
+  if (Number.isNaN(due.getTime())) return "current";
+
+  const dueMonth = due.getFullYear() * 12 + due.getMonth();
+  const currentMonth = now.getFullYear() * 12 + now.getMonth();
+  return dueMonth > currentMonth ? "future" : "current";
 }
 
 export default function PortalTagihan() {
@@ -366,6 +387,243 @@ export default function PortalTagihan() {
     navigate("/portal/checkout");
   };
 
+  const portalSummary = useMemo(() => {
+    const overdueItems = tagihan.filter((t) => getBillBucket(t) === "overdue");
+    const futureItems = tagihan.filter((t) => getBillBucket(t) === "future");
+    return {
+      childCount: grouped.size,
+      billCount: tagihan.length,
+      total: tagihan.reduce((sum, t) => sum + Number(t.nominal || 0), 0),
+      overdueCount: overdueItems.length,
+      overdueTotal: overdueItems.reduce((sum, t) => sum + Number(t.nominal || 0), 0),
+      futureCount: futureItems.length,
+    };
+  }, [grouped, tagihan]);
+
+  const selectedStudentCount = useMemo(
+    () => new Set(selectedItems.map((t) => t.siswa_id)).size,
+    [selectedItems],
+  );
+
+  const defaultOpenChildren = useMemo(() => {
+    const entries = Array.from(grouped.entries());
+    const overdueChild = entries.find(([, items]) =>
+      items.some((item) => getBillBucket(item) === "overdue"),
+    );
+    const first = overdueChild || entries[0];
+    return first ? [first[0]] : [];
+  }, [grouped]);
+
+  const groupByType = (items: TagihanItem[]) =>
+    Array.from(
+      items.reduce((map, item) => {
+        const key = item.jenis_id;
+        const list = map.get(key) || [];
+        list.push(item);
+        map.set(key, list);
+        return map;
+      }, new Map<string, TagihanItem[]>()),
+    ).map(([jenisId, typeItems]) => ({
+      jenisId,
+      items: [...typeItems].sort((a, b) =>
+        (a.jatuh_tempo || "").localeCompare(b.jatuh_tempo || ""),
+      ),
+    }));
+
+  const renderSppQuickActions = (siswaId: string, typeItems: TagihanItem[]) => {
+    if (!typeItems.some((t) => t.bulan > 0 && isSppPaymentName(t.jenis_nama))) {
+      return null;
+    }
+
+    const sppQuickGroups = Array.from(
+      typeItems
+        .filter((t) => t.bulan > 0 && isSppPaymentName(t.jenis_nama))
+        .reduce((map, item) => {
+          const groupKey = item.tahun_ajaran_mulai;
+          const list = map.get(groupKey) || [];
+          list.push(item);
+          map.set(groupKey, list);
+          return map;
+        }, new Map<string, TagihanItem[]>()),
+    ).map(([groupKey, groupItems]) => ({
+      groupKey,
+      items: [...groupItems].sort(
+        (a, b) =>
+          BULAN_ORDER_AKADEMIK.indexOf(a.bulan) -
+          BULAN_ORDER_AKADEMIK.indexOf(b.bulan),
+      ),
+    }));
+
+    return (
+      <div className="space-y-3 pb-3">
+        {sppQuickGroups.map(({ groupKey, items: sppItems }) => {
+          const sppFirst = sppItems[0];
+          const semester1Items = sppItems.filter((t) =>
+            [7, 8, 9, 10, 11, 12].includes(t.bulan),
+          );
+          const semester1Target = semester1Items.at(-1);
+          const totalOpenSpp = sppItems.reduce(
+            (sum, t) => sum + Number(t.nominal || 0),
+            0,
+          );
+
+          return (
+            <div
+              key={groupKey}
+              className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900 dark:bg-emerald-950/20"
+            >
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                    Pembayaran SPP Cepat
+                  </p>
+                  <p className="text-xs text-emerald-800/75 dark:text-emerald-200/70">
+                    TA {sppFirst.tahun_ajaran_nama} · {sppItems.length} bulan tersedia
+                  </p>
+                </div>
+                <p className="text-xs font-medium tabular-nums text-emerald-800 dark:text-emerald-200">
+                  {formatRupiah(totalOpenSpp)}
+                </p>
+              </div>
+
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!semester1Target}
+                  className="h-10 justify-start border-emerald-300 bg-white/80 text-emerald-800 hover:bg-emerald-100 dark:bg-background"
+                  onClick={() =>
+                    semester1Target &&
+                    selectSppThrough(
+                      siswaId,
+                      sppFirst.jenis_id,
+                      sppFirst.tahun_ajaran_mulai,
+                      semester1Target.tagihan_id,
+                    )
+                  }
+                >
+                  Semester 1 · Jul–Des
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-10 justify-start border-emerald-300 bg-white/80 text-emerald-800 hover:bg-emerald-100 dark:bg-background"
+                  onClick={() =>
+                    selectSppFullAcademicYear(
+                      siswaId,
+                      sppFirst.jenis_id,
+                      sppFirst.tahun_ajaran_mulai,
+                    )
+                  }
+                >
+                  2 Semester · Jul–Jun
+                </Button>
+              </div>
+
+              <div className="mt-2">
+                <Select
+                  onValueChange={(tagihanId) =>
+                    selectSppThrough(
+                      siswaId,
+                      sppFirst.jenis_id,
+                      sppFirst.tahun_ajaran_mulai,
+                      tagihanId,
+                    )
+                  }
+                >
+                  <SelectTrigger className="h-10 bg-background">
+                    <SelectValue placeholder="Atau bayar sampai bulan tertentu..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sppItems.map((t) => (
+                      <SelectItem key={t.tagihan_id} value={t.tagihan_id}>
+                        Sampai {labelBulanTA(t.bulan, t.tahun_ajaran_mulai)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderBillRow = (t: TagihanItem) => {
+    const key = getKey(t);
+    const isSelected = selected.has(key);
+    const prerequisite = isSelected ? null : getPrerequisite(t);
+    const isLocked = !!prerequisite;
+
+    return (
+      <div
+        key={key}
+        className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-3 py-3.5"
+      >
+        <Checkbox
+          id={`select-bill-${key}`}
+          className="mt-0.5 h-5 w-5 rounded-full border-emerald-700/60 data-[state=checked]:bg-emerald-700"
+          checked={isSelected}
+          disabled={isLocked}
+          onCheckedChange={() => toggleItem(t)}
+          aria-label={`${isLocked ? "Terkunci" : "Pilih"} ${t.jenis_nama} ${t.bulan === 0 ? t.tahun_ajaran_nama : labelBulanTA(t.bulan, t.tahun_ajaran_mulai)} untuk ${t.nama_siswa}`}
+        />
+        <label
+          htmlFor={`select-bill-${key}`}
+          className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 ${isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+        >
+          <span className="min-w-0 break-words text-sm font-medium leading-snug">
+            {t.bulan === 0
+              ? t.jenis_nama
+              : labelBulanTA(t.bulan, t.tahun_ajaran_mulai)}
+          </span>
+          <span className="whitespace-nowrap text-sm font-semibold tabular-nums leading-snug">
+            {formatRupiah(t.nominal || 0)}
+          </span>
+          <span className="col-span-2 text-xs text-muted-foreground">
+            {t.bulan === 0
+              ? `Sekali Bayar — TA ${t.tahun_ajaran_nama}`
+              : t.jatuh_tempo
+                ? `Jatuh tempo ${labelTanggal(t.jatuh_tempo)}`
+                : t.jenis_nama}
+          </span>
+          {isLocked && prerequisite ? (
+            <span className="col-span-2 mt-1 flex w-fit items-center gap-1 rounded bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+              <Lock className="h-3 w-3" />
+              Selesaikan {t.jenis_nama} {billingPeriodLabel(prerequisite)} terlebih dahulu
+            </span>
+          ) : t.menunggak ? (
+            <span className="col-span-2 mt-1 w-fit whitespace-nowrap rounded bg-destructive/10 px-2 py-1 text-[10px] font-medium text-destructive">
+              Lewat jatuh tempo
+            </span>
+          ) : null}
+        </label>
+
+        {cicilanDiizinkan(t) && isSelected && (
+          <div className="col-start-2 mt-3 grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5">
+            <label htmlFor={`installment-${key}`} className="text-xs text-muted-foreground">
+              Bayar cicilan
+            </label>
+            <RupiahInput
+              id={`installment-${key}`}
+              value={String(partialAmounts[key] ?? Number(t.nominal || 0))}
+              onChange={(raw) => {
+                setPartialAmounts((prev) => ({ ...prev, [key]: Number(raw) }));
+              }}
+              className="min-w-0 max-w-56 [&_input]:h-9 [&_input]:bg-muted/40 [&_input]:text-sm"
+            />
+            <span className="col-start-2 text-[10px] text-muted-foreground">
+              Maks. {formatRupiah(Number(t.nominal || 0))}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -375,16 +633,59 @@ export default function PortalTagihan() {
   }
 
   return (
-    <div className={`space-y-6 animate-fade-in ${tagihan.length > 0 ? "pb-32 md:pb-0" : ""}`}>
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-foreground">Tagihan</h1>
-          <p className="text-sm text-muted-foreground">
-            Pilih tagihan yang ingin dibayar
-          </p>
-        </div>
-
+    <div className={`space-y-5 animate-fade-in ${tagihan.length > 0 ? "pb-32 md:pb-0" : ""}`}>
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold text-foreground">Tagihan</h1>
+        <p className="text-sm text-muted-foreground">
+          Pilih anak dan tagihan yang ingin dibayar
+        </p>
       </div>
+
+      {tagihan.length > 0 && (
+        <Card className="overflow-hidden rounded-2xl border-emerald-100 bg-gradient-to-br from-emerald-50/80 to-background shadow-sm dark:border-emerald-950 dark:from-emerald-950/20">
+          <CardContent className="p-4 sm:p-5">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="rounded-xl bg-background/85 p-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Users className="h-4 w-4" />
+                  Anak
+                </div>
+                <p className="mt-1 text-xl font-bold tabular-nums">{portalSummary.childCount}</p>
+              </div>
+              <div className="rounded-xl bg-background/85 p-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <CalendarDays className="h-4 w-4" />
+                  Tagihan
+                </div>
+                <p className="mt-1 text-xl font-bold tabular-nums">{portalSummary.billCount}</p>
+              </div>
+              <div className="rounded-xl bg-background/85 p-3">
+                <p className="text-xs text-muted-foreground">Total tersedia</p>
+                <p className="mt-1 break-words text-base font-bold tabular-nums sm:text-lg">
+                  {formatRupiah(portalSummary.total)}
+                </p>
+              </div>
+              <div className="rounded-xl bg-background/85 p-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <AlertTriangle className="h-4 w-4" />
+                  Tunggakan
+                </div>
+                <p className="mt-1 break-words text-base font-bold tabular-nums text-destructive sm:text-lg">
+                  {formatRupiah(portalSummary.overdueTotal)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {portalSummary.overdueCount} tagihan
+                </p>
+              </div>
+            </div>
+            {portalSummary.futureCount > 0 && (
+              <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                Tagihan mendatang tetap tersedia bila ingin dibayar lebih awal. Tunggakan dan tagihan bulan berjalan ditampilkan lebih dahulu.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {tagihan.length === 0 ? (
         <Card>
@@ -393,256 +694,228 @@ export default function PortalTagihan() {
           </CardContent>
         </Card>
       ) : (
-        Array.from(grouped.entries()).map(([siswaId, items]) => {
-          const first = items[0];
-          const allKeys = items.map(getKey);
-          const allChecked = allKeys.every((k) => selected.has(k));
-          const selectedCount = allKeys.filter((k) => selected.has(k)).length;
-          const subtotal = items
-            .filter((t) => selected.has(getKey(t)))
-            .reduce((s, t) => s + amountFor(t), 0);
+        <Accordion
+          type="multiple"
+          defaultValue={defaultOpenChildren}
+          className="space-y-3"
+        >
+          {Array.from(grouped.entries()).map(([siswaId, items]) => {
+            const first = items[0];
+            const allKeys = items.map(getKey);
+            const allChecked = allKeys.every((k) => selected.has(k));
+            const selectedCount = allKeys.filter((k) => selected.has(k)).length;
+            const childTotal = items.reduce(
+              (sum, t) => sum + Number(t.nominal || 0),
+              0,
+            );
+            const childOverdue = items.filter(
+              (t) => getBillBucket(t) === "overdue",
+            );
+            const childOverdueTotal = childOverdue.reduce(
+              (sum, t) => sum + Number(t.nominal || 0),
+              0,
+            );
+            const subtotal = items
+              .filter((t) => selected.has(getKey(t)))
+              .reduce((sum, t) => sum + amountFor(t), 0);
 
-          const sppQuickGroups = Array.from(
-            items
-              .filter((t) => t.bulan > 0 && isSppPaymentName(t.jenis_nama))
-              .reduce((map, item) => {
-                const groupKey = `${item.jenis_id}:${item.tahun_ajaran_mulai}`;
-                const list = map.get(groupKey) || [];
-                list.push(item);
-                map.set(groupKey, list);
-                return map;
-              }, new Map<string, TagihanItem[]>()),
-          ).map(([groupKey, groupItems]) => ({
-            groupKey,
-            items: [...groupItems].sort(
-              (a, b) =>
-                BULAN_ORDER_AKADEMIK.indexOf(a.bulan) -
-                BULAN_ORDER_AKADEMIK.indexOf(b.bulan),
-            ),
-          }));
+            const bucketGroups = (["overdue", "current", "future"] as BillBucketKey[])
+              .map((bucket) => {
+                const bucketItems = items.filter(
+                  (item) => getBillBucket(item) === bucket,
+                );
+                return {
+                  bucket,
+                  items: bucketItems,
+                  groups: groupByType(bucketItems),
+                  total: bucketItems.reduce(
+                    (sum, item) => sum + Number(item.nominal || 0),
+                    0,
+                  ),
+                };
+              })
+              .filter((group) => group.items.length > 0);
 
-          return (
-            <Card key={siswaId} className="min-w-0 rounded-2xl shadow-sm">
-              <CardHeader className="px-4 pb-3 pt-5 sm:px-6">
-                <div className="min-w-0">
-                  <CardTitle className="break-words text-base leading-snug">
-                    {first.nama_siswa}
-                  </CardTitle>
-                  <p className="mt-1 break-words text-xs text-muted-foreground">
-                    {first.departemen_nama} — {first.kelas_nama} • NIS:{" "}
-                    {first.nis || "-"}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-                  <p className="text-xs text-muted-foreground" aria-live="polite" aria-atomic="true">
-                    {selectedCount} dari {items.length} tagihan dipilih
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="ml-auto h-9 shrink-0 gap-1.5 rounded-full border-emerald-600/50 bg-emerald-50/70 px-3 text-xs font-medium text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
-                    onClick={() => selectAllForSiswa(siswaId)}
-                    aria-pressed={allChecked}
-                    aria-label={`${allChecked ? "Batalkan pilihan" : "Pilih semua tagihan"} ${first.nama_siswa}`}
-                  >
-                    {allChecked ? <X className="h-4 w-4" /> : <CheckCheck className="h-4 w-4" />}
-                    {allChecked ? "Batalkan pilihan" : "Pilih semua"}
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="px-4 pb-4 sm:px-6">
-                {sppQuickGroups.length > 0 && (
-                  <div className="mb-4 space-y-3">
-                    {sppQuickGroups.map(({ groupKey, items: sppItems }) => {
-                      const sppFirst = sppItems[0];
-                      const semester1Items = sppItems.filter((t) =>
-                        [7, 8, 9, 10, 11, 12].includes(t.bulan),
-                      );
-                      const semester1Target = semester1Items.at(-1);
-                      const totalOpenSpp = sppItems.reduce(
-                        (sum, t) => sum + Number(t.nominal || 0),
-                        0,
-                      );
-
-                      return (
-                        <div
-                          key={groupKey}
-                          className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900 dark:bg-emerald-950/20"
-                        >
-                          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                              <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
-                                Pembayaran SPP Cepat
-                              </p>
-                              <p className="text-xs text-emerald-800/75 dark:text-emerald-200/70">
-                                TA {sppFirst.tahun_ajaran_nama} · maksimal 2 semester (Juli–Juni)
-                              </p>
-                            </div>
-                            <p className="text-xs font-medium tabular-nums text-emerald-800 dark:text-emerald-200">
-                              Sisa tersedia {formatRupiah(totalOpenSpp)}
-                            </p>
-                          </div>
-
-                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={!semester1Target}
-                              className="h-10 justify-start border-emerald-300 bg-white/80 text-emerald-800 hover:bg-emerald-100 dark:bg-background"
-                              onClick={() =>
-                                semester1Target &&
-                                selectSppThrough(
-                                  siswaId,
-                                  sppFirst.jenis_id,
-                                  sppFirst.tahun_ajaran_mulai,
-                                  semester1Target.tagihan_id,
-                                )
-                              }
-                            >
-                              Semester 1 · Jul–Des
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-10 justify-start border-emerald-300 bg-white/80 text-emerald-800 hover:bg-emerald-100 dark:bg-background"
-                              onClick={() =>
-                                selectSppFullAcademicYear(
-                                  siswaId,
-                                  sppFirst.jenis_id,
-                                  sppFirst.tahun_ajaran_mulai,
-                                )
-                              }
-                            >
-                              2 Semester · Jul–Jun
-                            </Button>
-                          </div>
-
-                          <div className="mt-2">
-                            <Select
-                              onValueChange={(tagihanId) =>
-                                selectSppThrough(
-                                  siswaId,
-                                  sppFirst.jenis_id,
-                                  sppFirst.tahun_ajaran_mulai,
-                                  tagihanId,
-                                )
-                              }
-                            >
-                              <SelectTrigger className="h-10 bg-background">
-                                <SelectValue placeholder="Atau bayar sampai bulan tertentu..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {sppItems.map((t) => (
-                                  <SelectItem key={t.tagihan_id} value={t.tagihan_id}>
-                                    Sampai {labelBulanTA(t.bulan, t.tahun_ajaran_mulai)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <p className="mt-2 text-[11px] leading-relaxed text-emerald-800/70 dark:text-emerald-200/60">
-                            Bulan yang sudah lunas otomatis dilewati. Pemilihan tetap berurutan dari tagihan SPP paling lama dan tidak memasukkan Uang Pangkal, Seragam, atau tagihan lainnya.
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <div className="divide-y">
-                  {items.map((t) => {
-                    const key = getKey(t);
-                    const isSelected = selected.has(key);
-                    const prerequisite = isSelected ? null : getPrerequisite(t);
-                    const isLocked = !!prerequisite;
-                    return (
-                      <div
-                        key={key}
-                        className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-3 py-4"
-                      >
-                        <Checkbox
-                          id={`select-bill-${key}`}
-                          className="mt-0.5 h-5 w-5 rounded-full border-emerald-700/60 data-[state=checked]:bg-emerald-700"
-                          checked={isSelected}
-                          disabled={isLocked}
-                          onCheckedChange={() => toggleItem(t)}
-                          aria-label={`${isLocked ? "Terkunci" : "Pilih"} ${t.jenis_nama} ${t.bulan === 0 ? t.tahun_ajaran_nama : labelBulanTA(t.bulan, t.tahun_ajaran_mulai)} untuk ${t.nama_siswa}`}
-                        />
-                        <label
-                          htmlFor={`select-bill-${key}`}
-                          className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 ${isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
-                        >
-                          <span className="min-w-0 break-words text-sm font-medium leading-snug">
-                            {t.jenis_nama}
+            return (
+              <AccordionItem
+                key={siswaId}
+                value={siswaId}
+                className="overflow-hidden rounded-2xl border bg-card px-0 shadow-sm"
+              >
+                <AccordionTrigger
+                  className="px-4 py-4 text-left hover:no-underline sm:px-5"
+                  aria-label={`Buka tagihan ${first.nama_siswa}`}
+                >
+                  <div className="grid min-w-0 flex-1 gap-3 pr-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                    <div className="min-w-0">
+                      <p className="break-words text-base font-semibold leading-snug text-foreground">
+                        {first.nama_siswa}
+                      </p>
+                      <p className="mt-1 break-words text-xs font-normal text-muted-foreground">
+                        {first.departemen_nama} — {first.kelas_nama} · NIS {first.nis || "-"}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <span className="rounded-full bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                          {items.length} tagihan
+                        </span>
+                        {childOverdue.length > 0 && (
+                          <span className="rounded-full bg-destructive/10 px-2 py-1 text-[11px] font-medium text-destructive">
+                            {childOverdue.length} tunggakan
                           </span>
-                          <span className="whitespace-nowrap text-sm font-semibold tabular-nums leading-snug">
-                            {formatRupiah(t.nominal || 0)}
+                        )}
+                        {selectedCount > 0 && (
+                          <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                            {selectedCount} dipilih
                           </span>
-                          <span className="col-span-2 text-xs text-muted-foreground">
-                            {t.bulan === 0
-                              ? `Sekali Bayar — TA ${t.tahun_ajaran_nama}`
-                              : labelBulanTA(t.bulan, t.tahun_ajaran_mulai)}
-                          </span>
-                          {isLocked && prerequisite ? (
-                            <span className="col-span-2 mt-1 flex w-fit items-center gap-1 rounded bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-                              <Lock className="h-3 w-3" />
-                              Selesaikan {t.jenis_nama} {billingPeriodLabel(prerequisite)} terlebih dahulu
-                            </span>
-                          ) : t.menunggak ? (
-                            <span className="col-span-2 mt-1 w-fit whitespace-nowrap rounded bg-destructive/10 px-2 py-1 text-[10px] font-medium text-destructive">
-                              Lewat jatuh tempo
-                            </span>
-                          ) : t.jatuh_tempo ? (
-                            <span className="col-span-2 mt-1 w-fit whitespace-nowrap rounded bg-muted px-2 py-1 text-[10px] text-muted-foreground">
-                              Jatuh tempo {labelTanggal(t.jatuh_tempo)}
-                            </span>
-                          ) : null}
-                        </label>
-                        {cicilanDiizinkan(t) && isSelected && (
-                          <div className="col-start-2 mt-3 grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5">
-                            <label htmlFor={`installment-${key}`} className="text-xs text-muted-foreground">
-                              Bayar cicilan
-                            </label>
-                            <RupiahInput
-                              id={`installment-${key}`}
-                              value={String(partialAmounts[key] ?? Number(t.nominal || 0))}
-                              onChange={(raw) => {
-                                setPartialAmounts((prev) => ({ ...prev, [key]: Number(raw) }));
-                              }}
-                              className="min-w-0 max-w-56 [&_input]:h-9 [&_input]:bg-muted/40 [&_input]:text-sm"
-                            />
-                            <span className="col-start-2 text-[10px] text-muted-foreground">
-                              Maks. {formatRupiah(Number(t.nominal || 0))}
-                            </span>
-                          </div>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-                {subtotal > 0 && (
-                  <div className="mt-1 flex items-center justify-between gap-3 border-t pt-3 text-sm">
-                    <span className="text-muted-foreground">Subtotal dipilih</span>
-                    <span className="whitespace-nowrap font-semibold tabular-nums text-emerald-700">
-                      {formatRupiah(subtotal)}
-                    </span>
+                    </div>
+                    <div className="text-left sm:text-right">
+                      <p className="text-[11px] font-normal text-muted-foreground">Total tersedia</p>
+                      <p className="text-base font-bold tabular-nums text-foreground">
+                        {formatRupiah(childTotal)}
+                      </p>
+                      {childOverdueTotal > 0 && (
+                        <p className="mt-0.5 text-[11px] font-medium tabular-nums text-destructive">
+                          Tunggakan {formatRupiah(childOverdueTotal)}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })
+                </AccordionTrigger>
+
+                <AccordionContent className="px-4 pb-4 sm:px-5">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-t pt-4">
+                    <p className="text-xs text-muted-foreground" aria-live="polite" aria-atomic="true">
+                      {selectedCount} dari {items.length} tagihan dipilih
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 shrink-0 gap-1.5 rounded-full border-emerald-600/50 bg-emerald-50/70 px-3 text-xs font-medium text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
+                      onClick={() => selectAllForSiswa(siswaId)}
+                      aria-pressed={allChecked}
+                      aria-label={`${allChecked ? "Batalkan pilihan" : "Pilih semua tagihan"} ${first.nama_siswa}`}
+                    >
+                      {allChecked ? <X className="h-4 w-4" /> : <CheckCheck className="h-4 w-4" />}
+                      {allChecked ? "Batalkan pilihan" : "Pilih semua"}
+                    </Button>
+                  </div>
+
+                  <div className="space-y-5">
+                    {bucketGroups.map(({ bucket, items: bucketItems, groups, total }) => (
+                      <section key={bucket} aria-label={BILL_BUCKET_LABELS[bucket]}>
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <div>
+                            <h2
+                              className={`text-sm font-semibold ${
+                                bucket === "overdue" ? "text-destructive" : "text-foreground"
+                              }`}
+                            >
+                              {BILL_BUCKET_LABELS[bucket]}
+                            </h2>
+                            <p className="text-[11px] text-muted-foreground">
+                              {bucketItems.length} tagihan
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold tabular-nums">
+                            {formatRupiah(total)}
+                          </p>
+                        </div>
+
+                        <Accordion
+                          type="multiple"
+                          defaultValue={
+                            bucket === "future"
+                              ? []
+                              : groups.map((group) => `${bucket}:${group.jenisId}`)
+                          }
+                          className="space-y-2"
+                        >
+                          {groups.map(({ jenisId, items: typeItems }) => {
+                            const typeFirst = typeItems[0];
+                            const typeTotal = typeItems.reduce(
+                              (sum, item) => sum + Number(item.nominal || 0),
+                              0,
+                            );
+                            const typeSelected = typeItems.filter((item) =>
+                              selected.has(getKey(item)),
+                            ).length;
+                            const typeKey = `${bucket}:${jenisId}`;
+
+                            const allTypeItems = items.filter(
+                              (item) => item.jenis_id === jenisId,
+                            );
+                            const firstBucketForType = (
+                              ["overdue", "current", "future"] as BillBucketKey[]
+                            ).find((candidate) =>
+                              allTypeItems.some(
+                                (item) => getBillBucket(item) === candidate,
+                              ),
+                            );
+
+                            return (
+                              <AccordionItem
+                                key={typeKey}
+                                value={typeKey}
+                                className="overflow-hidden rounded-xl border bg-background px-0"
+                              >
+                                <AccordionTrigger className="px-3 py-3 text-left hover:no-underline">
+                                  <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 pr-2">
+                                    <div className="min-w-0">
+                                      <p className="break-words text-sm font-medium leading-snug">
+                                        {typeFirst.jenis_nama}
+                                      </p>
+                                      <p className="mt-1 text-[11px] font-normal text-muted-foreground">
+                                        {typeItems.length} tagihan
+                                        {typeSelected > 0 ? ` · ${typeSelected} dipilih` : ""}
+                                      </p>
+                                    </div>
+                                    <p className="whitespace-nowrap text-sm font-semibold tabular-nums">
+                                      {formatRupiah(typeTotal)}
+                                    </p>
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="px-3 pb-2">
+                                  {bucket === firstBucketForType
+                                    ? renderSppQuickActions(siswaId, allTypeItems)
+                                    : null}
+                                  <div className="divide-y">
+                                    {typeItems.map(renderBillRow)}
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                            );
+                          })}
+                        </Accordion>
+                      </section>
+                    ))}
+                  </div>
+
+                  {subtotal > 0 && (
+                    <div className="mt-4 flex items-center justify-between gap-3 border-t pt-3 text-sm">
+                      <span className="text-muted-foreground">Subtotal dipilih</span>
+                      <span className="whitespace-nowrap font-semibold tabular-nums text-emerald-700">
+                        {formatRupiah(subtotal)}
+                      </span>
+                    </div>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            );
+          })}
+        </Accordion>
       )}
 
       {tagihan.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/90">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
             <div className="min-w-0" aria-live="polite" aria-atomic="true">
-              <p className="text-xs text-muted-foreground">{selectedItems.length} tagihan dipilih</p>
+              <p className="text-xs text-muted-foreground">
+                {selectedItems.length} tagihan
+                {selectedStudentCount > 0 ? ` dari ${selectedStudentCount} anak` : ""} dipilih
+              </p>
               <p className="break-words text-lg font-bold tabular-nums leading-tight">
                 {formatRupiah(totalSelected)}
               </p>

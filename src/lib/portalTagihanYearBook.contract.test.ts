@@ -42,7 +42,7 @@ describe("portal tagihan year-book compatibility", () => {
   });
 
   it("groups quick SPP selection by academic-year start, not financial-book id", () => {
-    expect(portal).toContain("const groupKey = `${item.jenis_id}:${item.tahun_ajaran_mulai}`;");
+    expect(portal).toContain("const groupKey = item.tahun_ajaran_mulai;");
     expect(portal).toContain(
       "t.tahun_ajaran_mulai === tahunAjaranMulai",
     );
