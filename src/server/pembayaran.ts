@@ -794,9 +794,22 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       usesSppRecognition
         ? !!tagihanFound?.jurnal_piutang_id || !!tagihanFound?.pengakuan_spp_selesai
         : tagihanFound?.status === "belum_bayar" || tagihanFound?.status === "sebagian";
+
+    // Jenis bulanan non-SPP (mis. SUBSIDI SILANG) boleh mempunyai jatuh tempo
+    // tanggal 10 tetapi periode layanannya sudah berjalan sejak awal bulan.
+    // Pembayaran pada bulan layanan yang sama bukan pendapatan diterima di muka;
+    // pembayaran untuk bulan yang benar-benar masih di masa depan tetap masuk
+    // akun penampung bila perlu_dimuka=true.
+    const bulanLayananSudahBerjalan =
+      !isSekali &&
+      !!tagihanFound?.jatuh_tempo &&
+      tagihanFound.jatuh_tempo.slice(0, 7) === tanggal_bayar.slice(0, 7);
+
     const pakaiDimuka =
       !tagihanSudahDiakuiPiutang &&
-      (usesSppRecognition || (jenis.perlu_dimuka !== false && (is_bayar_dimuka || belumJatuhTempo)));
+      (usesSppRecognition ||
+        (jenis.perlu_dimuka !== false &&
+          (is_bayar_dimuka || (belumJatuhTempo && !bulanLayananSudahBerjalan))));
     // Tagihan efektif = yang dikirim caller, atau yang ditemukan lewat
     // siswa+jenis+bulan+tahun_ajaran di atas (mis. pembayaran massal tunggakan
     // yang tidak mengirim tagihan_id sama sekali). Tanpa fallback ini,
