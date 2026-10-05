@@ -10,7 +10,7 @@ import { isMonthlySppRevenue } from "@/lib/recognitionDate";
 import { createServerFn } from "@tanstack/react-start";
 import { resolvePaymentBookYear } from "@/lib/paymentBookYear";
 import { resolvePaymentAmount } from "@/lib/paymentTariff";
-import { calculateRemainingBill, isSppPaymentName, resolveInstallmentAmount } from "@/lib/installment";
+import { calculateRemainingBill, isSppPaymentName, isUangPangkalPaymentName, resolveInstallmentAmount } from "@/lib/installment";
 import {
   billingPeriodLabel,
   findBillingPrerequisite,
@@ -644,9 +644,13 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       );
       const { remaining } = calculateRemainingBill(tagihanTerpilih.nominal, totalSudahBayar);
       const allowPartial =
-        (tagihanTerpilih.status !== "terjadwal" ||
-          (isSpp && !!tagihanTerpilih.jatuh_tempo && tagihanTerpilih.jatuh_tempo.slice(0, 7) + "-01" <= tanggal_bayar))
-        && (isSekali || isSpp);
+        (isSekali &&
+          (tagihanTerpilih.status !== "terjadwal" ||
+            isUangPangkalPaymentName(jenis.nama))) ||
+        (isSpp &&
+          (tagihanTerpilih.status !== "terjadwal" ||
+            (!!tagihanTerpilih.jatuh_tempo &&
+              tagihanTerpilih.jatuh_tempo.slice(0, 7) + "-01" <= tanggal_bayar)));
       jumlahValid = resolveInstallmentAmount({
         requestedAmount: data.jumlah,
         remainingAmount: remaining,
