@@ -187,6 +187,19 @@
   }
 }
 
+/* Compact receipt spacing also applies to the downloadable receipt.
+ * Keep font sizes readable; do not inherit report table padding. */
+.receipt-compact td,
+.receipt-compact th {
+  padding-top: 1pt !important;
+  padding-bottom: 1pt !important;
+  line-height: 1.15;
+}
+.receipt-compact .receipt-footer {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
 @page {
   size: A4 portrait;
   margin: 15mm 18mm;

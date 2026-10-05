@@ -248,3 +248,8 @@ Ringkasan (detail lengkap ada di versi lama file ini: `git log -p SESI_NOTES.md`
 - Route dashboard pegawai tidak dipindah: pegawai yang sudah login tetap membuka dashboard saat mengakses `/`.
 - Jika sesi aktif memiliki role `ortu` lalu membuka `/`, aplikasi otomatis mengarahkan ke `/portal`.
 - Protected route selain `/` tetap mengarahkan pengguna yang belum login ke `/login`, sehingga perilaku route internal lama tidak berubah.
+
+
+## Cetak kwitansi continuous form (5 Oktober 2026)
+
+- Foto cetakan fisik menunjukkan jarak baris dan bagian catatan kaki terlalu panjang dibanding aplikasi lama. Ukuran huruf dipertahankan; padding tabel kwitansi dipisahkan dari aturan laporan umum. Footer dirapatkan dan dijaga utuh agar tidak terpecah ke halaman berikutnya. Ukuran kertas continuous form tetap 241 x 140 mm; hasil printer fisik perlu dikonfirmasi pengguna karena driver printer dapat mengabaikan ukuran halaman CSS.
