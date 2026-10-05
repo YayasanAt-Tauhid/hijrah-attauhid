@@ -1,3 +1,36 @@
+## SPP asrama/non asrama — migration produksi berhasil (5 Oktober 2026)
+
+User menyetujui persiapan pemisahan SMP/SMA/MTA karena khawatir laporan
+keuangan tercampur. Branch `fix/spp-boarding-accounting` memakai `origin/main`
+`9a3b495`; produksi aktif hanya `cmvzcpeiuompqgdvflky`. Setelah SQL final
+ditampilkan, user menyetujui penerapan dan deploy. Kedua migration berhasil:
+ledger `20261005093036` dan `20261005093044`. Verifikasi produksi menunjukkan
+345 status siswa, 9963 metadata tagihan, dan 352 metadata pembayaran terisi;
+total uang, jumlah jurnal, debit/kredit, dan hash detail jurnal tidak berubah.
+Frontend dirilis melalui PR118/workflow main; lihat hasil deployment pada PR118
+untuk keadaan runtime terbaru. Aturan persetujuan SQL produksi tetap berlaku.
+
+Snapshot per tagihan dipilih agar perpindahan status siswa tidak mengubah
+histori; satu master SPP/lembaga dan tarif efektif siswa dipertahankan. Akun
+4102/4103 sudah ada. Bukti legacy dapat memulihkan 345 status kosong, tetapi
+empat siswa belum punya bukti dan Khairan Alzam memiliki konflik sumber lama
+dengan status sekarang. Dua pembayaran Gledysta total Rp900.000 belum bisa
+diklasifikasikan. Detail dan daftar nama ada di docs/spp-asrama-non-asrama.md.
+
+SQL metadata mempertahankan akun jurnal lama 4101. Reklasifikasi buku besar
+historis masih perlu audit jurnal tersendiri dan persetujuan atas SQL hasilnya;
+jangan menyatakan laba rugi historis sudah terpisah. Pembatalan SPP dengan PD
+pending setelah layanan diakui juga diperbaiki, karena kasus yang sama gagal
+pada definisi RPC produksi asli. Regresi SPP/uang pangkal dan fixture metadata,
+309 tes aplikasi, serta build lulus. Lint/typecheck repo belum bersih pada baseline.
+Lembaga pembayaran impor sering NULL; rekap dan filter mengambil unit master
+jenis pembayaran, tanpa mengubah data pembayaran. Snapshot tak ada yang kosong,
+kategori pembayaran cocok dengan tagihan, dan akses helper/audit privat terverifikasi.
+
+Berikutnya: cek hasil deployment PR118, lanjutkan audit jurnal 4101 dan
+konfirmasi kasus tanpa bukti. Jangan reklasifikasi jurnal 4101 sebelum SQL
+hasil audit ditampilkan dan mendapat persetujuan tersendiri.
+
 ## SPP awal bulan — revisi kebijakan, belum diterapkan (2 Oktober 2026)
 
 Pengguna menetapkan SPP diakui sejak tanggal 1 bulan layanan, mengikuti kebijakan

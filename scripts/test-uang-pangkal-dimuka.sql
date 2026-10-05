@@ -207,10 +207,13 @@ BEGIN
     book26,true,t.id,kas,liability,'Dimuka','JD',null,'UANG PANGKAL TK');
   SELECT id INTO pdid FROM pendapatan_dimuka WHERE pembayaran_id=(r->>'pembayaran_id')::uuid;
   UPDATE tagihan SET jatuh_tempo=(now() AT TIME ZONE 'Asia/Jakarta')::date WHERE id=t.id;
+  -- Kebijakan cicilan terbaru mengakui diskon uang pangkal satu kali pada
+  -- posting jatuh tempo, bukan pada salah satu penerimaan uang muka.
+  PERFORM posting_piutang_jatuh_tempo((now() AT TIME ZONE 'Asia/Jakarta')::date,NULL,5000);
   r := akui_pendapatan_dimuka_atomik(pdid);
   ASSERT (SELECT sum(debit) FROM jurnal_detail WHERE jurnal_id=(r->>'jurnal_id')::uuid AND akun_id=liability)=3780000;
-  ASSERT (SELECT sum(debit) FROM jurnal_detail WHERE jurnal_id=(r->>'jurnal_id')::uuid AND akun_id=potongan)=420000;
-  ASSERT (SELECT sum(kredit) FROM jurnal_detail WHERE jurnal_id=(r->>'jurnal_id')::uuid AND akun_id=revenue)=4200000;
+  ASSERT (SELECT sum(debit) FROM jurnal_detail WHERE jurnal_id=(SELECT jurnal_piutang_id FROM tagihan WHERE id=t.id) AND akun_id=potongan)=420000;
+  ASSERT (SELECT sum(kredit) FROM jurnal_detail WHERE jurnal_id IN ((r->>'jurnal_id')::uuid,(SELECT jurnal_piutang_id FROM tagihan WHERE id=t.id)) AND akun_id=revenue)=4200000;
   RAISE NOTICE 'PASS 11: pengakuan potongan 10 persen balance dan tetap bruto/netto';
 END;
 $discount$;
