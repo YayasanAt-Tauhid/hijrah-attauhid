@@ -101,23 +101,26 @@ function TabPenerimaan({ departemenId }: { departemenId?: string }) {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ["laporan_penerimaan", bulan, tahun, departemenId, filterTA],
+    queryKey: ["laporan_penerimaan_spp_unit", bulan, tahun, departemenId, filterTA],
     queryFn: async () => {
       const start = `${tahun}-${String(bulan).padStart(2, "0")}-01`;
       const endM = bulan === 12 ? 1 : bulan + 1;
       const endY = bulan === 12 ? tahun + 1 : tahun;
       const end = `${endY}-${String(endM).padStart(2, "0")}-01`;
-      return fetchAllPages((from, to) => {
+      const rows = await fetchAllPages((from, to) => {
         let q = supabase
         .from("pembayaran")
-        .select("*, siswa:siswa_id(nama, nis), jenis_pembayaran:jenis_id(nama, akun_pendapatan_id), departemen:departemen_id(nama, kode), jurnal:jurnal_id(id, nomor), tahun_ajaran:tahun_ajaran_id(id, nama)")
+        .select("*, siswa:siswa_id(nama, nis), jenis_pembayaran:jenis_id!inner(nama, akun_pendapatan_id, departemen_id, departemen:departemen_id(nama, kode)), departemen:departemen_id(nama, kode), jurnal:jurnal_id(id, nomor), tahun_ajaran:tahun_ajaran_id(id, nama)")
         .gte("tanggal_bayar", start)
         .lt("tanggal_bayar", end)
         .order("tanggal_bayar", { ascending: false }).order("id");
-      if (departemenId) q = q.eq("departemen_id", departemenId);
+      if (departemenId) q = q.eq("jenis_pembayaran.departemen_id", departemenId);
       if (filterTA && filterTA !== "all") q = q.eq("tahun_ajaran_id", filterTA);
         return q.range(from, to);
       });
+      // Impor lama dapat tidak mengisi unit pada pembayaran. Unit master
+      // SPP adalah sumber kategori dan tetap dapat difilter di server.
+      return rows.map(row => ({ ...row, departemen: row.jenis_pembayaran?.departemen || row.departemen }));
     },
   });
 
@@ -478,17 +481,18 @@ function TabNeraca({ departemenId }: { departemenId?: string }) {
   const end = `${endY}-${String(endM).padStart(2, "0")}-01`;
 
   const { data: rawPenerimaan, isLoading: lP } = useQuery({
-    queryKey: ["neraca_penerimaan_v3_spp", bulan, tahun, departemenId],
+    queryKey: ["neraca_penerimaan_v4_spp_unit", bulan, tahun, departemenId],
     queryFn: async () => {
-      return fetchAllPages((from, to) => {
+      const rows = await fetchAllPages((from, to) => {
         let q = supabase
         .from("pembayaran")
-        .select("id, jumlah, spp_kategori, jenis_pembayaran:jenis_id(nama), departemen:departemen_id(kode), keterangan")
+        .select("id, jumlah, spp_kategori, jenis_pembayaran:jenis_id!inner(nama, departemen_id, departemen:departemen_id(kode)), departemen:departemen_id(kode), keterangan")
         .gte("tanggal_bayar", start)
         .lt("tanggal_bayar", end).order("id");
-      if (departemenId) q = q.eq("departemen_id", departemenId);
+      if (departemenId) q = q.eq("jenis_pembayaran.departemen_id", departemenId);
         return q.range(from, to);
       });
+      return rows.map(row => ({ ...row, departemen: row.jenis_pembayaran?.departemen || row.departemen }));
     },
   });
 
@@ -620,4 +624,3 @@ function TabNeraca({ departemenId }: { departemenId?: string }) {
     </div>
   );
 }
-

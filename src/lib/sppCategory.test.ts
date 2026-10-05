@@ -25,4 +25,15 @@ describe("laporan kategori SPP", () => {
     expect(grouped.find(group => group.lembaga === "SMP" && group.kategori === "asrama")).toMatchObject({ jumlah: 300000, transaksi: 2 });
     expect(grouped.find(group => group.lembaga === "MTA")).toMatchObject({ kategori: "belum_terverifikasi", jumlah: 600000 });
   });
+
+  it("mengikutkan pembayaran impor tanpa unit pembayaran ke unit master SPP", () => {
+    const grouped = sppReceiptGroups([
+      { jumlah: 1250000, spp_kategori: "asrama", jenis_pembayaran: { nama: "SPP MTA", departemen: { kode: "MTA" } } },
+      { jumlah: 1250000, spp_kategori: "asrama", jenis_pembayaran: { nama: "SPP MTA", departemen: { kode: "MTA" } }, departemen: { kode: "MTA" } },
+      { jumlah: 325000, jenis_pembayaran: { nama: "SPP SD", departemen: { kode: "SD" } } },
+    ]);
+    expect(grouped).toHaveLength(2);
+    expect(grouped.find(group => group.lembaga === "MTA")).toMatchObject({ kategori: "asrama", jumlah: 2500000, transaksi: 2 });
+    expect(grouped.find(group => group.lembaga === "SD")).toMatchObject({ kategori: "umum", jumlah: 325000 });
+  });
 });

@@ -1,8 +1,17 @@
 # Pemisahan SPP asrama dan non asrama
 
-Status 5 Oktober 2026: disiapkan pada branch `fix/spp-boarding-accounting`,
-berdasarkan `main` commit `9a3b495`. Belum diterapkan atau dideploy.
-Target produksi hanya Supabase `cmvzcpeiuompqgdvflky`.
+Status 5 Oktober 2026: pengguna menyetujui SQL dan deployment. Kedua migration
+berhasil diterapkan pada Supabase produksi `cmvzcpeiuompqgdvflky`, versi ledger
+`20261005093036` dan `20261005093044`. Frontend dirilis melalui PR118 dan
+workflow deployment `main`; hasil deployment dicatat pada PR118.
+
+Verifikasi produksi: 345 status siswa, 9.963 metadata tagihan, dan 352 metadata
+pembayaran diperbarui. Tidak ada snapshot SPP bulanan yang kosong atau kategori
+pembayaran yang berbeda dari tagihannya. Jumlah tagihan/pembayaran, total uang,
+jumlah jurnal, debit/kredit, dan hash seluruh detail jurnal identik sebelum dan
+sesudah migration. Helper baru tidak dapat dipanggil browser; audit memakai
+RLS tanpa policy publik dan tanpa grant baca. Info advisor untuk audit tanpa
+policy memang disengaja karena tabel tersebut privat.
 
 ## Perilaku setelah penerapan
 
@@ -27,7 +36,9 @@ Laporan Penerimaan SPP menyediakan filter kategori, rekap lembaga/kategori,
 kolom kategori, dan ekspor detail maupun rekap. Kas yang diterima tetap
 dibedakan dari pendapatan yang diakui. Data tanpa bukti tetap masuk total
 sebagai belum terverifikasi. Pembacaan pembayaran memakai pagination supaya
-rekap tidak berhenti pada batas baris API. Ringkasan kas bulanan juga memberi
+rekap tidak berhenti pada batas baris API. Pembayaran impor yang kolom lembaganya
+kosong mengikuti unit master jenis pembayaran, termasuk filter di server.
+Ringkasan kas bulanan juga memberi
 label kategori SPP. Rekap SPP per siswa dan laporan buku besar tidak diubah UI-nya.
 
 ## Pemulihan data lama
@@ -73,10 +84,10 @@ Jangan menyatakan laporan laba rugi historis sudah terpisah seluruhnya.
    menolak perubahan jumlah kandidat/konfigurasi akun; lock `NOWAIT` menolak
    eksekusi bila transaksi lain sedang menulis tabel terkait.
 
-Masing-masing migration harus diterapkan atomik, berurutan, setelah pengguna
+Kedua migration telah diterapkan atomik dan berurutan setelah pengguna
 menyetujui SQL yang ditampilkan. Jangan memakai `supabase db push` secara buta.
 Jika guard gagal, periksa perubahan dan ulangi audit, jangan menghapus guard.
-Deploy frontend setelah kedua migration berhasil dan hasil audit diverifikasi.
+Deployment frontend mengikuti keberhasilan kedua migration dan verifikasi audit.
 Reklasifikasi jurnal lama tetap menunggu persetujuan terpisah atas SQL hasil audit.
 
 ## Validasi
@@ -88,7 +99,8 @@ Reklasifikasi jurnal lama tetap menunggu persetujuan terpisah atas SQL hasil aud
   histori/jadwal, pembayaran, akses audit, serta total dan jumlah jurnal tetap.
 - 16 skenario regresi SPP dan 15 skenario uang pangkal lulus. Semua skenario
   transaksi uji di-rollback; fixture tidak menyalin seluruh data/RLS produksi.
-- 308 tes aplikasi dan production build lulus. Lint/typecheck repo masih
+- 309 tes aplikasi dan production build lulus, termasuk pembayaran impor tanpa
+  unit pada pembayaran. Lint/typecheck repo masih
   memiliki temuan pada baseline; perubahan laporan tidak menambah diagnostik
   lint dibanding file `main`, dan helper kategori lulus lint.
 

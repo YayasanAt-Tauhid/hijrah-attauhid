@@ -1,10 +1,14 @@
-## SPP asrama/non asrama — siap ditinjau, belum diterapkan (5 Oktober 2026)
+## SPP asrama/non asrama — migration produksi berhasil (5 Oktober 2026)
 
 User menyetujui persiapan pemisahan SMP/SMA/MTA karena khawatir laporan
 keuangan tercampur. Branch `fix/spp-boarding-accounting` memakai `origin/main`
-`9a3b495`; produksi aktif hanya `cmvzcpeiuompqgdvflky`. Produksi diperiksa
-read-only, tanpa migration atau deploy pada sesi ini. Aturan persetujuan SQL
-produksi setelah ditampilkan tetap berlaku.
+`9a3b495`; produksi aktif hanya `cmvzcpeiuompqgdvflky`. Setelah SQL final
+ditampilkan, user menyetujui penerapan dan deploy. Kedua migration berhasil:
+ledger `20261005093036` dan `20261005093044`. Verifikasi produksi menunjukkan
+345 status siswa, 9963 metadata tagihan, dan 352 metadata pembayaran terisi;
+total uang, jumlah jurnal, debit/kredit, dan hash detail jurnal tidak berubah.
+Frontend dirilis melalui PR118/workflow main; lihat hasil deployment pada PR118
+untuk keadaan runtime terbaru. Aturan persetujuan SQL produksi tetap berlaku.
 
 Snapshot per tagihan dipilih agar perpindahan status siswa tidak mengubah
 histori; satu master SPP/lembaga dan tarif efektif siswa dipertahankan. Akun
@@ -18,11 +22,14 @@ historis masih perlu audit jurnal tersendiri dan persetujuan atas SQL hasilnya;
 jangan menyatakan laba rugi historis sudah terpisah. Pembatalan SPP dengan PD
 pending setelah layanan diakui juga diperbaiki, karena kasus yang sama gagal
 pada definisi RPC produksi asli. Regresi SPP/uang pangkal dan fixture metadata,
-308 tes aplikasi, serta build lulus. Lint/typecheck repo belum bersih pada baseline.
+309 tes aplikasi, serta build lulus. Lint/typecheck repo belum bersih pada baseline.
+Lembaga pembayaran impor sering NULL; rekap dan filter mengambil unit master
+jenis pembayaran, tanpa mengubah data pembayaran. Snapshot tak ada yang kosong,
+kategori pembayaran cocok dengan tagihan, dan akses helper/audit privat terverifikasi.
 
-Berikutnya: tampilkan SQL final, tunggu persetujuan produksi, terapkan dua
-migration atomik dengan guard aktif, verifikasi hasil audit, baru merge/deploy.
-Setelah itu lanjutkan audit jurnal 4101 dan konfirmasi kasus tanpa bukti.
+Berikutnya: cek hasil deployment PR118, lanjutkan audit jurnal 4101 dan
+konfirmasi kasus tanpa bukti. Jangan reklasifikasi jurnal 4101 sebelum SQL
+hasil audit ditampilkan dan mendapat persetujuan tersendiri.
 
 ## SPP awal bulan — revisi kebijakan, belum diterapkan (2 Oktober 2026)
 
