@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateRemainingBill, isSppPaymentName, resolveInstallmentAmount } from "./installment";
+import { calculateRemainingBill, isSppPaymentName, isUangPangkalPaymentName, resolveInstallmentAmount } from "./installment";
 
 describe("resolveInstallmentAmount", () => {
   it("membolehkan cicilan bebas selama tidak melebihi sisa", () => {
@@ -49,5 +49,20 @@ describe("isSppPaymentName", () => {
     expect(isSppPaymentName("UANG PANGKAL SD")).toBe(false);
     expect(isSppPaymentName("DAFTAR ULANG")).toBe(false);
     expect(isSppPaymentName("SPPPLUS")).toBe(false);
+  });
+});
+
+
+describe("isUangPangkalPaymentName", () => {
+  it("mengenali hanya Uang Pangkal jenjang yang didukung", () => {
+    for (const jenjang of ["TK", "SD", "SMP", "SMA", "MTA"]) {
+      expect(isUangPangkalPaymentName(`UANG PANGKAL ${jenjang}`)).toBe(true);
+    }
+  });
+
+  it("tidak memperluas kebijakan cicilan ke biaya sekali bayar lain", () => {
+    expect(isUangPangkalPaymentName("DAFTAR ULANG TK")).toBe(false);
+    expect(isUangPangkalPaymentName("BIAYA PENDAFTARAN")).toBe(false);
+    expect(isUangPangkalPaymentName("UANG PANGKAL DAYCARE")).toBe(false);
   });
 });
