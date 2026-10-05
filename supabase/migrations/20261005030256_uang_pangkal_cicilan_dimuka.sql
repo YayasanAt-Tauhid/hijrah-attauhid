@@ -42,7 +42,7 @@ BEGIN
 
   SELECT * INTO STRICT v_jenis FROM public.jenis_pembayaran WHERE id=p_jenis_id;
   v_is_spp := v_jenis.tipe='bulanan' AND lower(btrim(v_jenis.nama)) ~ '^spp([[:space:]-]|$)';
-  v_is_uang_pangkal := upper(btrim(v_jenis.nama)) ~ '^UANG PANGKAL (TK|SD|SMP|SMA|MTA)
+  v_is_uang_pangkal := upper(btrim(v_jenis.nama)) ~ '^UANG PANGKAL (TK|SD|SMP|SMA|MTA)$';
   IF v_is_spp AND p_tagihan_id IS NULL THEN
     RAISE EXCEPTION 'Buat dan pilih tagihan SPP dengan periode layanan terlebih dahulu';
   END IF;
@@ -233,194 +233,6 @@ BEGIN
   );
 END;
 $function$;
-;
-  IF v_is_spp AND p_tagihan_id IS NULL THEN
-    RAISE EXCEPTION 'Buat dan pilih tagihan SPP dengan periode layanan terlebih dahulu';
-  END IF;
-
-  SELECT pegawai_id INTO v_pegawai_id
-  FROM public.users_profile
-  WHERE id = p_petugas_id;
-
-  IF v_pegawai_id IS NOT NULL
-     AND NOT EXISTS (SELECT 1 FROM public.pegawai WHERE id = v_pegawai_id) THEN
-    v_pegawai_id := NULL;
-  END IF;
-
-  IF p_tagihan_id IS NOT NULL THEN
-    SELECT * INTO v_tagihan
-    FROM public.tagihan
-    WHERE id = p_tagihan_id
-    FOR UPDATE;
-
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'Tagihan tidak ditemukan';
-    END IF;
-
-    IF v_tagihan.siswa_id <> p_siswa_id
-       OR v_tagihan.jenis_id <> p_jenis_id
-       OR v_tagihan.bulan IS DISTINCT FROM p_bulan THEN
-      RAISE EXCEPTION 'Tagihan tidak sesuai dengan siswa, jenis, atau periode pembayaran';
-    END IF;
-
-    IF v_tagihan.status NOT IN ('belum_bayar', 'sebagian', 'terjadwal') THEN
-      RAISE EXCEPTION 'Tagihan sudah lunas atau tidak dapat dibayar';
-    END IF;
-
-    SELECT COALESCE(SUM(jumlah), 0)
-    INTO v_total_sebelum
-    FROM public.pembayaran
-    WHERE tagihan_id = p_tagihan_id;
-
-    IF v_total_sebelum >= v_tagihan.nominal THEN
-      RAISE EXCEPTION 'Tagihan sudah lunas';
-    END IF;
-
-    IF p_jumlah > (v_tagihan.nominal - v_total_sebelum) THEN
-      RAISE EXCEPTION 'Jumlah pembayaran melebihi sisa tagihan';
-    END IF;
-
-    -- Cicilan SPP diizinkan sejak bulan layanan; pembayaran sebelum layanan tetap penuh.
-    IF v_tagihan.status = 'terjadwal'
-       AND NOT (v_is_spp AND COALESCE(public.tanggal_pengakuan_tagihan(v_tagihan.id) <= p_tanggal_bayar,false))
-       AND p_jumlah < (v_tagihan.nominal - v_total_sebelum) THEN
-      RAISE EXCEPTION 'Tagihan yang belum jatuh tempo harus dibayar penuh';
-    END IF;
-
-    SELECT j.departemen_id
-    INTO v_departemen_asal
-    FROM public.jurnal j
-    WHERE j.id = v_tagihan.jurnal_piutang_id;
-
-    IF v_departemen_asal IS NOT NULL THEN
-      v_departemen_efektif := v_departemen_asal;
-    END IF;
-  END IF;
-
-  -- Tagihan bulan berjalan diakui atomik saat dibayar, tanpa menunggu cron.
-  IF v_is_spp AND v_tagihan.jurnal_piutang_id IS NULL AND NOT v_tagihan.pengakuan_spp_selesai
-     AND public.tanggal_pengakuan_tagihan(v_tagihan.id) <= p_tanggal_bayar
-     AND public.tanggal_pengakuan_tagihan(v_tagihan.id) <= (now() AT TIME ZONE 'Asia/Jakarta')::date THEN
-    PERFORM public.posting_spp_tagihan_atomik(v_tagihan.id,NULL);
-    SELECT * INTO v_tagihan FROM public.tagihan WHERE id=p_tagihan_id;
-  END IF;
-
-  -- SQL menentukan akun berdasarkan jurnal yang benar-benar sudah ada.
-  IF v_is_spp THEN
-    IF v_tagihan.jurnal_piutang_id IS NOT NULL OR v_tagihan.pengakuan_spp_selesai THEN
-      p_is_bayar_dimuka := false;
-      SELECT akun_id INTO p_kredit_akun_id FROM public.pengaturan_akun WHERE kode_setting='piutang_siswa';
-      p_kredit_label := 'Piutang Siswa'; p_prefix_jurnal := 'JP';
-    ELSE
-      p_is_bayar_dimuka := true;
-      SELECT COALESCE(v_jenis.akun_dimuka_id,pa.akun_id) INTO p_kredit_akun_id
-      FROM (SELECT 1) x LEFT JOIN public.pengaturan_akun pa ON pa.kode_setting='AKUN_PENDAPATAN_DIMUKA';
-      p_kredit_label := 'Pendapatan Diterima di Muka - '||v_jenis.nama; p_prefix_jurnal := 'JD';
-    END IF;
-    IF p_kredit_akun_id IS NULL THEN RAISE EXCEPTION 'Akun SPP belum dikonfigurasi'; END IF;
-  END IF;
-
-  INSERT INTO public.pembayaran (
-    siswa_id, jenis_id, tahun_ajaran_id, bulan,
-    jumlah, tanggal_bayar, petugas_id, keterangan, tagihan_id
-  )
-  VALUES (
-    p_siswa_id, p_jenis_id, p_tahun_ajaran_id, p_bulan,
-    p_jumlah, p_tanggal_bayar, v_pegawai_id, p_keterangan, p_tagihan_id
-  )
-  RETURNING id INTO v_pembayaran_id;
-
-  v_nomor_jurnal := public.generate_nomor_jurnal(p_prefix_jurnal, v_tahun);
-
-  INSERT INTO public.jurnal (
-    nomor, tanggal, keterangan, referensi,
-    total_debit, total_kredit, status,
-    dibuat_oleh, departemen_id
-  )
-  VALUES (
-    v_nomor_jurnal,
-    p_tanggal_bayar,
-    p_keterangan,
-    v_pembayaran_id::text,
-    p_jumlah,
-    p_jumlah,
-    'posted',
-    v_pegawai_id,
-    v_departemen_efektif
-  )
-  RETURNING id INTO v_jurnal_id;
-
-  INSERT INTO public.jurnal_detail (jurnal_id, akun_id, keterangan, debit, kredit, urutan)
-  VALUES (v_jurnal_id, p_kas_akun_id, 'Penerimaan ' || p_jenis_nama, p_jumlah, 0, 1);
-
-  INSERT INTO public.jurnal_detail (jurnal_id, akun_id, keterangan, debit, kredit, urutan)
-  VALUES (v_jurnal_id, p_kredit_akun_id, p_kredit_label, 0, p_jumlah, 2);
-
-  UPDATE public.pembayaran
-  SET jurnal_id = v_jurnal_id
-  WHERE id = v_pembayaran_id;
-
-  IF p_tagihan_id IS NOT NULL THEN
-    v_total_sesudah := v_total_sebelum + p_jumlah;
-    v_sisa_sesudah := GREATEST(v_tagihan.nominal - v_total_sesudah, 0);
-    v_status_sesudah := CASE
-      WHEN v_sisa_sesudah <= 0 THEN 'lunas'
-      ELSE 'sebagian'
-    END;
-
-    UPDATE public.tagihan
-    SET status = v_status_sesudah,
-        pembayaran_id = v_pembayaran_id
-    WHERE id = p_tagihan_id;
-  ELSE
-    UPDATE public.tagihan
-    SET status = 'lunas', pembayaran_id = v_pembayaran_id
-    WHERE siswa_id        = p_siswa_id
-      AND jenis_id        = p_jenis_id
-      AND tahun_ajaran_id = p_tahun_ajaran_id
-      AND (
-        (p_bulan IS NULL AND bulan IS NULL) OR
-        (bulan = p_bulan)
-      )
-      AND status IN ('belum_bayar', 'terjadwal');
-  END IF;
-
-  SELECT tahun_ajaran_id INTO v_tahun_target
-  FROM public.tagihan
-  WHERE id = p_tagihan_id;
-
-  IF p_is_bayar_dimuka THEN
-    SELECT id INTO v_periode_bayar
-    FROM public.tahun_buku
-    WHERE p_tanggal_bayar >= tanggal_mulai
-      AND p_tanggal_bayar <= tanggal_selesai
-    ORDER BY tanggal_mulai DESC
-    LIMIT 1;
-
-    INSERT INTO public.pendapatan_dimuka (
-      pembayaran_id, siswa_id, jenis_id,
-      tahun_ajaran_pembayaran_id, tahun_ajaran_target_id,
-      bulan, jumlah, status, departemen_id
-    )
-    VALUES (
-      v_pembayaran_id, p_siswa_id, p_jenis_id,
-      COALESCE(v_periode_bayar, p_tahun_ajaran_id),
-      COALESCE(v_tahun_target, p_tahun_ajaran_id),
-      p_bulan, p_jumlah, 'pending', v_departemen_efektif
-    )
-    ON CONFLICT DO NOTHING;
-  END IF;
-
-  RETURN jsonb_build_object(
-    'diterima_dimuka', p_is_bayar_dimuka,
-    'pembayaran_id', v_pembayaran_id,
-    'jurnal_id',     v_jurnal_id,
-    'nomor_jurnal',  v_nomor_jurnal,
-    'status_tagihan', COALESCE(v_status_sesudah, 'lunas'),
-    'sisa_tagihan', COALESCE(v_sisa_sesudah, 0)
-  );
-END;
-$function$;
 
 CREATE OR REPLACE FUNCTION public.proses_pembayaran_midtrans_atomik(p_transaksi_item_id uuid, p_siswa_id uuid, p_jenis_id uuid, p_bulan integer, p_jumlah numeric, p_tanggal_bayar date, p_departemen_id uuid, p_tahun_ajaran_id uuid, p_order_id text, p_payment_type text, p_kas_akun_id uuid, p_kredit_akun_id uuid, p_jenis_nama text)
  RETURNS jsonb
@@ -474,7 +286,9 @@ BEGIN
   WHERE id = p_jenis_id;
 
   SELECT tipe='bulanan' AND lower(btrim(nama)) ~ '^spp([[:space:]-]|$)',
-         upper(btrim(nama)) ~ '^UANG PANGKAL (TK|SD|SMP|SMA|MTA)
+         upper(btrim(nama)) ~ '^UANG PANGKAL (TK|SD|SMP|SMA|MTA)$'
+  INTO v_is_spp, v_is_uang_pangkal
+  FROM public.jenis_pembayaran WHERE id=p_jenis_id;
 
   v_identitas := p_jenis_nama
     || CASE WHEN v_bulan_norm IS NOT NULL THEN '-B' || v_bulan_norm ELSE '' END
@@ -701,230 +515,135 @@ BEGIN
 END;
 $function$;
 
-  INTO v_is_spp, v_is_uang_pangkal
-  FROM public.jenis_pembayaran WHERE id=p_jenis_id;
+CREATE OR REPLACE FUNCTION public.akui_pendapatan_dimuka_atomik(p_dimuka_id uuid, p_user_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_pd public.pendapatan_dimuka;
+  v_p public.pembayaran;
+  v_t public.tagihan;
+  v_jenis public.jenis_pembayaran;
+  v_today date := (now() AT TIME ZONE 'Asia/Jakarta')::date;
+  v_due date;
+  v_payment_id uuid;
+  v_liability uuid;
+  v_liability_count integer;
+  v_potongan uuid;
+  v_discount numeric := 0;
+  v_gross numeric;
+  v_is_uang_pangkal boolean := false;
+  v_total_tagihan_bayar numeric := 0;
+  v_discount_already_recognized boolean := false;
+  v_jurnal uuid;
+  v_nomor text;
+  v_pegawai uuid;
+BEGIN
+  -- Urutan lock sama dengan pembatalan: pembayaran dahulu, lalu pendapatan.
+  SELECT pembayaran_id INTO v_payment_id FROM public.pendapatan_dimuka WHERE id = p_dimuka_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Pendapatan diterima di muka tidak ditemukan'; END IF;
+  SELECT * INTO v_p FROM public.pembayaran WHERE id = v_payment_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Pembayaran sudah dibatalkan'; END IF;
+  SELECT * INTO v_pd FROM public.pendapatan_dimuka WHERE id = p_dimuka_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Pendapatan diterima di muka sudah dibatalkan'; END IF;
+  IF v_pd.status = 'diakui' AND v_pd.jurnal_pengakuan_id IS NOT NULL THEN
+    RETURN jsonb_build_object('diakui', false, 'jurnal_id', v_pd.jurnal_pengakuan_id);
+  END IF;
+  IF v_pd.status <> 'pending' OR v_pd.jurnal_pengakuan_id IS NOT NULL THEN
+    RAISE EXCEPTION 'Status pendapatan diterima di muka tidak dapat diakui';
+  END IF;
+  SELECT * INTO STRICT v_jenis FROM public.jenis_pembayaran WHERE id = v_pd.jenis_id;
+  v_is_uang_pangkal := upper(btrim(v_jenis.nama)) ~ '^UANG PANGKAL (TK|SD|SMP|SMA|MTA)$';
+  IF v_p.tagihan_id IS NOT NULL THEN
+    SELECT * INTO v_t FROM public.tagihan WHERE id = v_p.tagihan_id;
+  END IF;
+  v_due := CASE WHEN v_t.id IS NOT NULL THEN public.tanggal_pengakuan_tagihan(v_t.id)
+    WHEN v_jenis.tipe='bulanan' AND lower(btrim(v_jenis.nama)) ~ '^spp([[:space:]-]|$)'
+    THEN public.hitung_pengakuan_spp(v_pd.tahun_ajaran_target_id,v_pd.bulan)
+    ELSE public.hitung_jatuh_tempo_tagihan(v_pd.tahun_ajaran_target_id,v_pd.bulan,v_jenis.hari_jatuh_tempo) END;
+  IF v_due IS NULL OR v_due > v_today THEN
+    RAISE EXCEPTION 'Pendapatan belum dapat diakui sebelum %', COALESCE(v_due::text, 'tanggal pengakuan ditentukan');
+  END IF;
+  IF v_t.status = 'dibatalkan' THEN RAISE EXCEPTION 'Tagihan sudah dibatalkan'; END IF;
+  IF v_jenis.akun_pendapatan_id IS NULL THEN RAISE EXCEPTION 'Akun pendapatan belum dikonfigurasi'; END IF;
 
-  v_identitas := p_jenis_nama
-    || CASE WHEN v_bulan_norm IS NOT NULL THEN '-B' || v_bulan_norm ELSE '' END
-    || ' - ' || COALESCE(v_nama_siswa, p_siswa_id::text);
-
-  IF v_tagihan_id IS NOT NULL THEN
-    SELECT * INTO v_tagihan
-    FROM public.tagihan
-    WHERE id = v_tagihan_id
-    FOR UPDATE;
-
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'Tagihan transaksi online tidak ditemukan';
-    END IF;
-
-    IF v_tagihan.siswa_id <> p_siswa_id
-       OR v_tagihan.jenis_id <> p_jenis_id
-       OR v_tagihan.bulan IS DISTINCT FROM v_bulan_norm THEN
-      RAISE EXCEPTION 'Tagihan transaksi online tidak sesuai';
-    END IF;
-
-    IF v_tagihan.status NOT IN ('belum_bayar', 'sebagian', 'terjadwal') THEN
-      RAISE EXCEPTION 'Tagihan transaksi online sudah lunas atau tidak dapat dibayar';
-    END IF;
-
-    SELECT COALESCE(SUM(jumlah), 0)
-    INTO v_total_sebelum
-    FROM public.pembayaran
-    WHERE tagihan_id = v_tagihan_id;
-
-    IF p_jumlah > (v_tagihan.nominal - v_total_sebelum) THEN
-      RAISE EXCEPTION 'Jumlah transaksi online melebihi sisa tagihan';
-    END IF;
-
-    IF v_tagihan.status = 'terjadwal'
-       AND NOT v_is_uang_pangkal
-       AND NOT (v_is_spp AND COALESCE(public.tanggal_pengakuan_tagihan(v_tagihan.id) <= p_tanggal_bayar,false))
-       AND p_jumlah < (v_tagihan.nominal - v_total_sebelum) THEN
-      RAISE EXCEPTION 'Tagihan yang belum jatuh tempo harus dibayar penuh';
-    END IF;
-  ELSE
-    SELECT t.* INTO v_tagihan
-    FROM public.tagihan t
-    WHERE t.siswa_id        = p_siswa_id
-      AND t.jenis_id        = p_jenis_id
-      AND t.tahun_ajaran_id = p_tahun_ajaran_id
-      AND (
-        (v_bulan_norm IS NULL AND t.bulan IS NULL) OR
-        (t.bulan = v_bulan_norm)
-      )
-      AND t.status IN ('belum_bayar', 'sebagian', 'terjadwal')
-    LIMIT 1 FOR UPDATE;
-
-    IF FOUND THEN
-      v_tagihan_id := v_tagihan.id;
-    END IF;
+  -- Gunakan akun kewajiban di jurnal penerimaan, bukan konfigurasi yang mungkin berubah.
+  SELECT count(*), (array_agg(jd.akun_id))[1] INTO v_liability_count, v_liability
+  FROM public.jurnal_detail jd
+  JOIN public.akun_rekening a ON a.id = jd.akun_id
+  JOIN public.jurnal j ON j.id = jd.jurnal_id
+  WHERE jd.jurnal_id = v_p.jurnal_id AND j.status = 'posted'
+    AND jd.kredit = v_pd.jumlah AND jd.debit = 0 AND a.jenis = 'liabilitas';
+  IF v_liability_count <> 1 THEN
+    RAISE EXCEPTION 'Jurnal penerimaan tidak memiliki akun kewajiban yang sesuai';
   END IF;
 
-  IF EXISTS (SELECT 1 FROM public.jenis_pembayaran jp WHERE jp.id = p_jenis_id
-             AND upper(btrim(jp.nama)) ~ '^UANG PANGKAL (TK|SD|SMP|SMA|MTA)$')
-     AND v_tagihan_id IS NULL THEN
-    RAISE EXCEPTION 'Buat dan pilih tagihan uang pangkal dengan tahun ajaran target terlebih dahulu';
+  IF v_t.id IS NOT NULL AND v_jenis.tipe='bulanan'
+     AND lower(btrim(v_jenis.nama)) ~ '^spp([[:space:]-]|$)' THEN
+    PERFORM public.posting_spp_tagihan_atomik(v_t.id,p_user_id);
   END IF;
 
-  IF v_is_spp AND v_tagihan_id IS NULL THEN
-    RAISE EXCEPTION 'Buat dan pilih tagihan SPP dengan periode layanan terlebih dahulu';
-  END IF;
-  IF v_tagihan_id IS NOT NULL THEN
-    SELECT COALESCE(SUM(jumlah),0) INTO v_total_sebelum FROM public.pembayaran WHERE tagihan_id=v_tagihan_id;
-    IF p_jumlah > v_tagihan.nominal-v_total_sebelum THEN RAISE EXCEPTION 'Jumlah pembayaran melebihi sisa tagihan'; END IF;
-    IF v_tagihan.status='terjadwal'
-       AND NOT v_is_uang_pangkal
-       AND NOT (v_is_spp AND COALESCE(public.tanggal_pengakuan_tagihan(v_tagihan.id)<=p_tanggal_bayar,false))
-       AND p_jumlah<v_tagihan.nominal-v_total_sebelum THEN
-      RAISE EXCEPTION 'Tagihan yang belum jatuh tempo harus dibayar penuh';
-    END IF;
-  END IF;
+  -- Uang Pangkal dapat lunas lewat beberapa cicilan sebelum jatuh tempo.
+  -- Potongan diakui tepat satu kali pada salah satu jurnal pengakuan.
+  -- Jika tagihan masih parsial/terjadwal, potongan tetap menunggu jurnal
+  -- pembentukan piutang sisa di posting_piutang_jatuh_tempo.
+  IF v_t.id IS NOT NULL AND v_t.jurnal_piutang_id IS NULL AND COALESCE(v_t.nominal_diskon, 0) > 0
+     AND NOT (v_jenis.tipe='bulanan' AND lower(btrim(v_jenis.nama)) ~ '^spp([[:space:]-]|$)') THEN
+    SELECT COALESCE(v_jenis.akun_potongan_id, pa.akun_id) INTO v_potongan
+      FROM (SELECT 1) x LEFT JOIN public.pengaturan_akun pa ON pa.kode_setting = 'AKUN_POTONGAN_PENDAPATAN';
+    IF v_potongan IS NULL THEN RAISE EXCEPTION 'Akun potongan pendapatan belum dikonfigurasi'; END IF;
 
-  IF v_bulan_norm IS NOT NULL THEN
-    PERFORM 1 FROM public.pembayaran
-    WHERE siswa_id = p_siswa_id
-      AND jenis_id = p_jenis_id
-      AND bulan = v_bulan_norm
-      AND tagihan_id IS DISTINCT FROM v_tagihan_id;
-    IF FOUND THEN
-      RAISE EXCEPTION 'Pembayaran bulan % untuk jenis ini sudah ada', v_bulan_norm;
-    END IF;
-  END IF;
+    IF v_is_uang_pangkal THEN
+      SELECT COALESCE(SUM(p.jumlah),0) INTO v_total_tagihan_bayar
+      FROM public.pembayaran p
+      WHERE p.tagihan_id=v_t.id;
 
-  IF v_is_spp AND v_tagihan.jurnal_piutang_id IS NULL AND NOT v_tagihan.pengakuan_spp_selesai
-     AND public.tanggal_pengakuan_tagihan(v_tagihan.id) <= p_tanggal_bayar
-     AND public.tanggal_pengakuan_tagihan(v_tagihan.id) <= (now() AT TIME ZONE 'Asia/Jakarta')::date THEN
-    PERFORM public.posting_spp_tagihan_atomik(v_tagihan.id,NULL);
-    SELECT * INTO v_tagihan FROM public.tagihan WHERE id=v_tagihan_id;
-  END IF;
+      SELECT EXISTS(
+        SELECT 1
+        FROM public.pendapatan_dimuka pd2
+        JOIN public.pembayaran p2 ON p2.id=pd2.pembayaran_id
+        JOIN public.jurnal_detail jd2 ON jd2.jurnal_id=pd2.jurnal_pengakuan_id
+        WHERE p2.tagihan_id=v_t.id
+          AND jd2.akun_id=v_potongan
+          AND jd2.debit > 0
+      ) INTO v_discount_already_recognized;
 
-  v_dimuka := COALESCE(v_perlu_dimuka, true)
-              AND COALESCE(v_tagihan.status = 'terjadwal', false);
-
-  IF v_is_spp THEN
-    v_dimuka := v_tagihan.jurnal_piutang_id IS NULL AND NOT v_tagihan.pengakuan_spp_selesai;
-  END IF;
-
-  IF v_dimuka THEN
-    SELECT COALESCE(
-             (SELECT akun_dimuka_id FROM public.jenis_pembayaran WHERE id = p_jenis_id),
-             (SELECT akun_id FROM public.pengaturan_akun WHERE kode_setting = 'AKUN_PENDAPATAN_DIMUKA')
-           )
-    INTO v_kredit_akun_id;
-
-    IF v_kredit_akun_id IS NULL THEN
-      RAISE EXCEPTION 'Akun Pendapatan Diterima di Muka belum dikonfigurasi (pembayaran sebelum jatuh tempo untuk jenis "%")', p_jenis_nama;
-    END IF;
-
-    v_keterangan := 'Pembayaran Diterima di Muka ' || v_identitas
-      || ' [Online - ' || p_order_id || ' via ' || COALESCE(p_payment_type, '-') || ']';
-    v_kredit_label := 'Pendapatan Diterima di Muka - ' || v_identitas;
-  ELSE
-    SELECT akun_id INTO v_piutang_akun_id
-    FROM public.pengaturan_akun WHERE kode_setting = 'piutang_siswa';
-
-    IF v_tagihan.id IS NOT NULL
-       AND (CASE WHEN v_is_spp THEN
-            v_tagihan.jurnal_piutang_id IS NOT NULL OR v_tagihan.pengakuan_spp_selesai
-            ELSE v_tagihan.status IN ('belum_bayar', 'sebagian') END)
-       AND v_piutang_akun_id IS NOT NULL THEN
-      v_kredit_akun_id := v_piutang_akun_id;
-      v_keterangan := 'Pembayaran Piutang ' || v_identitas
-        || ' [Online - ' || p_order_id || ' via ' || COALESCE(p_payment_type, '-') || ']';
-      v_kredit_label := 'Piutang Siswa - ' || v_identitas;
+      IF v_t.status='lunas'
+         AND v_total_tagihan_bayar >= v_t.nominal
+         AND NOT v_discount_already_recognized THEN
+        v_discount := v_t.nominal_diskon;
+      END IF;
     ELSE
-      v_keterangan := 'Pembayaran ' || v_identitas
-        || ' [Online - ' || p_order_id || ' via ' || COALESCE(p_payment_type, '-') || ']';
-      v_kredit_label := 'Pendapatan - ' || v_identitas;
+      IF v_t.status <> 'lunas' OR v_pd.jumlah <> v_t.nominal OR
+         (SELECT count(*) FROM public.pendapatan_dimuka pd
+          JOIN public.pembayaran p ON p.id = pd.pembayaran_id WHERE p.tagihan_id = v_t.id) <> 1 THEN
+        RAISE EXCEPTION 'Pengakuan tagihan diskon memerlukan pembayaran penuh tunggal';
+      END IF;
+      v_discount := v_t.nominal_diskon;
     END IF;
   END IF;
-
-  SELECT id INTO v_periode_bayar
-  FROM public.tahun_buku
-  WHERE p_tanggal_bayar >= tanggal_mulai
-    AND p_tanggal_bayar <= tanggal_selesai
-  ORDER BY tanggal_mulai DESC
-  LIMIT 1;
-
-  INSERT INTO public.pembayaran (
-    siswa_id, jenis_id, tahun_ajaran_id, bulan,
-    jumlah, tanggal_bayar, departemen_id, keterangan, tagihan_id
-  )
-  VALUES (
-    p_siswa_id, p_jenis_id, COALESCE(v_periode_bayar, p_tahun_ajaran_id), v_bulan_norm,
-    p_jumlah, p_tanggal_bayar, p_departemen_id, v_keterangan, v_tagihan_id
-  )
-  RETURNING id INTO v_pembayaran_id;
-
-  v_nomor_jurnal := public.generate_nomor_jurnal(CASE WHEN v_dimuka THEN 'JD' ELSE 'JP' END, v_tahun);
-
-  INSERT INTO public.jurnal (
-    nomor, tanggal, keterangan, referensi,
-    total_debit, total_kredit, status, departemen_id
-  )
-  VALUES (
-    v_nomor_jurnal,
-    p_tanggal_bayar,
-    v_keterangan,
-    p_order_id,
-    p_jumlah,
-    p_jumlah,
-    'posted',
-    p_departemen_id
-  )
-  RETURNING id INTO v_jurnal_id;
-
-  INSERT INTO public.jurnal_detail (jurnal_id, akun_id, keterangan, debit, kredit, urutan)
-  VALUES (v_jurnal_id, p_kas_akun_id, v_keterangan, p_jumlah, 0, 1);
-
-  INSERT INTO public.jurnal_detail (jurnal_id, akun_id, keterangan, debit, kredit, urutan)
-  VALUES (v_jurnal_id, v_kredit_akun_id, v_kredit_label, 0, p_jumlah, 2);
-
-  UPDATE public.pembayaran
-  SET jurnal_id = v_jurnal_id
-  WHERE id = v_pembayaran_id;
-
-  IF v_tagihan_id IS NOT NULL THEN
-    v_total_sesudah := v_total_sebelum + p_jumlah;
-    v_sisa_sesudah := GREATEST(v_tagihan.nominal - v_total_sesudah, 0);
-    v_status_sesudah := CASE
-      WHEN v_sisa_sesudah <= 0 THEN 'lunas'
-      ELSE 'sebagian'
-    END;
-
-    UPDATE public.tagihan
-    SET status = v_status_sesudah,
-        pembayaran_id = v_pembayaran_id
-    WHERE id = v_tagihan_id;
+  v_gross := v_pd.jumlah + v_discount;
+  IF p_user_id IS NOT NULL THEN
+    SELECT pegawai_id INTO v_pegawai FROM public.users_profile WHERE id = p_user_id;
   END IF;
-
-  IF v_dimuka THEN
-    INSERT INTO public.pendapatan_dimuka (
-      pembayaran_id, siswa_id, jenis_id,
-      tahun_ajaran_pembayaran_id, tahun_ajaran_target_id,
-      bulan, jumlah, status, departemen_id
-    )
-    VALUES (
-      v_pembayaran_id, p_siswa_id, p_jenis_id,
-      COALESCE(v_periode_bayar, p_tahun_ajaran_id), v_tagihan.tahun_ajaran_id,
-      v_bulan_norm, p_jumlah, 'pending', p_departemen_id
-    )
-    ON CONFLICT DO NOTHING;
+  v_nomor := public.generate_nomor_jurnal('PD', extract(year FROM v_today)::integer);
+  INSERT INTO public.jurnal(nomor, tanggal, keterangan, referensi, departemen_id,
+    total_debit, total_kredit, status, dibuat_oleh)
+  VALUES (v_nomor, v_today, 'Pengakuan pendapatan ' || v_jenis.nama,
+    v_pd.pembayaran_id::text, v_pd.departemen_id, v_gross, v_gross, 'posted', v_pegawai)
+  RETURNING id INTO v_jurnal;
+  INSERT INTO public.jurnal_detail(jurnal_id, akun_id, keterangan, debit, kredit, urutan)
+  VALUES (v_jurnal, v_liability, 'Pengakuan Pendapatan Diterima di Muka', v_pd.jumlah, 0, 1);
+  IF v_discount > 0 THEN
+    INSERT INTO public.jurnal_detail(jurnal_id, akun_id, keterangan, debit, kredit, urutan)
+    VALUES (v_jurnal, v_potongan, 'Potongan ' || v_jenis.nama, v_discount, 0, 2);
   END IF;
-
-  UPDATE public.transaksi_midtrans_item
-  SET pembayaran_id = v_pembayaran_id
-  WHERE id = p_transaksi_item_id;
-
-  RETURN jsonb_build_object(
-    'pembayaran_id',   v_pembayaran_id,
-    'jurnal_id',       v_jurnal_id,
-    'nomor_jurnal',    v_nomor_jurnal,
-    'diterima_dimuka', v_dimuka,
-    'status_tagihan',  v_status_sesudah,
-    'sisa_tagihan',    v_sisa_sesudah
-  );
+  INSERT INTO public.jurnal_detail(jurnal_id, akun_id, keterangan, debit, kredit, urutan)
+  VALUES (v_jurnal, v_jenis.akun_pendapatan_id, 'Pendapatan ' || v_jenis.nama, 0, v_gross, 3);
+  UPDATE public.pendapatan_dimuka SET status = 'diakui', jurnal_pengakuan_id = v_jurnal,
+    tanggal_pengakuan = v_today WHERE id = v_pd.id;
+  RETURN jsonb_build_object('diakui', true, 'jurnal_id', v_jurnal, 'jumlah', v_pd.jumlah);
 END;
 $function$;
 
@@ -986,11 +705,7 @@ BEGIN
         AND NOT t.pengakuan_spp_selesai AND public.tanggal_pengakuan_tagihan(t.id) <= v_batas)
       OR
       (NOT (jp.tipe='bulanan' AND lower(btrim(jp.nama)) ~ '^spp([[:space:]-]|$)')
-        AND t.jatuh_tempo<=v_batas
-        AND (
-          t.status='terjadwal'
-          OR (
-            upper(btrim(jp.nama)) ~ '^UANG PANGKAL (TK|SD|SMP|SMA|MTA)
+        AND t.status='terjadwal' AND t.jatuh_tempo<=v_batas)
     )
     ORDER BY t.jatuh_tempo, t.id
     LIMIT GREATEST(COALESCE(p_limit, 5000), 1)
@@ -1013,7 +728,17 @@ BEGIN
       v_netto  := v_row.nominal;
       v_diskon := COALESCE(v_row.nominal_diskon, 0);
       v_bruto  := COALESCE(v_row.nominal_bruto, v_row.nominal + v_diskon);
-      v_is_uang_pangkal := upper(btrim(v_row.jenis_nama)) ~ '^UANG PANGKAL (TK|SD|SMP|SMA|MTA)
+      v_is_uang_pangkal := upper(btrim(v_row.jenis_nama)) ~ '^UANG PANGKAL (TK|SD|SMP|SMA|MTA)$';
+
+      SELECT COALESCE(SUM(p.jumlah),0) INTO v_total_dibayar
+      FROM public.pembayaran p
+      WHERE p.tagihan_id=v_row.id;
+
+      v_sisa_netto := CASE
+        WHEN v_is_uang_pangkal THEN GREATEST(v_netto-v_total_dibayar,0)
+        ELSE v_netto
+      END;
+      v_bruto_post := v_sisa_netto + v_diskon;
 
       v_potongan_akun_id := COALESCE(v_row.akun_potongan_id, v_potongan_global_id);
 
@@ -1066,17 +791,11 @@ BEGIN
 
       UPDATE tagihan
       SET status = CASE
-            WHEN v_is_uang_pangkal AND v_sisa_netto <= 0 THEN 'lunas'
             WHEN v_is_uang_pangkal AND v_total_dibayar > 0 THEN 'sebagian'
             ELSE 'belum_bayar'
           END,
           jurnal_piutang_id = v_jurnal_id
-      WHERE id = v_row.id
-        AND jurnal_piutang_id IS NULL
-        AND (
-          status='terjadwal'
-          OR (v_is_uang_pangkal AND status='lunas' AND v_diskon > 0)
-        );
+      WHERE id = v_row.id AND status = 'terjadwal' AND jurnal_piutang_id IS NULL;
 
       IF NOT FOUND THEN
         DELETE FROM jurnal_detail WHERE jurnal_id = v_jurnal_id;
@@ -1086,295 +805,6 @@ BEGIN
 
       v_diposting := v_diposting + 1;
       v_total := v_total + v_sisa_netto;
-
-    EXCEPTION WHEN OTHERS THEN
-      v_errors := v_errors || ('Tagihan ' || v_row.id || ': ' || SQLERRM);
-    END;
-  END LOOP;
-
-  RETURN QUERY SELECT v_diposting, v_total, v_errors;
-END;
-$function$;
-
-            AND t.status='lunas'
-            AND COALESCE(t.nominal_diskon,0) > 0
-            AND EXISTS (
-              SELECT 1
-              FROM public.pembayaran p0
-              JOIN public.pendapatan_dimuka pd0 ON pd0.pembayaran_id=p0.id
-              WHERE p0.tagihan_id=t.id
-                AND pd0.status='pending'
-                AND pd0.jurnal_pengakuan_id IS NULL
-            )
-          )
-        ))
-    )
-    ORDER BY t.jatuh_tempo, t.id
-    LIMIT GREATEST(COALESCE(p_limit, 5000), 1)
-  LOOP
-    BEGIN
-      IF v_row.tipe='bulanan' AND lower(btrim(v_row.jenis_nama)) ~ '^spp([[:space:]-]|$)' THEN
-        v_spp_result:=public.posting_spp_tagihan_atomik(v_row.id,p_user_id);
-        IF (v_spp_result->>'diposting')::boolean THEN
-          v_diposting:=v_diposting+1;
-          v_total:=v_total+(v_spp_result->>'jumlah')::numeric;
-        END IF;
-        CONTINUE;
-      END IF;
-      IF v_row.akun_pendapatan_id IS NULL THEN
-        v_errors := v_errors ||
-          ('Tagihan ' || v_row.id || ': akun pendapatan belum diset untuk jenis "' || v_row.jenis_nama || '"');
-        CONTINUE;
-      END IF;
-
-      v_netto  := v_row.nominal;
-      v_diskon := COALESCE(v_row.nominal_diskon, 0);
-      v_bruto  := COALESCE(v_row.nominal_bruto, v_row.nominal + v_diskon);
-
-      v_potongan_akun_id := COALESCE(v_row.akun_potongan_id, v_potongan_global_id);
-
-      IF v_diskon > 0 AND v_potongan_akun_id IS NULL THEN
-        v_errors := v_errors ||
-          ('Tagihan ' || v_row.id || ': akun potongan/keringanan belum dikonfigurasi di Pengaturan Akun');
-        CONTINUE;
-      END IF;
-
-      v_dept_id := NULL;
-      IF v_row.kelas_id IS NOT NULL THEN
-        SELECT departemen_id INTO v_dept_id FROM kelas WHERE id = v_row.kelas_id;
-      END IF;
-      IF v_dept_id IS NULL THEN
-        SELECT departemen_id INTO v_dept_id FROM siswa WHERE id = v_row.siswa_id;
-      END IF;
-
-      v_nomor := generate_nomor_jurnal('JPI', v_tahun);
-
-      INSERT INTO jurnal (nomor, tanggal, keterangan, referensi, departemen_id,
-                          total_debit, total_kredit, status, dibuat_oleh)
-      VALUES (
-        v_nomor, v_tanggal,
-        'Piutang ' || v_row.jenis_nama
-          || CASE WHEN v_row.bulan IS NOT NULL THEN '-B' || v_row.bulan ELSE '' END
-          || ' jatuh tempo ' || to_char(v_row.jatuh_tempo, 'YYYY-MM-DD')
-          || ' - siswa ' || v_row.siswa_id,
-        v_row.id::text, v_dept_id,
-        v_bruto, v_bruto, 'posted', v_pegawai_id
-      )
-      RETURNING id INTO v_jurnal_id;
-
-      v_urutan := 0;
-
-      IF v_netto > 0 THEN
-        v_urutan := v_urutan + 1;
-        INSERT INTO jurnal_detail (jurnal_id, akun_id, keterangan, debit, kredit, urutan)
-        VALUES (v_jurnal_id, v_piutang_akun_id, 'Piutang ' || v_row.jenis_nama, v_netto, 0, v_urutan);
-      END IF;
-
-      IF v_diskon > 0 THEN
-        v_urutan := v_urutan + 1;
-        INSERT INTO jurnal_detail (jurnal_id, akun_id, keterangan, debit, kredit, urutan)
-        VALUES (v_jurnal_id, v_potongan_akun_id, 'Keringanan ' || v_row.jenis_nama, v_diskon, 0, v_urutan);
-      END IF;
-
-      v_urutan := v_urutan + 1;
-      INSERT INTO jurnal_detail (jurnal_id, akun_id, keterangan, debit, kredit, urutan)
-      VALUES (v_jurnal_id, v_row.akun_pendapatan_id, 'Pendapatan ' || v_row.jenis_nama, 0, v_bruto, v_urutan);
-
-      UPDATE tagihan
-      SET status = 'belum_bayar', jurnal_piutang_id = v_jurnal_id
-      WHERE id = v_row.id AND status = 'terjadwal' AND jurnal_piutang_id IS NULL;
-
-      IF NOT FOUND THEN
-        DELETE FROM jurnal_detail WHERE jurnal_id = v_jurnal_id;
-        DELETE FROM jurnal WHERE id = v_jurnal_id;
-        CONTINUE;
-      END IF;
-
-      v_diposting := v_diposting + 1;
-      v_total := v_total + v_netto;
-
-    EXCEPTION WHEN OTHERS THEN
-      v_errors := v_errors || ('Tagihan ' || v_row.id || ': ' || SQLERRM);
-    END;
-  END LOOP;
-
-  RETURN QUERY SELECT v_diposting, v_total, v_errors;
-END;
-$function$;
-;
-      SELECT COALESCE(SUM(p.jumlah),0) INTO v_total_dibayar
-      FROM public.pembayaran p WHERE p.tagihan_id=v_row.id;
-      v_sisa_netto := CASE WHEN v_is_uang_pangkal
-        THEN GREATEST(v_netto-v_total_dibayar,0) ELSE v_netto END;
-      v_bruto_post := v_sisa_netto + v_diskon;
-
-      v_potongan_akun_id := COALESCE(v_row.akun_potongan_id, v_potongan_global_id);
-
-      IF v_diskon > 0 AND v_potongan_akun_id IS NULL THEN
-        v_errors := v_errors ||
-          ('Tagihan ' || v_row.id || ': akun potongan/keringanan belum dikonfigurasi di Pengaturan Akun');
-        CONTINUE;
-      END IF;
-
-      v_dept_id := NULL;
-      IF v_row.kelas_id IS NOT NULL THEN
-        SELECT departemen_id INTO v_dept_id FROM kelas WHERE id = v_row.kelas_id;
-      END IF;
-      IF v_dept_id IS NULL THEN
-        SELECT departemen_id INTO v_dept_id FROM siswa WHERE id = v_row.siswa_id;
-      END IF;
-
-      v_nomor := generate_nomor_jurnal('JPI', v_tahun);
-
-      INSERT INTO jurnal (nomor, tanggal, keterangan, referensi, departemen_id,
-                          total_debit, total_kredit, status, dibuat_oleh)
-      VALUES (
-        v_nomor, v_tanggal,
-        'Piutang ' || v_row.jenis_nama
-          || CASE WHEN v_row.bulan IS NOT NULL THEN '-B' || v_row.bulan ELSE '' END
-          || ' jatuh tempo ' || to_char(v_row.jatuh_tempo, 'YYYY-MM-DD')
-          || ' - siswa ' || v_row.siswa_id,
-        v_row.id::text, v_dept_id,
-        v_bruto, v_bruto, 'posted', v_pegawai_id
-      )
-      RETURNING id INTO v_jurnal_id;
-
-      v_urutan := 0;
-
-      IF v_netto > 0 THEN
-        v_urutan := v_urutan + 1;
-        INSERT INTO jurnal_detail (jurnal_id, akun_id, keterangan, debit, kredit, urutan)
-        VALUES (v_jurnal_id, v_piutang_akun_id, 'Piutang ' || v_row.jenis_nama, v_netto, 0, v_urutan);
-      END IF;
-
-      IF v_diskon > 0 THEN
-        v_urutan := v_urutan + 1;
-        INSERT INTO jurnal_detail (jurnal_id, akun_id, keterangan, debit, kredit, urutan)
-        VALUES (v_jurnal_id, v_potongan_akun_id, 'Keringanan ' || v_row.jenis_nama, v_diskon, 0, v_urutan);
-      END IF;
-
-      v_urutan := v_urutan + 1;
-      INSERT INTO jurnal_detail (jurnal_id, akun_id, keterangan, debit, kredit, urutan)
-      VALUES (v_jurnal_id, v_row.akun_pendapatan_id, 'Pendapatan ' || v_row.jenis_nama, 0, v_bruto, v_urutan);
-
-      UPDATE tagihan
-      SET status = 'belum_bayar', jurnal_piutang_id = v_jurnal_id
-      WHERE id = v_row.id AND status = 'terjadwal' AND jurnal_piutang_id IS NULL;
-
-      IF NOT FOUND THEN
-        DELETE FROM jurnal_detail WHERE jurnal_id = v_jurnal_id;
-        DELETE FROM jurnal WHERE id = v_jurnal_id;
-        CONTINUE;
-      END IF;
-
-      v_diposting := v_diposting + 1;
-      v_total := v_total + v_netto;
-
-    EXCEPTION WHEN OTHERS THEN
-      v_errors := v_errors || ('Tagihan ' || v_row.id || ': ' || SQLERRM);
-    END;
-  END LOOP;
-
-  RETURN QUERY SELECT v_diposting, v_total, v_errors;
-END;
-$function$;
-
-            AND t.status='lunas'
-            AND COALESCE(t.nominal_diskon,0) > 0
-            AND EXISTS (
-              SELECT 1
-              FROM public.pembayaran p0
-              JOIN public.pendapatan_dimuka pd0 ON pd0.pembayaran_id=p0.id
-              WHERE p0.tagihan_id=t.id
-                AND pd0.status='pending'
-                AND pd0.jurnal_pengakuan_id IS NULL
-            )
-          )
-        ))
-    )
-    ORDER BY t.jatuh_tempo, t.id
-    LIMIT GREATEST(COALESCE(p_limit, 5000), 1)
-  LOOP
-    BEGIN
-      IF v_row.tipe='bulanan' AND lower(btrim(v_row.jenis_nama)) ~ '^spp([[:space:]-]|$)' THEN
-        v_spp_result:=public.posting_spp_tagihan_atomik(v_row.id,p_user_id);
-        IF (v_spp_result->>'diposting')::boolean THEN
-          v_diposting:=v_diposting+1;
-          v_total:=v_total+(v_spp_result->>'jumlah')::numeric;
-        END IF;
-        CONTINUE;
-      END IF;
-      IF v_row.akun_pendapatan_id IS NULL THEN
-        v_errors := v_errors ||
-          ('Tagihan ' || v_row.id || ': akun pendapatan belum diset untuk jenis "' || v_row.jenis_nama || '"');
-        CONTINUE;
-      END IF;
-
-      v_netto  := v_row.nominal;
-      v_diskon := COALESCE(v_row.nominal_diskon, 0);
-      v_bruto  := COALESCE(v_row.nominal_bruto, v_row.nominal + v_diskon);
-
-      v_potongan_akun_id := COALESCE(v_row.akun_potongan_id, v_potongan_global_id);
-
-      IF v_diskon > 0 AND v_potongan_akun_id IS NULL THEN
-        v_errors := v_errors ||
-          ('Tagihan ' || v_row.id || ': akun potongan/keringanan belum dikonfigurasi di Pengaturan Akun');
-        CONTINUE;
-      END IF;
-
-      v_dept_id := NULL;
-      IF v_row.kelas_id IS NOT NULL THEN
-        SELECT departemen_id INTO v_dept_id FROM kelas WHERE id = v_row.kelas_id;
-      END IF;
-      IF v_dept_id IS NULL THEN
-        SELECT departemen_id INTO v_dept_id FROM siswa WHERE id = v_row.siswa_id;
-      END IF;
-
-      v_nomor := generate_nomor_jurnal('JPI', v_tahun);
-
-      INSERT INTO jurnal (nomor, tanggal, keterangan, referensi, departemen_id,
-                          total_debit, total_kredit, status, dibuat_oleh)
-      VALUES (
-        v_nomor, v_tanggal,
-        'Piutang ' || v_row.jenis_nama
-          || CASE WHEN v_row.bulan IS NOT NULL THEN '-B' || v_row.bulan ELSE '' END
-          || ' jatuh tempo ' || to_char(v_row.jatuh_tempo, 'YYYY-MM-DD')
-          || ' - siswa ' || v_row.siswa_id,
-        v_row.id::text, v_dept_id,
-        v_bruto, v_bruto, 'posted', v_pegawai_id
-      )
-      RETURNING id INTO v_jurnal_id;
-
-      v_urutan := 0;
-
-      IF v_netto > 0 THEN
-        v_urutan := v_urutan + 1;
-        INSERT INTO jurnal_detail (jurnal_id, akun_id, keterangan, debit, kredit, urutan)
-        VALUES (v_jurnal_id, v_piutang_akun_id, 'Piutang ' || v_row.jenis_nama, v_netto, 0, v_urutan);
-      END IF;
-
-      IF v_diskon > 0 THEN
-        v_urutan := v_urutan + 1;
-        INSERT INTO jurnal_detail (jurnal_id, akun_id, keterangan, debit, kredit, urutan)
-        VALUES (v_jurnal_id, v_potongan_akun_id, 'Keringanan ' || v_row.jenis_nama, v_diskon, 0, v_urutan);
-      END IF;
-
-      v_urutan := v_urutan + 1;
-      INSERT INTO jurnal_detail (jurnal_id, akun_id, keterangan, debit, kredit, urutan)
-      VALUES (v_jurnal_id, v_row.akun_pendapatan_id, 'Pendapatan ' || v_row.jenis_nama, 0, v_bruto, v_urutan);
-
-      UPDATE tagihan
-      SET status = 'belum_bayar', jurnal_piutang_id = v_jurnal_id
-      WHERE id = v_row.id AND status = 'terjadwal' AND jurnal_piutang_id IS NULL;
-
-      IF NOT FOUND THEN
-        DELETE FROM jurnal_detail WHERE jurnal_id = v_jurnal_id;
-        DELETE FROM jurnal WHERE id = v_jurnal_id;
-        CONTINUE;
-      END IF;
-
-      v_diposting := v_diposting + 1;
-      v_total := v_total + v_netto;
 
     EXCEPTION WHEN OTHERS THEN
       v_errors := v_errors || ('Tagihan ' || v_row.id || ': ' || SQLERRM);
@@ -1490,7 +920,10 @@ BEGIN
               AND jp.tipe='bulanan'
               AND lower(btrim(jp.nama)) ~ '^spp([[:space:]-]|$)')
             OR
-            (upper(btrim(jp.nama)) ~ '^UANG PANGKAL (TK|SD|SMP|SMA|MTA)
+            (upper(btrim(jp.nama)) ~ '^UANG PANGKAL (TK|SD|SMP|SMA|MTA)$'
+              AND public.tanggal_pengakuan_tagihan(t.id) <= p_tanggal)
+          )
+      );
 
   IF v_restore_piutang THEN
     SELECT akun_id INTO v_spp_piutang FROM public.pengaturan_akun WHERE kode_setting='piutang_siswa';
@@ -1530,139 +963,11 @@ BEGIN
         AND v_tagihan.jatuh_tempo IS NOT NULL
         AND v_tagihan.jatuh_tempo > CURRENT_DATE
         AND EXISTS (
-          SELECT 1 FROM public.jenis_pembayaran jp
+          SELECT 1
+          FROM public.jenis_pembayaran jp
           WHERE jp.id=v_tagihan.jenis_id
-            AND upper(btrim(jp.nama)) ~ '^UANG PANGKAL (TK|SD|SMP|SMA|MTA)
-
-    UPDATE public.tagihan
-    SET status = v_status_baru,
-        pembayaran_id = v_payment_sisa_id
-    WHERE id = v_pb.tagihan_id;
-  END IF;
-
-  RETURN jsonb_build_object(
-    'pembayaran_id', p_pembayaran_id,
-    'jurnal_pembalik_id', v_pembalik_id,
-    'jurnal_pembalik_pengakuan_id', v_pembalik_pengakuan_id
-  );
-END;
-$function$;
-
-              AND public.tanggal_pengakuan_tagihan(t.id) <= p_tanggal)
-          )
-      );
-
-  IF v_restore_piutang THEN
-    SELECT akun_id INTO v_spp_piutang FROM public.pengaturan_akun WHERE kode_setting='piutang_siswa';
-    SELECT akun_pendapatan_id INTO v_spp_pendapatan FROM public.jenis_pembayaran WHERE id=v_pb.jenis_id;
-    IF v_spp_piutang IS NULL OR v_spp_pendapatan IS NULL THEN
-      RAISE EXCEPTION 'Akun piutang/pendapatan SPP belum dikonfigurasi';
-    END IF;
-    v_nomor:=public.generate_nomor_jurnal('JPI',v_tahun);
-    INSERT INTO public.jurnal(nomor,tanggal,keterangan,referensi,departemen_id,total_debit,total_kredit,status)
-    VALUES(v_nomor,p_tanggal,'Piutang SPP atas pembatalan pembayaran yang telah diakui',v_pb.tagihan_id::text,
-      COALESCE(v_dimuka.departemen_id,v_pb.departemen_id),v_pb.jumlah,v_pb.jumlah,'posted') RETURNING id INTO v_spp_jurnal;
-    INSERT INTO public.jurnal_detail(jurnal_id,akun_id,debit,kredit,keterangan,urutan) VALUES
-      (v_spp_jurnal,v_spp_piutang,v_pb.jumlah,0,'Piutang SPP',1),
-      (v_spp_jurnal,v_spp_pendapatan,0,v_pb.jumlah,'Pemulihan pendapatan periode layanan',2);
-    UPDATE public.tagihan SET jurnal_piutang_id=COALESCE(jurnal_piutang_id,v_spp_jurnal)
-    WHERE id=v_pb.tagihan_id;
-  END IF;
-
-  DELETE FROM public.pembayaran WHERE id = p_pembayaran_id;
-
-  IF v_pb.tagihan_id IS NOT NULL AND v_tagihan.id IS NOT NULL THEN
-    SELECT COALESCE(SUM(jumlah), 0)
-    INTO v_total_sisa
-    FROM public.pembayaran
-    WHERE tagihan_id = v_pb.tagihan_id;
-
-    SELECT id INTO v_payment_sisa_id
-    FROM public.pembayaran
-    WHERE tagihan_id = v_pb.tagihan_id
-    ORDER BY tanggal_bayar DESC NULLS LAST, id DESC
-    LIMIT 1;
-
-    v_status_baru := CASE
-      WHEN v_total_sisa >= v_tagihan.nominal THEN 'lunas'
-      WHEN v_total_sisa > 0 THEN 'sebagian'
-      WHEN v_tagihan.jurnal_piutang_id IS NOT NULL OR v_tagihan.pengakuan_spp_selesai THEN 'belum_bayar'
-      WHEN v_tagihan.jatuh_tempo IS NOT NULL AND v_tagihan.jatuh_tempo > CURRENT_DATE THEN 'terjadwal'
-      ELSE 'belum_bayar'
-    END;
-
-    UPDATE public.tagihan
-    SET status = v_status_baru,
-        pembayaran_id = v_payment_sisa_id
-    WHERE id = v_pb.tagihan_id;
-  END IF;
-
-  RETURN jsonb_build_object(
-    'pembayaran_id', p_pembayaran_id,
-    'jurnal_pembalik_id', v_pembalik_id,
-    'jurnal_pembalik_pengakuan_id', v_pembalik_pengakuan_id
-  );
-END;
-$function$;
-
+            AND upper(btrim(jp.nama)) ~ '^UANG PANGKAL (TK|SD|SMP|SMA|MTA)$'
         ) THEN 'terjadwal'
-      WHEN v_total_sisa > 0 THEN 'sebagian'
-      WHEN v_tagihan.jurnal_piutang_id IS NOT NULL OR v_tagihan.pengakuan_spp_selesai THEN 'belum_bayar'
-      WHEN v_tagihan.jatuh_tempo IS NOT NULL AND v_tagihan.jatuh_tempo > CURRENT_DATE THEN 'terjadwal'
-      ELSE 'belum_bayar'
-    END;
-
-    UPDATE public.tagihan
-    SET status = v_status_baru,
-        pembayaran_id = v_payment_sisa_id
-    WHERE id = v_pb.tagihan_id;
-  END IF;
-
-  RETURN jsonb_build_object(
-    'pembayaran_id', p_pembayaran_id,
-    'jurnal_pembalik_id', v_pembalik_id,
-    'jurnal_pembalik_pengakuan_id', v_pembalik_pengakuan_id
-  );
-END;
-$function$;
-
-              AND public.tanggal_pengakuan_tagihan(t.id) <= p_tanggal)
-          )
-      );
-
-  IF v_restore_piutang THEN
-    SELECT akun_id INTO v_spp_piutang FROM public.pengaturan_akun WHERE kode_setting='piutang_siswa';
-    SELECT akun_pendapatan_id INTO v_spp_pendapatan FROM public.jenis_pembayaran WHERE id=v_pb.jenis_id;
-    IF v_spp_piutang IS NULL OR v_spp_pendapatan IS NULL THEN
-      RAISE EXCEPTION 'Akun piutang/pendapatan SPP belum dikonfigurasi';
-    END IF;
-    v_nomor:=public.generate_nomor_jurnal('JPI',v_tahun);
-    INSERT INTO public.jurnal(nomor,tanggal,keterangan,referensi,departemen_id,total_debit,total_kredit,status)
-    VALUES(v_nomor,p_tanggal,'Piutang SPP atas pembatalan pembayaran yang telah diakui',v_pb.tagihan_id::text,
-      COALESCE(v_dimuka.departemen_id,v_pb.departemen_id),v_pb.jumlah,v_pb.jumlah,'posted') RETURNING id INTO v_spp_jurnal;
-    INSERT INTO public.jurnal_detail(jurnal_id,akun_id,debit,kredit,keterangan,urutan) VALUES
-      (v_spp_jurnal,v_spp_piutang,v_pb.jumlah,0,'Piutang SPP',1),
-      (v_spp_jurnal,v_spp_pendapatan,0,v_pb.jumlah,'Pemulihan pendapatan periode layanan',2);
-    UPDATE public.tagihan SET jurnal_piutang_id=COALESCE(jurnal_piutang_id,v_spp_jurnal)
-    WHERE id=v_pb.tagihan_id;
-  END IF;
-
-  DELETE FROM public.pembayaran WHERE id = p_pembayaran_id;
-
-  IF v_pb.tagihan_id IS NOT NULL AND v_tagihan.id IS NOT NULL THEN
-    SELECT COALESCE(SUM(jumlah), 0)
-    INTO v_total_sisa
-    FROM public.pembayaran
-    WHERE tagihan_id = v_pb.tagihan_id;
-
-    SELECT id INTO v_payment_sisa_id
-    FROM public.pembayaran
-    WHERE tagihan_id = v_pb.tagihan_id
-    ORDER BY tanggal_bayar DESC NULLS LAST, id DESC
-    LIMIT 1;
-
-    v_status_baru := CASE
-      WHEN v_total_sisa >= v_tagihan.nominal THEN 'lunas'
       WHEN v_total_sisa > 0 THEN 'sebagian'
       WHEN v_tagihan.jurnal_piutang_id IS NOT NULL OR v_tagihan.pengakuan_spp_selesai THEN 'belum_bayar'
       WHEN v_tagihan.jatuh_tempo IS NOT NULL AND v_tagihan.jatuh_tempo > CURRENT_DATE THEN 'terjadwal'
