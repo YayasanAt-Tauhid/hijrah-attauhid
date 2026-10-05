@@ -36,7 +36,7 @@ import { Search, Printer, Plus, Check, X, ShoppingCart, Trash2, WalletCards, His
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { calculateRemainingBill, isSppPaymentName } from "@/lib/installment";
+import { calculateRemainingBill, isSppPaymentName, isUangPangkalPaymentName } from "@/lib/installment";
 import {
   billingPeriodLabel,
   findBillingPrerequisite,
@@ -678,7 +678,10 @@ function InputPembayaranContent() {
   const tarifTidakAda  = !!(form.jenisId && selectedSiswa && !loadingTarif && tarifNominal == null && !adaTagihanDipilih);
   const isSpp = !isSekali && isSppPaymentName(selectedJenis?.nama);
   const cicilanSekaliDiizinkan =
-    isSekali && !!existingTagihan && existingTagihan.status !== "terjadwal";
+    isSekali &&
+    !!existingTagihan &&
+    (existingTagihan.status !== "terjadwal" ||
+      isUangPangkalPaymentName(selectedJenis?.nama));
   const cicilanSppDiizinkan =
     isSpp && !!existingTagihan &&
     (existingTagihan.status !== "terjadwal" ||
