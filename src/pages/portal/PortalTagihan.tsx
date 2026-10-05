@@ -252,7 +252,7 @@ export default function PortalTagihan() {
   const selectSppThrough = (
     siswaId: string,
     jenisId: string,
-    tahunAjaranId: string,
+    tahunAjaranMulai: string,
     targetTagihanId: string,
   ) => {
     const sameYear = tagihan
@@ -260,7 +260,7 @@ export default function PortalTagihan() {
         (t) =>
           t.siswa_id === siswaId &&
           t.jenis_id === jenisId &&
-          t.tahun_ajaran_id === tahunAjaranId &&
+          t.tahun_ajaran_mulai === tahunAjaranMulai &&
           t.bulan > 0 &&
           isSppPaymentName(t.jenis_nama),
       )
@@ -287,14 +287,14 @@ export default function PortalTagihan() {
   const selectSppFullAcademicYear = (
     siswaId: string,
     jenisId: string,
-    tahunAjaranId: string,
+    tahunAjaranMulai: string,
   ) => {
     const sameYear = tagihan
       .filter(
         (t) =>
           t.siswa_id === siswaId &&
           t.jenis_id === jenisId &&
-          t.tahun_ajaran_id === tahunAjaranId &&
+          t.tahun_ajaran_mulai === tahunAjaranMulai &&
           t.bulan > 0 &&
           isSppPaymentName(t.jenis_nama),
       )
@@ -304,7 +304,7 @@ export default function PortalTagihan() {
           BULAN_ORDER_AKADEMIK.indexOf(b.bulan),
       );
     const last = sameYear.at(-1);
-    if (last) selectSppThrough(siswaId, jenisId, tahunAjaranId, last.tagihan_id);
+    if (last) selectSppThrough(siswaId, jenisId, tahunAjaranMulai, last.tagihan_id);
   };
 
   const cicilanDiizinkan = (t: TagihanItem) =>
@@ -406,7 +406,7 @@ export default function PortalTagihan() {
             items
               .filter((t) => t.bulan > 0 && isSppPaymentName(t.jenis_nama))
               .reduce((map, item) => {
-                const groupKey = `${item.jenis_id}:${item.tahun_ajaran_id}`;
+                const groupKey = `${item.jenis_id}:${item.tahun_ajaran_mulai}`;
                 const list = map.get(groupKey) || [];
                 list.push(item);
                 map.set(groupKey, list);
@@ -496,7 +496,7 @@ export default function PortalTagihan() {
                                 selectSppThrough(
                                   siswaId,
                                   sppFirst.jenis_id,
-                                  sppFirst.tahun_ajaran_id,
+                                  sppFirst.tahun_ajaran_mulai,
                                   semester1Target.tagihan_id,
                                 )
                               }
@@ -512,7 +512,7 @@ export default function PortalTagihan() {
                                 selectSppFullAcademicYear(
                                   siswaId,
                                   sppFirst.jenis_id,
-                                  sppFirst.tahun_ajaran_id,
+                                  sppFirst.tahun_ajaran_mulai,
                                 )
                               }
                             >
@@ -526,7 +526,7 @@ export default function PortalTagihan() {
                                 selectSppThrough(
                                   siswaId,
                                   sppFirst.jenis_id,
-                                  sppFirst.tahun_ajaran_id,
+                                  sppFirst.tahun_ajaran_mulai,
                                   tagihanId,
                                 )
                               }

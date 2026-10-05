@@ -97,6 +97,40 @@ describe("PortalTagihan selection and installment checkout", () => {
     expect(screen.getByText("1 tagihan dipilih")).toBeInTheDocument();
   });
 
+  it("keeps one academic-year SPP group across different financial books", () => {
+    mocks.rows.push({
+      tagihan_id: "monthly-jan",
+      siswa_id: "student-a",
+      nama_siswa: "Anak Pertama",
+      jenis_id: "spp",
+      jenis_nama: "SPP SMP",
+      bulan: 1,
+      nominal: 450000,
+      tahun_ajaran_id: "book-next",
+      tahun_ajaran_nama: "2026/2027",
+      tahun_ajaran_mulai: "2026-07-01",
+      status: "terjadwal",
+      menunggak: false,
+      jatuh_tempo: "2027-01-10",
+      departemen_id: "smp",
+      departemen_nama: "SMP",
+      kelas_nama: "9C",
+      nis: "123",
+    });
+
+    try {
+      render(<PortalTagihan />);
+      const yearButtons = screen.getAllByRole("button", { name: /2 Semester · Jul–Jun/ });
+      fireEvent.click(yearButtons[0]);
+
+      expect(screen.getByRole("checkbox", { name: /SPP SMP Juli 2026/ })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: /SPP SMP Januari 2027/ })).toBeChecked();
+      expect(screen.getByText("2 tagihan dipilih")).toBeInTheDocument();
+    } finally {
+      mocks.rows.pop();
+    }
+  });
+
   it("does not proceed to checkout with a zero installment", () => {
     render(<PortalTagihan />);
     fireEvent.click(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ }));
