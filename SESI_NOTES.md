@@ -1,3 +1,29 @@
+## SPP asrama/non asrama — siap ditinjau, belum diterapkan (5 Oktober 2026)
+
+User menyetujui persiapan pemisahan SMP/SMA/MTA karena khawatir laporan
+keuangan tercampur. Branch `fix/spp-boarding-accounting` memakai `origin/main`
+`9a3b495`; produksi aktif hanya `cmvzcpeiuompqgdvflky`. Produksi diperiksa
+read-only, tanpa migration atau deploy pada sesi ini. Aturan persetujuan SQL
+produksi setelah ditampilkan tetap berlaku.
+
+Snapshot per tagihan dipilih agar perpindahan status siswa tidak mengubah
+histori; satu master SPP/lembaga dan tarif efektif siswa dipertahankan. Akun
+4102/4103 sudah ada. Bukti legacy dapat memulihkan 345 status kosong, tetapi
+empat siswa belum punya bukti dan Khairan Alzam memiliki konflik sumber lama
+dengan status sekarang. Dua pembayaran Gledysta total Rp900.000 belum bisa
+diklasifikasikan. Detail dan daftar nama ada di docs/spp-asrama-non-asrama.md.
+
+SQL metadata mempertahankan akun jurnal lama 4101. Reklasifikasi buku besar
+historis masih perlu audit jurnal tersendiri dan persetujuan atas SQL hasilnya;
+jangan menyatakan laba rugi historis sudah terpisah. Pembatalan SPP dengan PD
+pending setelah layanan diakui juga diperbaiki, karena kasus yang sama gagal
+pada definisi RPC produksi asli. Regresi SPP/uang pangkal dan fixture metadata,
+308 tes aplikasi, serta build lulus. Lint/typecheck repo belum bersih pada baseline.
+
+Berikutnya: tampilkan SQL final, tunggu persetujuan produksi, terapkan dua
+migration atomik dengan guard aktif, verifikasi hasil audit, baru merge/deploy.
+Setelah itu lanjutkan audit jurnal 4101 dan konfirmasi kasus tanpa bukti.
+
 ## SPP awal bulan — revisi kebijakan, belum diterapkan (2 Oktober 2026)
 
 Pengguna menetapkan SPP diakui sejak tanggal 1 bulan layanan, mengikuti kebijakan

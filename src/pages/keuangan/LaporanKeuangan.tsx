@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { fetchAllPages } from "@/lib/fetchAll";
+import { SPP_CATEGORY_LABELS, sppCategory, sppCategoryLabel, sppReceiptGroups } from "@/lib/sppCategory";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -86,6 +88,7 @@ function TabPenerimaan({ departemenId }: { departemenId?: string }) {
   const [bulan, setBulan] = useState(now.getMonth() + 1);
   const [tahun, setTahun] = useState(now.getFullYear());
   const [filterTA, setFilterTA] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   // Fetch tahun ajaran list
   const { data: tahunAjaranList } = useQuery({
@@ -104,17 +107,17 @@ function TabPenerimaan({ departemenId }: { departemenId?: string }) {
       const endM = bulan === 12 ? 1 : bulan + 1;
       const endY = bulan === 12 ? tahun + 1 : tahun;
       const end = `${endY}-${String(endM).padStart(2, "0")}-01`;
-      let q = supabase
+      return fetchAllPages((from, to) => {
+        let q = supabase
         .from("pembayaran")
         .select("*, siswa:siswa_id(nama, nis), jenis_pembayaran:jenis_id(nama, akun_pendapatan_id), departemen:departemen_id(nama, kode), jurnal:jurnal_id(id, nomor), tahun_ajaran:tahun_ajaran_id(id, nama)")
         .gte("tanggal_bayar", start)
         .lt("tanggal_bayar", end)
-        .order("tanggal_bayar", { ascending: false });
+        .order("tanggal_bayar", { ascending: false }).order("id");
       if (departemenId) q = q.eq("departemen_id", departemenId);
       if (filterTA && filterTA !== "all") q = q.eq("tahun_ajaran_id", filterTA);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data || [];
+        return q.range(from, to);
+      });
     },
   });
 
@@ -124,12 +127,14 @@ function TabPenerimaan({ departemenId }: { departemenId?: string }) {
     queryKey: ["dimuka_by_pembayaran", pembayaranIds],
     enabled: pembayaranIds.length > 0,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pendapatan_dimuka")
-        .select("pembayaran_id, status")
-        .in("pembayaran_id", pembayaranIds);
-      if (error) throw error;
-      return data || [];
+      const refs: { pembayaran_id: string; status: string }[] = [];
+      for (let offset = 0; offset < pembayaranIds.length; offset += 200) {
+        const { data, error } = await supabase.from("pendapatan_dimuka").select("pembayaran_id, status")
+          .in("pembayaran_id", pembayaranIds.slice(offset, offset + 200));
+        if (error) throw error;
+        refs.push(...(data || []));
+      }
+      return refs;
     },
   });
 
@@ -141,8 +146,18 @@ function TabPenerimaan({ departemenId }: { departemenId?: string }) {
     return false;
   };
 
-  const regulerItems = data?.filter((r: any) => !isDimuka(r)) || [];
-  const dimukaItems = data?.filter((r: any) => isDimuka(r)) || [];
+  const sppItems = (data || []).filter((row) => {
+    const category = sppCategory(row.spp_kategori, row.jenis_pembayaran?.nama, row.departemen?.kode);
+    return category && (categoryFilter === "all" || category === categoryFilter);
+  }).map((row) => ({ ...row,
+    siswa_nama: row.siswa?.nama || "—", jenis: row.jenis_pembayaran?.nama || "—",
+    tahun_ajaran_label: row.tahun_ajaran?.nama || "—", lembaga: row.departemen?.kode || "—",
+    status_dimuka: isDimuka(row) ? "Di Muka" : "Reguler",
+    kategori_spp_label: sppCategoryLabel(sppCategory(row.spp_kategori, row.jenis_pembayaran?.nama, row.departemen?.kode)) }));
+  const summary = sppReceiptGroups(sppItems);
+  const unverifiedTotal = summary.filter(group => group.kategori === "belum_terverifikasi").reduce((sum, group) => sum + group.jumlah, 0);
+  const regulerItems = sppItems.filter((r) => !isDimuka(r));
+  const dimukaItems = sppItems.filter((r) => isDimuka(r));
   const totalReguler = regulerItems.reduce((s, r) => s + Number(r.jumlah || 0), 0);
   const totalDimuka = dimukaItems.reduce((s, r) => s + Number(r.jumlah || 0), 0);
   const total = totalReguler + totalDimuka;
@@ -153,6 +168,7 @@ function TabPenerimaan({ departemenId }: { departemenId?: string }) {
     { key: "jenis", label: "Jenis Bayar", render: (_, r) => (r as any).jenis_pembayaran?.nama || "-" },
     { key: "tahun_ajaran", label: "TA", render: (_, r) => (r as any).tahun_ajaran?.nama || "-" },
     { key: "lembaga", label: "Lembaga", render: (_, r) => (r as any).departemen?.kode || "-" },
+    { key: "kategori_spp_label", label: "Kategori SPP" },
     { key: "jumlah", label: "Jumlah", render: (v) => formatRupiah(Number(v)) },
     {
       key: "status_dimuka", label: "Status",
@@ -207,9 +223,47 @@ function TabPenerimaan({ departemenId }: { departemenId?: string }) {
           </Select>
         </div>
       </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <Label>Kategori SPP</Label>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua kategori</SelectItem>
+              {Object.entries(SPP_CATEGORY_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="text-sm text-muted-foreground">Kategori mengikuti tagihan saat transaksi, termasuk cicilan dan pembayaran di muka.</p>
+      </div>
+      {!isLoading && unverifiedTotal > 0 && <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">SPP {formatRupiah(unverifiedTotal)} belum terverifikasi kategorinya. Nilai ini tetap masuk total dan ditampilkan terpisah.</p>}
+      <Card>
+        <CardHeader><CardTitle>Rekap penerimaan SPP per lembaga dan kategori</CardTitle></CardHeader>
+        <CardContent>
+          <DataTable columns={[
+            { key: "lembaga", label: "Lembaga" },
+            { key: "label", label: "Kategori SPP" },
+            { key: "transaksi", label: "Transaksi" },
+            { key: "jumlah", label: "Penerimaan", render: value => formatRupiah(Number(value)) },
+          ]} data={summary} loading={isLoading} searchable={false} exportable exportFilename="rekap-spp-asrama" exportColumns={[
+            { key: "lembaga", label: "Lembaga" }, { key: "label", label: "Kategori SPP" },
+            { key: "transaksi", label: "Transaksi" }, { key: "jumlah", label: "Penerimaan" },
+          ]} />
+          <p className="mt-3 text-sm text-muted-foreground">Rekap ini menunjukkan kas yang diterima. Pendapatan yang diakui mengikuti jurnal pada laporan akuntansi.</p>
+        </CardContent>
+      </Card>
       <Card>
         <CardContent className="pt-6">
-          <DataTable columns={columns} data={data || []} loading={isLoading} exportable exportFilename="laporan-penerimaan" pageSize={20} />
+          <DataTable columns={columns} data={sppItems} loading={isLoading} exportable exportFilename="laporan-penerimaan-spp" pageSize={20} exportColumns={[
+            { key: "tanggal_bayar", label: "Tanggal" },
+            { key: "siswa_nama", label: "Siswa" },
+            { key: "jenis", label: "Jenis Bayar" },
+            { key: "tahun_ajaran_label", label: "TA" },
+            { key: "lembaga", label: "Lembaga" },
+            { key: "kategori_spp_label", label: "Kategori SPP" },
+            { key: "jumlah", label: "Jumlah" },
+            { key: "status_dimuka", label: "Status" },
+          ]} />
           {!isLoading && (
             <div className="mt-4 space-y-1 text-right text-sm">
               <p>Penerimaan Reguler: <span className="font-semibold text-success">{formatRupiah(totalReguler)}</span></p>
@@ -424,16 +478,17 @@ function TabNeraca({ departemenId }: { departemenId?: string }) {
   const end = `${endY}-${String(endM).padStart(2, "0")}-01`;
 
   const { data: rawPenerimaan, isLoading: lP } = useQuery({
-    queryKey: ["neraca_penerimaan_v2", bulan, tahun, departemenId],
+    queryKey: ["neraca_penerimaan_v3_spp", bulan, tahun, departemenId],
     queryFn: async () => {
-      let q = supabase
+      return fetchAllPages((from, to) => {
+        let q = supabase
         .from("pembayaran")
-        .select("id, jumlah, jenis_pembayaran:jenis_id(nama), keterangan")
+        .select("id, jumlah, spp_kategori, jenis_pembayaran:jenis_id(nama), departemen:departemen_id(kode), keterangan")
         .gte("tanggal_bayar", start)
-        .lt("tanggal_bayar", end);
+        .lt("tanggal_bayar", end).order("id");
       if (departemenId) q = q.eq("departemen_id", departemenId);
-      const { data } = await q;
-      return data || [];
+        return q.range(from, to);
+      });
     },
   });
 
@@ -443,8 +498,14 @@ function TabNeraca({ departemenId }: { departemenId?: string }) {
     queryKey: ["neraca_dimuka_refs", pembIds],
     enabled: pembIds.length > 0,
     queryFn: async () => {
-      const { data } = await supabase.from("pendapatan_dimuka").select("pembayaran_id").in("pembayaran_id", pembIds);
-      return new Set((data || []).map((d: any) => d.pembayaran_id));
+      const refs = new Set<string>();
+      for (let offset = 0; offset < pembIds.length; offset += 200) {
+        const { data, error } = await supabase.from("pendapatan_dimuka").select("pembayaran_id")
+          .in("pembayaran_id", pembIds.slice(offset, offset + 200));
+        if (error) throw error;
+        for (const row of data || []) refs.add(row.pembayaran_id);
+      }
+      return refs;
     },
   });
 
@@ -458,7 +519,10 @@ function TabNeraca({ departemenId }: { departemenId?: string }) {
       if (isDimukaN(r)) {
         totalDimuka += Number(r.jumlah);
       } else {
-        const key = r.jenis_pembayaran?.nama || "Lainnya";
+        const category = sppCategory(r.spp_kategori, r.jenis_pembayaran?.nama, r.departemen?.kode);
+        const key = category
+          ? `${r.jenis_pembayaran?.nama} — ${sppCategoryLabel(category)}`
+          : r.jenis_pembayaran?.nama || "Lainnya";
         grouped.set(key, (grouped.get(key) || 0) + Number(r.jumlah));
       }
     });

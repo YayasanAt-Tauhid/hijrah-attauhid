@@ -1836,6 +1836,7 @@ export type Database = {
       }
       pembayaran: {
         Row: {
+          spp_kategori: string | null
           bulan: number | null
           departemen_id: string | null
           id: string
@@ -1850,6 +1851,7 @@ export type Database = {
           tanggal_bayar: string | null
         }
         Insert: {
+          spp_kategori?: string | null
           bulan?: number | null
           departemen_id?: string | null
           id?: string
@@ -1864,6 +1866,7 @@ export type Database = {
           tanggal_bayar?: string | null
         }
         Update: {
+          spp_kategori?: string | null
           bulan?: number | null
           departemen_id?: string | null
           id?: string
@@ -3949,6 +3952,8 @@ export type Database = {
       }
       tagihan: {
         Row: {
+          spp_kategori: string | null
+          spp_akun_pendapatan_id: string | null
           bulan: number | null
           created_at: string
           created_by: string | null
@@ -3975,6 +3980,8 @@ export type Database = {
           write_off_id: string | null
         }
         Insert: {
+          spp_kategori?: string | null
+          spp_akun_pendapatan_id?: string | null
           bulan?: number | null
           created_at?: string
           created_by?: string | null
@@ -4001,6 +4008,8 @@ export type Database = {
           write_off_id?: string | null
         }
         Update: {
+          spp_kategori?: string | null
+          spp_akun_pendapatan_id?: string | null
           bulan?: number | null
           created_at?: string
           created_by?: string | null
