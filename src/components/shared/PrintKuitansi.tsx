@@ -72,14 +72,14 @@ export function PrintKuitansi({
       style={{ fontFamily: '"Times New Roman", Times, serif' }}
       id="kuitansi-print"
       data-print-orientation={orientation}
-      className={`hidden print:!block bg-white text-black mx-auto w-full p-5 print:p-0 text-[12pt] leading-[1.25] ${isPortrait ? "max-w-[120mm]" : "max-w-[201mm]"}`}
+      className={`hidden print:!block receipt-compact bg-white text-black mx-auto w-full p-5 print:p-0 text-[12pt] leading-[1.15] ${isPortrait ? "max-w-[120mm]" : "max-w-[201mm]"}`}
     >
-      <div className={`flex items-start justify-between border-b-2 border-black pb-2 ${isPortrait ? "flex-col gap-2" : "gap-4"}`}>
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className={`flex items-start justify-between border-b-2 border-black pb-1 gap-2 ${isPortrait ? "flex-col" : ""}`}>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <img
             src={YAYASAN_PRINT_LOGO_URL}
             alt="Logo Yayasan At-Tauhid"
-            className="h-[68px] w-[54px] shrink-0 object-contain"
+            className="h-[56px] w-[44px] shrink-0 object-contain"
           />
           <div className="min-w-0">
             <h1 className="text-[15pt] font-extrabold uppercase tracking-tight">
@@ -95,63 +95,63 @@ export function PrintKuitansi({
             )}
           </div>
         </div>
-        <div className={`shrink-0 border-y-2 border-black px-3 py-2 text-center text-[12.5pt] font-extrabold tracking-wide ${isPortrait ? "w-full" : ""}`}>
+        <div className={`shrink-0 border-y-2 border-black px-2 py-1 text-center text-[12.5pt] font-extrabold tracking-wide ${isPortrait ? "w-full" : ""}`}>
           BUKTI PEMBAYARAN
         </div>
       </div>
 
-      <div className="mt-2 font-bold tracking-wide">{nomorBukti}</div>
+      <div className="mt-1 font-bold tracking-wide">{nomorBukti}</div>
 
       <table className="mt-1 w-full table-fixed text-[11.5pt]">
         <tbody>
           <tr>
-            <td className={`${isPortrait ? "w-[86px]" : "w-[115px]"} py-1 align-top`}>Nama Siswa</td>
-            <td className="py-1 align-top font-semibold">{payment.siswa.nama}</td>
-            <td className={`${isPortrait ? "w-[70px]" : "w-[92px]"} py-1 align-top`}>Tgl. Bayar</td>
-            <td className={`${isPortrait ? "w-[100px]" : "w-[132px]"} py-1 align-top`}>
+            <td className={`${isPortrait ? "w-[86px]" : "w-[115px]"} py-0.5 align-top`}>Nama Siswa</td>
+            <td className="py-0.5 align-top font-semibold">{payment.siswa.nama}</td>
+            <td className={`${isPortrait ? "w-[70px]" : "w-[92px]"} py-0.5 align-top`}>Tgl. Bayar</td>
+            <td className={`${isPortrait ? "w-[100px]" : "w-[132px]"} py-0.5 align-top`}>
               {format(tanggal, "dd MMM yyyy", { locale: idLocale })}
             </td>
           </tr>
           <tr>
-            <td className="py-1 align-top">NIS / NISN</td>
-            <td className="py-1 align-top">{identitas}</td>
-            <td className="py-1 align-top">Metode</td>
-            <td className="py-1 align-top">{metode}</td>
+            <td className="py-0.5 align-top">NIS / NISN</td>
+            <td className="py-0.5 align-top">{identitas}</td>
+            <td className="py-0.5 align-top">Metode</td>
+            <td className="py-0.5 align-top">{metode}</td>
           </tr>
           <tr>
-            <td className="py-1 align-top">Kelas</td>
-            <td className="py-1 align-top">{kelasNama || "-"}</td>
-            <td className="py-1 align-top">Petugas</td>
-            <td className="py-1 align-top">{petugasNama || "-"}</td>
+            <td className="py-0.5 align-top">Kelas</td>
+            <td className="py-0.5 align-top">{kelasNama || "-"}</td>
+            <td className="py-0.5 align-top">Petugas</td>
+            <td className="py-0.5 align-top">{petugasNama || "-"}</td>
           </tr>
           <tr>
-            <td className="py-1 align-top">Lembaga</td>
-            <td className="py-1 align-top" colSpan={3}>{lembagaNama || "-"}</td>
+            <td className="py-0.5 align-top">Lembaga</td>
+            <td className="py-0.5 align-top" colSpan={3}>{lembagaNama || "-"}</td>
           </tr>
         </tbody>
       </table>
 
-      <div className="my-2 border-y border-black py-1.5 text-[11.5pt] font-bold">
+      <div className="my-1 border-y border-black py-0.5 text-[11.5pt] font-bold">
         Dengan rincian pembayaran sebagai berikut:
       </div>
 
       <table className="w-full text-[11.5pt]">
         <tbody>
           <tr>
-            <td className="w-[28px] py-1.5 align-top">1.</td>
-            <td className="py-1.5 pr-3 align-top">{rincian}</td>
-            <td className="w-[30px] py-1.5 align-top">Rp</td>
-            <td className={`${isPortrait ? "w-[88px]" : "w-[105px]"} py-1.5 text-right align-top`}>{formatAngka(payment.jumlah)}</td>
+            <td className="w-[28px] py-0.5 align-top">1.</td>
+            <td className="py-0.5 pr-3 align-top">{rincian}</td>
+            <td className="w-[30px] py-0.5 align-top">Rp</td>
+            <td className={`${isPortrait ? "w-[88px]" : "w-[105px]"} py-0.5 text-right align-top`}>{formatAngka(payment.jumlah)}</td>
           </tr>
           <tr className="border-t-2 border-black font-extrabold">
-            <td className="py-1.5 pr-3 text-right" colSpan={2}>JUMLAH</td>
-            <td className="py-1.5">Rp</td>
-            <td className="py-1.5 text-right">{formatAngka(payment.jumlah)}</td>
+            <td className="py-0.5 pr-3 text-right" colSpan={2}>JUMLAH</td>
+            <td className="py-0.5">Rp</td>
+            <td className="py-0.5 text-right">{formatAngka(payment.jumlah)}</td>
           </tr>
         </tbody>
       </table>
 
-      <div className="mt-2 text-[11pt]">
+      <div className="mt-1 text-[11pt]">
         <span className="font-semibold">Terbilang:</span>{" "}
         <span className="italic">{terbilang(payment.jumlah)}</span>
       </div>
@@ -161,15 +161,15 @@ export function PrintKuitansi({
         </div>
       )}
 
-      <div className="mt-3 grid grid-cols-[1.6fr_1fr] items-end gap-8">
-        <div className="text-[10pt] leading-snug">
+      <div className="receipt-footer mt-2 grid grid-cols-[1.6fr_1fr] items-start gap-4">
+        <div className="text-[10pt] leading-[1.15]">
           <p className="italic">
             This is a computer generated message and requires no signature.
           </p>
           <p className="italic">
             Informasi ini merupakan hasil cetakan komputer dan tidak memerlukan tanda tangan petugas.
           </p>
-          <p className="mt-2 font-medium">Powered by Hijrah At-Tauhid</p>
+          <p className="mt-1 font-medium">Powered by Hijrah At-Tauhid</p>
         </div>
 
         <div className="text-center text-[11pt]">

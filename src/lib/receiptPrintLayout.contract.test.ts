@@ -41,9 +41,9 @@ describe('receipt print layout contract', () => {
     expect(combined).toContain('src={YAYASAN_PRINT_LOGO_URL}')
   })
 
-  it('keeps the existing receipt font sizes while tightening only horizontal layout', () => {
-    expect(single).toContain('text-[12pt] leading-[1.25]')
-    expect(combined).toContain('text-[12pt] leading-[1.25]')
+  it('keeps the existing receipt font sizes while tightening receipt spacing', () => {
+    expect(single).toContain('text-[12pt] leading-[1.15]')
+    expect(combined).toContain('text-[12pt] leading-[1.15]')
     expect(single).toContain('text-[12.5pt]')
     expect(combined).toContain('text-[12.5pt]')
   })
