@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { ShoppingCart, CheckCheck, Lock, X, AlertTriangle, CalendarDays, Users } from "lucide-react";
 import { BULAN_ORDER_AKADEMIK } from "@/hooks/useKeuangan";
-import { isSppPaymentName } from "@/lib/installment";
+import { isSppPaymentName, isUangPangkalPaymentName } from "@/lib/installment";
 import {
   billingPeriodLabel,
   findBillingPrerequisite,
@@ -329,7 +329,8 @@ export default function PortalTagihan() {
   };
 
   const cicilanDiizinkan = (t: TagihanItem) =>
-    t.bulan === 0 && t.status !== "terjadwal";
+    t.bulan === 0 &&
+    (t.status !== "terjadwal" || isUangPangkalPaymentName(t.jenis_nama));
   const amountFor = (t: TagihanItem) => {
     const requested = partialAmounts[getKey(t)];
     if (!cicilanDiizinkan(t) || requested == null) return Number(t.nominal || 0);

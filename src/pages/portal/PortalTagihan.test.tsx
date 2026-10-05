@@ -36,6 +36,28 @@ describe("PortalTagihan selection and installment checkout", () => {
     );
   });
 
+  it("allows installments for a future scheduled Uang Pangkal bill", () => {
+    const original = { ...mocks.rows[1] };
+    Object.assign(mocks.rows[1], {
+      status: "terjadwal",
+      menunggak: false,
+      jatuh_tempo: "2027-07-01",
+      tahun_ajaran_nama: "2027/2028",
+      tahun_ajaran_mulai: "2027-07-01",
+    });
+
+    try {
+      render(<PortalTagihan />);
+      fireEvent.click(screen.getByRole("button", { name: /UANG PANGKAL SMP 1 tagihan/ }));
+      fireEvent.click(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ }));
+      expect(screen.getByLabelText("Bayar cicilan")).toHaveValue("1.500.000");
+      fireEvent.change(screen.getByLabelText("Bayar cicilan"), { target: { value: "500.000" } });
+      expect(screen.getByLabelText("Bayar cicilan")).toHaveValue("500.000");
+    } finally {
+      Object.assign(mocks.rows[1], original);
+    }
+  });
+
   it("keeps formatted installment amounts and selected items intact in the cart", () => {
     render(<PortalTagihan />);
     expect(screen.queryByLabelText("Bayar cicilan")).not.toBeInTheDocument();

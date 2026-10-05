@@ -46,3 +46,8 @@ export function isSppPaymentName(value: unknown): boolean {
   const name = String(value ?? "").trim();
   return /(^|\s|[-_/])SPP($|\s|[-_/])/i.test(name);
 }
+
+export function isUangPangkalPaymentName(value: unknown): boolean {
+  const name = String(value ?? "").trim();
+  return /^UANG PANGKAL (TK|SD|SMP|SMA|MTA)$/i.test(name);
+}

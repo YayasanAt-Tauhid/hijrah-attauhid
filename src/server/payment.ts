@@ -13,6 +13,7 @@ import {
   findBillingPrerequisite,
   type BillingSequenceBill,
 } from "@/lib/billingSequence";
+import { isUangPangkalPaymentName } from "@/lib/installment";
 import { authMiddleware, requireContext } from "./auth";
 import { createAdminClient, readEnv } from "./supabase";
 
@@ -199,7 +200,10 @@ export async function buatTransaksiSnap(params: {
       );
     }
 
-    const cicilanDiizinkan = item.bulan === 0 && tagihan.status !== "terjadwal";
+    const cicilanDiizinkan =
+      item.bulan === 0 &&
+      (tagihan.status !== "terjadwal" ||
+        isUangPangkalPaymentName(item.jenis_nama));
     if (!cicilanDiizinkan && requested !== sisa) {
       throw new Error(
         tagihan.status === "terjadwal"
