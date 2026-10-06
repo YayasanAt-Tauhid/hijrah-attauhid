@@ -22,11 +22,13 @@ import {
   listKebijakanKeringanan,
   buatVersiKebijakanKeringanan,
   cariKebijakanKeringananAktif,
+  listTagihanDiskonTarget,
   type AjukanDiskonInput,
   type PutuskanDiskonInput,
   type KonfirmasiKeluargaInput,
   type BuatVersiKebijakanInput,
   type KebijakanKeringananListItem,
+  type TagihanDiskonTarget,
 } from "@/server/diskon";
 
 export type KategoriDiskon =
@@ -118,6 +120,28 @@ export function useKebijakanKeringananAktif(input: {
         },
       });
       return hasil.item;
+    },
+  });
+}
+
+export function useTagihanDiskonTarget(input: {
+  siswa_id?: string;
+  jenis_id?: string;
+  enabled?: boolean;
+}) {
+  const enabled = !!(input.enabled && input.siswa_id && input.jenis_id);
+  return useQuery({
+    queryKey: ["tagihan_diskon_target", input.siswa_id, input.jenis_id],
+    enabled,
+    queryFn: async () => {
+      if (!enabled) return [] as TagihanDiskonTarget[];
+      const hasil = await listTagihanDiskonTarget({
+        data: {
+          siswa_id: input.siswa_id,
+          jenis_id: input.jenis_id,
+        },
+      });
+      return hasil.items;
     },
   });
 }
