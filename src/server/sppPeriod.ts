@@ -43,6 +43,7 @@ export const previewOrApplySppPeriod = createServerFn({ method: "POST" })
     const { data: result, error } = await admin.rpc("sesuaikan_kategori_spp_periode", {
       p_siswa_id: data.siswa_id, p_jenis_id: data.jenis_id,
       p_mulai: data.mulai + "-01", p_selesai: data.selesai + "-01", p_kategori: data.kategori,
+      p_nominal_bruto: data.nominal_bruto,
       p_user_id: userId, p_apply: data.apply, p_preview_hash: data.preview_hash, p_alasan: data.alasan,
     });
     if (error) {

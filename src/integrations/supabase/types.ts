@@ -15,15 +15,15 @@ export type Database = {
   public: {
     Tables: {
       spp_kategori_periode_audit: {
-        Row: { id: string; siswa_id: string; jenis_id: string; mulai: string; selesai: string; kategori: string; alasan: string; dibuat_oleh: string; dibuat_at: string; transaction_id: number; perubahan: Json }
-        Insert: { id?: string; siswa_id: string; jenis_id: string; mulai: string; selesai: string; kategori: string; alasan: string; dibuat_oleh: string; dibuat_at?: string; transaction_id?: number; perubahan: Json }
-        Update: { id?: string; siswa_id?: string; jenis_id?: string; mulai?: string; selesai?: string; kategori?: string; alasan?: string; dibuat_oleh?: string; dibuat_at?: string; transaction_id?: number; perubahan?: Json }
+        Row: { id: string; siswa_id: string; jenis_id: string; mulai: string; selesai: string; kategori: string; nominal_bruto: number; alasan: string; dibuat_oleh: string; dibuat_at: string; transaction_id: number; perubahan: Json }
+        Insert: { id?: string; siswa_id: string; jenis_id: string; mulai: string; selesai: string; kategori: string; nominal_bruto: number; alasan: string; dibuat_oleh: string; dibuat_at?: string; transaction_id?: number; perubahan: Json }
+        Update: { id?: string; siswa_id?: string; jenis_id?: string; mulai?: string; selesai?: string; kategori?: string; nominal_bruto?: number; alasan?: string; dibuat_oleh?: string; dibuat_at?: string; transaction_id?: number; perubahan?: Json }
         Relationships: []
       }
       spp_kategori_periode: {
-        Row: { siswa_id: string; jenis_id: string; periode: string; kategori: string; audit_id: string }
-        Insert: { siswa_id: string; jenis_id: string; periode: string; kategori: string; audit_id: string }
-        Update: { siswa_id?: string; jenis_id?: string; periode?: string; kategori?: string; audit_id?: string }
+        Row: { siswa_id: string; jenis_id: string; periode: string; kategori: string; nominal_bruto: number; audit_id: string }
+        Insert: { siswa_id: string; jenis_id: string; periode: string; kategori: string; nominal_bruto: number; audit_id: string }
+        Update: { siswa_id?: string; jenis_id?: string; periode?: string; kategori?: string; nominal_bruto?: number; audit_id?: string }
         Relationships: []
       }
       _keep_alive_log: {
@@ -5001,8 +5001,12 @@ export type Database = {
     }
     Functions: {
       sesuaikan_kategori_spp_periode: {
-        Args: { p_siswa_id: string; p_jenis_id: string; p_mulai: string; p_selesai: string; p_kategori: string; p_user_id: string; p_apply?: boolean; p_preview_hash?: string; p_alasan?: string }
+        Args: { p_siswa_id: string; p_jenis_id: string; p_mulai: string; p_selesai: string; p_kategori: string; p_nominal_bruto: number; p_user_id: string; p_apply?: boolean; p_preview_hash?: string; p_alasan?: string }
         Returns: Json
+      }
+      nominal_spp_periode: {
+        Args: { p_jenis_id: string; p_siswa_id: string; p_periode: string }
+        Returns: number
       }
       snapshot_spp_periode: {
         Args: { p_jenis_id: string; p_siswa_id: string; p_periode: string }

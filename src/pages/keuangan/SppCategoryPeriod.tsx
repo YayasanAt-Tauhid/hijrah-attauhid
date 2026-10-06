@@ -28,6 +28,7 @@ export default function SppCategoryPeriod({ departemenId }: { departemenId?: str
   const [mulai, setMulai] = useState(minMonth);
   const [selesai, setSelesai] = useState(minMonth);
   const [kategori, setKategori] = useState<"asrama" | "non_asrama">("non_asrama");
+  const [nominalBruto, setNominalBruto] = useState("");
   const [alasan, setAlasan] = useState("");
   const [preview, setPreview] = useState<SppPeriodPreview | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -35,7 +36,7 @@ export default function SppCategoryPeriod({ departemenId }: { departemenId?: str
 
   useEffect(() => { const timer = setTimeout(() => setSearchQuery(search), 350); return () => clearTimeout(timer); }, [search]);
   useEffect(() => { setSiswaId(""); setJenisId(""); setSearch(""); setSearchQuery(""); }, [departemenId]);
-  useEffect(() => { setPreview(null); setConfirmOpen(false); }, [siswaId, jenisId, mulai, selesai, kategori, searchQuery]);
+  useEffect(() => { setPreview(null); setConfirmOpen(false); }, [siswaId, jenisId, mulai, selesai, kategori, nominalBruto, searchQuery]);
   const options = useQuery({
     queryKey: ["spp_period_options", searchQuery, departemenId],
     queryFn: () => getSppPeriodOptions({ data: { search: searchQuery, departemen_id: departemenId || undefined } }),
@@ -48,7 +49,8 @@ export default function SppCategoryPeriod({ departemenId }: { departemenId?: str
     queryFn: () => getSppPeriodHistory({ data: { siswa_id: siswaId } }),
     enabled: allowed && !!siswaId,
   });
-  const input = { siswa_id: siswaId, jenis_id: jenisId, mulai, selesai, kategori };
+  const parsedNominalBruto = Number(nominalBruto);
+  const input = { siswa_id: siswaId, jenis_id: jenisId, mulai, selesai, kategori, nominal_bruto: parsedNominalBruto };
   const mutation = useMutation({
     mutationFn: (apply: boolean) => previewOrApplySppPeriod({
       data: { ...input, apply, preview_hash: apply ? preview?.preview_hash : undefined, alasan: apply ? alasan : undefined },
@@ -70,7 +72,7 @@ export default function SppCategoryPeriod({ departemenId }: { departemenId?: str
   return <div className="space-y-4">
     <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
       <p className="font-medium">Kategori SPP per bulan layanan</p>
-      <p>Pilih Asrama atau Non Asrama untuk rentang bulan mendatang. Kategori disimpan pada setiap tagihan; status siswa dan nominal tidak berubah.</p>
+      <p>Pilih Asrama atau Non Asrama beserta tarif bruto untuk rentang bulan mendatang. Kategori dan nominal disimpan sebagai snapshot per bulan; status siswa tidak berubah.</p>
       <p className="text-muted-foreground">Tagihan yang sudah dibayar, memiliki jurnal, pembayaran online aktif, atau berada dalam periode tutup buku akan dikunci.</p>
     </div>
     <div className="grid gap-3 sm:grid-cols-2">
@@ -109,24 +111,33 @@ export default function SppCategoryPeriod({ departemenId }: { departemenId?: str
           <SelectContent><SelectItem value="asrama">Asrama</SelectItem><SelectItem value="non_asrama">Non Asrama</SelectItem></SelectContent>
         </Select>
       </div>
+      <div className="space-y-1">
+        <Label htmlFor="spp-gross-amount">Nominal SPP bruto per bulan</Label>
+        <Input id="spp-gross-amount" type="number" min="1" max="100000000" step="1000" disabled={busy} value={nominalBruto}
+          placeholder="Contoh: 1300000" onChange={(e) => setNominalBruto(e.target.value)} />
+        <p className="text-xs text-muted-foreground">Masukkan tarif sebelum potongan/keringanan. Diskon aktif akan dihitung ulang otomatis.</p>
+      </div>
       <div className="space-y-1"><Label htmlFor="spp-start-month">Bulan mulai</Label><Input id="spp-start-month" type="month" min={minMonth} disabled={busy} value={mulai} onChange={(e) => setMulai(e.target.value)} /></div>
       <div className="space-y-1"><Label htmlFor="spp-end-month">Bulan akhir</Label><Input id="spp-end-month" type="month" min={mulai || minMonth} disabled={busy} value={selesai} onChange={(e) => setSelesai(e.target.value)} /></div>
     </div>
-    <Button disabled={busy || !siswaId || !jenisId || !mulai || !selesai} variant="outline" onClick={() => mutation.mutate(false)}>
+    <Button disabled={busy || !siswaId || !jenisId || !mulai || !selesai || !Number.isFinite(parsedNominalBruto) || parsedNominalBruto <= 0} variant="outline" onClick={() => mutation.mutate(false)}>
       {busy ? "Memproses…" : "Lihat pratinjau"}
     </Button>
     {preview && <div className="space-y-3 rounded-md border p-3">
       <p className="text-sm font-medium">{preview.bulan_dapat_disesuaikan} bulan dapat disesuaikan ke {categoryLabel(kategori)}.</p>
       <div className="overflow-x-auto"><table className="w-full text-sm">
-        <thead><tr className="border-b text-left"><th className="p-2">Periode</th><th className="p-2">Kategori tersimpan</th><th className="p-2 text-right">Nominal tetap</th><th className="p-2">Tindakan</th></tr></thead>
+        <thead><tr className="border-b text-left"><th className="p-2">Periode</th><th className="p-2">Kategori</th><th className="p-2 text-right">Bruto lama / referensi</th><th className="p-2 text-right">Bruto baru</th><th className="p-2 text-right">Diskon baru</th><th className="p-2 text-right">Netto baru</th><th className="p-2">Tindakan</th></tr></thead>
         <tbody>{preview.rows.map((row) => <tr className="border-b" key={row.periode}>
           <td className="p-2 whitespace-nowrap">{monthLabel(row.periode)}</td>
-          <td className="p-2">{categoryLabel(row.kategori_lama)}</td>
-          <td className="p-2 text-right whitespace-nowrap">{row.nominal == null ? "Belum ada tagihan" : formatRupiah(Number(row.nominal))}</td>
+          <td className="p-2 whitespace-nowrap">{categoryLabel(row.kategori_lama)} → {categoryLabel(row.kategori_baru)}</td>
+          <td className="p-2 text-right whitespace-nowrap">{row.nominal_bruto_lama != null ? formatRupiah(Number(row.nominal_bruto_lama)) : row.tarif_referensi != null ? formatRupiah(Number(row.tarif_referensi)) : "Belum ada referensi"}</td>
+          <td className="p-2 text-right whitespace-nowrap">{formatRupiah(Number(row.nominal_bruto_baru))}</td>
+          <td className="p-2 text-right whitespace-nowrap">{row.nominal_diskon_baru == null ? "Saat generate" : formatRupiah(Number(row.nominal_diskon_baru))}</td>
+          <td className="p-2 text-right whitespace-nowrap">{row.nominal_netto_baru == null ? "Saat generate" : formatRupiah(Number(row.nominal_netto_baru))}</td>
           <td className="p-2"><p className={row.aksi === "terkunci" ? "text-destructive" : ""}>{actionLabels[row.aksi]}</p>{row.alasan && <p className="text-xs text-muted-foreground">{row.alasan}</p>}</td>
         </tr>)}</tbody>
       </table></div>
-      <p className="text-xs text-muted-foreground">Bulan tanpa tagihan menyimpan kategori untuk pembuatan tagihan berikutnya. Tagihan baru tidak dibuat oleh penyesuaian ini.</p>
+      <p className="text-xs text-muted-foreground">Bulan tanpa tagihan menyimpan kategori dan bruto untuk generate berikutnya. Diskon/netto dihitung saat tagihan dibuat. Penyesuaian ini tidak membuat tagihan baru.</p>
       {preview.bulan_dapat_disesuaikan > 0 && <>
         <Label htmlFor="spp-change-reason">Alasan perubahan</Label>
         <Textarea id="spp-change-reason" value={alasan} maxLength={1000} disabled={busy} onChange={(e) => setAlasan(e.target.value)} placeholder="Contoh: Pindah non asrama mulai November berdasarkan konfirmasi wali siswa." />
@@ -144,7 +155,7 @@ export default function SppCategoryPeriod({ departemenId }: { departemenId?: str
       </div>)}
     </div>}
     <ConfirmDialog open={confirmOpen} onOpenChange={setConfirmOpen} title="Simpan kategori SPP per periode?"
-      description={`Sesuaikan ${preview?.bulan_dapat_disesuaikan || 0} bulan untuk ${selected?.nama || "siswa"} ke ${categoryLabel(kategori)}. Bulan terkunci dilewati. Nominal dan status siswa tetap.`}
+      description={`Sesuaikan ${preview?.bulan_dapat_disesuaikan || 0} bulan untuk ${selected?.nama || "siswa"} ke ${categoryLabel(kategori)} dengan bruto ${Number.isFinite(parsedNominalBruto) ? formatRupiah(parsedNominalBruto) : "-"}. Bulan terkunci dilewati; status siswa tetap.`}
       variant="default" confirmLabel="Simpan penyesuaian" loading={busy} onConfirm={() => mutation.mutate(true)} />
   </div>;
 }
