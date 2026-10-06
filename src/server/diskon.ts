@@ -362,6 +362,8 @@ export interface AjukanDiskonInput {
   periode_selesai: string;
   /** Versi kebijakan yang menjadi dasar pengajuan, bila ada. */
   kebijakan_keringanan_id?: string | null;
+  /** Override tipe perhitungan untuk pengajuan ini. Kosong = pakai kebijakan/default skema. */
+  tipe?: "persen" | "nominal" | null;
   /** Override nilai kebijakan/default skema. Kosong = pakai nilai yang berlaku. */
   nilai?: number | null;
   catatan?: string | null;
@@ -417,10 +419,16 @@ export const ajukanDiskonSiswa = createServerFn({ method: "POST" })
       policy = policyRow;
     }
 
+    if (data.tipe && data.nilai == null) {
+      throw new Error("Nilai keringanan wajib diisi saat memilih tipe manual");
+    }
     const nilaiAktual = Number(
       data.nilai ?? policy?.nilai ?? skema.nilai_default ?? 0
     );
-    const tipeAktual = String(policy?.tipe ?? skema.tipe);
+    const tipeAktual = String(data.tipe ?? policy?.tipe ?? skema.tipe);
+    if (tipeAktual !== "persen" && tipeAktual !== "nominal") {
+      throw new Error("Tipe keringanan harus persen atau nominal");
+    }
     if (!Number.isFinite(nilaiAktual) || nilaiAktual <= 0) {
       throw new Error("Nilai keringanan harus lebih dari 0");
     }
@@ -437,6 +445,7 @@ export const ajukanDiskonSiswa = createServerFn({ method: "POST" })
         kebijakan_keringanan_id: data.kebijakan_keringanan_id ?? null,
         periode_mulai: data.periode_mulai,
         periode_selesai: data.periode_selesai,
+        tipe_snapshot: data.tipe ?? null,
         nilai: nilaiAktual,
         catatan: data.catatan ?? null,
         dokumen_url: data.dokumen_url ?? null,
