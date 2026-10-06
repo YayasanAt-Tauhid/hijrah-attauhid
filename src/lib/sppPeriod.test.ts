@@ -3,17 +3,18 @@ import { nextJakartaMonth, safeStudentSearch, sppPeriodSchema } from "./sppPerio
 const input = {
   siswa_id: "00000000-0000-0000-0000-000000000911",
   jenis_id: "00000000-0000-0000-0000-000000000912",
-  mulai: "2026-11", selesai: "2027-06", kategori: "non_asrama",
+  mulai: "2026-11", selesai: "2027-06", kategori: "non_asrama", nominal_bruto: 1_300_000,
 };
 describe("kategori SPP per periode", () => {
   it("menolak penyimpanan tanpa bukti pratinjau dan alasan", () => {
     expect(sppPeriodSchema.safeParse({ ...input, apply: true }).success).toBe(false);
     expect(sppPeriodSchema.safeParse({ ...input, apply: true, preview_hash: "a".repeat(32), alasan: "Pindah non asrama sesuai konfirmasi wali." }).success).toBe(true);
   });
-  it("menolak rentang terbalik, kategori lain, dan bulan tidak valid", () => {
+  it("menolak rentang terbalik, kategori lain, bulan tidak valid, dan nominal tidak valid", () => {
     expect(sppPeriodSchema.safeParse({ ...input, selesai: "2026-10" }).success).toBe(false);
     expect(sppPeriodSchema.safeParse({ ...input, kategori: "umum" }).success).toBe(false);
     expect(sppPeriodSchema.safeParse({ ...input, mulai: "2026-13" }).success).toBe(false);
+    expect(sppPeriodSchema.safeParse({ ...input, nominal_bruto: 0 }).success).toBe(false);
   });
   it("menggunakan pergantian bulan WIB termasuk pergantian tahun", () => {
     expect(nextJakartaMonth(new Date("2026-10-31T16:59:59Z"))).toBe("2026-11");

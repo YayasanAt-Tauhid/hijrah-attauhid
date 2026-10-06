@@ -7,6 +7,7 @@ export const sppPeriodSchema = z.object({
   mulai: month,
   selesai: month,
   kategori: z.enum(["asrama", "non_asrama"]),
+  nominal_bruto: z.coerce.number().positive("Nominal bruto harus lebih dari 0").max(100_000_000, "Nominal bruto maksimal Rp100.000.000"),
   apply: z.boolean().default(false),
   preview_hash: z.string().regex(/^[a-f0-9]{32}$/).optional(),
   alasan: z.string().trim().max(1000).optional(),
@@ -22,6 +23,13 @@ export interface SppPeriodRow {
   tagihan_id: string | null;
   status: string | null;
   nominal: number | null;
+  nominal_bruto_lama: number | null;
+  nominal_bruto_baru: number;
+  nominal_diskon_lama: number | null;
+  nominal_diskon_baru: number | null;
+  nominal_netto_lama: number | null;
+  nominal_netto_baru: number | null;
+  tarif_referensi: number | null;
   kategori_lama: string | null;
   kategori_baru: "asrama" | "non_asrama";
   aksi: "ubah_tagihan" | "jadwalkan" | "terkunci" | "sudah_sesuai";

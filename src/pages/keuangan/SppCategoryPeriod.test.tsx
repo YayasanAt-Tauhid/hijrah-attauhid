@@ -20,8 +20,8 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 const preview = {
   preview_hash: "a".repeat(32), bulan_dapat_disesuaikan: 1, applied: false, tagihan_diubah: 0, audit_id: null,
   rows: [
-    { periode: "2026-11-01", tagihan_id: "bill-one", nominal: 450000, kategori_lama: "asrama", kategori_baru: "non_asrama", aksi: "ubah_tagihan", alasan: null },
-    { periode: "2026-12-01", tagihan_id: "bill-paid", nominal: 450000, kategori_lama: "asrama", kategori_baru: "non_asrama", aksi: "terkunci", alasan: "Tagihan sudah memiliki pembayaran, jurnal, atau koreksi" },
+    { periode: "2026-11-01", tagihan_id: "bill-one", nominal: 450000, nominal_bruto_lama: 450000, nominal_bruto_baru: 1300000, nominal_diskon_lama: 0, nominal_diskon_baru: 100000, nominal_netto_lama: 450000, nominal_netto_baru: 1200000, tarif_referensi: 450000, kategori_lama: "asrama", kategori_baru: "non_asrama", aksi: "ubah_tagihan", alasan: null },
+    { periode: "2026-12-01", tagihan_id: "bill-paid", nominal: 450000, nominal_bruto_lama: 450000, nominal_bruto_baru: 1300000, nominal_diskon_lama: 0, nominal_diskon_baru: 100000, nominal_netto_lama: 450000, nominal_netto_baru: 1200000, tarif_referensi: 450000, kategori_lama: "asrama", kategori_baru: "non_asrama", aksi: "terkunci", alasan: "Tagihan sudah memiliki pembayaran, jurnal, atau koreksi" },
   ],
 };
 afterEach(() => { cleanup(); vi.clearAllMocks(); mocks.role = "admin"; });
@@ -36,6 +36,7 @@ async function chooseStudent() {
   fireEvent.change(screen.getByLabelText("Cari siswa aktif SMP / SMA / MTA"), { target: { value: "Siswa" } });
   await screen.findByRole("option", { name: /Siswa Uji/ });
   fireEvent.change(screen.getAllByRole("combobox")[0], { target: { value: "00000000-0000-0000-0000-000000000911" } });
+  fireEvent.change(screen.getByLabelText("Nominal SPP bruto per bulan"), { target: { value: "1300000" } });
   await waitFor(() => expect(screen.getByRole("button", { name: "Lihat pratinjau" })).not.toBeDisabled());
 }
 describe("pratinjau penyesuaian kategori SPP", () => {
@@ -51,7 +52,7 @@ describe("pratinjau penyesuaian kategori SPP", () => {
     expect(screen.getByRole("dialog")).toHaveTextContent("1 bulan");
     fireEvent.click(screen.getByRole("button", { name: "Konfirmasi simpan" }));
     await waitFor(() => expect(mocks.operation).toHaveBeenCalledTimes(2));
-    expect(mocks.operation.mock.calls[1][0].data).toMatchObject({ apply: true, preview_hash: "a".repeat(32) });
+    expect(mocks.operation.mock.calls[1][0].data).toMatchObject({ apply: true, preview_hash: "a".repeat(32), nominal_bruto: 1300000 });
   });
   it("membuang pratinjau saat bulan berubah", async () => {
     mount(); await chooseStudent();
