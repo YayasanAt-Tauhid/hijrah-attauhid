@@ -343,7 +343,7 @@ function DialogAjukan({
   const [jenisId, setJenisId] = useState("");
   const [bulanMulai, setBulanMulai] = useState("");
   const [bulanSelesai, setBulanSelesai] = useState("");
-  const [pakaiDefault, setPakaiDefault] = useState(true);
+  const [modeNilai, setModeNilai] = useState<"default" | "persen" | "nominal">("default");
   const [nilai, setNilai] = useState("0");
   const [catatan, setCatatan] = useState("");
   const [dokumenUrl, setDokumenUrl] = useState("");
@@ -357,6 +357,7 @@ function DialogAjukan({
     periode_selesai: bulanSelesai ? bulanKeTanggal(bulanSelesai) : undefined,
   });
   const nilaiBakuAktif = Number(kebijakanAktif?.nilai ?? skema?.nilai_default ?? 0);
+  const tipeBakuAktif = kebijakanAktif?.tipe ?? skema?.tipe ?? "nominal";
 
   function reset() {
     setSiswa(null);
@@ -364,7 +365,7 @@ function DialogAjukan({
     setJenisId("");
     setBulanMulai("");
     setBulanSelesai("");
-    setPakaiDefault(true);
+    setModeNilai("default");
     setNilai("0");
     setCatatan("");
     setDokumenUrl("");
@@ -378,10 +379,10 @@ function DialogAjukan({
   if (!bulanSelesai) kekurangan.push("Bulan selesai belum diisi");
   if (bulanMulai && bulanSelesai && bulanSelesai < bulanMulai)
     kekurangan.push("Bulan selesai lebih awal dari bulan mulai");
-  if (!pakaiDefault) {
+  if (modeNilai !== "default") {
     const n = Number(nilai || 0);
     if (n <= 0) kekurangan.push("Nilai potongan harus lebih dari 0");
-    if (skema?.tipe === "persen" && n > 100)
+    if (modeNilai === "persen" && n > 100)
       kekurangan.push("Persentase tidak boleh lebih dari 100%");
   } else if (nilaiBakuAktif <= 0) {
     kekurangan.push(
@@ -399,7 +400,8 @@ function DialogAjukan({
         kebijakan_keringanan_id: kebijakanAktif?.id ?? null,
         periode_mulai: bulanKeTanggal(bulanMulai),
         periode_selesai: bulanKeTanggal(bulanSelesai),
-        nilai: pakaiDefault ? null : Number(nilai || 0),
+        tipe: modeNilai === "default" ? null : modeNilai,
+        nilai: modeNilai === "default" ? null : Number(nilai || 0),
         catatan: catatan.trim() || null,
         dokumen_url: dokumenUrl.trim() || null,
       },
@@ -520,33 +522,41 @@ function DialogAjukan({
 
           {skema && (
             <>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="pakai-default"
-                  checked={pakaiDefault}
-                  onCheckedChange={(c) => setPakaiDefault(c === true)}
-                />
-                <Label htmlFor="pakai-default" className="cursor-pointer font-normal">
-                  {kebijakanAktif ? "Pakai nilai kebijakan aktif" : "Pakai nilai default skema"}
-                  {nilaiBakuAktif > 0 && (
-                    <>
-                      {" "}
-                      (
-                      {skema.tipe === "persen"
-                        ? `${nilaiBakuAktif}%`
-                        : formatRupiah(nilaiBakuAktif)}
-                      )
-                    </>
-                  )}
-                </Label>
+              <div>
+                <Label>Cara Menentukan Potongan</Label>
+                <Select
+                  value={modeNilai}
+                  onValueChange={(v) => {
+                    setModeNilai(v as "default" | "persen" | "nominal");
+                    setNilai("0");
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">
+                      {kebijakanAktif ? "Sesuai kebijakan aktif" : "Sesuai default skema"}
+                      {nilaiBakuAktif > 0
+                        ? ` · ${tipeBakuAktif === "persen" ? `${nilaiBakuAktif}%` : formatRupiah(nilaiBakuAktif)}`
+                        : ""}
+                    </SelectItem>
+                    <SelectItem value="persen">Persentase (%)</SelectItem>
+                    <SelectItem value="nominal">Nominal (Rp)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Pilihan manual hanya mengubah pengajuan siswa ini. Kebijakan aktif tetap
+                  menjadi referensi dan nilai yang disetujui disimpan sebagai snapshot.
+                </p>
               </div>
 
-              {!pakaiDefault && (
+              {modeNilai !== "default" && (
                 <div>
                   <Label htmlFor="nilai-diskon">
-                    Nilai Potongan {skema.tipe === "persen" ? "(%)" : "(Rp)"}
+                    Nilai Potongan {modeNilai === "persen" ? "(%)" : "(Rp)"}
                   </Label>
-                  {skema.tipe === "persen" ? (
+                  {modeNilai === "persen" ? (
                     <Input
                       id="nilai-diskon"
                       type="number"
