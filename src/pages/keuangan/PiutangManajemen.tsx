@@ -1,3 +1,4 @@
+import SppCategoryPeriod from "./SppCategoryPeriod";
 import { recognitionDueDate, isMonthlySppRevenue } from "@/lib/recognitionDate";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -724,11 +725,12 @@ export default function PiutangManajemen() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
+        <TabsList className="h-auto flex flex-wrap justify-start">
           <TabsTrigger value="akrual">Akrual Pendapatan</TabsTrigger>
           <TabsTrigger value="penyisihan">Penyisihan Piutang</TabsTrigger>
           <TabsTrigger value="writeoff">Write-Off Piutang</TabsTrigger>
           <TabsTrigger value="koreksi">Koreksi / Pembatalan Tagihan</TabsTrigger>
+          <TabsTrigger value="kategori_spp">Kategori SPP per Bulan</TabsTrigger>
         </TabsList>
 
         {/* ── Tab Akrual Pendapatan ── */}
@@ -816,6 +818,9 @@ export default function PiutangManajemen() {
           </div>
           <DataTable columns={colsDibatalkan} data={dibatalkanList || []} loading={loadDibatalkan}
             pageSize={20} exportable exportFilename={`tagihan-dibatalkan-${tahun}`} />
+        </TabsContent>
+        <TabsContent value="kategori_spp" className="mt-3">
+          <SppCategoryPeriod departemenId={departemenId || undefined} />
         </TabsContent>
       </Tabs>
 
