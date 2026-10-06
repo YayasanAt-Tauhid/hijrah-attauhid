@@ -25,6 +25,18 @@ const ROLE_LIHAT_KERINGANAN = [
 
 type StatusDiskon = "diajukan" | "disetujui" | "ditolak" | "dibatalkan";
 
+function rentangBulan(tanggal: string): { mulai: string; selesai: string } {
+  const cocok = /^(\d{4})-(\d{2})-(\d{2})$/.exec(tanggal);
+  if (!cocok) throw new Error("Tanggal tagihan tidak valid");
+  const tahun = Number(cocok[1]);
+  const bulan = Number(cocok[2]);
+  const hariTerakhir = new Date(Date.UTC(tahun, bulan, 0)).getUTCDate();
+  return {
+    mulai: `${cocok[1]}-${cocok[2]}-01`,
+    selesai: `${cocok[1]}-${cocok[2]}-${String(hariTerakhir).padStart(2, "0")}`,
+  };
+}
+
 
 export interface KebijakanKeringananListItem {
   id: string;
@@ -350,12 +362,91 @@ export const listSiswaDiskon = createServerFn({ method: "POST" })
     return { items: rows.map((row) => rapikanBarisDiskon(row)) };
   });
 
+// ── Target tagihan untuk jenis pembayaran sekali ────────────────────────────
+
+export interface TagihanDiskonTarget {
+  id: string;
+  jatuh_tempo: string;
+  periode_mulai: string;
+  periode_selesai: string;
+  nominal_bruto: number;
+  nominal_diskon: number;
+  nominal_netto: number;
+  status: "terjadwal" | "belum_bayar";
+  tahun_buku_nama: string | null;
+  tahun_akademik_nama: string | null;
+}
+
+export interface ListTagihanDiskonTargetInput {
+  siswa_id?: string;
+  jenis_id?: string;
+}
+
+export const listTagihanDiskonTarget = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: ListTagihanDiskonTargetInput | undefined) => d ?? {})
+  .handler(async ({ data, context }): Promise<{ items: TagihanDiskonTarget[] }> => {
+    const admin = createAdminClient();
+    const { userId } = requireContext(context);
+    await requireRole(admin, userId, ROLE_PENGAJU);
+
+    if (!data.siswa_id || !data.jenis_id) return { items: [] };
+
+    const { data: jenis, error: jenisError } = await (admin as any)
+      .from("jenis_pembayaran")
+      .select("id,tipe")
+      .eq("id", data.jenis_id)
+      .eq("aktif", true)
+      .single();
+    if (jenisError || !jenis) throw new Error("Jenis pembayaran tidak ditemukan atau tidak aktif");
+    if (jenis.tipe !== "sekali") return { items: [] };
+
+    const { data: rows, error } = await (admin as any)
+      .from("tagihan")
+      .select(
+        "id,jatuh_tempo,nominal,nominal_bruto,nominal_diskon,status," +
+          "tahun_buku:tahun_ajaran_id(nama,tanggal_mulai,tanggal_selesai)," +
+          "tahun_akademik:tahun_akademik_id(nama)"
+      )
+      .eq("siswa_id", data.siswa_id)
+      .eq("jenis_id", data.jenis_id)
+      .in("status", ["terjadwal", "belum_bayar"])
+      .order("jatuh_tempo", { ascending: true });
+
+    if (error) throw new Error("Gagal memuat tagihan tujuan: " + error.message);
+
+    const items: TagihanDiskonTarget[] = [];
+    for (const row of rows ?? []) {
+      const tanggalEfektif = String(
+        row.jatuh_tempo || row.tahun_buku?.tanggal_mulai || ""
+      );
+      if (!tanggalEfektif) continue;
+      const periode = rentangBulan(tanggalEfektif);
+      items.push({
+        id: String(row.id),
+        jatuh_tempo: tanggalEfektif,
+        periode_mulai: periode.mulai,
+        periode_selesai: periode.selesai,
+        nominal_bruto: Number(row.nominal_bruto ?? row.nominal ?? 0),
+        nominal_diskon: Number(row.nominal_diskon ?? 0),
+        nominal_netto: Number(row.nominal ?? 0),
+        status: row.status as "terjadwal" | "belum_bayar",
+        tahun_buku_nama: row.tahun_buku?.nama ?? null,
+        tahun_akademik_nama: row.tahun_akademik?.nama ?? null,
+      });
+    }
+
+    return { items };
+  });
+
 // ── Pengajuan ──────────────────────────────────────────────────────────────
 
 export interface AjukanDiskonInput {
   siswa_id: string;
   skema_diskon_id: string;
   jenis_id: string;
+  /** Wajib untuk jenis pembayaran sekali. Server memvalidasi kepemilikan tagihannya. */
+  tagihan_id?: string | null;
   /** "yyyy-MM-dd". Dinormalisasi ke awal bulan oleh trigger DB. */
   periode_mulai: string;
   /** "yyyy-MM-dd". Dinormalisasi ke akhir bulan oleh trigger DB. */
@@ -386,8 +477,62 @@ export const ajukanDiskonSiswa = createServerFn({ method: "POST" })
     if (!data?.siswa_id || !data?.skema_diskon_id || !data?.jenis_id) {
       throw new Error("Siswa, skema diskon, dan jenis pembayaran wajib diisi");
     }
-    if (!data.periode_mulai || !data.periode_selesai) {
-      throw new Error("Periode berlaku keringanan wajib diisi");
+
+    const { data: jenis, error: jenisError } = await (admin as any)
+      .from("jenis_pembayaran")
+      .select("id,nama,tipe")
+      .eq("id", data.jenis_id)
+      .eq("aktif", true)
+      .single();
+    if (jenisError || !jenis) {
+      throw new Error("Jenis pembayaran tidak ditemukan atau tidak aktif");
+    }
+
+    let periodeMulai = data.periode_mulai;
+    let periodeSelesai = data.periode_selesai;
+
+    if (jenis.tipe === "sekali") {
+      if (!data.tagihan_id) {
+        throw new Error("Pilih tagihan tujuan untuk jenis pembayaran sekali");
+      }
+
+      const { data: target, error: targetError } = await (admin as any)
+        .from("tagihan")
+        .select(
+          "id,siswa_id,jenis_id,jatuh_tempo,status," +
+            "tahun_buku:tahun_ajaran_id(tanggal_mulai)"
+        )
+        .eq("id", data.tagihan_id)
+        .single();
+
+      if (targetError || !target) throw new Error("Tagihan tujuan tidak ditemukan");
+      if (target.siswa_id !== data.siswa_id || target.jenis_id !== data.jenis_id) {
+        throw new Error("Tagihan tujuan tidak sesuai dengan siswa atau jenis pembayaran");
+      }
+      if (!["terjadwal", "belum_bayar"].includes(String(target.status))) {
+        throw new Error("Tagihan tujuan sudah dibayar atau tidak dapat diberi keringanan otomatis");
+      }
+
+      const tanggalEfektif = String(
+        target.jatuh_tempo || target.tahun_buku?.tanggal_mulai || ""
+      );
+      if (!tanggalEfektif) {
+        throw new Error("Tanggal tagihan tujuan belum tersedia");
+      }
+      const periodeTarget = rentangBulan(tanggalEfektif);
+      periodeMulai = periodeTarget.mulai;
+      periodeSelesai = periodeTarget.selesai;
+    } else {
+      if (data.tagihan_id) {
+        throw new Error("Tagihan tujuan hanya digunakan untuk jenis pembayaran sekali");
+      }
+      if (!periodeMulai || !periodeSelesai) {
+        throw new Error("Periode berlaku keringanan wajib diisi");
+      }
+    }
+
+    if (!periodeMulai || !periodeSelesai || periodeSelesai < periodeMulai) {
+      throw new Error("Periode berlaku keringanan tidak valid");
     }
 
     const { data: skema, error: skemaError } = await (admin as any)
@@ -411,8 +556,8 @@ export const ajukanDiskonSiswa = createServerFn({ method: "POST" })
         throw new Error("Kebijakan keringanan tidak sesuai skema atau jenis pembayaran");
       }
       if (
-        data.periode_mulai < policyRow.berlaku_mulai ||
-        (policyRow.berlaku_selesai && data.periode_selesai > policyRow.berlaku_selesai)
+        periodeMulai < policyRow.berlaku_mulai ||
+        (policyRow.berlaku_selesai && periodeSelesai > policyRow.berlaku_selesai)
       ) {
         throw new Error("Periode pengajuan melewati masa berlaku kebijakan");
       }
@@ -443,8 +588,8 @@ export const ajukanDiskonSiswa = createServerFn({ method: "POST" })
         skema_diskon_id: data.skema_diskon_id,
         jenis_id: data.jenis_id,
         kebijakan_keringanan_id: data.kebijakan_keringanan_id ?? null,
-        periode_mulai: data.periode_mulai,
-        periode_selesai: data.periode_selesai,
+        periode_mulai: periodeMulai,
+        periode_selesai: periodeSelesai,
         tipe_snapshot: data.tipe ?? null,
         nilai: nilaiAktual,
         catatan: data.catatan ?? null,
