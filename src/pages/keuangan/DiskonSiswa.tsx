@@ -50,6 +50,7 @@ import {
   useSaranKeluarga,
   useKonfirmasiKeluarga,
   useKebijakanKeringananAktif,
+  useTagihanDiskonTarget,
   LABEL_KATEGORI,
   LABEL_STATUS,
   type KategoriDiskon,
@@ -76,6 +77,15 @@ function formatPeriode(mulai: string, selesai: string): string {
   const f = (t: string) =>
     new Date(t).toLocaleDateString("id-ID", { month: "short", year: "numeric" });
   return `${f(mulai)} – ${f(selesai)}`;
+}
+
+function formatTanggal(tanggal: string): string {
+  return new Date(`${tanggal}T00:00:00Z`).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 function nilaiTampil(row: SiswaDiskonRow): string {
@@ -341,6 +351,7 @@ function DialogAjukan({
   const [siswa, setSiswa] = useState<SiswaRingkas | null>(null);
   const [skemaId, setSkemaId] = useState("");
   const [jenisId, setJenisId] = useState("");
+  const [tagihanId, setTagihanId] = useState("");
   const [bulanMulai, setBulanMulai] = useState("");
   const [bulanSelesai, setBulanSelesai] = useState("");
   const [modeNilai, setModeNilai] = useState<"default" | "persen" | "nominal">("default");
@@ -349,12 +360,34 @@ function DialogAjukan({
   const [dokumenUrl, setDokumenUrl] = useState("");
 
   const skema = skemaList?.find((s) => s.id === skemaId);
+  const jenisDipilih = jenisList?.find((j: any) => j.id === jenisId);
+  const jenisSekali = jenisDipilih?.tipe === "sekali";
+  const {
+    data: tagihanTarget = [],
+    isLoading: sedangMemuatTagihanTarget,
+  } = useTagihanDiskonTarget({
+    siswa_id: siswa?.id,
+    jenis_id: jenisId || undefined,
+    enabled: jenisSekali,
+  });
+  const tagihanDipilih = tagihanTarget.find((t) => t.id === tagihanId);
+  const periodeMulaiAktif = jenisSekali
+    ? tagihanDipilih?.periode_mulai ?? ""
+    : bulanMulai
+      ? bulanKeTanggal(bulanMulai)
+      : "";
+  const periodeSelesaiAktif = jenisSekali
+    ? tagihanDipilih?.periode_selesai ?? ""
+    : bulanSelesai
+      ? bulanKeTanggal(bulanSelesai)
+      : "";
+
   const { data: kebijakanAktif } = useKebijakanKeringananAktif({
     siswa_id: siswa?.id,
     skema_diskon_id: skemaId || undefined,
     jenis_id: jenisId || undefined,
-    periode_mulai: bulanMulai ? bulanKeTanggal(bulanMulai) : undefined,
-    periode_selesai: bulanSelesai ? bulanKeTanggal(bulanSelesai) : undefined,
+    periode_mulai: periodeMulaiAktif || undefined,
+    periode_selesai: periodeSelesaiAktif || undefined,
   });
   const nilaiBakuAktif = Number(kebijakanAktif?.nilai ?? skema?.nilai_default ?? 0);
   const tipeBakuAktif = kebijakanAktif?.tipe ?? skema?.tipe ?? "nominal";
@@ -363,6 +396,7 @@ function DialogAjukan({
     setSiswa(null);
     setSkemaId("");
     setJenisId("");
+    setTagihanId("");
     setBulanMulai("");
     setBulanSelesai("");
     setModeNilai("default");
@@ -375,10 +409,14 @@ function DialogAjukan({
   if (!siswa) kekurangan.push("Siswa belum dipilih");
   if (!skemaId) kekurangan.push("Skema keringanan belum dipilih");
   if (!jenisId) kekurangan.push("Jenis pembayaran belum dipilih");
-  if (!bulanMulai) kekurangan.push("Bulan mulai belum diisi");
-  if (!bulanSelesai) kekurangan.push("Bulan selesai belum diisi");
-  if (bulanMulai && bulanSelesai && bulanSelesai < bulanMulai)
-    kekurangan.push("Bulan selesai lebih awal dari bulan mulai");
+  if (jenisSekali) {
+    if (!tagihanId) kekurangan.push("Tagihan tujuan belum dipilih");
+  } else {
+    if (!bulanMulai) kekurangan.push("Bulan mulai belum diisi");
+    if (!bulanSelesai) kekurangan.push("Bulan selesai belum diisi");
+    if (bulanMulai && bulanSelesai && bulanSelesai < bulanMulai)
+      kekurangan.push("Bulan selesai lebih awal dari bulan mulai");
+  }
   if (modeNilai !== "default") {
     const n = Number(nilai || 0);
     if (n <= 0) kekurangan.push("Nilai potongan harus lebih dari 0");
@@ -397,9 +435,10 @@ function DialogAjukan({
         siswa_id: siswa.id,
         skema_diskon_id: skemaId,
         jenis_id: jenisId,
+        tagihan_id: jenisSekali ? tagihanId : null,
         kebijakan_keringanan_id: kebijakanAktif?.id ?? null,
-        periode_mulai: bulanKeTanggal(bulanMulai),
-        periode_selesai: bulanKeTanggal(bulanSelesai),
+        periode_mulai: periodeMulaiAktif,
+        periode_selesai: periodeSelesaiAktif,
         tipe: modeNilai === "default" ? null : modeNilai,
         nilai: modeNilai === "default" ? null : Number(nilai || 0),
         catatan: catatan.trim() || null,
@@ -430,7 +469,13 @@ function DialogAjukan({
         <div className="space-y-4">
           <div>
             <Label>Siswa</Label>
-            <SiswaCombobox value={siswa} onChange={setSiswa} />
+            <SiswaCombobox
+              value={siswa}
+              onChange={(next) => {
+                setSiswa(next);
+                setTagihanId("");
+              }}
+            />
           </div>
 
           <div>
@@ -464,7 +509,15 @@ function DialogAjukan({
 
           <div>
             <Label>Jenis Pembayaran</Label>
-            <Select value={jenisId} onValueChange={setJenisId}>
+            <Select
+              value={jenisId}
+              onValueChange={(value) => {
+                setJenisId(value);
+                setTagihanId("");
+                setBulanMulai("");
+                setBulanSelesai("");
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Pilih jenis pembayaran..." />
               </SelectTrigger>
@@ -495,30 +548,97 @@ function DialogAjukan({
             </Alert>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="bulan-mulai">Mulai Bulan</Label>
-              <Input
-                id="bulan-mulai"
-                type="month"
-                value={bulanMulai}
-                onChange={(e) => setBulanMulai(e.target.value)}
-              />
+          {jenisSekali ? (
+            <div className="space-y-2">
+              <div>
+                <Label>Tagihan Tujuan / Tahun Ajaran</Label>
+                <Select
+                  value={tagihanId}
+                  onValueChange={setTagihanId}
+                  disabled={!siswa || !jenisId || sedangMemuatTagihanTarget}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        sedangMemuatTagihanTarget
+                          ? "Memuat tagihan..."
+                          : "Pilih tagihan yang akan diberi potongan..."
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tagihanTarget.map((target) => (
+                      <SelectItem key={target.id} value={target.id}>
+                        {target.tahun_akademik_nama ??
+                          target.tahun_buku_nama ??
+                          "Tagihan sekali"}{" "}
+                        · {formatRupiah(target.nominal_bruto)} · jatuh tempo{" "}
+                        {formatTanggal(target.jatuh_tempo)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {!sedangMemuatTagihanTarget &&
+                siswa &&
+                jenisId &&
+                tagihanTarget.length === 0 && (
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      Tidak ada tagihan aktif yang dapat diberi keringanan untuk
+                      siswa dan jenis pembayaran ini. Tagihan yang sudah lunas atau
+                      dibayar sebagian tidak ditawarkan sebagai target otomatis.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+              {tagihanDipilih && (
+                <Alert>
+                  <Check className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Tagihan terpilih:</strong>{" "}
+                    {tagihanDipilih.tahun_akademik_nama ??
+                      tagihanDipilih.tahun_buku_nama ??
+                      formatTanggal(tagihanDipilih.jatuh_tempo)}
+                    . Bruto {formatRupiah(tagihanDipilih.nominal_bruto)}, potongan
+                    yang sudah tercatat {formatRupiah(tagihanDipilih.nominal_diskon)},
+                    netto saat ini {formatRupiah(tagihanDipilih.nominal_netto)}.
+                    Periode keringanan ditetapkan otomatis dari jatuh tempo{" "}
+                    {formatTanggal(tagihanDipilih.jatuh_tempo)}.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
-            <div>
-              <Label htmlFor="bulan-selesai">Sampai Bulan</Label>
-              <Input
-                id="bulan-selesai"
-                type="month"
-                value={bulanSelesai}
-                onChange={(e) => setBulanSelesai(e.target.value)}
-              />
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground -mt-2">
-            Mis. Jul 2026 – Jun 2027 untuk dua semester, atau Jul – Des 2026
-            untuk satu semester saja.
-          </p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="bulan-mulai">Mulai Bulan</Label>
+                  <Input
+                    id="bulan-mulai"
+                    type="month"
+                    value={bulanMulai}
+                    onChange={(e) => setBulanMulai(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="bulan-selesai">Sampai Bulan</Label>
+                  <Input
+                    id="bulan-selesai"
+                    type="month"
+                    value={bulanSelesai}
+                    onChange={(e) => setBulanSelesai(e.target.value)}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground -mt-2">
+                Mis. Jul 2026 – Jun 2027 untuk dua semester, atau Jul – Des 2026
+                untuk satu semester saja.
+              </p>
+            </>
+          )}
 
           {skema && (
             <>
