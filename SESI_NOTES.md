@@ -1,3 +1,16 @@
+## Referensi kategori SPP — pembaruan tampilan (6 Oktober 2026)
+
+User mengecek /keuangan/referensi dan menyetujui rincian kategori/akun di tab
+Jenis Penerimaan. Scope hanya UI: satu master SPP aktif per lembaga tetap
+berlaku. Untuk SMP/SMA/MTA, baris jenis SPP serta form menampilkan akun aktif
+4102 Asrama, 4103 Non Asrama, dan akun master sebagai cadangan untuk status
+belum terverifikasi. Label form akun master diperjelas agar tidak dikira
+menentukan seluruh pendapatan SPP. Tidak ada SQL, perubahan konfigurasi,
+transaksi, atau reklasifikasi jurnal dalam pekerjaan ini. Deployment mengikuti
+workflow main pada PR berjudul "Tampilkan rincian kategori akun SPP di referensi".
+Status empat siswa, dua pembayaran Rp900.000, dan audit historis 4101 tetap
+seperti catatan di bawah; jangan menganggapnya selesai karena tampilan referensi.
+
 ## SPP asrama/non asrama — migration produksi berhasil (5 Oktober 2026)
 
 User menyetujui persiapan pemisahan SMP/SMA/MTA karena khawatir laporan
