@@ -9,6 +9,13 @@ export const SPP_CATEGORY_LABELS = {
 
 export type SppCategory = keyof typeof SPP_CATEGORY_LABELS;
 
+/** Sama dengan ruang lingkup pemetaan SPP bulanan pada database. */
+export function usesSppCategoryAccounts(name: unknown, frequency: unknown, departmentCode: unknown) {
+  return frequency === "bulanan"
+    && typeof name === "string" && /^spp([\s-]|$)/i.test(name.trim())
+    && ["SMP", "SMA", "MTA"].includes(String(departmentCode));
+}
+
 /** Hanya snapshot transaksi; status siswa sekarang bukan sumber histori. */
 export function sppCategory(snapshot: unknown, paymentName: unknown, departmentCode?: unknown): SppCategory | null {
   if (!isSppPaymentName(paymentName)) return null;

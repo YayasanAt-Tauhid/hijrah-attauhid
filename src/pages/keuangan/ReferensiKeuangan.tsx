@@ -30,6 +30,8 @@ import { toast } from "sonner";
 import TabTarifTagihan from "./TabTarifTagihan";
 import TabSkemaDiskon from "./TabSkemaDiskon";
 import TabKebijakanKeringanan from "./TabKebijakanKeringanan";
+import SppCategoryAccounts from "./SppCategoryAccounts";
+import { usesSppCategoryAccounts } from "@/lib/sppCategory";
 
 export default function ReferensiKeuangan() {
   return (
@@ -76,7 +78,7 @@ function TabJenisPembayaran() {
     if (filterLembaga === "__umum__") return data.filter((j: any) => !j.departemen_id);
     return data.filter((j: any) => j.departemen_id === filterLembaga);
   }, [data, filterLembaga]);
-  const { data: akunPendapatanList } = useAkunByJenis("pendapatan");
+  const { data: akunPendapatanList, isLoading: akunPendapatanLoading, isError: akunPendapatanError } = useAkunByJenis("pendapatan");
   const { data: akunLiabilitasList } = useAkunByJenis("liabilitas");
   const createMut = useCreateJenisPembayaran();
   const updateMut = useUpdateJenisPembayaran();
@@ -95,6 +97,10 @@ function TabJenisPembayaran() {
   const [tipe, setTipe] = useState("bulanan");
   const [tahunMasukDari, setTahunMasukDari] = useState("");
   const [tahunMasukSampai, setTahunMasukSampai] = useState("");
+  const formDepartment = lembagaList?.find(department => department.id === formDepartemenId);
+  const formUsesSppCategories = usesSppCategoryAccounts(nama, tipe, formDepartment?.kode);
+  const fallbackAccount = akunPendapatanList?.find(account => account.id === akunPendapatanId)
+    || (editItem?.akun_pendapatan?.id === akunPendapatanId ? editItem.akun_pendapatan : null);
 
   const openAdd = () => { setEditItem(null); setNama(""); setNominal(""); setKeterangan(""); setAktif(true); setFormDepartemenId(""); setAkunPendapatanId(""); setAkunDimukaId(""); setPerluDimuka(true); setTipe("bulanan"); setTahunMasukDari(""); setTahunMasukSampai(""); setDialogOpen(true); };
   const openEdit = (item: any) => {
@@ -133,8 +139,15 @@ function TabJenisPembayaran() {
       },
     },
     {
-      key: "akun_pendapatan", label: "Akun Pendapatan",
+      key: "akun_pendapatan", label: "Kategori / Akun Pendapatan",
       render: (_, r) => {
+        if (usesSppCategoryAccounts(r.nama, r.tipe, r.departemen?.kode)) {
+          return <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Pemetaan tagihan baru</p>
+            <SppCategoryAccounts accounts={akunPendapatanList} fallbackAccount={r.akun_pendapatan}
+              loading={akunPendapatanLoading} error={akunPendapatanError} />
+          </div>;
+        }
         const akun = (r as any).akun_pendapatan;
         if (akun) return <span className="text-sm">{akun.kode} - {akun.nama}</span>;
         return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">Belum diset</Badge>;
@@ -166,6 +179,12 @@ function TabJenisPembayaran() {
     <>
       <Card className="mt-4">
         <CardContent className="pt-6">
+          <Alert className="mb-4">
+            <AlertDescription>
+              SPP SMP, SMA, dan MTA memiliki kategori Asrama dan Non Asrama dalam satu jenis SPP per lembaga.
+              Kategori mengikuti status siswa saat tagihan dibuat. Kategori dan akun pada tagihan lama tetap mengikuti data yang sudah tersimpan.
+            </AlertDescription>
+          </Alert>
           <div className="flex flex-wrap items-end gap-2 mb-4">
             <div className="w-56">
               <Label className="text-xs">Filter Lembaga</Label>
@@ -203,7 +222,7 @@ function TabJenisPembayaran() {
         </CardContent>
       </Card>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editItem ? "Edit" : "Tambah"} Jenis Penerimaan</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div><Label>Nama</Label><Input value={nama} onChange={(e) => setNama(e.target.value)} /></div>
@@ -250,7 +269,7 @@ function TabJenisPembayaran() {
               </p>
             </div>
             <div>
-              <Label>Akun Pendapatan (untuk jurnal otomatis)</Label>
+              <Label>{formUsesSppCategories ? "Akun Cadangan SPP (kategori belum terverifikasi)" : "Akun Pendapatan (untuk jurnal otomatis)"}</Label>
               <SearchableSelect
                 value={akunPendapatanId || "__none__"}
                 onValueChange={(v) => setAkunPendapatanId(v === "__none__" ? "" : v)}
@@ -267,8 +286,18 @@ function TabJenisPembayaran() {
                   })) ?? []),
                 ]}
               />
-              <p className="text-xs text-muted-foreground mt-1">Akun yang di-kredit saat menerima pembayaran jenis ini</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {formUsesSppCategories
+                  ? "Pilihan ini dipakai untuk tagihan baru yang status asrama siswanya belum terverifikasi. Asrama dan Non Asrama memakai akun kategori di bawah."
+                  : "Akun yang di-kredit saat menerima pembayaran jenis ini"}
+              </p>
             </div>
+            {formUsesSppCategories && <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+              <p className="text-sm font-medium">Pemetaan SPP untuk tagihan baru</p>
+              <SppCategoryAccounts accounts={akunPendapatanList} fallbackAccount={fallbackAccount}
+                loading={akunPendapatanLoading} error={akunPendapatanError} />
+              <p className="text-xs text-muted-foreground">Kategori mengikuti status asrama siswa saat tagihan dibuat. Mengubah pilihan akun cadangan tidak mengubah akun pada tagihan lama.</p>
+            </div>}
             <div className="space-y-2">
     <div className="flex items-center gap-2">
       <Switch
