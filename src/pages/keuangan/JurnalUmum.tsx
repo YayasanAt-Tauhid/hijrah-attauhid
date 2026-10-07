@@ -13,7 +13,7 @@ import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FilterToolbar, ActiveFilter } from "@/components/shared/FilterToolbar";
 import { Badge } from "@/components/ui/badge";
-import { useJurnalList, useJurnalDetail, useCreateJurnal, useUpdateJurnal, useDeleteJurnal, usePostJurnal, useAkunRekening, useKoreksiJurnal, useJurnalDikoreksiIds } from "@/hooks/useJurnal";
+import { useJurnalList, useJurnalPenginput, useJurnalDetail, useCreateJurnal, useUpdateJurnal, useDeleteJurnal, usePostJurnal, useAkunRekening, useKoreksiJurnal, useJurnalDikoreksiIds } from "@/hooks/useJurnal";
 import { AkunCombobox } from "@/components/shared/AkunCombobox";
 import { RupiahInput } from "@/components/shared/RupiahInput";
 import { formatRupiah, useLembaga } from "@/hooks/useKeuangan";
@@ -55,10 +55,12 @@ export default function JurnalUmum() {
   const [statusFilter, setStatusFilter] = useState<"semua" | "draft" | "posted">("semua");
   const [sembunyikanKoreksi, setSembunyikanKoreksi] = useState(true);
   const [akunFilter, setAkunFilter] = useState("");
+  const [penginputId, setPenginputId] = useState("");
   const [tanggalDari, setTanggalDari] = useState(defaultDari);
   const [tanggalSampai, setTanggalSampai] = useState(defaultSampai);
   const { data: lembagaList } = useLembaga();
-  const { data: jurnalList, isLoading } = useJurnalList(tanggalDari || undefined, tanggalSampai || undefined, departemenId || undefined);
+  const { data: jurnalList, isLoading } = useJurnalList(tanggalDari || undefined, tanggalSampai || undefined, departemenId || undefined, penginputId || undefined);
+  const { data: penginputList, isLoading: penginputLoading, isError: penginputError } = useJurnalPenginput();
   const { data: dikoreksiIds } = useJurnalDikoreksiIds();
   const { data: akunList } = useAkunRekening();
   const createMut = useCreateJurnal();
@@ -328,7 +330,17 @@ export default function JurnalUmum() {
   const jurnalPosted = filteredJurnal.filter((j: any) => j.status === "posted").length;
   const jurnalDraft = filteredJurnal.filter((j: any) => j.status === "draft").length;
 
+  const penginputNama = penginputId === "__online__"
+    ? "Otomatis (Online Payment)"
+    : penginputId === "__unknown__"
+      ? "Belum tercatat"
+      : penginputList?.find((p) => p.id === penginputId)?.nama || "Penginput terpilih";
+
   const activeFilters: ActiveFilter[] = [
+    ...(penginputId ? [{
+      key: "penginput", label: "Diinput Oleh", value: penginputNama,
+      onClear: () => setPenginputId(""),
+    }] : []),
     ...(departemenId ? [{
       key: "lembaga", label: "Lembaga", value: lembagaNama?.kode || lembagaNama?.nama || "",
       onClear: () => setDepartemenId(""),
@@ -519,6 +531,22 @@ export default function JurnalUmum() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="filter-penginput-jurnal" className="text-xs">Diinput Oleh</Label>
+              <Select value={penginputId || "__all__"} onValueChange={(v) => setPenginputId(v === "__all__" ? "" : v)}>
+                <SelectTrigger id="filter-penginput-jurnal" className="h-8 text-xs"><SelectValue placeholder="Semua Penginput" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Semua Penginput</SelectItem>
+                  {penginputList?.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.nama}</SelectItem>
+                  ))}
+                  <SelectItem value="__online__">Otomatis (Online Payment)</SelectItem>
+                  <SelectItem value="__unknown__">Belum tercatat</SelectItem>
+                </SelectContent>
+              </Select>
+              {penginputLoading && <p className="text-xs text-muted-foreground">Memuat nama penginput...</p>}
+              {penginputError && <p className="text-xs text-destructive">Nama penginput gagal dimuat. Muat ulang halaman.</p>}
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Status</Label>
