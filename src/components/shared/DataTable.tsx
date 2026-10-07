@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -26,6 +26,8 @@ interface DataTableProps<T> {
   data: T[];
   searchable?: boolean;
   searchPlaceholder?: string;
+  searchKeys?: string[];
+  horizontalNavigation?: boolean;
   exportable?: boolean;
   exportFilename?: string;
   exportColumns?: ExportColumn[];
@@ -45,8 +47,11 @@ export function DataTable<T extends Record<string, unknown>>({
   columns, data, searchable = true, searchPlaceholder = "Cari...",
   exportable = false, exportFilename = "data", exportColumns, exportSheetName = "Data", selectable = false,
   loading = false, pageSize = 10, onRowClick, onSelectionChange,
-  actions, emptyMessage = "Tidak ada data",
+  actions, emptyMessage = "Tidak ada data", searchKeys, horizontalNavigation = false,
 }: DataTableProps<T>) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollPosition, setScrollPosition] = useState(0);
+  const [scrollMaximum, setScrollMaximum] = useState(0);
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
@@ -58,8 +63,8 @@ export function DataTable<T extends Record<string, unknown>>({
     if (search) {
       const q = search.toLowerCase();
       result = result.filter((row) =>
-        columns.some((col) => {
-          const val = row[col.key];
+        (searchKeys || columns.map((col) => col.key)).some((key) => {
+          const val = row[key];
           return val != null && String(val).toLowerCase().includes(q);
         })
       );
@@ -73,10 +78,32 @@ export function DataTable<T extends Record<string, unknown>>({
       });
     }
     return result;
-  }, [data, search, sortKey, sortDir, columns]);
+  }, [data, search, sortKey, sortDir, columns, searchKeys]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paged = filtered.slice(page * pageSize, (page + 1) * pageSize);
+  const currentPage = Math.min(page, totalPages - 1);
+  const paged = filtered.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!horizontalNavigation || !element || loading) return;
+    const update = () => {
+      setScrollMaximum(Math.max(0, element.scrollWidth - element.clientWidth));
+      setScrollPosition(element.scrollLeft);
+    };
+    update();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(element);
+    const table = element.querySelector("table");
+    if (table) observer?.observe(table);
+    window.addEventListener("resize", update);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", update); };
+  }, [horizontalNavigation, columns, data, loading]);
+  const scrollTo = (position: number) => {
+    const element = scrollRef.current;
+    if (!element) return;
+    element.scrollLeft = Math.max(0, Math.min(scrollMaximum, position));
+    setScrollPosition(element.scrollLeft);
+  };
 
   const toggleSort = (key: string) => {
     if (sortKey === key) {
@@ -90,7 +117,8 @@ export function DataTable<T extends Record<string, unknown>>({
 
   const toggleSelect = (idx: number) => {
     const next = new Set(selected);
-    next.has(idx) ? next.delete(idx) : next.add(idx);
+    if (next.has(idx)) next.delete(idx);
+    else next.add(idx);
     setSelected(next);
     onSelectionChange?.(Array.from(next).map((i) => paged[i]));
   };
@@ -145,9 +173,14 @@ export function DataTable<T extends Record<string, unknown>>({
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-lg border overflow-x-auto">
-        <Table>
+      {/* SPMB exposes navigation before the table, without requiring a trip to its bottom. */}
+      {horizontalNavigation && scrollMaximum > 0 && <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
+        <Button type="button" variant="outline" size="icon" className="h-8 w-8 shrink-0" aria-label="Geser kolom ke kiri" disabled={scrollPosition <= 0} onClick={() => scrollTo(scrollPosition - (scrollRef.current?.clientWidth || 400) * 0.7)}><ChevronLeft className="h-4 w-4" /></Button>
+        <input aria-label="Posisi kolom tabel" type="range" className="min-w-0 flex-1 accent-primary" min={0} max={scrollMaximum} value={scrollPosition} onChange={(event) => scrollTo(Number(event.target.value))} />
+        <Button type="button" variant="outline" size="icon" className="h-8 w-8 shrink-0" aria-label="Geser kolom ke kanan" disabled={scrollPosition >= scrollMaximum - 1} onClick={() => scrollTo(scrollPosition + (scrollRef.current?.clientWidth || 400) * 0.7)}><ChevronRight className="h-4 w-4" /></Button>
+      </div>}
+      <div ref={scrollRef} tabIndex={horizontalNavigation ? 0 : undefined} aria-label={horizontalNavigation ? "Tabel pendaftar, dapat digeser ke samping" : undefined} onScroll={horizontalNavigation ? (event) => setScrollPosition(event.currentTarget.scrollLeft) : undefined} className="max-w-full rounded-lg border overflow-x-auto">
+        <Table containerClassName={horizontalNavigation ? "overflow-visible" : undefined}>
           <TableHeader>
             <TableRow className="bg-muted/50">
               {selectable && (
@@ -216,21 +249,21 @@ export function DataTable<T extends Record<string, unknown>>({
       <div className="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
         <span>
           {filtered.length > 0
-            ? `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, filtered.length)} dari ${filtered.length}`
+            ? `${currentPage * pageSize + 1}–${Math.min((currentPage + 1) * pageSize, filtered.length)} dari ${filtered.length}`
             : "0 data"}
         </span>
         <div className="flex items-center gap-1 self-end sm:self-auto">
-          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page === 0} onClick={() => setPage(0)}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === 0} onClick={() => setPage(0)}>
             <ChevronsLeft className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page === 0} onClick={() => setPage(page - 1)}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="px-2 whitespace-nowrap">Hal {page + 1}/{totalPages}</span>
-          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>
+          <span className="px-2 whitespace-nowrap">Hal {currentPage + 1}/{totalPages}</span>
+          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage >= totalPages - 1} onClick={() => setPage(currentPage + 1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page >= totalPages - 1} onClick={() => setPage(totalPages - 1)}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage >= totalPages - 1} onClick={() => setPage(totalPages - 1)}>
             <ChevronsRight className="h-4 w-4" />
           </Button>
         </div>

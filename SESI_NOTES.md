@@ -1,3 +1,19 @@
+## SPMB — daftar ringkas dan statistik terpisah (7 Oktober 2026)
+
+Pengguna menyetujui perbaikan setelah melaporkan tabel sulit digeser, panel
+Status Verifikasi Data SPMB mengganggu, dan kartu Diterima kehilangan siswa
+sesudah aktivasi. Penerimaan dihitung kumulatif dari pendaftaran SPMB; aktivasi
+dibedakan agar siswa internal yang masih aktif di lembaga asal tidak keliru
+dianggap aktif di tujuan. Halaman statistik dan daftar memakai dataset serta
+cakupan akses RPC yang sama, dengan filter periode/lembaga di URL.
+Tidak ada perubahan skema, transaksi, atau data produksi. Pemeriksaan data
+tetap melalui detail/edit siswa. Deployment melalui workflow main setelah
+332 tes regresi dan build berhasil. Pemeriksaan browser memakai fixture
+terisolasi tanpa akses/mutasi produksi; geser kolom, nama tetap terlihat,
+menu tindakan, checklist, dan filter kartu penerimaan/aktivasi lulus pada
+desktop serta viewport 390 px. Lint repo memiliki masalah bawaan; file baru
+bersih dan masalah any SPMB berkurang dari 85 menjadi 68.
+
 ## Referensi kategori SPP — pembaruan tampilan (6 Oktober 2026)
 
 User mengecek /keuangan/referensi dan menyetujui rincian kategori/akun di tab

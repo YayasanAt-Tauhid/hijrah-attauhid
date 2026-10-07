@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "@/lib/router-compat";
+import { useNavigate, useSearchParams } from "@/lib/router-compat";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
-import { StatsCard } from "@/components/shared/StatsCard";
+import { SpmbStatistics } from "@/components/akademik/SpmbStatistics";
+import { isSpmbAccepted, isSpmbActivated, matchesSpmbStatus } from "@/lib/spmbAdmission";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -32,6 +34,9 @@ import {
 } from "@/lib/spmbPolicy";
 import {
   AlertTriangle,
+  BarChart3,
+  ChevronDown,
+  Columns3,
   ArrowRightLeft,
   CheckCircle2,
   Clock,
@@ -77,6 +82,10 @@ function formatTanggal(value: unknown): string {
 type KesiapanPenerimaan = { siap: boolean; kekurangan: string[] };
 
 type SpmbFilterState = {
+  tahun: string;
+  gelombang: string;
+  asrama: string;
+  sumber: string;
   departemen: string;
   status: string;
   jenisKelamin: string;
@@ -89,6 +98,10 @@ type SpmbFilterState = {
 };
 
 const DEFAULT_FILTERS: SpmbFilterState = {
+  tahun: "all",
+  gelombang: "all",
+  asrama: "all",
+  sumber: "all",
   departemen: "all",
   status: "all",
   jenisKelamin: "all",
@@ -183,9 +196,13 @@ function normalizeDigits(value: string) {
   return value.replace(/\D/g, "");
 }
 
-export default function SPMB() {
+export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const [extraColumns, setExtraColumns] = useState<string[]>([]);
+  const [readinessRow, setReadinessRow] = useState<Record<string, unknown> | null>(null);
   const { role } = useAuth();
   const canChangeSpmbTarget = role === "admin" || role === "admin_tu";
   const angkatanQuery = useAngkatan();
@@ -236,7 +253,19 @@ export default function SPMB() {
   const [methodEditRow, setMethodEditRow] = useState<Record<string, unknown> | null>(null);
   const [methodEditValue, setMethodEditValue] = useState<"online" | "offline">("online");
   const [methodEditLoading, setMethodEditLoading] = useState(false);
-  const [filters, setFilters] = useState<SpmbFilterState>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<SpmbFilterState>(() => {
+    const initial = { ...DEFAULT_FILTERS };
+    for (const key of Object.keys(initial) as Array<keyof SpmbFilterState>) initial[key] = searchParams.get(key) || "all";
+    return initial;
+  });
+  // Kartu statistik dan tombol kembali browser memakai filter yang sama di URL.
+  const filterSearch = searchParams.toString();
+  useEffect(() => {
+    const params = new URLSearchParams(filterSearch);
+    const next = { ...DEFAULT_FILTERS };
+    for (const key of Object.keys(next) as Array<keyof SpmbFilterState>) next[key] = params.get(key) || "all";
+    setFilters(next);
+  }, [filterSearch]);
   const [sortMode, setSortMode] = useState("registration_desc");
 
   useEffect(() => {
@@ -317,11 +346,30 @@ export default function SPMB() {
     closeRegistration();
   };
 
-  const setFilter = (key: keyof SpmbFilterState, value: string) =>
-    setFilters((current) => ({ ...current, [key]: value }));
-  const resetFilters = () => setFilters({ ...DEFAULT_FILTERS });
+  const setFilter = (key: keyof SpmbFilterState, value: string) => {
+    const next = { ...filters, [key]: value };
+    setFilters(next);
+    const params = new URLSearchParams();
+    for (const [name, selected] of Object.entries(next)) if (selected !== "all") params.set(name, selected);
+    setSearchParams(params, { replace: true });
+  };
+  const resetFilters = () => { setFilters({ ...DEFAULT_FILTERS }); setSearchParams("", { replace: true }); };
+  const openListFromStatistics = (selected: Record<string, string> = {}) => {
+    const params = new URLSearchParams();
+    for (const key of ["departemen", "tahun", "gelombang"] as const) if (filters[key] !== "all") params.set(key, filters[key]);
+    for (const [key, value] of Object.entries(selected)) params.set(key, value);
+    navigate(`/akademik/spmb${params.size ? `?${params}` : ""}`);
+  };
+  const waveQuery = useQuery({
+    queryKey: ["spmb", "waves", "statistics"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("spmb_gelombang").select("id,nama").order("urutan");
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
-  const { data: calonList = [], isLoading } = useQuery({
+  const { data: calonList = [], isLoading, error: listError } = useQuery({
     queryKey: ["siswa", "calon"],
     queryFn: async () => {
       const { data: visibleRows, error: visibleError } = await (supabase as any).rpc("spmb_visible_siswa_ids");
@@ -426,6 +474,7 @@ export default function SPMB() {
           _spmbStatusKelulusan: detail?.spmb_status_kelulusan || null,
           _spmbTanggalDaftarUlang: detail?.spmb_tanggal_daftar_ulang || null,
           _spmbTahunAjaranId: detail?.tahun_ajaran_id || null,
+          _spmbGelombangId: detail?.spmb_gelombang_id || null,
           _spmbKelasTujuanId: detail?.spmb_kelas_tujuan_id || null,
           _spmbTanggalAktivasi: detail?.spmb_tanggal_aktivasi || null,
           _spmbRegisteredAt: detail?.spmb_registered_at || s.created_at || null,
@@ -556,45 +605,27 @@ export default function SPMB() {
     )
   );
 
-  const statistikCalonList = filters.departemen === "all"
-    ? calonList
-    : calonList.filter((s: any) => s.departemen_id === filters.departemen);
-  const statistikDepartemen = filters.departemen === "all"
-    ? null
-    : spmbDepartemenList.find((dept: any) => dept.id === filters.departemen);
-  const statistikLabel = statistikDepartemen ? labelDepartemenSpmb(statistikDepartemen) : "Semua lembaga";
-
-  const calonCount = statistikCalonList.filter((s: any) => s.status === "calon").length;
-  const diterimaCount = statistikCalonList.filter((s: any) => s.status === "diterima").length;
-  const nisKosongCount = statistikCalonList.filter((s: any) => s.status === "diterima" && !s.nis).length;
-  const asramaCount = statistikCalonList.filter((s: any) => s._spmbDetail?.status_asrama === "asrama").length;
-  const nonAsramaCount = statistikCalonList.filter((s: any) => s._spmbDetail?.status_asrama === "non_asrama").length;
-  const lakiCount = statistikCalonList.filter((s: any) => s.jenis_kelamin === "L").length;
-  const perempuanCount = statistikCalonList.filter((s: any) => s.jenis_kelamin === "P").length;
-  const onlineCount = statistikCalonList.filter((s: any) => s._spmbSource === "online").length;
-  const offlineCount = statistikCalonList.filter((s: any) => s._spmbSource === "offline").length;
-  const unknownSourceCount = statistikCalonList.filter((s: any) => s._spmbSource === "unknown").length;
-  const belumSiapCount = statistikCalonList.filter(
-    (s: any) => s.status === "calon" && !getKesiapanPenerimaan(s as Record<string, unknown>).siap,
-  ).length;
-  const pendaftarPerLembaga = spmbDepartemenList.map((dept: any) => ({
-    id: dept.id as string,
-    kode: String(dept.kode || dept.nama || "Lembaga").trim().toUpperCase(),
-    nama: String(dept.nama || dept.kode || "Lembaga").trim(),
-    jumlah: calonList.filter((s: any) => s.departemen_id === dept.id).length,
-  }));
+  const statistikCalonList = calonList.filter((row: Record<string, unknown>) =>
+    (filters.departemen === "all" || row.departemen_id === filters.departemen)
+    && (filters.tahun === "all" || row._spmbTahunAjaranId === filters.tahun)
+    && (filters.gelombang === "all" || row._spmbGelombangId === filters.gelombang),
+  );
   const hasActiveFilters = Object.values(filters).some((value) => value !== "all");
-  const filteredCalonList = calonList.filter((s: any) => {
-    if (filters.departemen !== "all" && s.departemen_id !== filters.departemen) return false;
-    if (filters.status !== "all" && s.status !== filters.status) return false;
+  const advancedFilterCount = Object.entries(filters).filter(([key, value]) =>
+    !["departemen", "status"].includes(key) && value !== "all",
+  ).length;
+  const filteredCalonList = statistikCalonList.filter((s: Record<string, unknown>) => {
+    if (!matchesSpmbStatus(s, filters.status)) return false;
     if (filters.jenisKelamin !== "all" && s.jenis_kelamin !== filters.jenisKelamin) return false;
+    if (filters.asrama !== "all" && s._spmbAsrama !== filters.asrama) return false;
+    if (filters.sumber !== "all" && s._spmbSource !== filters.sumber) return false;
     if (filters.tes !== "all" && Boolean(s._spmbTanggalTes) !== (filters.tes === "sudah")) return false;
     if (filters.kelulusan === "lulus" && s._spmbStatusKelulusan !== "lulus") return false;
     if (filters.kelulusan === "tidak_lulus" && s._spmbStatusKelulusan !== "tidak_lulus") return false;
     if (filters.kelulusan === "belum" && s._spmbStatusKelulusan) return false;
     if (filters.daftarUlang !== "all" && Boolean(s._spmbTanggalDaftarUlang) !== (filters.daftarUlang === "sudah")) return false;
     if (filters.biaya !== "all" && s._biayaSort !== filters.biaya) return false;
-    if (filters.kesiapan !== "all" && getKesiapanPenerimaan(s as Record<string, unknown>).siap !== (filters.kesiapan === "siap")) return false;
+    if (filters.kesiapan !== "all" && getKesiapanPenerimaan(s).siap !== (filters.kesiapan === "siap")) return false;
     if (filters.verifikasi !== "all" && Boolean(s.terverifikasi) !== (filters.verifikasi === "sudah")) return false;
     return true;
   });
@@ -1055,7 +1086,7 @@ export default function SPMB() {
     {
       key: "id",
       label: "Aksi",
-      className: "w-72",
+      className: "w-36",
       render: (_, row) => {
         const status = row.status as string;
         const internalStudent = row._spmbInternal === true;
@@ -1077,120 +1108,80 @@ export default function SPMB() {
           && detail?.spmb_status_kelulusan === "lulus"
           && Boolean(detail?.spmb_tanggal_daftar_ulang)
           && !detail?.spmb_tanggal_aktivasi;
+        const activated = isSpmbActivated(row);
         return (
-          <div className="flex flex-wrap gap-1" onClick={(event) => event.stopPropagation()}>
-            <Button size="sm" variant="outline" onClick={() => openSpmbDetail(row)} title="Lihat detail pendaftaran SPMB"><Eye className="h-3 w-3" /></Button>
-            <Button size="sm" variant="outline" onClick={() => navigate(`/akademik/siswa/${row.id}/edit`)} title="Edit data lengkap"><Pencil className="h-3 w-3" /></Button>
-            {canChangeSpmbTarget
-              && !detail?.spmb_tanggal_aktivasi
-              && detail?.spmb_status_pendaftaran !== "selesai"
-              && (internalStudent || row._academicStatus !== "aktif")
-              && (
-                <span title={row._pmbLunas && !row._pmbGratis ? "Sudah ada pembayaran pendaftaran; koreksi tujuan harus diselesaikan bersama bagian keuangan." : "Ubah lembaga/jenjang tujuan SPMB"}>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={Boolean(row._pmbLunas && !row._pmbGratis)}
-                    onClick={() => openTargetChange(row)}
-                  >
-                    <ArrowRightLeft className="h-3 w-3" />
-                  </Button>
-                </span>
-              )}
-            {!detail?.spmb_tanggal_tes && <Button size="sm" variant="outline" disabled={tesLoading} onClick={() => handleMilestone(row, "tes", "Sudah Tes")}>{tesLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Sudah Tes"}</Button>}
-            {detail?.spmb_tanggal_tes && !detail?.spmb_status_kelulusan && <>
-              <Button size="sm" variant="outline" disabled={lulusLoading} onClick={() => handleMilestone(row, "lulus", "Lulus")}>{lulusLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Lulus"}</Button>
-              <Button size="sm" variant="outline" className="border-destructive/40 text-destructive" disabled={milestoneLoadingId === `${row.id}:tidak_lulus`} onClick={() => handleMilestone(row, "tidak_lulus", "Tidak Lulus")}>{milestoneLoadingId === `${row.id}:tidak_lulus` ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Tidak Lulus"}</Button>
-            </>}
-            {detail?.spmb_status_kelulusan === "lulus" && !detail?.spmb_tanggal_daftar_ulang && <Button size="sm" variant="outline" disabled={daftarUlangLoading} onClick={() => handleMilestone(row, "daftar_ulang", "Daftar Ulang")}>{daftarUlangLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Daftar Ulang"}</Button>}
-            {status === "calon" && (
-              <span title={kesiapan.kekurangan.length ? `Lengkapi: ${kesiapan.kekurangan.join(", ")}` : "Terima calon murid"}>
-                <Button size="sm" variant="outline" disabled={loading || !kesiapan.siap} onClick={() => handleTerima(row)}>{loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Terima"}</Button>
-              </span>
-            )}
-            {!internalStudent && status === "diterima" && !row.nis && <Button size="sm" variant="outline" className="border-warning/50 text-warning hover:bg-warning/10" disabled={loading} onClick={() => handleBuatNIS(row)}>{loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <><RefreshCw className="mr-1 h-3 w-3" />Buat NIS</>}</Button>}
-            {!internalStudent && status === "diterima" && (
-              <span title={!row.nis ? "Buat NIS terlebih dahulu" : "Aktifkan murid"}>
-                <Button size="sm" disabled={loading || !row.nis} onClick={() => handleAktifkan(row)}>Aktifkan</Button>
-              </span>
-            )}
-            {internalReadyForActivation && (
-              <span title={activationDateReady ? "Pilih kelas tujuan dan selesaikan perpindahan jenjang" : `Aktivasi baru dapat dilakukan mulai ${formatTanggal(targetYearForRow?.tanggal_mulai)}`}>
-                <Button
-                  size="sm"
-                  disabled={!activationDateReady}
-                  onClick={() => openInternalActivation(row)}
-                >
-                  Aktifkan ke Jenjang
-                </Button>
-              </span>
-            )}
-            {internalStudent && detail?.spmb_tanggal_aktivasi && (
-              <span className="inline-flex items-center rounded-md border border-success/30 bg-success/10 px-2 py-1 text-xs text-success" title={`Diaktifkan ${formatTanggal(detail.spmb_tanggal_aktivasi)}`}>
-                Aktif di Tujuan
-              </span>
-            )}
-            {role === "admin"
-              && detail?.spmb_status_kelulusan === "lulus"
-              && (
-                (!internalStudent && row._academicStatus === "aktif")
-                || (internalStudent && Boolean(detail?.spmb_tanggal_aktivasi))
-              )
-              && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => navigate(`/keuangan/rencana-siswa-baru?siswa=${row.id}`)}
-                  title="Atur tagihan awal dan SPP sampai akhir jenjang"
-                >
-                  Atur Tagihan
-                </Button>
-              )}
+          <div onClick={(event) => event.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild><Button size="sm" variant="outline">Tindakan<ChevronDown className="ml-1 h-3 w-3" /></Button></DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuItem onSelect={() => openSpmbDetail(row)}><Eye className="mr-2 h-4 w-4" />Detail pendaftaran</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => navigate(`/akademik/siswa/${row.id}/edit`)}><Pencil className="mr-2 h-4 w-4" />Edit / periksa data</DropdownMenuItem>
+                {canChangeSpmbTarget && !activated && !detail?.spmb_tanggal_aktivasi && detail?.spmb_status_pendaftaran !== "selesai" && (internalStudent || row._academicStatus !== "aktif") && (
+                  <DropdownMenuItem title="Ubah lembaga/jenjang tujuan SPMB" disabled={Boolean(row._pmbLunas && !row._pmbGratis)} onSelect={() => openTargetChange(row)}><ArrowRightLeft className="mr-2 h-4 w-4" />Ubah tujuan SPMB</DropdownMenuItem>
+                )}
+                {!activated && <>
+                  <DropdownMenuSeparator />
+                  {!detail?.spmb_tanggal_tes && <DropdownMenuItem disabled={tesLoading} onSelect={() => handleMilestone(row, "tes", "Sudah Tes")}>Catat sudah tes</DropdownMenuItem>}
+                  {detail?.spmb_tanggal_tes && !detail?.spmb_status_kelulusan && <>
+                    <DropdownMenuItem disabled={lulusLoading} onSelect={() => handleMilestone(row, "lulus", "Lulus")}>Catat lulus tes</DropdownMenuItem>
+                    <DropdownMenuItem disabled={milestoneLoadingId === `${row.id}:tidak_lulus`} onSelect={() => handleMilestone(row, "tidak_lulus", "Tidak Lulus")}>Catat tidak lulus tes</DropdownMenuItem>
+                  </>}
+                  {detail?.spmb_status_kelulusan === "lulus" && !detail?.spmb_tanggal_daftar_ulang && <DropdownMenuItem disabled={daftarUlangLoading} onSelect={() => handleMilestone(row, "daftar_ulang", "Daftar Ulang")}>Catat daftar ulang</DropdownMenuItem>}
+                  {status === "calon" && <>
+                    <DropdownMenuItem disabled={loading || !kesiapan.siap} onSelect={() => handleTerima(row)}>Terima calon murid</DropdownMenuItem>
+                    {!kesiapan.siap && <DropdownMenuItem onSelect={() => setReadinessRow(row)} className="text-warning">Lihat {kesiapan.kekurangan.length} kekurangan</DropdownMenuItem>}
+                  </>}
+                  {!internalStudent && status === "diterima" && !row.nis && <DropdownMenuItem disabled={loading} onSelect={() => handleBuatNIS(row)}>Buat NIS</DropdownMenuItem>}
+                  {!internalStudent && status === "diterima" && <DropdownMenuItem disabled={loading || !row.nis} onSelect={() => handleAktifkan(row)}>Aktifkan murid</DropdownMenuItem>}
+                  {internalReadyForActivation && <>
+                    <DropdownMenuItem disabled={!activationDateReady} onSelect={() => openInternalActivation(row)}>Aktifkan ke jenjang tujuan</DropdownMenuItem>
+                    {!activationDateReady && <DropdownMenuLabel className="whitespace-normal text-xs font-normal text-muted-foreground">Aktivasi mulai {formatTanggal(targetYearForRow?.tanggal_mulai)}</DropdownMenuLabel>}
+                  </>}
+                </>}
+                {role === "admin" && detail?.spmb_status_kelulusan === "lulus" && ((!internalStudent && row._academicStatus === "aktif") || (internalStudent && Boolean(detail?.spmb_tanggal_aktivasi))) && <>
+                  <DropdownMenuSeparator /><DropdownMenuItem onSelect={() => navigate(`/keuangan/rencana-siswa-baru?siswa=${row.id}`)}>Atur tagihan</DropdownMenuItem>
+                </>}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         );
       },
     },
     {
       key: "status",
-      label: "Status",
+      label: "Seleksi & aktivasi",
       sortable: true,
-      render: (value, row) => {
-        const status = value as string;
-        const colors: Record<string, string> = {
-          calon: "bg-warning/15 text-warning border-warning/30",
-          diterima: "bg-info/15 text-info border-info/30",
-          selesai: "bg-success/15 text-success border-success/30",
-        };
-        return (
-          <div className="flex items-center gap-1.5">
-            <span className={`rounded-full border px-2 py-0.5 text-xs ${colors[status] || ""}`}>{status}</span>
-            {row._spmbInternal && (
-              <span className="rounded-full border border-info/30 bg-info/10 px-1.5 py-0.5 text-xs text-info" title={`Siswa internal masih aktif di ${row._academicLembagaNama || "lembaga asal"}`}>Internal</span>
-            )}
-            {row.terverifikasi && (
-              <span className="inline-flex items-center gap-0.5 rounded-full border border-success/30 bg-success/15 px-1.5 py-0.5 text-xs text-success" title="Sudah diverifikasi pada Data SPMB">
-                <CheckCircle2 className="h-3 w-3" />Verified
-              </span>
-            )}
-          </div>
-        );
-      },
+      render: (value, row) => (
+        <div className="space-y-1 text-xs">
+          <span className={`inline-flex rounded-full border px-2 py-0.5 ${isSpmbAccepted(row) ? "border-success/30 bg-success/10 text-success" : "border-warning/30 bg-warning/10 text-warning"}`}>
+            {isSpmbActivated(row) ? "Diterima · Aktif" : isSpmbAccepted(row) ? "Diterima · Belum aktif" : "Calon"}
+          </span>
+          <p className={row._spmbStatusKelulusan === "tidak_lulus" ? "text-destructive" : "text-muted-foreground"}>
+            {row._spmbStatusKelulusan === "lulus" ? "Lulus tes" : row._spmbStatusKelulusan === "tidak_lulus" ? "Tidak lulus tes" : row._spmbTanggalTes ? "Sudah tes · Hasil belum diisi" : "Belum tes"}
+          </p>
+          <p className="text-muted-foreground">{row._spmbTanggalDaftarUlang ? "Sudah daftar ulang" : "Belum daftar ulang"}</p>
+        </div>
+      ),
     },
     {
       key: "_kesiapanSort",
-      label: "Kesiapan",
+      label: "Kelengkapan data",
       sortable: true,
       render: (_, row) => {
         const kesiapan = getKesiapanPenerimaan(row);
-        return kesiapan.siap
-          ? <span className="inline-flex items-center gap-1 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5" />Siap diterima</span>
-          : <span className="inline-flex cursor-help items-center gap-1 text-xs text-warning" title={`Belum lengkap: ${kesiapan.kekurangan.join(", ")}`}><AlertTriangle className="h-3.5 w-3.5" />{kesiapan.kekurangan.length} belum lengkap</span>;
+        return <div className="space-y-1 text-xs">
+          <p className={row.terverifikasi ? "text-success" : "text-warning"}>{row.terverifikasi ? "Terverifikasi" : "Belum diverifikasi"}</p>
+          {isSpmbAccepted(row) ? <button type="button" className="text-primary hover:underline" onClick={(event) => { event.stopPropagation(); openSpmbDetail(row); }}>Lihat data SPMB</button>
+            : kesiapan.siap ? <span className="text-success">Siap diterima</span>
+            : <button type="button" className="inline-flex items-center gap-1 text-warning underline underline-offset-2" onClick={(event) => { event.stopPropagation(); setReadinessRow(row); }}><AlertTriangle className="h-3.5 w-3.5" />{kesiapan.kekurangan.length} belum lengkap</button>}
+        </div>;
       },
     },
     {
       key: "nama",
-      label: "Nama",
+      label: "Nama siswa",
       sortable: true,
+      className: "sticky left-0 z-10 min-w-[13rem] max-w-[16rem] bg-card",
       render: (value, row) => (
         <button
           type="button"
@@ -1201,7 +1192,9 @@ export default function SPMB() {
           }}
           title="Buka detail pendaftaran SPMB"
         >
-          {String(value || "-")}
+          <span className="block max-w-[14rem] whitespace-normal">{String(value || "-")}</span>
+          <span className="mt-1 block text-xs font-normal text-muted-foreground">NIS: {String(row.nis || "Belum ada")} · {row.jenis_kelamin === "L" ? "L" : "P"}</span>
+          {row._spmbInternal && <span className="mt-1 block text-xs font-normal text-muted-foreground">Siswa internal</span>}
         </button>
       ),
     },
@@ -1226,7 +1219,7 @@ export default function SPMB() {
       },
     },
     { key: "jenis_kelamin", label: "JK", sortable: true, render: (value) => value === "L" ? "L" : "P" },
-    { key: "_lembagaNama", label: "Lembaga", sortable: true, render: (value) => (value as string) || "-" },
+    { key: "_lembagaNama", label: "Tujuan", sortable: true, render: (value, row) => <div className="space-y-1"><p className="font-medium">{String(value || "-")}</p><p className="text-xs text-muted-foreground">Angkatan {String(row._angkatanNama || "-")}</p>{row._spmbAsrama !== "-" && <p className="text-xs text-muted-foreground">{String(row._spmbAsrama)}</p>}</div> },
     { key: "_spmbAsrama", label: "Asrama", sortable: true, render: (value) => (value as string) || "-" },
     { key: "_angkatanNama", label: "Angkatan", sortable: true, render: (value) => (value as string) || "-" },
     { key: "_spmbRegisteredAt", label: "Tgl Pendaftaran", sortable: true, render: (value) => formatTanggal(value) },
@@ -1301,6 +1294,20 @@ export default function SPMB() {
 
   ];
 
+  const primaryColumnKeys = ["nama", "_lembagaNama", "status", "_kesiapanSort", "_spmbRegisteredAt", "id"];
+  const visibleColumns = [
+    ...primaryColumnKeys.slice(0, -1).map((key) => columns.find((column) => column.key === key)!),
+    ...columns.filter((column) => !primaryColumnKeys.includes(column.key) && extraColumns.includes(column.key)),
+    columns.find((column) => column.key === "id")!,
+  ];
+  const columnPicker = <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm"><Columns3 className="mr-2 h-4 w-4" />Pilih kolom{extraColumns.length ? ` (${extraColumns.length})` : ""}</Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
+    <DropdownMenuLabel>Kolom tambahan</DropdownMenuLabel>
+    {columns.filter((column) => !primaryColumnKeys.includes(column.key)).map((column) => <DropdownMenuCheckboxItem key={column.key} checked={extraColumns.includes(column.key)} onSelect={(event) => event.preventDefault()} onCheckedChange={(checked) => setExtraColumns((current) => checked ? [...current, column.key] : current.filter((key) => key !== column.key))}>{column.label}</DropdownMenuCheckboxItem>)}
+    <DropdownMenuSeparator /><DropdownMenuItem onSelect={() => setExtraColumns([])}>Kembali ke kolom ringkas</DropdownMenuItem>
+  </DropdownMenuContent></DropdownMenu>;
+
+  if (view === "statistics") return <SpmbStatistics rows={statistikCalonList} departments={spmbDepartemenList} years={tahunList} waves={waveQuery.data || []} scope={{ departemen: filters.departemen, tahun: filters.tahun, gelombang: filters.gelombang }} onScopeChange={setFilter} onOpenList={openListFromStatistics} loading={isLoading || departemenQuery.isLoading || tahunQuery.isLoading || waveQuery.isLoading} error={listError || departemenQuery.error || tahunQuery.error || waveQuery.error} />;
+
   const optionsLoading = angkatanQuery.isLoading || departemenQuery.isLoading || tahunQuery.isLoading;
   const optionsError = angkatanQuery.error || departemenQuery.error || tahunQuery.error;
 
@@ -1312,6 +1319,8 @@ export default function SPMB() {
           <p className="text-sm text-muted-foreground">Pantau pendaftaran, seleksi, kelulusan, daftar ulang, dan penerimaan murid baru</p>
         </div>
 
+        <div className="flex flex-wrap gap-2">
+        <Button variant="outline" onClick={() => navigate(`/akademik/spmb/statistik${filterSearch ? `?${filterSearch}` : ""}`)}><BarChart3 className="mr-2 h-4 w-4" />Statistik SPMB</Button>
         <AdminSpmbRegistrationDialog
           departments={spmbDepartemenList}
           cohorts={angkatanList}
@@ -1325,6 +1334,7 @@ export default function SPMB() {
             ]);
           }}
         />
+        </div>
       </div>
 
       <Dialog
@@ -1633,94 +1643,13 @@ export default function SPMB() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold">Statistik SPMB</p>
-          <p className="text-xs text-muted-foreground">
-            Menampilkan statistik: <span className="font-medium text-foreground">{statistikLabel}</span>
-          </p>
-        </div>
-        {spmbDepartemenList.length > 1 && (
-          <div className="w-full sm:w-56">
-            <Label className="text-xs">Lembaga/Jenjang Statistik</Label>
-            <Select value={filters.departemen} onValueChange={(value) => setFilter("departemen", value)}>
-              <SelectTrigger className="mt-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua lembaga</SelectItem>
-                {spmbDepartemenList.map((dept: any) => (
-                  <SelectItem key={dept.id} value={dept.id}>{labelDepartemenSpmb(dept)}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-      </div>
-
-      <div className={`grid gap-4 ${nisKosongCount > 0 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
-        <StatsCard title="Total Pendaftar" value={statistikCalonList.length} icon={Users} color="primary" />
-        <StatsCard title="Menunggu" value={calonCount} icon={Clock} color="warning" />
-        <StatsCard title="Diterima" value={diterimaCount} icon={UserCheck} color="success" />
-        {nisKosongCount > 0 && <StatsCard title="NIS Belum Dibuat" value={nisKosongCount} icon={AlertTriangle} color="destructive" />}
-      </div>
-
-      <div className="space-y-2">
-        <div>
-          <p className="text-sm font-semibold">Sumber Pendaftaran</p>
-          <p className="text-xs text-muted-foreground">
-            Online berasal dari halaman /spmb. Offline berasal dari input Admin/TU melalui tombol Daftarkan Calon Murid.
-          </p>
-        </div>
-        <div className={`grid gap-4 ${unknownSourceCount > 0 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
-          <StatsCard title="Pendaftaran Online" value={onlineCount} icon={Users} color="info" />
-          <StatsCard title="Pendaftaran Offline" value={offlineCount} icon={UserPlus} color="warning" />
-          {unknownSourceCount > 0 && (
-            <StatsCard title="Sumber Belum Diketahui" value={unknownSourceCount} icon={AlertTriangle} color="destructive" />
-          )}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <div>
-          <p className="text-sm font-semibold">Pendaftar per Lembaga/Jenjang</p>
-          <p className="text-xs text-muted-foreground">
-            {role === "admin_tu"
-              ? "Statistik hanya menampilkan lembaga yang menjadi cakupan Admin TU."
-              : "Statistik menampilkan seluruh lembaga SPMB yang dapat Anda akses."}
-          </p>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          {pendaftarPerLembaga.map((item) => (
-            <StatsCard
-              key={item.id}
-              title={`Pendaftar ${item.kode}`}
-              value={item.jumlah}
-              icon={Users}
-              color="info"
-              onClick={() => setFilter("departemen", item.id)}
-              active={filters.departemen === item.id}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatsCard title="Asrama" value={asramaCount} icon={Users} color="primary" />
-        <StatsCard title="Non Asrama" value={nonAsramaCount} icon={Users} color="warning" />
-        <StatsCard title="Laki-laki" value={lakiCount} icon={Users} color="primary" />
-        <StatsCard title="Perempuan" value={perempuanCount} icon={Users} color="success" />
-      </div>
-
-      {belumSiapCount > 0 && (
-        <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 text-sm">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
-          <div>
-            <p className="font-medium">{belumSiapCount} calon belum siap diterima</p>
-            <p className="text-muted-foreground">Verifikasi data dilakukan dari tab Data SPMB pada detail siswa. Tombol Terima aktif setelah verifikasi, dokumen wajib tersedia, biaya pendaftaran lunas atau gratis, angkatan dan kelas terisi, serta NPSN lembaga tersedia.</p>
-          </div>
-        </div>
-      )}
+      <Dialog open={Boolean(readinessRow)} onOpenChange={(open) => { if (!open) setReadinessRow(null); }}>
+        <DialogContent><DialogHeader><DialogTitle>Kelengkapan {String(readinessRow?.nama || "pendaftar")}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Lengkapi persyaratan berikut agar penerimaan dapat diproses.</p>
+          <ul className="list-disc space-y-2 pl-5 text-sm">{readinessRow && getKesiapanPenerimaan(readinessRow).kekurangan.map((item) => <li key={item}>{item}</li>)}</ul>
+          <div className="flex flex-wrap gap-2"><Button onClick={() => { if (readinessRow) navigate(`/akademik/siswa/${readinessRow.id}/edit`); }}>Edit / periksa data</Button><Button variant="outline" onClick={() => { if (readinessRow) openSpmbDetail(readinessRow); }}>Detail pendaftaran</Button></div>
+        </DialogContent>
+      </Dialog>
 
       <div className="space-y-4 rounded-xl border bg-card p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1734,10 +1663,13 @@ export default function SPMB() {
           <Button variant="outline" size="sm" disabled={!hasActiveFilters} onClick={resetFilters}>Reset Filter</Button>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          <div className="space-y-1"><Label className="text-xs">Urutkan</Label><Select value={sortMode} onValueChange={setSortMode}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="registration_desc">Pendaftaran terbaru</SelectItem><SelectItem value="registration_asc">Pendaftaran terlama</SelectItem><SelectItem value="payment_desc">Pembayaran terbaru</SelectItem><SelectItem value="payment_asc">Pembayaran terlama</SelectItem></SelectContent></Select></div>
+        <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-1"><Label className="text-xs">Lembaga</Label><Select value={filters.departemen} onValueChange={(value) => setFilter("departemen", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua lembaga</SelectItem>{spmbDepartemenList.map((dept: any) => <SelectItem key={dept.id} value={dept.id}>{labelDepartemenSpmb(dept)}</SelectItem>)}</SelectContent></Select></div>
-          <div className="space-y-1"><Label className="text-xs">Status</Label><Select value={filters.status} onValueChange={(value) => setFilter("status", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua status</SelectItem><SelectItem value="calon">Calon</SelectItem><SelectItem value="diterima">Diterima</SelectItem><SelectItem value="selesai">Selesai</SelectItem></SelectContent></Select></div>
+          <div className="space-y-1"><Label className="text-xs">Status</Label><Select value={filters.status} onValueChange={(value) => setFilter("status", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua status</SelectItem><SelectItem value="calon">Calon</SelectItem><SelectItem value="diterima">Diterima (semua)</SelectItem><SelectItem value="belum_aktif">Diterima · Belum aktif</SelectItem><SelectItem value="selesai">Sudah diaktifkan</SelectItem></SelectContent></Select></div>
+          <div className="flex items-end"><Button variant="outline" className="w-full" aria-expanded={advancedFiltersOpen} aria-controls="spmb-advanced-filters" onClick={() => setAdvancedFiltersOpen((open) => !open)}><Filter className="mr-2 h-4 w-4" />Filter lainnya{advancedFilterCount ? ` (${advancedFilterCount})` : ""}<ChevronDown className="ml-2 h-4 w-4" /></Button></div>
+        </div>
+        {advancedFiltersOpen && <div id="spmb-advanced-filters" className="grid gap-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1"><Label className="text-xs">Urutkan</Label><Select value={sortMode} onValueChange={setSortMode}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="registration_desc">Pendaftaran terbaru</SelectItem><SelectItem value="registration_asc">Pendaftaran terlama</SelectItem><SelectItem value="payment_desc">Pembayaran terbaru</SelectItem><SelectItem value="payment_asc">Pembayaran terlama</SelectItem></SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Jenis Kelamin</Label><Select value={filters.jenisKelamin} onValueChange={(value) => setFilter("jenisKelamin", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="L">Laki-laki</SelectItem><SelectItem value="P">Perempuan</SelectItem></SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Tes</Label><Select value={filters.tes} onValueChange={(value) => setFilter("tes", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="sudah">Sudah tes</SelectItem><SelectItem value="belum">Belum tes</SelectItem></SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Kelulusan</Label><Select value={filters.kelulusan} onValueChange={(value) => setFilter("kelulusan", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="lulus">Lulus</SelectItem><SelectItem value="tidak_lulus">Tidak Lulus</SelectItem><SelectItem value="belum">Belum ditentukan</SelectItem></SelectContent></Select></div>
@@ -1745,11 +1677,21 @@ export default function SPMB() {
           <div className="space-y-1"><Label className="text-xs">Biaya Pendaftaran</Label><Select value={filters.biaya} onValueChange={(value) => setFilter("biaya", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="gratis">Gratis</SelectItem><SelectItem value="lunas">Lunas</SelectItem><SelectItem value="belum_bayar">Belum bayar</SelectItem><SelectItem value="belum_diatur">Belum diatur</SelectItem></SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Kesiapan</Label><Select value={filters.kesiapan} onValueChange={(value) => setFilter("kesiapan", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="siap">Siap diterima</SelectItem><SelectItem value="belum">Belum lengkap</SelectItem></SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Verifikasi</Label><Select value={filters.verifikasi} onValueChange={(value) => setFilter("verifikasi", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="sudah">Sudah diverifikasi</SelectItem><SelectItem value="belum">Belum diverifikasi</SelectItem></SelectContent></Select></div>
-        </div>
+          <div className="space-y-1"><Label className="text-xs">Tahun ajaran tujuan</Label><Select value={filters.tahun} onValueChange={(value) => setFilter("tahun", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem>{tahunList.map((year) => <SelectItem key={year.id} value={year.id}>{year.nama}</SelectItem>)}</SelectContent></Select></div>
+          <div className="space-y-1"><Label className="text-xs">Gelombang</Label><Select value={filters.gelombang} onValueChange={(value) => setFilter("gelombang", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem>{(waveQuery.data || []).map((wave) => <SelectItem key={wave.id} value={wave.id}>{wave.nama}</SelectItem>)}</SelectContent></Select></div>
+          <div className="space-y-1"><Label className="text-xs">Asrama</Label><Select value={filters.asrama} onValueChange={(value) => setFilter("asrama", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="Asrama">Asrama</SelectItem><SelectItem value="Non Asrama">Non Asrama</SelectItem></SelectContent></Select></div>
+          <div className="space-y-1"><Label className="text-xs">Metode pendaftaran</Label><Select value={filters.sumber} onValueChange={(value) => setFilter("sumber", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="online">Online</SelectItem><SelectItem value="offline">Offline</SelectItem><SelectItem value="unknown">Belum diketahui</SelectItem></SelectContent></Select></div>
+        </div>}
+        {(listError || waveQuery.error) && <p role="alert" className="text-sm text-destructive">Data SPMB tidak dapat dimuat lengkap. Silakan muat ulang halaman.</p>}
+        <p className="text-xs text-muted-foreground">Urutan: {sortMode === "registration_desc" ? "Pendaftaran terbaru" : sortMode === "registration_asc" ? "Pendaftaran terlama" : sortMode === "payment_desc" ? "Pembayaran terbaru" : "Pembayaran terlama"}{advancedFilterCount ? ` · ${advancedFilterCount} filter tambahan aktif` : ""}</p>
       </div>
 
       <DataTable
-        columns={columns}
+        key={JSON.stringify(filters)}
+        columns={visibleColumns}
+        searchKeys={["nama", "nis", "_lembagaNama", "_angkatanNama", "_spmbInputer"]}
+        horizontalNavigation
+        actions={columnPicker}
         data={sortedCalonList as Record<string, unknown>[]}
         searchPlaceholder="Cari nama, NIS, lembaga, atau angkatan..."
         exportable

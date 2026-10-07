@@ -25,6 +25,10 @@ export function StatsCard({ title, value, icon: Icon, trend, color = "primary", 
     <Card
       className={`transition-all hover:-translate-y-0.5 hover:shadow-md ${onClick ? "cursor-pointer" : ""} ${active ? "ring-2 ring-warning" : ""}`}
       onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-label={onClick ? `${title}: ${value}. Buka daftar` : undefined}
+      onKeyDown={onClick ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onClick(); } } : undefined}
     >
       <CardContent className="p-4">
         <div className={`mb-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${colorMap[color]}`}>
