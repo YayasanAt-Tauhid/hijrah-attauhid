@@ -84,22 +84,62 @@ export function useDeleteAkunRekening() {
 }
 
 // ─── Jurnal ───
-export function useJurnalList(tanggalDari?: string, tanggalSampai?: string, departemenId?: string) {
+export function useJurnalPenginput() {
   return useQuery({
-    queryKey: ["jurnal", tanggalDari, tanggalSampai, departemenId],
+    queryKey: ["jurnal", "penginput"],
     queryFn: async () => {
-      let q = supabase
-        .from("jurnal")
-        .select("*, departemen:departemen_id(nama, kode), penginput:dibuat_oleh(nama)")
-        .order("tanggal", { ascending: false });
-      if (tanggalDari) q = q.gte("tanggal", tanggalDari);
-      if (tanggalSampai) q = q.lte("tanggal", tanggalSampai);
-      if (departemenId) {
-        q = q.eq("departemen_id", departemenId);
+      const names = new Map<string, string>();
+      const pageSize = 1000;
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
+          .from("jurnal")
+          .select("id, dibuat_oleh, penginput:dibuat_oleh(nama)")
+          .not("dibuat_oleh", "is", null)
+          .order("id")
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        for (const row of data || []) {
+          if (row.dibuat_oleh) {
+            names.set(row.dibuat_oleh, row.penginput?.nama || "Penginput tidak tersedia");
+          }
+        }
+        if ((data || []).length < pageSize) break;
       }
-      const { data, error } = await q;
-      if (error) throw error;
-      return data as any[];
+      return [...names].map(([id, nama]) => ({ id, nama }))
+        .sort((a, b) => a.nama.localeCompare(b.nama, "id"));
+    },
+  });
+}
+
+export function useJurnalList(tanggalDari?: string, tanggalSampai?: string, departemenId?: string, penginputId?: string) {
+  return useQuery({
+    queryKey: ["jurnal", tanggalDari, tanggalSampai, departemenId, penginputId],
+    queryFn: async () => {
+      const rows: any[] = [];
+      const pageSize = 1000;
+      for (let from = 0; ; from += pageSize) {
+        let q = supabase
+          .from("jurnal")
+          .select("*, departemen:departemen_id(nama, kode), penginput:dibuat_oleh(nama)")
+          .order("tanggal", { ascending: false })
+          .order("id");
+        if (tanggalDari) q = q.gte("tanggal", tanggalDari);
+        if (tanggalSampai) q = q.lte("tanggal", tanggalSampai);
+        if (departemenId) q = q.eq("departemen_id", departemenId);
+        if (penginputId === "__online__") {
+          q = q.is("dibuat_oleh", null).like("referensi", "HAT-%");
+        } else if (penginputId === "__unknown__") {
+          q = q.is("dibuat_oleh", null)
+            .or("referensi.is.null,referensi.not.like.HAT-%");
+        } else if (penginputId) {
+          q = q.eq("dibuat_oleh", penginputId);
+        }
+        const { data, error } = await q.range(from, from + pageSize - 1);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if ((data || []).length < pageSize) break;
+      }
+      return rows;
     },
   });
 }
