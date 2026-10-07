@@ -50,8 +50,8 @@ describe("Admin SPMB registration parity", () => {
   it("classifies admin registration as offline and public registration as online", () => {
     expect(adminForm).toContain('value="Offline — Admin / TU"');
     expect(server).toContain('spmb_sumber_pendaftaran: actor ? "admin" : "publik"');
-    expect(page).toContain('"Pendaftaran Online"');
-    expect(page).toContain('"Pendaftaran Offline"');
+    expect(readFileSync(resolve(process.cwd(), "src/components/akademik/SpmbStatistics.tsx"), "utf8")).toContain('"Pendaftaran Online"');
+    expect(readFileSync(resolve(process.cwd(), "src/components/akademik/SpmbStatistics.tsx"), "utf8")).toContain('"Pendaftaran Offline"');
     expect(page).toContain('detail?.spmb_sumber_pendaftaran === "admin"');
     expect(page).toContain('detail?.spmb_sumber_pendaftaran === "publik"');
     expect(page).toContain('"Belum diklasifikasikan"');

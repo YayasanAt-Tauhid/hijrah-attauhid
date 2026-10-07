@@ -58,6 +58,7 @@ const menuItems: MenuItem[] = [
           { title: "Daftar Siswa", url: "/akademik/siswa" },
           { title: "Data Alumni", url: "/akademik/alumni" },
           { title: "SPMB", url: "/akademik/spmb" },
+          { title: "Statistik SPMB", url: "/akademik/spmb/statistik" },
           { title: "Konfigurasi SPMB", url: "/akademik/spmb-konfigurasi" },
           { title: "Mutasi Siswa", url: "/akademik/mutasi" },
           { title: "Statistik Siswa", url: "/akademik/statistik" },
@@ -282,7 +283,8 @@ function SubGroupCollapsible({
         <CollapsibleContent>
           <div className="ml-3 border-l border-sidebar-border pl-2 mt-0.5 mb-1 space-y-0.5">
             {items.map((sub) => {
-              const subActive = pathname === sub.url || pathname.startsWith(sub.url + "/");
+              const subActive = (pathname === sub.url || pathname.startsWith(sub.url + "/"))
+                && !items.some((item) => item.url !== sub.url && item.url.startsWith(sub.url + "/") && (pathname === item.url || pathname.startsWith(item.url + "/")));
               return (
                 <SidebarMenuSubItem key={sub.url}>
                   <SidebarMenuSubButton
