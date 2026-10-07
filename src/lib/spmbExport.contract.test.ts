@@ -14,6 +14,7 @@ describe("SPMB filtered export", () => {
     expect(spmbPage).toContain("_exportNik");
     expect(spmbPage).toContain("_exportKesiapan");
     expect(spmbPage).toContain("_exportStatusPendaftaran");
+    expect(spmbPage).toContain("_exportJenisPendaftar");
   });
 
   it("exports the DataTable search result instead of the unfiltered source rows", () => {

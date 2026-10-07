@@ -88,6 +88,7 @@ type SpmbFilterState = {
   sumber: string;
   departemen: string;
   status: string;
+  jenisPendaftar: string;
   jenisKelamin: string;
   tes: string;
   kelulusan: string;
@@ -104,6 +105,7 @@ const DEFAULT_FILTERS: SpmbFilterState = {
   sumber: "all",
   departemen: "all",
   status: "all",
+  jenisPendaftar: "all",
   jenisKelamin: "all",
   tes: "all",
   kelulusan: "all",
@@ -123,6 +125,7 @@ const SPMB_EXPORT_COLUMNS = [
   { key: "email", label: "Email" },
   { key: "alamat", label: "Alamat" },
   { key: "_lembagaNama", label: "Lembaga Tujuan" },
+  { key: "_exportJenisPendaftar", label: "Jenis Pendaftar" },
   { key: "_angkatanNama", label: "Angkatan" },
   { key: "_exportKategori", label: "Kategori" },
   { key: "_spmbAsrama", label: "Status Asrama" },
@@ -437,6 +440,12 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         const targetCohortId = detail.spmb_angkatan_tujuan_id || s.angkatan_id;
         const targetDept = targetDeptById.get(targetDeptId) || s.departemen;
         const targetCohort = targetCohortById.get(targetCohortId) || s.angkatan;
+        const internalStudent = detail.spmb_siswa_internal === true;
+        const academicDeptCode = String(s.departemen?.kode || s.departemen?.nama || "").trim().toUpperCase();
+        const targetDeptCode = String(targetDept?.kode || targetDept?.nama || "").trim().toUpperCase();
+        const registrationTypeLabel = internalStudent
+          ? `Internal${academicDeptCode && targetDeptCode ? ` · ${academicDeptCode} → ${targetDeptCode}` : ""}`
+          : "Eksternal";
         const registrationStatus = detail.spmb_status_pendaftaran
           || (["calon", "diterima"].includes(s.status) ? s.status : "calon");
         const biayaSort = r?.gratis_pendaftaran
@@ -456,7 +465,11 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           _academicStatus: s.status,
           _academicDepartemenId: s.departemen_id,
           _academicLembagaNama: s.departemen?.nama || "",
-          _spmbInternal: detail.spmb_siswa_internal === true,
+          _academicLembagaKode: academicDeptCode,
+          _lembagaKode: targetDeptCode,
+          _spmbInternal: internalStudent,
+          _spmbJenisPendaftar: internalStudent ? "internal" : "eksternal",
+          _spmbJenisPendaftarLabel: registrationTypeLabel,
           _readiness: r,
           _pmbConfigured: r?.configured,
           _pmbLunas: r?.lunas,
@@ -492,6 +505,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           _exportNik: detail?.nik || "",
           _exportJenisKelamin: s.jenis_kelamin === "L" ? "Laki-laki" : s.jenis_kelamin === "P" ? "Perempuan" : "",
           _exportKategori: detail?.kategori || "",
+          _exportJenisPendaftar: registrationTypeLabel,
           _exportTanggalPendaftaran: formatTanggal(detail?.spmb_registered_at || s.created_at),
           _exportBiaya: r?.gratis_pendaftaran
             ? "Gratis"
@@ -612,10 +626,11 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
   );
   const hasActiveFilters = Object.values(filters).some((value) => value !== "all");
   const advancedFilterCount = Object.entries(filters).filter(([key, value]) =>
-    !["departemen", "status"].includes(key) && value !== "all",
+    !["departemen", "status", "jenisPendaftar"].includes(key) && value !== "all",
   ).length;
   const filteredCalonList = statistikCalonList.filter((s: Record<string, unknown>) => {
     if (!matchesSpmbStatus(s, filters.status)) return false;
+    if (filters.jenisPendaftar !== "all" && s._spmbJenisPendaftar !== filters.jenisPendaftar) return false;
     if (filters.jenisKelamin !== "all" && s.jenis_kelamin !== filters.jenisKelamin) return false;
     if (filters.asrama !== "all" && s._spmbAsrama !== filters.asrama) return false;
     if (filters.sumber !== "all" && s._spmbSource !== filters.sumber) return false;
@@ -1194,9 +1209,24 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         >
           <span className="block max-w-[14rem] whitespace-normal">{String(value || "-")}</span>
           <span className="mt-1 block text-xs font-normal text-muted-foreground">NIS: {String(row.nis || "Belum ada")} · {row.jenis_kelamin === "L" ? "L" : "P"}</span>
-          {row._spmbInternal && <span className="mt-1 block text-xs font-normal text-muted-foreground">Siswa internal</span>}
         </button>
       ),
+    },
+    {
+      key: "_spmbJenisPendaftarLabel",
+      label: "Jenis pendaftar",
+      sortable: true,
+      className: "min-w-[10rem]",
+      render: (_, row) => row._spmbInternal
+        ? (
+          <div className="space-y-1">
+            <span className="inline-flex rounded-full border border-info/30 bg-info/10 px-2 py-0.5 text-xs font-medium text-info">Internal</span>
+            <p className="text-xs text-muted-foreground">
+              {String(row._academicLembagaKode || row._academicLembagaNama || "-")} → {String(row._lembagaKode || row._lembagaNama || "-")}
+            </p>
+          </div>
+        )
+        : <span className="inline-flex rounded-full border px-2 py-0.5 text-xs text-muted-foreground">Eksternal</span>,
     },
     {
       key: "nis",
@@ -1294,7 +1324,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
 
   ];
 
-  const primaryColumnKeys = ["nama", "_lembagaNama", "status", "_kesiapanSort", "_spmbRegisteredAt", "id"];
+  const primaryColumnKeys = ["nama", "_spmbJenisPendaftarLabel", "_lembagaNama", "status", "_kesiapanSort", "_spmbRegisteredAt", "id"];
   const visibleColumns = [
     ...primaryColumnKeys.slice(0, -1).map((key) => columns.find((column) => column.key === key)!),
     ...columns.filter((column) => !primaryColumnKeys.includes(column.key) && extraColumns.includes(column.key)),
@@ -1663,9 +1693,10 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           <Button variant="outline" size="sm" disabled={!hasActiveFilters} onClick={resetFilters}>Reset Filter</Button>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1"><Label className="text-xs">Lembaga</Label><Select value={filters.departemen} onValueChange={(value) => setFilter("departemen", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua lembaga</SelectItem>{spmbDepartemenList.map((dept: any) => <SelectItem key={dept.id} value={dept.id}>{labelDepartemenSpmb(dept)}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Status</Label><Select value={filters.status} onValueChange={(value) => setFilter("status", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua status</SelectItem><SelectItem value="calon">Calon</SelectItem><SelectItem value="diterima">Diterima (semua)</SelectItem><SelectItem value="belum_aktif">Diterima · Belum aktif</SelectItem><SelectItem value="selesai">Sudah diaktifkan</SelectItem></SelectContent></Select></div>
+          <div className="space-y-1"><Label className="text-xs">Jenis Pendaftar</Label><Select value={filters.jenisPendaftar} onValueChange={(value) => setFilter("jenisPendaftar", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua pendaftar</SelectItem><SelectItem value="internal">Internal / Naik Jenjang</SelectItem><SelectItem value="eksternal">Eksternal</SelectItem></SelectContent></Select></div>
           <div className="flex items-end"><Button variant="outline" className="w-full" aria-expanded={advancedFiltersOpen} aria-controls="spmb-advanced-filters" onClick={() => setAdvancedFiltersOpen((open) => !open)}><Filter className="mr-2 h-4 w-4" />Filter lainnya{advancedFilterCount ? ` (${advancedFilterCount})` : ""}<ChevronDown className="ml-2 h-4 w-4" /></Button></div>
         </div>
         {advancedFiltersOpen && <div id="spmb-advanced-filters" className="grid gap-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1689,7 +1720,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       <DataTable
         key={JSON.stringify(filters)}
         columns={visibleColumns}
-        searchKeys={["nama", "nis", "_lembagaNama", "_angkatanNama", "_spmbInputer"]}
+        searchKeys={["nama", "nis", "_spmbJenisPendaftarLabel", "_lembagaNama", "_angkatanNama", "_spmbInputer"]}
         horizontalNavigation
         actions={columnPicker}
         data={sortedCalonList as Record<string, unknown>[]}
