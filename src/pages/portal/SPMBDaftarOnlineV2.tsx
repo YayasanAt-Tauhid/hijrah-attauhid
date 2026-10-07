@@ -260,10 +260,19 @@ function OptionSelect({ value, placeholder, options, onValueChange, disabled }: 
   );
 }
 
-function DocumentPicker({ label, required, value, onChange }: {
+type DocumentUploadState = {
+  file: File;
+  status: "uploading" | "uploaded" | "failed";
+  path?: string;
+  error?: string;
+};
+
+function DocumentPicker({ label, required, value, onChange, upload, disabled }: {
   label: string;
   required?: boolean;
   value: File | null;
+  upload?: DocumentUploadState;
+  disabled?: boolean;
   onChange: (file: File | null) => void;
 }) {
   const handleFile = (file: File | null) => {
@@ -286,12 +295,15 @@ function DocumentPicker({ label, required, value, onChange }: {
         <Label>{label}{required ? " *" : ""}</Label>
         <p className="mt-1 text-xs text-muted-foreground">PDF/JPG/PNG, maksimal 10 MB · {required ? "wajib" : "opsional"}</p>
       </div>
-      <Input className="min-h-11" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" onChange={(event) => handleFile(event.target.files?.[0] || null)} />
+      <Input disabled={disabled} className="min-h-11" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" onChange={(event) => handleFile(event.target.files?.[0] || null)} />
       {value && (
-        <div className="flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          <FileCheck2 className="h-4 w-4 shrink-0" />
-          <span className="truncate">{value.name}</span>
-          <span className="ml-auto shrink-0 text-xs">{(value.size / 1024 / 1024).toFixed(1)} MB</span>
+        <div aria-live="polite" className={`rounded-md px-3 py-2 text-sm ${upload?.status === "uploaded" ? "bg-emerald-50 text-emerald-800" : upload?.status === "failed" ? "bg-red-50 text-red-800" : "bg-slate-100 text-slate-700"}`}>
+          <div className="flex items-center gap-2">
+            {upload?.status === "uploaded" ? <FileCheck2 className="h-4 w-4 shrink-0" /> : upload?.status === "failed" ? <AlertCircle className="h-4 w-4 shrink-0" /> : <Upload className="h-4 w-4 shrink-0" />}
+            <span className="min-w-0 truncate">{value.name}</span>
+            <span className="ml-auto shrink-0 text-xs">{(value.size / 1024 / 1024).toFixed(1)} MB</span>
+          </div>
+          <p className="mt-1 text-xs">{upload?.status === "uploaded" ? "Berhasil diunggah. Pendaftaran selesai setelah formulir berhasil dikirim." : upload?.status === "uploading" ? "Sedang mengunggah…" : upload?.status === "failed" ? upload.error : "File dipilih, belum diunggah. Diunggah saat formulir dikirim."}</p>
         </div>
       )}
     </div>
@@ -306,6 +318,12 @@ export default function SPMBDaftarOnlineV2() {
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const [form, setForm] = useState({ ...initialForm });
   const [documents, setDocuments] = useState<PmbDocuments>(() => emptyDocuments());
+  const [documentUploads, setDocumentUploads] = useState<Partial<Record<PmbDocumentKind, DocumentUploadState>>>({});
+
+  function selectDocument(kind: PmbDocumentKind, file: File | null) {
+    setDocuments((current) => ({ ...current, [kind]: file }));
+    setDocumentUploads((current) => ({ ...current, [kind]: undefined }));
+  }
   const [draftReady, setDraftReady] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -519,11 +537,24 @@ export default function SPMBDaftarOnlineV2() {
 
   async function uploadDocument(kind: PmbDocumentKind, file: File | null): Promise<string | undefined> {
     if (!file) return undefined;
-    const signed = await pmbCreateDocumentUpload({ data: { kind, file_name: file.name } });
-    const { error } = await supabase.storage.from(PMB_DOCUMENT_BUCKET)
-      .uploadToSignedUrl(signed.path, signed.token, file, { contentType: file.type || undefined });
-    if (error) throw new Error(`Gagal mengunggah ${file.name}: ${error.message}`);
-    return signed.path;
+    const previous = documentUploads[kind];
+    if (previous?.file === file && previous.status === "uploaded" && previous.path) return previous.path;
+    setDocumentUploads((current) => ({ ...current, [kind]: { file, status: "uploading" } }));
+    try {
+      const signed = await pmbCreateDocumentUpload({ data: { kind, file_name: file.name } });
+      const { error } = await supabase.storage.from(PMB_DOCUMENT_BUCKET)
+        .uploadToSignedUrl(signed.path, signed.token, file, { contentType: file.type || undefined });
+      if (error) throw new Error(error.message);
+      setDocumentUploads((current) => ({ ...current, [kind]: { file, status: "uploaded", path: signed.path } }));
+      return signed.path;
+    } catch (error: unknown) {
+      const detail = errorMessage(error, "Unggahan gagal");
+      const message = /failed to fetch|network|load failed/i.test(detail)
+        ? `Gagal mengunggah ${file.name}. Periksa koneksi lalu kirim formulir kembali. Jika tetap gagal, coba Google Chrome dan pilih ulang dokumen. Data yang sudah diisi tetap ada di halaman ini.`
+        : `Gagal mengunggah ${file.name}: ${detail}`;
+      setDocumentUploads((current) => ({ ...current, [kind]: { file, status: "failed", error: message } }));
+      throw new Error(message);
+    }
   }
 
   function focusField(id: string) {
@@ -662,10 +693,10 @@ export default function SPMBDaftarOnlineV2() {
 
     setLoading(true);
     try {
-      const [dokumenKk, dokumenAkta, dokumenRapor, dokumenIjazah] = await Promise.all([
-        uploadDocument("kk", documents.kk), uploadDocument("akta", documents.akta),
-        uploadDocument("rapor", documents.rapor), uploadDocument("ijazah", documents.ijazah),
-      ]);
+      const dokumenKk = await uploadDocument("kk", documents.kk);
+      const dokumenAkta = await uploadDocument("akta", documents.akta);
+      const dokumenRapor = siswaPindahan ? await uploadDocument("rapor", documents.rapor) : undefined;
+      const dokumenIjazah = siswaPindahan ? await uploadDocument("ijazah", documents.ijazah) : undefined;
       const result = await pmbDaftar({ data: {
         ...form,
         pendaftar_nama: form.pendaftar_nama.trim(),
@@ -755,6 +786,7 @@ export default function SPMBDaftarOnlineV2() {
       pendaftar_email: pendaftarLocked ? current.pendaftar_email : "",
     }));
     setDocuments(emptyDocuments());
+    setDocumentUploads({});
     window.history.replaceState({}, "", "/spmb");
   }
 
@@ -1047,10 +1079,10 @@ export default function SPMBDaftarOnlineV2() {
 
                 <FormSection title="Dokumen Persyaratan" description="Dokumen disimpan privat untuk verifikasi SPMB">
                   <div className="grid gap-4 md:grid-cols-2">
-                    <DocumentPicker label="Kartu Keluarga" required value={documents.kk} onChange={(file) => setDocuments((current) => ({ ...current, kk: file }))} />
-                    <DocumentPicker label="Akta Kelahiran" required value={documents.akta} onChange={(file) => setDocuments((current) => ({ ...current, akta: file }))} />
-                    {siswaPindahan && <DocumentPicker label="Rapor Siswa Pindahan" required value={documents.rapor} onChange={(file) => setDocuments((current) => ({ ...current, rapor: file }))} />}
-                    {siswaPindahan && <DocumentPicker label="Ijazah / SKHUN Siswa Pindahan" required value={documents.ijazah} onChange={(file) => setDocuments((current) => ({ ...current, ijazah: file }))} />}
+                    <DocumentPicker label="Kartu Keluarga" required value={documents.kk} upload={documentUploads.kk} disabled={loading} onChange={(file) => selectDocument("kk", file)} />
+                    <DocumentPicker label="Akta Kelahiran" required value={documents.akta} upload={documentUploads.akta} disabled={loading} onChange={(file) => selectDocument("akta", file)} />
+                    {siswaPindahan && <DocumentPicker label="Rapor Siswa Pindahan" required value={documents.rapor} upload={documentUploads.rapor} disabled={loading} onChange={(file) => selectDocument("rapor", file)} />}
+                    {siswaPindahan && <DocumentPicker label="Ijazah / SKHUN Siswa Pindahan" required value={documents.ijazah} upload={documentUploads.ijazah} disabled={loading} onChange={(file) => selectDocument("ijazah", file)} />}
                   </div>
                   <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900"><Upload className="mt-0.5 h-4 w-4 shrink-0" />Kartu Keluarga dan Akta Kelahiran wajib untuk semua pendaftar. Rapor dan Ijazah/SKHUN hanya ditampilkan dan wajib untuk kategori Siswa Pindahan.</div>
                 </FormSection>
