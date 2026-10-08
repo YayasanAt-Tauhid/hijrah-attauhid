@@ -315,3 +315,10 @@ Ringkasan (detail lengkap ada di versi lama file ini: `git log -p SESI_NOTES.md`
 ## Cetak kwitansi continuous form (5 Oktober 2026)
 
 - Foto cetakan fisik menunjukkan jarak baris dan bagian catatan kaki terlalu panjang dibanding aplikasi lama. Ukuran huruf dipertahankan; padding tabel kwitansi dipisahkan dari aturan laporan umum. Footer dirapatkan dan dijaga utuh agar tidak terpecah ke halaman berikutnya. Ukuran kertas continuous form tetap 241 x 140 mm; hasil printer fisik perlu dikonfirmasi pengguna karena driver printer dapat mengabaikan ukuran halaman CSS.
+
+
+## Cicilan SPP — pembatas database (8 Oktober 2026)
+
+- Production aktif tetap cmvzcpeiuompqgdvflky. Perbaikan indeks sudah diterapkan langsung melalui migration MCP setelah persetujuan user; aplikasi tidak memerlukan perubahan frontend.
+- Uji RPC cicilan kedua, pelunasan, jurnal/kuitansi, penolakan kelebihan bayar dan tagihan lunas, serta duplikasi non-SPP berhasil. Semua transaksi uji di-rollback.
+- Saldo Azka sebelum/sesudah perbaikan: tagihan September Rp450.000, dibayar Rp100.000, sisa Rp350.000. Pembayaran lanjutan tetap diinput petugas saat menerima uang.
