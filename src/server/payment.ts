@@ -16,6 +16,8 @@ import {
 import { isUangPangkalPaymentName } from "@/lib/installment";
 import { authMiddleware, requireContext } from "./auth";
 import { createAdminClient, readEnv } from "./supabase";
+import { paymentExpiry, readGatewayStatus } from "./midtransGateway";
+import { closeOnlineSessionsForBills, processGatewayPayment } from "./midtransSessions";
 
 interface TagihanItem {
   tagihan_id?: string;
@@ -191,7 +193,7 @@ export async function buatTransaksiSnap(params: {
     }
 
     const requested = Number(item.jumlah);
-    if (!Number.isFinite(requested) || requested <= 0) {
+    if (!Number.isSafeInteger(requested) || requested <= 0) {
       throw new Error("Jumlah pembayaran harus lebih dari 0");
     }
     if (requested > sisa) {
@@ -284,26 +286,18 @@ export async function buatTransaksiSnap(params: {
 
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "");
-  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const random = crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase();
   const orderId = `HAT-${dateStr}-${random}`;
 
-  const { data: transaksi, error: txError } = await admin
-    .from("transaksi_midtrans")
-    .insert({
-      order_id: orderId,
-      user_id: userId,
-      total_amount: totalAmount,
-      biaya_admin: biayaAdmin,
-      status: "pending",
-      expired_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    })
-    .select()
-    .single();
-  if (txError) throw txError;
-
+  const serverKey = readEnv("MIDTRANS_SERVER_KEY");
+  if (!serverKey) throw new Error("MIDTRANS_SERVER_KEY belum dikonfigurasi");
+  const baseUrl = serverKey.startsWith("SB-") ? "https://app.sandbox.midtrans.com" : "https://app.midtrans.com";
+  const authString = btoa(`${serverKey}:`);
+  const billIds = validatedItems.map(item => item.tagihan_id!);
+  if (new Set(billIds).size !== billIds.length) throw new Error("Tagihan yang sama tidak boleh dipilih dua kali");
+  await closeOnlineSessionsForBills(billIds, "replacement_checkout");
   const itemsToInsert = validatedItems.map((item) => ({
-    transaksi_id: transaksi.id,
-    tagihan_id: item.tagihan_id || null,
+    tagihan_id: item.tagihan_id,
     siswa_id: item.siswa_id,
     jenis_id: item.jenis_id,
     bulan: item.bulan,
@@ -312,19 +306,11 @@ export async function buatTransaksiSnap(params: {
     departemen_id: item.departemen_id || null,
     tahun_ajaran_id: item.tahun_ajaran_id || null,
   }));
-
-  const { error: itemError } = await admin
-    .from("transaksi_midtrans_item")
-    .insert(itemsToInsert);
-  if (itemError) throw itemError;
-
-  // Panggil Midtrans Snap
-  const serverKey = readEnv("MIDTRANS_SERVER_KEY");
-  if (!serverKey) throw new Error("MIDTRANS_SERVER_KEY belum dikonfigurasi");
-  const baseUrl = serverKey.startsWith("SB-")
-    ? "https://app.sandbox.midtrans.com"
-    : "https://app.midtrans.com";
-  const authString = btoa(`${serverKey}:`);
+  const { data: transaksi, error: txError } = await (admin as any).rpc("create_midtrans_checkout_atomik", {
+    p_user_id: userId, p_order_id: orderId, p_items: itemsToInsert,
+    p_expired_at: new Date(now.getTime() + 24 * 3600 * 1000).toISOString(),
+  });
+  if (txError) throw new Error(txError.message);
 
   const itemDetails = validatedItems.map((item, idx) => ({
     id: `ITEM-${idx + 1}-${item.bulan}`,
@@ -349,7 +335,8 @@ export async function buatTransaksiSnap(params: {
     },
     item_details: itemDetails,
     callbacks: callbacks(orderId),
-    expiry: { unit: "hours", duration: 24 },
+    expiry: paymentExpiry(now),
+    page_expiry: { unit: "hours", duration: 24 },
     enabled_payments: enabledPayments,
   };
 
@@ -358,6 +345,13 @@ export async function buatTransaksiSnap(params: {
     midtransPayload.qris = { acquirer: "gopay" };
   }
 
+  // Persist the exact request before contacting the gateway, so a timed-out
+  // token response can be recovered with the same order ID instead of unlocking.
+  const { error: requestSaveError } = await (admin as any).from("transaksi_midtrans").update({
+    metadata: { ...(transaksi.metadata || {}), snap_request: midtransPayload },
+  }).eq("id", transaksi.id).eq("status", "pending");
+  if (requestSaveError) throw requestSaveError;
+
   const midtransRes = await fetch(`${baseUrl}/snap/v1/transactions`, {
     method: "POST",
     headers: {
@@ -365,20 +359,32 @@ export async function buatTransaksiSnap(params: {
       Authorization: `Basic ${authString}`,
     },
     body: JSON.stringify(midtransPayload),
+    signal: AbortSignal.timeout(12000),
   });
   const midtransData = await midtransRes.json();
 
   if (!midtransRes.ok || !midtransData.token) {
-    await admin.from("transaksi_midtrans").delete().eq("id", transaksi.id);
+    // A timeout/5xx/duplicate order may have created a session remotely.
+    // Keep the reservation until its closure can be confirmed.
+    const rejection = [400, 401, 403, 422].includes(midtransRes.status) &&
+      !/duplicate|sudah digunakan|already.*(used|utilized)/i.test(JSON.stringify(midtransData));
+    await (admin as any).from("transaksi_midtrans").update({
+      ...(rejection ? { status: "failed", gateway_closed_at: new Date().toISOString() } : {}),
+      reconciliation_error: "Pembuatan sesi Midtrans belum berhasil dikonfirmasi",
+    }).eq("id", transaksi.id);
     throw new Error(
       midtransData.error_messages?.[0] || "Gagal membuat transaksi Midtrans"
     );
   }
 
-  await admin
+  const { data: savedToken, error: tokenError } = await admin
     .from("transaksi_midtrans")
     .update({ snap_token: midtransData.token })
-    .eq("id", transaksi.id);
+    .eq("id", transaksi.id).eq("status", "pending")
+    .select("id");
+  if (tokenError || !savedToken?.length) {
+    throw new Error("Sesi pembayaran belum dapat disimpan. Pembayaran baru ditahan sampai pemeriksaan selesai.");
+  }
 
   return {
     success: true,
@@ -483,34 +489,11 @@ export const syncMidtransPaymentStatus = createServerFn({ method: "POST" })
 
     const serverKey = readEnv("MIDTRANS_SERVER_KEY") || "";
     if (!serverKey) throw new Error("MIDTRANS_SERVER_KEY belum dikonfigurasi");
-    const apiBase = serverKey.startsWith("SB-")
-      ? "https://api.sandbox.midtrans.com"
-      : "https://api.midtrans.com";
-    const statusResponse = await fetch(
-      `${apiBase}/v2/${encodeURIComponent(orderId)}/status`,
-      { headers: { Authorization: `Basic ${btoa(`${serverKey}:`)}` } }
-    );
-    const gatewayPayload = await statusResponse.json() as Record<string, unknown>;
-
-    if (!statusResponse.ok) {
-      const message = typeof gatewayPayload.status_message === "string"
-        ? gatewayPayload.status_message
-        : "Gagal memeriksa status transaksi Midtrans";
-      throw new Error(message);
+    const gatewayPayload = await readGatewayStatus(orderId, serverKey);
+    if (!gatewayPayload) {
+      return { order_id: orderId, status: transaksi.status, gateway_status: null };
     }
-
-    // Jalankan satu-satunya jalur pembukuan yang sudah memiliki verifikasi
-    // signature, idempotensi pembayaran, serta jurnal atomik.
-    const { getRequest } = await import("@tanstack/react-start/server");
-    const origin = new URL(getRequest().url).origin;
-    const processResponse = await fetch(`${origin}/api/midtrans-notification`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(gatewayPayload),
-    });
-    if (!processResponse.ok) {
-      throw new Error(`Sinkronisasi pembayaran gagal (${processResponse.status})`);
-    }
+    await processGatewayPayment(gatewayPayload);
 
     const { data: refreshed, error: refreshError } = await admin
       .from("transaksi_midtrans")

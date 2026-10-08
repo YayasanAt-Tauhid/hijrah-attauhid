@@ -7,7 +7,7 @@ const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8"
 const migration = read("supabase/migrations/20261005030256_uang_pangkal_cicilan_dimuka.sql");
 const portal = read("src/pages/portal/PortalTagihan.tsx");
 const checkout = read("src/server/payment.ts");
-const webhook = read("src/routes/api.midtrans-notification.ts");
+const webhook = read("src/server/midtransNotification.ts");
 const cashier = read("src/pages/keuangan/InputPembayaran.tsx");
 
 describe("Uang Pangkal installment-before-due contract", () => {

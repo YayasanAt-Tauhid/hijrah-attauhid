@@ -19,6 +19,7 @@ import {
 } from "@/lib/billingSequence";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
+import { closeOnlineSessionsForBills } from "./midtransSessions";
 
 export interface ProsesPembayaranInput {
   siswa_id: string;
@@ -855,6 +856,10 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     const keteranganFinal = keterangan
       ? `${keterangan} | ${autoKet}`
       : autoKet;
+
+    if (tagihanEfektifId) {
+      await closeOnlineSessionsForBills([tagihanEfektifId], "cashier_payment");
+    }
 
     const { data: result, error: rpcErr } = await (admin as any).rpc(
       "proses_pembayaran_dengan_kuitansi_atomik",
