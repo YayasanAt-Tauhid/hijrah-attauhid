@@ -1,0 +1,23 @@
+
+CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+CREATE SCHEMA extensions; CREATE EXTENSION pgcrypto WITH SCHEMA extensions;
+CREATE SCHEMA cron;
+CREATE TABLE cron.job(jobname text,active boolean);
+CREATE FUNCTION cron.schedule(text,text,text) RETURNS bigint LANGUAGE sql AS $$ INSERT INTO cron.job VALUES($1,true) RETURNING 1::bigint $$;
+CREATE SCHEMA net;
+CREATE FUNCTION net.http_post(url text,body jsonb,headers jsonb,timeout_milliseconds integer) RETURNS bigint LANGUAGE sql AS $$ SELECT 1::bigint $$;
+CREATE TABLE public.tagihan(id uuid primary key default gen_random_uuid(),siswa_id uuid,jenis_id uuid,tahun_ajaran_id uuid,bulan int,nominal numeric,status text,jurnal_piutang_id uuid,pengakuan_spp_selesai boolean default false,pembayaran_id uuid);
+CREATE TABLE public.transaksi_midtrans(id uuid primary key default gen_random_uuid(),order_id text unique,user_id uuid,total_amount numeric,biaya_admin numeric,status text,snap_token text,metadata jsonb,expired_at timestamptz,created_at timestamptz default now(),paid_at timestamptz,midtrans_payment_status text);
+CREATE TABLE public.transaksi_midtrans_item(id uuid primary key default gen_random_uuid(),transaksi_id uuid references transaksi_midtrans(id),tagihan_id uuid references tagihan(id),siswa_id uuid,jenis_id uuid,bulan int,jumlah numeric,nama_item text,departemen_id uuid,tahun_ajaran_id uuid,pembayaran_id uuid);
+CREATE TABLE public.ortu_siswa(user_id uuid,siswa_id uuid);
+CREATE TABLE public.pembayaran(id uuid primary key default gen_random_uuid(),siswa_id uuid,jenis_id uuid,tahun_ajaran_id uuid,bulan int,jumlah numeric,tanggal_bayar date,petugas_id uuid,keterangan text,departemen_id uuid,jurnal_id uuid,tagihan_id uuid,spp_kategori text);
+CREATE TABLE public.jenis_pembayaran(id uuid,nama text,tipe text,perlu_dimuka boolean,akun_dimuka_id uuid);
+CREATE TABLE public.siswa(id uuid,nama text);
+CREATE TABLE public.pengaturan_akun(kode_setting text,akun_id uuid);
+CREATE TABLE public.tahun_buku(id uuid,tanggal_mulai date,tanggal_selesai date);
+CREATE TABLE public.jurnal(id uuid primary key default gen_random_uuid(),nomor text,tanggal date,keterangan text,referensi text,total_debit numeric,total_kredit numeric,status text,departemen_id uuid);
+CREATE TABLE public.jurnal_detail(jurnal_id uuid,akun_id uuid,keterangan text,debit numeric,kredit numeric,urutan int);
+CREATE TABLE public.pendapatan_dimuka(pembayaran_id uuid,siswa_id uuid,jenis_id uuid,tahun_ajaran_pembayaran_id uuid,tahun_ajaran_target_id uuid,bulan int,jumlah numeric,status text,departemen_id uuid);
+CREATE FUNCTION public.generate_nomor_jurnal(text,int) RETURNS text LANGUAGE sql AS $$ SELECT $1||'-'||gen_random_uuid()::text $$;
+CREATE FUNCTION public.tanggal_pengakuan_tagihan(uuid) RETURNS date LANGUAGE sql AS $$ SELECT null::date $$;
+CREATE FUNCTION public.posting_spp_tagihan_atomik(uuid,uuid) RETURNS void LANGUAGE sql AS $$ SELECT $$;
