@@ -211,4 +211,4 @@ END $$;
 REVOKE ALL ON FUNCTION payment_private.request_reconciliation() FROM PUBLIC,anon,authenticated;
 SELECT cron.schedule('midtrans-reconciliation','*/5 * * * *','SELECT payment_private.request_reconciliation();');
 -- Enable after the matching application deployment is verified.
-UPDATE cron.job SET active=false WHERE jobname='midtrans-reconciliation';
+SELECT cron.alter_job((SELECT jobid FROM cron.job WHERE jobname='midtrans-reconciliation'), active := false);
