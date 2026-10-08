@@ -2,8 +2,9 @@
 CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
 CREATE SCHEMA extensions; CREATE EXTENSION pgcrypto WITH SCHEMA extensions;
 CREATE SCHEMA cron;
-CREATE TABLE cron.job(jobname text,active boolean);
-CREATE FUNCTION cron.schedule(text,text,text) RETURNS bigint LANGUAGE sql AS $$ INSERT INTO cron.job VALUES($1,true) RETURNING 1::bigint $$;
+CREATE TABLE cron.job(jobid bigserial primary key,jobname text,active boolean);
+CREATE FUNCTION cron.schedule(text,text,text) RETURNS bigint LANGUAGE sql AS $$ INSERT INTO cron.job(jobname,active) VALUES($1,true) RETURNING jobid $$;
+CREATE FUNCTION cron.alter_job(job_id bigint,active boolean) RETURNS void LANGUAGE sql AS $$ UPDATE cron.job SET active=$2 WHERE jobid=$1 $$;
 CREATE SCHEMA net;
 CREATE FUNCTION net.http_post(url text,body jsonb,headers jsonb,timeout_milliseconds integer) RETURNS bigint LANGUAGE sql AS $$ SELECT 1::bigint $$;
 CREATE TABLE public.tagihan(id uuid primary key default gen_random_uuid(),siswa_id uuid,jenis_id uuid,tahun_ajaran_id uuid,bulan int,nominal numeric,status text,jurnal_piutang_id uuid,pengakuan_spp_selesai boolean default false,pembayaran_id uuid);
