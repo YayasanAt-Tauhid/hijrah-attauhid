@@ -28,6 +28,7 @@ import { id as idLocale } from "date-fns/locale";
 import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan";
 import { canDownloadReceipt, downloadReceiptPdf, type PortalReceipt } from "@/lib/receiptDownload";
 import { portalReceiptIdentity } from "@/lib/portalReceiptData";
+import { historyBillBalance, isPendingHistoryOutdated, type HistoryBillBalance } from "@/lib/paymentHistory";
 
 const formatRupiah = (n: number) =>
   new Intl.NumberFormat("id-ID", {
@@ -37,7 +38,7 @@ const formatRupiah = (n: number) =>
   }).format(n);
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  paid: { label: "Lunas", variant: "default" },
+  paid: { label: "Pembayaran berhasil", variant: "default" },
   pending: { label: "Menunggu", variant: "secondary" },
   failed: { label: "Gagal", variant: "destructive" },
   expired: { label: "Kedaluwarsa", variant: "outline" },
@@ -52,7 +53,7 @@ interface RiwayatItem {
   total_amount: number;
   biaya_admin: number;
   receipt: PortalReceipt;
-  items: { id: string; nama_item: string; jumlah: number }[];
+  items: { id: string; nama_item: string; jumlah: number; balance?: HistoryBillBalance | null }[];
 }
 
 export default function PortalRiwayat() {
@@ -81,13 +82,13 @@ export default function PortalRiwayat() {
       const [onlineResult, manualResult] = await Promise.all([
         supabase
           .from("transaksi_midtrans")
-          .select("*, transaksi_midtrans_item(*, siswa:siswa_id(nama, nis, nisn, kelas_siswa(aktif, kelas:kelas_id(nama))), departemen:departemen_id(nama))")
+          .select("*, transaksi_midtrans_item(*, tagihan:tagihan_id(id, nominal, status, pembayaran!pembayaran_tagihan_id_fkey(jumlah)), siswa:siswa_id(nama, nis, nisn, kelas_siswa(aktif, kelas:kelas_id(nama))), departemen:departemen_id(nama))")
           .eq("user_id", user!.id)
           .order("created_at", { ascending: false }),
         anakIds.length > 0
           ? supabase
               .from("pembayaran")
-              .select("id, jumlah, bulan, tanggal_bayar, keterangan, siswa:siswa_id(nama, nis, nisn, kelas_siswa(aktif, kelas:kelas_id(nama))), departemen:departemen_id(nama), jenis_pembayaran:jenis_id(nama), jurnal:jurnal_id(nomor)")
+              .select("id, jumlah, bulan, tanggal_bayar, keterangan, tagihan:tagihan_id(id, nominal, status, pembayaran!pembayaran_tagihan_id_fkey(jumlah)), siswa:siswa_id(nama, nis, nisn, kelas_siswa(aktif, kelas:kelas_id(nama))), departemen:departemen_id(nama), jenis_pembayaran:jenis_id(nama), jurnal:jurnal_id(nomor)")
               .in("siswa_id", anakIds)
               .order("tanggal_bayar", { ascending: false })
           : Promise.resolve({ data: [] }),
@@ -119,6 +120,7 @@ export default function PortalRiwayat() {
           id: i.id,
           nama_item: i.nama_item,
           jumlah: Number(i.jumlah),
+          balance: historyBillBalance(i.tagihan),
         }));
         if (biayaAdmin > 0) {
           items.push({ id: `${tx.id}-biaya-admin`, nama_item: "Biaya Admin", jumlah: biayaAdmin });
@@ -159,7 +161,7 @@ export default function PortalRiwayat() {
           status: "paid",
           total_amount: Number(p.jumlah),
           biaya_admin: 0,
-          items: [{ id: p.id, nama_item: p.keterangan || p.jenis_pembayaran?.nama || "Pembayaran", jumlah: Number(p.jumlah) }],
+          items: [{ id: p.id, nama_item: p.keterangan || p.jenis_pembayaran?.nama || "Pembayaran", jumlah: Number(p.jumlah), balance: historyBillBalance(p.tagihan) }],
           receipt: {
             ...portalReceiptIdentity([p]),
             nomorBukti: p.jurnal?.nomor || `HT-${format(new Date(p.tanggal_bayar), "yyyyMMdd")}-${p.id.replace(/-/g, "").slice(0, 10).toUpperCase()}`,
@@ -279,6 +281,7 @@ export default function PortalRiwayat() {
             const status = statusConfig[tx.status] || statusConfig.pending;
             const items = tx.items;
             const isHighlighted = tx.order_id === highlightOrder;
+            const outdated = isPendingHistoryOutdated(tx.status, items);
 
             return (
               <AccordionItem
@@ -288,7 +291,7 @@ export default function PortalRiwayat() {
               >
                 <Card className="mb-3">
                   <AccordionTrigger className="px-5 py-4 hover:no-underline">
-                    <div className="flex flex-1 items-center justify-between gap-4 text-left">
+                    <div className="flex min-w-0 flex-1 flex-col items-start justify-between gap-3 text-left sm:flex-row sm:items-center">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded">
@@ -320,7 +323,7 @@ export default function PortalRiwayat() {
                           )}
                         </p>
                       </div>
-                      <div className="flex items-center gap-3 shrink-0">
+                      <div className="flex flex-wrap items-center gap-3">
                         <span className="font-semibold text-sm">
                           {formatRupiah(tx.total_amount)}
                         </span>
@@ -340,11 +343,18 @@ export default function PortalRiwayat() {
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="px-5 pb-4">
+                    {outdated && (
+                      <p role="alert" className="mb-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                        Nominal transaksi lama ini sudah tidak sesuai dengan sisa tagihan atau tagihannya tidak dapat dibayar.
+                        Jangan membayar melalui transaksi ini. Buka menu Tagihan untuk melihat sisa terbaru.
+                        Status pembayaran di Midtrans masih perlu dikonfirmasi.
+                      </p>
+                    )}
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Item</TableHead>
-                          <TableHead className="text-right">Jumlah</TableHead>
+                          <TableHead className="text-right">Jumlah transaksi</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -352,6 +362,17 @@ export default function PortalRiwayat() {
                           <TableRow key={item.id}>
                             <TableCell className="text-sm">
                               {item.nama_item}
+                              {item.balance && (
+                                <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                                  <p>Total tagihan: {formatRupiah(item.balance.nominal)}</p>
+                                  <p>Sudah dibayar: {formatRupiah(item.balance.paid)}</p>
+                                  <p className="font-medium text-foreground">
+                                    {item.balance.remaining === 0
+                                      ? "Tagihan lunas"
+                                      : `Sisa tagihan: ${formatRupiah(item.balance.remaining)}`}
+                                  </p>
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell className="text-right text-sm">
                               {formatRupiah(item.jumlah)}
@@ -360,6 +381,11 @@ export default function PortalRiwayat() {
                         ))}
                       </TableBody>
                     </Table>
+                    {items.some((item) => item.balance) && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Sisa tagihan di atas adalah kondisi saat ini, termasuk pembayaran setelah transaksi ini.
+                      </p>
+                    )}
                     {canDownloadReceipt(tx.status) && (
                       <div className="mt-3 flex justify-end">
                         <Button
