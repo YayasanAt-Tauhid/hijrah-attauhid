@@ -1,7 +1,7 @@
 
 import { createAdminClient, readEnv } from "./supabase";
 import { closeGatewaySession, isGatewayPaid, readGatewayStatus, type GatewayPayload } from "./midtransGateway";
-import { runReconciliationBatch } from "./reconciliationBatch";
+import { limitReconciliationCandidates, runReconciliationBatch } from "./reconciliationBatch";
 
 export async function processGatewayPayment(payload: GatewayPayload) {
   // Status API is authenticated server-to-server. Feed its result through the
@@ -104,7 +104,7 @@ export async function reconcileOnlineSessions() {
   const { data: candidates, error } = await admin.rpc("get_midtrans_reconciliation_candidates");
   if (error) throw error;
 
-  return runReconciliationBatch((candidates || []) as ReconciliationCandidate[], async (tx) => {
+  return runReconciliationBatch(limitReconciliationCandidates((candidates || []) as ReconciliationCandidate[]), async (tx) => {
     if (tx.gateway_closed_at && tx.status !== "paid") return "skipped";
     if (Date.now() - Date.parse(tx.created_at) < 90000) return "skipped";
 
