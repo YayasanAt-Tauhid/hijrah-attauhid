@@ -1,0 +1,31 @@
+name: Verify pull request
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: verify-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Tests
+        run: npm test -- --maxWorkers=2
+      - name: Typecheck application
+        run: npx tsc -p tsconfig.app.json --noEmit
+      - name: Typecheck Vite config
+        run: npx tsc -p tsconfig.node.json --noEmit
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_build_placeholder
+        run: npm run build
