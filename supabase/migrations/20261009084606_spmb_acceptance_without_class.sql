@@ -34,7 +34,7 @@ BEGIN
 
  IF internal_student THEN has_class:=true;
  ELSE SELECT EXISTS(SELECT 1 FROM public.kelas_siswa ks JOIN public.kelas k ON k.id=ks.kelas_id
-   WHERE ks.siswa_id=s.id AND ks.aktif AND ks.tahun_ajaran_id IS NOT NULL AND k.departemen_id=target_dept) INTO has_class;
+   WHERE ks.siswa_id=s.id AND ks.aktif AND ks.tahun_ajaran_id=d.tahun_ajaran_id AND k.departemen_id=target_dept AND COALESCE(k.aktif,true)) INTO has_class;
  END IF;
 
  IF NOT COALESCE(s.terverifikasi,false) THEN missing:=array_append(missing,'verifikasi data'); END IF;

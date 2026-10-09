@@ -794,19 +794,14 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         });
         return;
       }
+      // Database mensyaratkan NIS sebelum menerima calon murid.
+      if (!row.nis && !await generateNIS(id, departemenId, angkatanId, namaSiswa)) return;
       const { error } = await supabase.from("siswa").update({ status: "diterima" } as any).eq("id", id);
       if (error) throw error;
 
-      let nisBerhasil = Boolean(row.nis);
-      if (!row.nis) {
-        nisBerhasil = await generateNIS(id, departemenId, angkatanId, namaSiswa);
-      }
-
       await qc.invalidateQueries({ queryKey: ["siswa"] });
       toast.success(`${namaSiswa} berhasil diterima`, {
-        description: nisBerhasil
-          ? "Calon sudah lulus dan diterima. NIS lembaga berhasil ditetapkan."
-          : "Calon sudah diterima, tetapi NIS belum berhasil dibuat. Gunakan tombol Buat NIS sebelum aktivasi.",
+        description: "Calon sudah lulus dan diterima. NIS lembaga berhasil ditetapkan.",
       });
     } catch (error: any) {
       toast.error("Gagal menerima murid", { description: error?.message || "Terjadi kesalahan teknis" });

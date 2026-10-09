@@ -74,7 +74,7 @@ export const getSpmbBillingCandidates = createServerFn({ method: "GET" })
         .in("id", siswaIds),
       admin
         .from("kelas_siswa")
-        .select("siswa_id,kelas_id,tahun_ajaran_id,aktif,kelas:kelas_id(id,nama,departemen_id)")
+        .select("siswa_id,kelas_id,tahun_ajaran_id,aktif,kelas:kelas_id(id,nama,departemen_id,aktif)")
         .in("siswa_id", siswaIds)
         .eq("aktif", true),
       (admin as any)
@@ -132,6 +132,11 @@ export const getSpmbBillingCandidates = createServerFn({ method: "GET" })
     const siswaById = new Map((siswaResult.data || []).map((row: any) => [row.id, row]));
     const activeClassBySiswa = new Map<string, any>();
     for (const row of (kelasResult.data || []) as any[]) {
+      const detail = latestDetailBySiswa.get(row.siswa_id);
+      const targetDeptId = detail?.spmb_departemen_tujuan_id ||
+        (siswaById.get(row.siswa_id) as any)?.departemen_id;
+      if (row.tahun_ajaran_id !== detail?.tahun_ajaran_id ||
+        row.kelas?.departemen_id !== targetDeptId || row.kelas?.aktif === false) continue;
       if (!activeClassBySiswa.has(row.siswa_id)) activeClassBySiswa.set(row.siswa_id, row);
     }
     const deptById = new Map((deptResult.data || []).map((row: any) => [row.id, row]));
@@ -166,7 +171,7 @@ export const getSpmbBillingCandidates = createServerFn({ method: "GET" })
       const tahun = detail.tahun_ajaran_id ? tahunById.get(detail.tahun_ajaran_id) : null;
 
       const isInternal = detail.spmb_siswa_internal === true;
-      // Status lulus cukup untuk menerbitkan biaya masuk. Aktivasi akademik
+      // Penerimaan setelah lulus memungkinkan biaya masuk. Aktivasi akademik
       // dan penempatan kelas hanya diperlukan untuk rencana SPP otomatis.
       const accepted = isInternal
         ? ["diterima", "aktif", "selesai"].includes(detail.spmb_status_pendaftaran)
@@ -184,7 +189,7 @@ export const getSpmbBillingCandidates = createServerFn({ method: "GET" })
       // tujuan SPMB jika lembaganya berbeda.
       const activeInTarget = activeClass?.kelas?.departemen_id === targetDeptId &&
         activeClass?.tahun_ajaran_id === detail.tahun_ajaran_id ? activeClass : null;
-      const effectiveClass = targetClass || activeInTarget?.kelas || null;
+      const effectiveClass = activeInTarget?.kelas || targetClass || null;
 
       items.push({
         id: siswa.id,
@@ -205,7 +210,7 @@ export const getSpmbBillingCandidates = createServerFn({ method: "GET" })
         spmb_tanggal_lulus: detail.spmb_tanggal_lulus || null,
         spmb_tanggal_aktivasi: detail.spmb_tanggal_aktivasi || null,
         ready_for_billing: ready,
-        ready_for_spp: readyForSpp && Boolean(effectiveClass),
+        ready_for_spp: readyForSpp && Boolean(activeInTarget),
         ready_reason: readyReason,
         rencana_spp: plan
           ? {
