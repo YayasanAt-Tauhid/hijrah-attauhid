@@ -22,7 +22,7 @@ The feature requires both migrations in this PR. Production migration, merge, an
 | Production function comparison | Changed bodies match the intended acceptance/class/department/duplicate-fee behavior; internal activation RPC unchanged |
 | SQL definition compilation | All six function definitions accepted in BEGIN/ROLLBACK transactions; trigger and portal view replacement accepted together in BEGIN/ROLLBACK |
 | Build | Vite/Nitro Cloudflare build passed |
-| Full application TypeScript check | Added to PR CI; VPS attempt exhausted its default Node heap |
+| Full application TypeScript check | CI builds generated routes and compares complete diagnostics with main; baseline has 91 existing diagnostics |
 
 The cashier scenarios include full and installment payments, payment books 2026 and 2027 for one target invoice, concurrent final-payment attempts with one successful transaction, receipt creation, target SMP accounting while an internal student remains enrolled in SD, and nine monthly SPP invoices after activation without duplicating the initial fee.
 
@@ -38,6 +38,8 @@ Database preparation also verified:
 - Parent access remains isolated by RLS and the portal view uses security_invoker=true.
 - A wrong origin department or class is rejected before tariffs are written.
 - Final staging journals and payments use the target department and remain balanced.
+
+CI tests both the application and Vite configuration against the base commit. It fails on added TypeScript diagnostics or an incomplete compiler run, and publishes the complete logs and counts. The repository does not currently have a clean full-source typecheck: main has 91 existing application diagnostics. The latest PR check is the source of truth for additional diagnostics.
 
 The stateful integration suites and fixture requirements are documented in scripts/qa/README.md. Raw logs and private fixture data remain outside Git on the VPS.
 

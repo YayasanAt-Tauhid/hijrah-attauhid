@@ -33,3 +33,7 @@ The verification suite can be rerun against the completed October 9 fixtures. It
 ## Gateway scope
 
 The online suite simulates Snap and status responses and generates a test SHA-512 webhook signature. Real Midtrans requests are blocked. It verifies ownership, canonical fee/department data, installment amounts, ledger entries, duplicate webhook handling, and parent invoice balances. It does not verify Midtrans sandbox connectivity, actual QRIS/VA settlement, or a browser checkout interaction.
+
+## Source typechecks
+
+PR CI builds generated routes, runs complete application/config TypeScript checks for both the PR and its base commit, and compares diagnostic counts/messages without source line offsets. It fails on new diagnostics or an incomplete compiler run. Full results are published as the typescript-baseline-comparison artifact; passing this regression check does not mean pre-existing repository type errors are absent.
