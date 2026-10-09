@@ -78,7 +78,7 @@ GET /api/v1/pendaftaran?departemen_id=<UUID_SMP>&tahun_ajaran_id=<UUID_TA>&statu
 
 `GET /api/v1/siswa` mendukung `departemen_id`, `tahun_ajaran_id`, `status`, dan `kelas_id`.
 
-Dengan `siswa:read`, kontrak lama tetap kompatibel. Jika token juga memiliki `siswa:identity:read`, payload siswa pada list, detail, anggota kelas, dan incremental sync ditambah `nisn`, `nik_hijrah`, dan `nik_dapodik`. `nik_hijrah` bersumber dari `siswa_detail.nik` (identitas legacy Hijrah), sedangkan `nik_dapodik` bersumber dari `siswa_detail.nik_dapodik` (NIK resmi yang dicocokkan dengan Dapodik/KK). Scope identitas tidak diberikan otomatis kepada token lama.
+Dengan `siswa:read`, respons list, detail, anggota kelas, dan incremental sync siswa menyertakan `status_asrama`: `"Asrama"`, `"Non Asrama"`, atau `null` bila tidak berlaku/belum tersedia. Anggota kelas tetap membutuhkan `kelas:read` dan `siswa:read`. Status ini bersumber dari `siswa_detail.status_asrama`, bukan kategori tagihan SPP per bulan. Jika token juga memiliki `siswa:identity:read`, payload siswa pada list, detail, anggota kelas, dan incremental sync ditambah `nisn`, `nik_hijrah`, dan `nik_dapodik`. `nik_hijrah` bersumber dari `siswa_detail.nik` (identitas legacy Hijrah), sedangkan `nik_dapodik` bersumber dari `siswa_detail.nik_dapodik` (NIK resmi yang dicocokkan dengan Dapodik/KK). Scope identitas tidak diberikan otomatis kepada token lama.
 
 ```json
 {
@@ -114,7 +114,7 @@ Field dasar mencakup `id`, `siswa_id`, `status`, `tanggal_pendaftaran`, `unit`, 
 
 `status_kelulusan` bernilai `lulus`, `tidak_lulus`, atau `null` bila keputusan belum dibuat. `tanggal_keputusan` diisi saat keputusan Lulus/Tidak Lulus ditetapkan.
 
-Untuk kontrak pihak ketiga, `status_asrama` diekspor sebagai nilai sederhana **Ya/Tidak** tanpa mengubah data internal: `asrama` → `Ya`, `non_asrama` → `Tidak`, dan `null` bila status asrama tidak berlaku/belum tersedia.
+Sesuai perubahan kontrak 9 Oktober 2026, nilai lama `"Ya"`/`"Tidak"` diganti dengan `"Asrama"`/`"Non Asrama"`; penerima API perlu menyesuaikan pemetaan enum. Untuk kontrak pihak ketiga, `status_asrama` diekspor sebagai nilai sederhana **Asrama/Non Asrama** tanpa mengubah data internal: `asrama` → `Asrama`, `non_asrama` → `Non Asrama`, dan `null` bila status asrama tidak berlaku/belum tersedia.
 
 `pembayaran_pendaftaran` berbentuk:
 

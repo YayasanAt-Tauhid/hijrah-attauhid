@@ -39,12 +39,12 @@ describe('Integration API v1 contract', () => {
     expect(api).toContain('download_path:`/api/v1/documents/${pid}.${kind}`')
   })
 
-  it('maps internal boarding status to the third-party Ya/Tidak contract', () => {
-    expect(api).toContain("value==='asrama'?'Ya':value==='non_asrama'?'Tidak':null")
+  it('maps internal boarding status to the third-party Asrama/Non Asrama contract', () => {
+    expect(api).toContain("value==='asrama'?'Asrama':value==='non_asrama'?'Non Asrama':null")
     expect(api).toContain('status_asrama:integrationAsramaStatus(d.status_asrama)')
-    expect(docs).toContain('`asrama` → `Ya`')
-    expect(docs).toContain('`non_asrama` → `Tidak`')
-    expect(openapi).toContain("enum: ['Ya', 'Tidak', null]")
+    expect(docs).toContain('`asrama` → `Asrama`')
+    expect(docs).toContain('`non_asrama` → `Non Asrama`')
+    expect(openapi).toContain("enum: ['Asrama', 'Non Asrama', null]")
   })
 
   it('serializes the SPMB selection decision for read/sync consumers', () => {
