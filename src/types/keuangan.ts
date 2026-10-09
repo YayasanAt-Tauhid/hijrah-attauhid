@@ -18,6 +18,7 @@ export type Siswa      = Database["public"]["Tables"]["siswa"]["Row"];
 
 /** Siswa dengan kelas aktif, dipakai di form pencarian */
 export interface SiswaWithKelas extends Pick<Siswa, "id" | "nis" | "nisn" | "nama" | "foto_url" | "status"> {
+  departemen_id?: string | null;
   kelas_siswa: Array<{
     kelas_id: string;
     kelas: {
