@@ -64,7 +64,7 @@ components:
             jenis_kelamin: { type: [string, 'null'] }
         jenis_pendaftaran: { type: [string, 'null'] }
         kategori: { type: [string, 'null'] }
-        status_asrama: { type: [string, 'null'] }
+        status_asrama: { type: [string, 'null'], enum: ['Asrama', 'Non Asrama', null], description: "Status asrama; null bila tidak berlaku/belum tersedia" }
         gelombang:
           type: [object, 'null']
           properties:
@@ -93,7 +93,7 @@ components:
           items: { $ref: '#/components/schemas/Document' }
     Student:
       type: object
-      required: [id, nama, status]
+      required: [id, nama, status, status_asrama]
       properties:
         id: { type: string, format: uuid }
         nis: { type: [string, 'null'] }
@@ -103,6 +103,7 @@ components:
         nama: { type: string }
         jenis_kelamin: { type: [string, 'null'] }
         status: { type: string }
+        status_asrama: { type: [string, 'null'], enum: ['Asrama', 'Non Asrama', null], description: 'From siswa_detail.status_asrama; available with siswa:read, including class members and sync.' }
         unit: { type: object }
         angkatan: { type: object }
         terverifikasi: { type: [boolean, 'null'] }

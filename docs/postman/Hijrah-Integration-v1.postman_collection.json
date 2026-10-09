@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Hijrah Integration API v1.1",
-    "description": "Backward-compatible Hijrah /api/v1 integration: scoped read/sync, granular scopes, employee read/import/update, SPMB filters, and optional scoped milestone updates. Never place the bearer token in browser/mobile code.",
+    "description": "Backward-compatible Hijrah /api/v1 integration: scoped read/sync, granular scopes, employee read/import/update, SPMB filters, and optional scoped milestone updates. Never place the bearer token in browser/mobile code.\nBoarding status (9 October 2026): registration, student list/detail, class members, and sync responses use status_asrama = Asrama / Non Asrama / null. Replaces previous Ya / Tidak registration values. Student boarding status only requires siswa:read; class members also require kelas:read.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
