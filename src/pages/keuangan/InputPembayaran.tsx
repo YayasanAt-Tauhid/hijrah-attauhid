@@ -97,7 +97,7 @@ type OpenBillRow = {
   nominal_diskon: number | null;
   status: string;
   jatuh_tempo: string | null;
-  jenis_pembayaran: { id: string; nama: string; tipe: string } | null;
+  jenis_pembayaran: { id: string; nama: string; tipe: string; departemen_id: string | null } | null;
   tahun_ajaran: { id: string; nama: string; tanggal_mulai: string | null } | null;
   terbayar: number;
   sisa: number;
@@ -183,7 +183,7 @@ function InputPembayaranContent() {
   // berikutnya (lembaga lain) tetap menemukan hasil.
   const [filterLembagaId, setFilterLembagaId] = useState("");
   const siswaDepartemenId = getKelasAktif(selectedSiswa)?.kelas?.departemen_id ?? "";
-  const departemenId = siswaDepartemenId || filterLembagaId;
+  const departemenId = siswaDepartemenId || selectedSiswa?.departemen_id || filterLembagaId;
   const [form, setForm] = useState<FormPembayaran>(FORM_DEFAULT);
   const [selectedTahunAjaranId, setSelectedTahunAjaranId] = useState("");
   const [showKuitansi, setShowKuitansi] = useState(false);
@@ -302,6 +302,7 @@ function InputPembayaranContent() {
           search: searchTerm,
           status: "aktif",
           include_nonaktif_with_open_bills: true,
+          include_calon_lulus_with_open_bills: true,
           departemen_id: filterLembagaId || undefined,
           limit: 10,
         },
@@ -494,7 +495,7 @@ function InputPembayaranContent() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tagihan")
-        .select("id, jenis_id, tahun_ajaran_id, bulan, nominal, nominal_bruto, nominal_diskon, status, jatuh_tempo, jenis_pembayaran:jenis_id(id, nama, tipe), tahun_ajaran:tahun_ajaran_id(id, nama, tanggal_mulai)")
+        .select("id, jenis_id, tahun_ajaran_id, bulan, nominal, nominal_bruto, nominal_diskon, status, jatuh_tempo, jenis_pembayaran:jenis_id(id, nama, tipe, departemen_id), tahun_ajaran:tahun_ajaran_id(id, nama, tanggal_mulai)")
         .eq("siswa_id", selectedSiswa!.id)
         .eq("tahun_ajaran_id", effectiveTahunAjaranId)
         .in("status", payableTagihanStatuses)
@@ -852,7 +853,7 @@ function InputPembayaranContent() {
       bulan: bill.bulan ?? 0,
       jumlah: bill.sisa,
       tahunAjaranId: bill.tahun_ajaran_id,
-      departemenId: departemenId || undefined,
+      departemenId: bill.jenis_pembayaran.departemen_id || departemenId || undefined,
       isBayarDimuka,
       status: bill.status,
       tahunLabel: yearLabel,
@@ -1090,7 +1091,7 @@ function InputPembayaranContent() {
       bulan: isSekali ? 0 : form.bulan,
       jumlah,
       tahunAjaranId: effectiveTahunAjaranId,
-      departemenId: departemenId || undefined,
+      departemenId: selectedJenis.departemen_id || departemenId || undefined,
       isBayarDimuka,
       status: existingTagihan?.status ?? null,
       tahunLabel: selectedTahunLabel,
@@ -1231,7 +1232,7 @@ function InputPembayaranContent() {
       keterangan:      isBayarDimuka
         ? `[DIMUKA] ${form.keterangan || ""} - Untuk TA: ${tahunAjaranList?.find(t => t.id === effectiveTahunAjaranId)?.nama ?? ""}`.trim()
         : form.keterangan || undefined,
-      departemen_id:   departemenId || undefined,
+      departemen_id:   selectedJenis?.departemen_id || departemenId || undefined,
       tahun_ajaran_id: effectiveTahunAjaranId,
       is_bayar_dimuka: isBayarDimuka,
       tagihan_id:      existingTagihan?.id,

@@ -152,7 +152,7 @@ export default function RencanaTagihanSiswaBaru() {
   const initialJenisList = useMemo(
     () => availableJenis.filter((jenis: any) =>
       jenis.tipe === "sekali" &&
-      !/pendaftaran|spmb|psb/i.test(String(jenis.nama || ""))
+      !/pendaftaran|spmb|psb|saldo|lama|migrasi/i.test(String(jenis.nama || ""))
     ),
     [availableJenis],
   );
@@ -251,7 +251,7 @@ export default function RencanaTagihanSiswaBaru() {
       if (
         jenis.aktif !== false &&
         jenis.tipe === "sekali" &&
-        !/pendaftaran|spmb|psb/i.test(String(jenis.nama || "")) &&
+        !/pendaftaran|spmb|psb|saldo|lama|migrasi/i.test(String(jenis.nama || "")) &&
         (!jenis.departemen_id || jenis.departemen_id === row.target_departemen_id)
       ) {
         const isMta4DaftarUlang = requireMta4Fee
@@ -304,12 +304,14 @@ export default function RencanaTagihanSiswaBaru() {
       toast.error("Tahun ajaran SPMB belum lengkap");
       return;
     }
+    const onlyInitial = !selected.ready_for_spp;
+    const sppAmount = Number(sppNominal);
+    if (!onlyInitial) {
     if (!sppJenisId) {
       toast.error("Pilih jenis SPP");
       return;
     }
 
-    const sppAmount = Number(sppNominal);
     if (!Number.isFinite(sppAmount) || sppAmount <= 0) {
       toast.error("Nominal SPP harus lebih dari 0");
       return;
@@ -341,12 +343,17 @@ export default function RencanaTagihanSiswaBaru() {
       }
     }
 
+    }
     if (isMta4Entry && requiredMta4DaftarUlang && !initialFees[requiredMta4DaftarUlang.id]?.checked) {
       toast.error("Daftar Ulang MTA 4 perlu dipilih; nominalnya mengikuti kebijakan khusus MTA 4");
       return;
     }
 
     const checkedInitial = initialJenisList.filter((jenis: any) => initialFees[jenis.id]?.checked);
+    if (onlyInitial && checkedInitial.length === 0) {
+      toast.error("Pilih setidaknya satu biaya awal untuk diterbitkan.");
+      return;
+    }
     for (const jenis of checkedInitial as any[]) {
       const nominal = Number(initialFees[jenis.id]?.nominal);
       if (!Number.isFinite(nominal) || nominal <= 0) {
@@ -357,7 +364,9 @@ export default function RencanaTagihanSiswaBaru() {
 
     setSaving(true);
     const failures: string[] = [];
+    const existingInitialFees: string[] = [];
     try {
+      if (!onlyInitial) {
       const sppPayload = {
         p_tarif_rows: sppGeneratePeriods.groups.map((group) => ({
           jenis_id: sppJenisId,
@@ -401,6 +410,7 @@ export default function RencanaTagihanSiswaBaru() {
         });
       }
 
+      }
       const oncePeriods = targetTahunBukuTarif({
         tahunAjaran: selectedAcademicYear,
         tahunBukuList: tahunBukuList as any,
@@ -411,6 +421,19 @@ export default function RencanaTagihanSiswaBaru() {
       for (const jenis of checkedInitial as any[]) {
         try {
           if (!onceYearBookId) throw new Error("Tahun Buku awal tahun ajaran belum tersedia");
+          // Cegah tarif override berulang bila tagihan awal sudah diterbitkan.
+          const { data: existing, error: checkError } = await supabase.from("tagihan")
+            .select("id")
+            .eq("siswa_id", selected.id)
+            .eq("jenis_id", jenis.id)
+            .eq("tahun_ajaran_id", onceYearBookId)
+            .is("bulan", null)
+            .limit(1);
+          if (checkError) throw checkError;
+          if (existing?.length) {
+            existingInitialFees.push(jenis.nama);
+            continue;
+          }
           const nominal = Number(initialFees[jenis.id]?.nominal);
           const { error } = await (supabase as any).rpc(
             "simpan_tarif_generate_dan_rencana_atomik",
@@ -430,7 +453,8 @@ export default function RencanaTagihanSiswaBaru() {
               p_departemen_id: selected.target_departemen_id,
               p_siswa_ids: null,
               p_siswa_id: selected.id,
-              p_kelas_id: selected.kelas_id,
+              // Calon dan siswa internal belum aktif tidak boleh menggunakan kelas lama.
+              p_kelas_id: onlyInitial ? null : selected.kelas_id,
               p_angkatan_id: null,
               p_sampai_akhir_jenjang: false,
               p_rencana_mulai: null,
@@ -446,18 +470,22 @@ export default function RencanaTagihanSiswaBaru() {
         qc.invalidateQueries({ queryKey: ["spmb_billing_candidates"] }),
         qc.invalidateQueries({ queryKey: ["tarif_tagihan"] }),
         qc.invalidateQueries({ queryKey: ["tagihan"] }),
+        qc.invalidateQueries({ queryKey: ["spmb_payment_monitor"] }),
+        qc.invalidateQueries({ queryKey: ["tunggakan"] }),
         qc.invalidateQueries({ queryKey: ["jurnal"] }),
       ]);
 
       if (failures.length === 0) {
-        toast.success("Rencana tagihan siswa baru berhasil disimpan", {
-          description: endMode === "level"
+        toast.success(onlyInitial ? "Tagihan awal calon siswa berhasil diterbitkan" : "Rencana tagihan siswa baru berhasil disimpan", {
+          description: onlyInitial ? (existingInitialFees.length
+            ? `${existingInitialFees.length} jenis biaya sudah mempunyai tagihan dan tidak diterbitkan ulang. SPP menyusul setelah aktivasi/penempatan.`
+            : "Rencana SPP baru dapat diaktifkan setelah aktivasi dan penempatan akademik.") : endMode === "level"
             ? `SPP ${formatRupiah(sppAmount)} · otomatis sampai ${namaBulan(bulanTerakhir)} akhir ${phaseLabel(selected) || "jenjang"}.`
             : `SPP ${formatRupiah(sppAmount)} · otomatis sampai ${formatDate(manualEndDate)}.`,
         });
         closePlan();
       } else {
-        toast.warning("Rencana SPP tersimpan, tetapi ada tagihan awal yang gagal", {
+        toast.warning(onlyInitial ? "Beberapa tagihan awal gagal diterbitkan" : "Rencana SPP tersimpan, tetapi ada tagihan awal yang gagal", {
           description: failures.slice(0, 3).join(" | "),
           duration: 10000,
         });
@@ -510,11 +538,11 @@ export default function RencanaTagihanSiswaBaru() {
       className: "min-w-[170px]",
       render: (_, row) => row.ready_for_billing ? (
         <Badge className="border-emerald-300 bg-emerald-100 text-emerald-700">
-          <CheckCircle2 className="mr-1 h-3 w-3" /> Siap
+          <CheckCircle2 className="mr-1 h-3 w-3" /> {row.ready_for_spp ? "Siap SPP" : "Siap Tagihan Awal"}
         </Badge>
       ) : (
         <div>
-          <Badge variant="outline">Belum aktif</Badge>
+          <Badge variant="outline">Belum siap ditagih</Badge>
           <p className="mt-1 max-w-[240px] text-[11px] text-muted-foreground">{row.ready_reason}</p>
         </div>
       ),
@@ -546,7 +574,7 @@ export default function RencanaTagihanSiswaBaru() {
           disabled={!row.ready_for_billing}
           onClick={() => openPlan(row)}
         >
-          {row.rencana_spp ? "Edit Rencana" : "Atur Tagihan"}
+          {!row.ready_for_spp ? "Terbitkan Tagihan Awal" : row.rencana_spp ? "Edit Rencana" : "Atur Tagihan"}
         </Button>
       ),
     },
@@ -564,8 +592,9 @@ export default function RencanaTagihanSiswaBaru() {
       <Alert>
         <Info className="h-4 w-4" />
         <AlertDescription className="text-sm">
-          Siswa harus sudah aktif pada jenjang tujuan. Tagihan SPP untuk tahun pertama dibuat sesuai Tahun Ajaran,
-          sedangkan bulan tahun-tahun berikutnya dibuat otomatis oleh rencana sampai akhir jenjang. Nominal setiap siswa boleh berbeda.
+          Calon siswa yang sudah lulus dapat diterbitkan biaya awal tanpa penempatan kelas.
+          Rencana SPP otomatis baru dibuat setelah aktivasi dan penempatan pada jenjang tujuan.
+          SPP yang belum jatuh tempo bukan tunggakan.
         </AlertDescription>
       </Alert>
 
@@ -635,7 +664,7 @@ export default function RencanaTagihanSiswaBaru() {
       <Dialog open={!!selected} onOpenChange={(open) => { if (!open) closePlan(); }}>
         <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{selected?.rencana_spp ? "Edit" : "Buat"} Rencana Tagihan Siswa Baru</DialogTitle>
+            <DialogTitle>{selected && !selected.ready_for_spp ? "Terbitkan Tagihan Awal Calon Siswa" : selected?.rencana_spp ? "Edit" : "Buat"} Rencana Tagihan Siswa Baru</DialogTitle>
           </DialogHeader>
 
           {selected && (
@@ -656,7 +685,17 @@ export default function RencanaTagihanSiswaBaru() {
                 </div>
               </div>
 
-              <Card>
+              {!selected.ready_for_spp && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    Siswa sudah lulus SPMB tetapi belum diaktifkan/ditempatkan di jenjang tujuan.
+                    Biaya awal dapat diterbitkan sekarang tanpa kelas. Rencana SPP otomatis ditunda
+                    sampai aktivasi akademik agar tidak memakai kelas lama atau menagih terlalu dini.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {selected.ready_for_spp && <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-base">
                     <WalletCards className="h-4 w-4 text-primary" /> Rencana SPP
@@ -762,7 +801,7 @@ export default function RencanaTagihanSiswaBaru() {
                     {" "}Jika siswa pindah atau menjadi alumni, rencana dihentikan.
                   </div>
                 </CardContent>
-              </Card>
+              </Card>}
 
               <Card>
                 <CardHeader className="pb-3">
@@ -828,7 +867,7 @@ export default function RencanaTagihanSiswaBaru() {
           <DialogFooter>
             <Button variant="outline" onClick={closePlan} disabled={saving}>Batal</Button>
             <Button onClick={() => void handleSave()} disabled={saving || !selected?.ready_for_billing}>
-              {saving ? "Menyimpan..." : "Simpan Rencana Tagihan"}
+              {saving ? "Menyimpan..." : selected && !selected.ready_for_spp ? "Terbitkan Tagihan Awal" : "Simpan Rencana Tagihan"}
             </Button>
           </DialogFooter>
         </DialogContent>

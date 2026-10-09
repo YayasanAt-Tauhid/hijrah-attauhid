@@ -226,6 +226,7 @@ export interface RekapTunggakanBatchInput {
   jenis_id: string;
   tahun_ajaran_id: string;
   kelas_id?: string;
+  tanpa_kelas?: boolean;
   departemen_id?: string;
   /** Filter bulan (tipe bulanan). Kosong/undefined = semua bulan. */
   bulan_list?: number[];
@@ -259,38 +260,31 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
       "kasir",
     ]);
 
-    const { jenis_id, tahun_ajaran_id, kelas_id, bulan_list } = data;
+    const { jenis_id, tahun_ajaran_id, kelas_id, bulan_list, tanpa_kelas } = data;
     const perTanggal = data.per_tanggal || new Date().toISOString().split("T")[0];
 
     if (!jenis_id || !tahun_ajaran_id) {
       throw new Error("jenis_id dan tahun_ajaran_id wajib diisi");
     }
+    if (kelas_id && tanpa_kelas) throw new Error("Filter kelas tidak valid");
 
-    // Gunakan kelas AKTIF siswa sebagai identitas tampilan, bukan kelas pada
-    // tahun tagihan. Data migrasi dapat berisi tunggakan periode lama (mis.
-    // SPP SD 2025) sementara histori kelas tahun tersebut tidak tersedia lagi
-    // dan siswa sekarang sudah berada di jenjang lain. Sumber lembaga tetap
-    // ditentukan oleh jenis pembayaran/tagihan yang dipilih.
-    let siswaQuery = admin
-      .from("kelas_siswa")
-      .select("siswa_id, siswa:siswa_id(nis, nama), kelas:kelas_id(nama, departemen_id)")
-      .eq("aktif", true);
-    if (kelas_id) siswaQuery = siswaQuery.eq("kelas_id", kelas_id);
-    const { data: kelasSiswaRows, error: ksErr } = await siswaQuery;
-    if (ksErr)
-      throw new Error("Gagal mengambil data kelas siswa: " + ksErr.message);
+    // Filter kelas bersifat opsional. Sumber tunggakan adalah tagihan,
+    // bukan tabel kelas_siswa: calon siswa lulus SPMB bisa belum ditempatkan.
+    // Bila kelas dipilih, batasi berdasarkan penempatan aktif seperti sebelumnya.
+    let selectedClassStudentIds: Set<string> | null = null;
+    if (kelas_id) {
+      const { data: matching, error } = await admin.from("kelas_siswa")
+        .select("siswa_id").eq("aktif", true).eq("kelas_id", kelas_id);
+      if (error) throw new Error("Gagal mengambil siswa kelas: " + error.message);
+      selectedClassStudentIds = new Set((matching || []).map(row => row.siswa_id));
+      if (!selectedClassStudentIds.size) return { rows: [], per_tanggal: perTanggal };
+    }
 
     interface KelasSiswaRow {
       siswa_id: string;
       siswa: { nis: string | null; nama: string | null } | null;
       kelas: { nama: string | null; departemen_id: string | null } | null;
     }
-    const filtered = (kelasSiswaRows || []) as unknown as KelasSiswaRow[];
-    if (!filtered.length) return { rows: [], per_tanggal: perTanggal };
-
-    const siswaIds = Array.from(new Set(filtered.map((r) => r.siswa_id)));
-    const siswaIdSet = new Set(siswaIds);
-
     // Jangan kirim >1.000 siswa aktif sebagai satu filter .in(...): selain URL
     // menjadi terlalu panjang, PostgREST juga membatasi satu response page.
     // Ambil tagihan per jenis+tahun secara berhalaman lalu saring ke siswa aktif
@@ -321,13 +315,51 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
       const { data: page, error: tErr } = await tagihanQuery;
       if (tErr) throw new Error("Gagal mengambil data tagihan: " + tErr.message);
       for (const row of page || []) {
-        if (row.siswa_id && siswaIdSet.has(row.siswa_id)) {
+        if (row.siswa_id && (!selectedClassStudentIds || selectedClassStudentIds.has(row.siswa_id))) {
           tagihanRows.push(row as BatchTagihanRow);
         }
       }
       if (!page || page.length < pageSize) break;
     }
     if (!tagihanRows.length) return { rows: [], per_tanggal: perTanggal };
+
+    // Ambil identitas siswa dari tagihan yang benar-benar ada. Hindari
+    // menganggap calon yang belum lulus (atau mantan siswa) sebagai penunggak.
+    const studentIds = [...new Set(tagihanRows.map(row => row.siswa_id).filter((id): id is string => Boolean(id)))];
+    const siswaMeta = new Map<string, KelasSiswaRow>();
+    const studentStates = new Map<string, string>();
+    const passedStudents = new Set<string>();
+    for (let offset = 0; offset < studentIds.length; offset += 100) {
+      const ids = studentIds.slice(offset, offset + 100);
+      const [studentResult, classResult, detailResult] = await Promise.all([
+        admin.from("siswa").select("id,nama,nis,status").in("id", ids),
+        admin.from("kelas_siswa")
+          .select("siswa_id,kelas:kelas_id(nama,departemen_id)")
+          .eq("aktif", true).in("siswa_id", ids),
+        (admin as any).from("siswa_detail")
+          .select("siswa_id").in("siswa_id", ids)
+          .eq("spmb_status_kelulusan", "lulus")
+          .not("spmb_gelombang_id", "is", null),
+      ]);
+      if (studentResult.error) throw new Error("Gagal mengambil identitas siswa: " + studentResult.error.message);
+      if (classResult.error) throw new Error("Gagal mengambil penempatan siswa: " + classResult.error.message);
+      if (detailResult.error) throw new Error("Gagal memeriksa kelulusan SPMB: " + detailResult.error.message);
+      for (const row of studentResult.data || []) {
+        studentStates.set(row.id, row.status);
+        siswaMeta.set(row.id, { siswa_id: row.id, siswa: row, kelas: null });
+      }
+      for (const row of detailResult.data || []) if (row.siswa_id) passedStudents.add(row.siswa_id);
+      for (const row of classResult.data || []) {
+        const meta = siswaMeta.get(row.siswa_id);
+        if (meta && !meta.kelas) meta.kelas = row.kelas as KelasSiswaRow["kelas"];
+      }
+    }
+    const siswaIdSet = new Set(studentIds.filter(id =>
+      studentStates.get(id) === "aktif" ||
+      (["calon", "diterima"].includes(String(studentStates.get(id))) && passedStudents.has(id)) ||
+      (["keluar", "alumni", "pindah"].includes(String(studentStates.get(id))) && Boolean(siswaMeta.get(id)?.kelas))
+    ));
+    if (!siswaIdSet.size) return { rows: [], per_tanggal: perTanggal };
 
     // Pembayaran parsial juga dibaca berhalaman. Filtering siswa dilakukan di
     // server supaya tidak membangun query-string .in(...) yang sangat panjang.
@@ -364,11 +396,6 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
     // Satu baris hasil = satu tagihan/periode. Jangan gabungkan beberapa bulan
     // milik siswa menjadi satu total karena kasir harus bisa memilih tunggakan
     // tertentu (mis. November saja tanpa otomatis ikut Desember).
-    const siswaMeta = new Map<string, KelasSiswaRow>();
-    for (const ks of filtered) {
-      if (!siswaMeta.has(ks.siswa_id)) siswaMeta.set(ks.siswa_id, ks);
-    }
-
     const rows: TunggakanSiswaRow[] = [];
     for (const t of tagihanRows) {
       const nominal = Number(t.nominal) || 0;
@@ -379,13 +406,14 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
       if (!sudahMenunggak(t.jatuh_tempo, perTanggal)) continue; // belum jatuh tempo -> bukan tunggakan
 
       const ks = siswaMeta.get(t.siswa_id!);
-      if (!ks) continue;
+      if (!ks || !siswaIdSet.has(t.siswa_id!)) continue;
+      if (tanpa_kelas && ks.kelas) continue;
 
       rows.push({
         siswa_id: t.siswa_id!,
         nis: ks.siswa?.nis ?? null,
         nama: ks.siswa?.nama ?? null,
-        kelas: ks.kelas?.nama ?? null,
+        kelas: ks.kelas?.nama ?? "Belum ditempatkan",
         bulan_tunggak: [t.bulan ?? 0],
         tagihan_tunggak: [{ tagihan_id: t.id, bulan: t.bulan ?? 0, sisa }],
         total: sisa,

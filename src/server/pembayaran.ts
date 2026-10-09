@@ -64,6 +64,7 @@ export interface CariSiswaPembayaranInput {
   departemen_id?: string;
   limit?: number;
   include_nonaktif_with_open_bills?: boolean;
+  include_calon_lulus_with_open_bills?: boolean;
 }
 
 export interface SiswaPembayaranRingkas {
@@ -108,9 +109,12 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     const status = data?.status === "calon" ? "calon" : "aktif";
     const includeNonaktifWithOpenBills =
       status === "aktif" && data?.include_nonaktif_with_open_bills === true;
-    const searchableStatuses = includeNonaktifWithOpenBills
-      ? ["aktif", "keluar", "alumni", "pindah"]
-      : [status];
+    const includeCalonLulus = status === "aktif" && data?.include_calon_lulus_with_open_bills === true;
+    const searchableStatuses = status === "calon" ? ["calon"] : [
+      "aktif",
+      ...(includeNonaktifWithOpenBills ? ["keluar", "alumni", "pindah"] : []),
+      ...(includeCalonLulus ? ["calon", "diterima"] : []),
+    ];
     const limit = Math.min(Math.max(Number(data?.limit ?? 10), 1), 20);
     const select =
       "id, nis, nisn, nama, foto_url, status, angkatan_id, departemen_id, kelas_siswa(kelas_id, aktif, kelas:kelas_id(id, nama, departemen_id))";
@@ -132,7 +136,7 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
         .ilike(field, "%" + identitySearch + "%")
         // Ambil kandidat lebih banyak sebelum filter kelas/status diterapkan,
         // agar nama yang sama di beberapa kelas tidak terpotong terlalu dini.
-        .limit(kelasSearch || includeNonaktifWithOpenBills ? 100 : limit);
+        .limit(kelasSearch || includeNonaktifWithOpenBills || includeCalonLulus ? 100 : limit);
       q = searchableStatuses.length === 1
         ? q.eq("status", searchableStatuses[0])
         : q.in("status", searchableStatuses);
@@ -164,9 +168,21 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     }
 
     const nonaktifDenganTagihanTerbuka = new Set<string>();
-    if (includeNonaktifWithOpenBills) {
+    const calonLulus = new Set<string>();
+    if (includeCalonLulus) {
+      const ids = Array.from(unik.values()).filter(s => ["calon", "diterima"].includes(String(s.status))).map(s => s.id);
+      if (ids.length) {
+        const { data: passed, error } = await (admin as any).from("siswa_detail")
+          .select("siswa_id").in("siswa_id", ids)
+          .eq("spmb_status_kelulusan", "lulus").not("spmb_gelombang_id", "is", null);
+        if (error) throw new Error("Gagal memeriksa kelulusan SPMB: " + error.message);
+        for (const row of passed || []) if (row.siswa_id) calonLulus.add(row.siswa_id);
+      }
+    }
+    if (includeNonaktifWithOpenBills || includeCalonLulus) {
       const nonaktifIds = Array.from(unik.values())
-        .filter((siswa) => siswa.status !== "aktif")
+        .filter((siswa) => siswa.status !== "aktif" &&
+          (!["calon", "diterima"].includes(String(siswa.status)) || calonLulus.has(siswa.id)))
         .map((siswa) => siswa.id);
 
       if (nonaktifIds.length > 0) {
@@ -174,7 +190,9 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
           .from("tagihan")
           .select("siswa_id")
           .in("siswa_id", nonaktifIds)
-          .in("status", ["belum_bayar", "sebagian"]);
+          .in("status", includeCalonLulus
+            ? ["belum_bayar", "sebagian", "terjadwal"]
+            : ["belum_bayar", "sebagian"]);
         if (openBillsError) {
           throw new Error("Gagal memeriksa tunggakan siswa nonaktif: " + openBillsError.message);
         }
@@ -191,7 +209,11 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
       items: Array.from(unik.values())
         .filter((siswa) => {
           if (
-            includeNonaktifWithOpenBills &&
+            ["calon", "diterima"].includes(String(siswa.status)) && includeCalonLulus &&
+            !calonLulus.has(siswa.id)
+          ) return false;
+          if (
+            (includeNonaktifWithOpenBills || includeCalonLulus) &&
             siswa.status !== "aktif" &&
             !nonaktifDenganTagihanTerbuka.has(siswa.id)
           ) {
