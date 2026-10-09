@@ -17,7 +17,8 @@ import { isUangPangkalPaymentName } from "@/lib/installment";
 import { authMiddleware, requireContext } from "./auth";
 import { createAdminClient, readEnv } from "./supabase";
 import { paymentExpiry, readGatewayStatus } from "./midtransGateway";
-import { closeOnlineSessionsForBills, processGatewayPayment } from "./midtransSessions";
+import { processGatewayPayment } from "./midtransSessions";
+import { findReusablePaymentForBills, resumeOwnedMidtransPayment, cancelOwnedMidtransPayment } from "./pendingMidtrans";
 
 interface TagihanItem {
   tagihan_id?: string;
@@ -61,6 +62,8 @@ export interface CreatePaymentResult {
    * baru karena fee customer dihitung oleh fitur Split Midtrans fee with customers.
    */
   biaya_admin: number;
+  /** True ketika checkout melanjutkan order lama; bukan membuat order baru. */
+  reused?: boolean;
   /** URL halaman Snap (vtweb) — dipakai app mobile untuk membuka pembayaran di browser/WebView. */
   redirect_url: string;
 }
@@ -295,7 +298,11 @@ export async function buatTransaksiSnap(params: {
   const authString = btoa(`${serverKey}:`);
   const billIds = validatedItems.map(item => item.tagihan_id!);
   if (new Set(billIds).size !== billIds.length) throw new Error("Tagihan yang sama tidak boleh dipilih dua kali");
-  await closeOnlineSessionsForBills(billIds, "replacement_checkout");
+  // Resume an identical active checkout instead of generating a second Midtrans order.
+  // If another pending session overlaps, the parent must cancel it explicitly first.
+  const reusablePayment = await findReusablePaymentForBills(userId,
+    validatedItems.map(item => ({ tagihan_id: item.tagihan_id!, jumlah: item.jumlah })));
+  if (reusablePayment) return reusablePayment;
   const itemsToInsert = validatedItems.map((item) => ({
     tagihan_id: item.tagihan_id,
     siswa_id: item.siswa_id,
@@ -419,6 +426,22 @@ export const createPayment = createServerFn({ method: "POST" })
     });
     return result;
   });
+
+/** The order owner alone may resume a still-valid Snap token. */
+export const resumePendingMidtransPayment = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: SyncMidtransPaymentInput) => d)
+  .handler(async ({ data, context }): Promise<CreatePaymentResult> =>
+    resumeOwnedMidtransPayment(requireContext(context).userId, String(data?.order_id || "").trim())
+  );
+
+/** Parent-requested cancellation always closes the gateway before freeing a bill. */
+export const cancelPendingMidtransPayment = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: SyncMidtransPaymentInput) => d)
+  .handler(async ({ data, context }) =>
+    cancelOwnedMidtransPayment(requireContext(context).userId, String(data?.order_id || "").trim())
+  );
 
 export interface MidtransConfig {
   client_key: string;

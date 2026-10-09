@@ -146,6 +146,7 @@ export default function PortalCheckout() {
         return;
       }
 
+      if (result.reused) toast.info(`Melanjutkan pembayaran sebelumnya (Order ID: ${result.order_id}).`);
       // Open Midtrans Snap. Pilihan channel + fee customer ditangani Midtrans.
       window.snap.pay(result.snap_token, {
         onSuccess: () => {
@@ -166,7 +167,7 @@ export default function PortalCheckout() {
           setIsLoading(false);
         },
         onClose: () => {
-          toast.warning("Pembayaran dibatalkan.");
+          toast.info("Jendela pembayaran ditutup. Transaksi tetap menunggu pembayaran; lanjutkan dari Riwayat Pembayaran atau batalkan secara khusus.");
           setIsLoading(false);
         },
       });

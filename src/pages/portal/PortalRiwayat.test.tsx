@@ -5,10 +5,14 @@ import PortalRiwayat from "./PortalRiwayat";
 
 const mocks = vi.hoisted(() => ({
   download: vi.fn().mockResolvedValue(undefined),
+  resume: vi.fn().mockResolvedValue({ success: true, snap_token: "EXISTING-SNAP-TOKEN", order_id: "ORDER-pending" }),
+  cancel: vi.fn().mockResolvedValue({ success: true, order_id: "ORDER-pending" }),
+  loadMidtrans: vi.fn().mockResolvedValue(undefined),
   exportProps: vi.fn(),
   rows: ["pending", "failed", "expired", "paid"].map(status => ({
     key: status, order_id: `ORDER-${status}`, tanggal: "2026-09-30T08:00:00Z",
     status, payment_type: "qris", total_amount: 450000, biaya_admin: 0,
+    expired_at: "2099-12-31T08:00:00Z", gateway_closed_at: null, has_snap_token: true,
     items: [{ id: status, nama_item: "SPP September", jumlah: 450000 }],
     receipt: { items: [{ id: status, jenisNama: "SPP September", jumlah: 450000, bulan: 0 }],
       tanggalBayar: "2026-09-30T08:00:00Z", nomorBukti: `ORDER-${status}`,
@@ -17,7 +21,8 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "parent" } }) }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: {} }));
-vi.mock("@/server/payment", () => ({ syncMidtransPaymentStatus: vi.fn() }));
+vi.mock("@/server/payment", () => ({ syncMidtransPaymentStatus: vi.fn(), resumePendingMidtransPayment: mocks.resume, cancelPendingMidtransPayment: mocks.cancel }));
+vi.mock("@/hooks/useMidtrans", () => ({ useMidtrans: () => ({ loadMidtrans: mocks.loadMidtrans }) }));
 vi.mock("@/lib/router-compat", () => ({ useSearchParams: () => [new URLSearchParams()] }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey[0] === "portal-anak-ids" ? ["student"] : mocks.rows, isLoading: false }),
@@ -42,6 +47,26 @@ describe("Portal receipt eligibility", () => {
     fireEvent.click(screen.getByRole("button", { name: new RegExp(`ORDER-${status}`) }));
     expect(screen.queryByRole("button", { name: "Download kwitansi" })).not.toBeInTheDocument();
     expect(mocks.download).not.toHaveBeenCalled();
+  });
+
+  it("reopens the same pending Snap token and order id instead of creating a new payment", async () => {
+    const pay = vi.fn();
+    Object.defineProperty(window, "snap", { configurable: true, value: { pay } });
+    render(<PortalRiwayat />);
+    fireEvent.click(screen.getByRole("button", { name: /ORDER-pending/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Lanjutkan Pembayaran" }));
+    await waitFor(() => expect(mocks.resume).toHaveBeenCalledWith({ data: { order_id: "ORDER-pending" } }));
+    await waitFor(() => expect(pay).toHaveBeenCalledWith("EXISTING-SNAP-TOKEN", expect.any(Object)));
+    delete (window as any).snap;
+  });
+
+  it("requires explicit confirmation before calling the server-side cancellation", async () => {
+    render(<PortalRiwayat />);
+    fireEvent.click(screen.getByRole("button", { name: /ORDER-pending/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Batalkan Pembayaran" }));
+    expect(mocks.cancel).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Ya, Batalkan Pembayaran" }));
+    await waitFor(() => expect(mocks.cancel).toHaveBeenCalledWith({ data: { order_id: "ORDER-pending" } }));
   });
 
   it("downloads a paid transaction with the shared cashier receipt and no print popup", async () => {
