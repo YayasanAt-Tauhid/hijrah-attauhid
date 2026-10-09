@@ -115,6 +115,7 @@ const menuItems: MenuItem[] = [
         items: [
           { title: "Input Pembayaran", url: "/keuangan/pembayaran", roles: ["admin", "keuangan", "kasir"] },
           { title: "Pembayaran SPMB", url: "/keuangan/pembayaran-spmb", roles: ["admin", "keuangan", "kasir"] },
+          { title: "Monitoring Pembayaran SPMB", url: "/keuangan/monitoring-spmb", roles: ["admin", "keuangan", "kasir"] },
           { title: "Rencana Tagihan Siswa Baru", url: "/keuangan/rencana-siswa-baru", roles: ["admin", "keuangan"] },
           { title: "Penerimaan Lain", url: "/keuangan/penerimaan-lain", roles: ["admin", "keuangan"] },
           { title: "Pengeluaran", url: "/keuangan/pengeluaran", roles: ["admin", "keuangan"] },

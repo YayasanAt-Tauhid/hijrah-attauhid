@@ -1153,6 +1153,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
                     {!activationDateReady && <DropdownMenuLabel className="whitespace-normal text-xs font-normal text-muted-foreground">Aktivasi mulai {formatTanggal(targetYearForRow?.tanggal_mulai)}</DropdownMenuLabel>}
                   </>}
                 </>}
+                {role === "admin" && detail?.spmb_status_kelulusan === "lulus" && <DropdownMenuItem onSelect={() => navigate(`/keuangan/monitoring-spmb?siswa=${row.id}`)}>Monitoring pembayaran</DropdownMenuItem>}
                 {role === "admin" && detail?.spmb_status_kelulusan === "lulus" && ((!internalStudent && row._academicStatus === "aktif") || (internalStudent && Boolean(detail?.spmb_tanggal_aktivasi))) && <>
                   <DropdownMenuSeparator /><DropdownMenuItem onSelect={() => navigate(`/keuangan/rencana-siswa-baru?siswa=${row.id}`)}>Atur tagihan</DropdownMenuItem>
                 </>}
