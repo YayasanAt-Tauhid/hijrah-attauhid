@@ -140,7 +140,7 @@ export async function buatTransaksiSnap(params: {
   for (const item of items) {
     let tagihanQuery = admin
       .from("tagihan")
-      .select("id, nominal, nominal_bruto, nominal_diskon, status, tahun_ajaran_id, bulan, jatuh_tempo")
+      .select("id, nominal, nominal_bruto, nominal_diskon, status, tahun_ajaran_id, bulan, jatuh_tempo, jenis:jenis_id(nama, departemen_id)")
       .eq("siswa_id", item.siswa_id)
       .eq("jenis_id", item.jenis_id);
 
@@ -172,6 +172,8 @@ export async function buatTransaksiSnap(params: {
     }
 
     const tagihan = tagihanRows[0];
+    const jenisTagihan = tagihan.jenis;
+    if (!jenisTagihan) throw new Error("Jenis pembayaran tagihan tidak ditemukan");
     const nominalTagihan = Number(tagihan.nominal) || 0;
     if (nominalTagihan <= 0) {
       throw new Error(
@@ -208,7 +210,7 @@ export async function buatTransaksiSnap(params: {
     const cicilanDiizinkan =
       item.bulan === 0 &&
       (tagihan.status !== "terjadwal" ||
-        isUangPangkalPaymentName(item.jenis_nama));
+        isUangPangkalPaymentName(jenisTagihan.nama));
     if (!cicilanDiizinkan && requested !== sisa) {
       throw new Error(
         tagihan.status === "terjadwal"
@@ -221,7 +223,8 @@ export async function buatTransaksiSnap(params: {
       ...item,
       tagihan_id: tagihan.id,
       jumlah: requested,
-      departemen_id: item.departemen_id || undefined,
+      jenis_nama: jenisTagihan.nama,
+      departemen_id: jenisTagihan.departemen_id || undefined,
       tahun_ajaran_id: tagihan.tahun_ajaran_id || item.tahun_ajaran_id || undefined,
     });
   }

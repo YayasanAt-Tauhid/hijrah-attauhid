@@ -39,8 +39,12 @@ describe("Kasir payment access contract", () => {
     expect(pembayaranServer).toContain('await requireRole(admin, userId, ["admin", "keuangan", "kasir"])');
     expect(pembayaranPage).toContain("cariSiswaPembayaran");
     expect(pembayaranPage).toContain("include_nonaktif_with_open_bills: true");
-    expect(pembayaranServer).toContain('["aktif", "keluar", "alumni", "pindah"]');
-    expect(pembayaranServer).toContain('.in("status", ["belum_bayar", "sebagian"])');
+    expect(pembayaranServer).toContain('.in("status", includeCalonLulus');
+    expect(pembayaranServer).toContain('? ["belum_bayar", "sebagian", "terjadwal"]');
+    expect(pembayaranServer).toContain('...(includeNonaktifWithOpenBills ? ["keluar", "alumni", "pindah"] : [])');
+    expect(pembayaranServer).toContain('...(includeCalonLulus ? ["calon", "diterima"] : [])');
+    expect(pembayaranPage).toContain("include_calon_lulus_with_open_bills: true");
+    expect(pembayaranServer).toContain('calonLulus.has(siswa.id)');
     expect(spmbPage).toContain('status: "calon"');
   });
 

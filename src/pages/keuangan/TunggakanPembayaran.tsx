@@ -87,7 +87,8 @@ function TunggakanPembayaranContent() {
         data: {
           jenis_id: jenisId,
           tahun_ajaran_id: tahunAjaranId,
-          kelas_id: kelasId || undefined,
+          kelas_id: kelasId && kelasId !== "__tanpa_kelas__" ? kelasId : undefined,
+          tanpa_kelas: kelasId === "__tanpa_kelas__",
           departemen_id: departemenId || undefined,
           bulan_list: bulanRange,
         },
@@ -220,7 +221,7 @@ function TunggakanPembayaranContent() {
       onClear: () => { setJenisId(""); setSelectedIds(new Set()); },
     }] : []),
     ...(kelasId ? [{
-      key: "kelas", label: "Kelas", value: kelasNama?.nama || kelasId,
+      key: "kelas", label: "Kelas", value: kelasId === "__tanpa_kelas__" ? "Belum ditempatkan" : kelasNama?.nama || kelasId,
       onClear: () => setKelasId(""),
     }] : []),
     ...(!isSekaliBayar && jenisId ? [{
@@ -317,7 +318,8 @@ function TunggakanPembayaranContent() {
               <Select value={kelasId || "__all__"} onValueChange={(v) => setKelasId(v === "__all__" ? "" : v)}>
                 <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Semua" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__all__">Semua</SelectItem>
+                  <SelectItem value="__all__">Semua (termasuk belum ditempatkan)</SelectItem>
+                  <SelectItem value="__tanpa_kelas__">Belum ditempatkan</SelectItem>
                   {filteredKelas?.map((k: any) => <SelectItem key={k.id} value={k.id}>{k.nama}</SelectItem>)}
                 </SelectContent>
               </Select>

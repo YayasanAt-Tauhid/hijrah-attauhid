@@ -251,7 +251,7 @@ export async function handleNotification(request: Request): Promise<Response> {
 
         const { data: jenis } = await admin
           .from("jenis_pembayaran")
-          .select("nama, akun_pendapatan_id")
+          .select("nama, departemen_id, akun_pendapatan_id")
           .eq("id", item.jenis_id)
           .single();
 
@@ -292,7 +292,7 @@ export async function handleNotification(request: Request): Promise<Response> {
             p_bulan: item.bulan,
             p_jumlah: item.jumlah,
             p_tanggal_bayar: today,
-            p_departemen_id: item.departemen_id || null,
+            p_departemen_id: jenis?.departemen_id || item.departemen_id || null,
             p_tahun_ajaran_id: item.tahun_ajaran_id || null,
             p_order_id: order_id,
             p_payment_type: payment_type,

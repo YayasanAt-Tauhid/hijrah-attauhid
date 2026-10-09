@@ -1,0 +1,64 @@
+name: Verify pull request
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: verify-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Tests
+        run: npm test -- --maxWorkers=2
+      - name: Build and generate routes
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_build_placeholder
+        run: npm run build
+      - name: Compare full TypeScript checks with main
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_build_placeholder
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          typecheck_dir="$RUNNER_TEMP/pr-typecheck"
+          baseline_repo="$RUNNER_TEMP/pr-typecheck-base"
+          mkdir -p "$typecheck_dir"
+          git worktree add --detach "$baseline_repo" "$PR_BASE_SHA"
+          record_tsc() {
+            set +e
+            npx tsc -p "$1" --noEmit --pretty false >"$2" 2>&1
+            typecheck_exit="$?"
+            set -e
+            printf '%s\n' "$typecheck_exit" >"${2%.txt}.exit"
+          }
+          (
+            cd "$baseline_repo"
+            npm ci
+            npm run build >"$typecheck_dir/base-build.log" 2>&1
+            record_tsc tsconfig.app.json "$typecheck_dir/base-app.txt"
+            record_tsc tsconfig.node.json "$typecheck_dir/base-config.txt"
+          )
+          record_tsc tsconfig.app.json "$typecheck_dir/current-app.txt"
+          record_tsc tsconfig.node.json "$typecheck_dir/current-config.txt"
+          python3 scripts/qa/compare-typecheck.py --base "$typecheck_dir/base-app.txt" --current "$typecheck_dir/current-app.txt" --label application
+          python3 scripts/qa/compare-typecheck.py --base "$typecheck_dir/base-config.txt" --current "$typecheck_dir/current-config.txt" --label configuration
+      - name: Upload TypeScript evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-baseline-comparison
+          path: ${{ runner.temp }}/pr-typecheck/
+          if-no-files-found: ignore
