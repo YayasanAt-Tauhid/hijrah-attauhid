@@ -2,9 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { syncMidtransPaymentStatus } from "@/server/payment";
+import { syncMidtransPaymentStatus, resumePendingMidtransPayment, cancelPendingMidtransPayment } from "@/server/payment";
+import { useMidtrans } from "@/hooks/useMidtrans";
 import { useSearchParams } from "@/lib/router-compat";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Copy, Download, Loader2 } from "lucide-react";
+import { Copy, Download, Loader2, CreditCard, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan";
@@ -52,12 +57,19 @@ interface RiwayatItem {
   status: string;
   total_amount: number;
   biaya_admin: number;
+  expired_at?: string | null;
+  gateway_closed_at?: string | null;
+  has_snap_token?: boolean;
   receipt: PortalReceipt;
   items: { id: string; nama_item: string; jumlah: number; balance?: HistoryBillBalance | null }[];
 }
 
 export default function PortalRiwayat() {
   const { user } = useAuth();
+  const { loadMidtrans } = useMidtrans();
+  const [paymentAction, setPaymentAction] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<RiwayatItem | null>(null);
+  useEffect(() => { void loadMidtrans(); }, [loadMidtrans]);
   const [searchParams] = useSearchParams();
   const highlightOrder = searchParams.get("order");
   const queryClient = useQueryClient();
@@ -133,6 +145,9 @@ export default function PortalRiwayat() {
           status: tx.status,
           total_amount: Number(tx.total_amount) + biayaAdmin,
           biaya_admin: biayaAdmin,
+          expired_at: tx.expired_at,
+          gateway_closed_at: tx.gateway_closed_at,
+          has_snap_token: Boolean(tx.snap_token),
           items,
           receipt: {
             ...portalReceiptIdentity(tx.transaksi_midtrans_item || []),
@@ -220,6 +235,60 @@ export default function PortalRiwayat() {
         });
     }
   }, [highlightOrder, transaksi, queryClient, user?.id]);
+
+  const lanjutkanPembayaran = async (tx: RiwayatItem) => {
+    if (!tx.order_id || paymentAction) return;
+    setPaymentAction(tx.order_id);
+    try {
+      if (!window.snap || typeof window.snap.pay !== "function") {
+        await loadMidtrans();
+      }
+      if (!window.snap || typeof window.snap.pay !== "function") {
+        throw new Error("Layanan Midtrans belum siap. Silakan coba lagi.");
+      }
+      const result = await resumePendingMidtransPayment({ data: { order_id: tx.order_id } });
+      // Same token + order ID: no new transaction is created on a retry.
+      window.snap.pay(result.snap_token, {
+        onSuccess: () => {
+          toast.success("Pembayaran diterima Midtrans. Sedang memeriksa pencatatan...");
+          void syncMidtransPaymentStatus({ data: { order_id: result.order_id } })
+            .catch(() => toast.info("Pencatatan pembayaran masih diverifikasi. Periksa kembali Riwayat."))
+            .finally(() => void queryClient.invalidateQueries({ queryKey: ["portal-riwayat", user?.id] }));
+        },
+        onPending: () => {
+          toast.info("Pembayaran masih pending. Nomor transaksi tetap sama.");
+          void queryClient.invalidateQueries({ queryKey: ["portal-riwayat", user?.id] });
+        },
+        onError: () => {
+          toast.error("Midtrans melaporkan kendala pembayaran. Periksa kembali status sebelum mencoba lagi.");
+          void queryClient.invalidateQueries({ queryKey: ["portal-riwayat", user?.id] });
+        },
+        onClose: () => toast.info("Jendela pembayaran ditutup. Transaksi tetap aktif hingga dibatalkan atau kedaluwarsa."),
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal melanjutkan pembayaran.");
+      void queryClient.invalidateQueries({ queryKey: ["portal-riwayat", user?.id] });
+    } finally {
+      setPaymentAction(null);
+    }
+  };
+
+  const batalkanPembayaran = async () => {
+    if (!cancelTarget?.order_id || paymentAction) return;
+    const orderId = cancelTarget.order_id;
+    setPaymentAction(orderId);
+    try {
+      await cancelPendingMidtransPayment({ data: { order_id: orderId } });
+      toast.success("Sesi Midtrans berhasil ditutup. Anda dapat memilih tagihan dan membuat pembayaran baru.");
+      setCancelTarget(null);
+      await queryClient.invalidateQueries({ queryKey: ["portal-riwayat", user?.id] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Sesi Midtrans belum bisa dibatalkan.");
+      void queryClient.invalidateQueries({ queryKey: ["portal-riwayat", user?.id] });
+    } finally {
+      setPaymentAction(null);
+    }
+  };
 
   const downloadKwitansi = (tx: RiwayatItem) => {
     if (!canDownloadReceipt(tx.status) || downloadTarget) return;
@@ -386,6 +455,22 @@ export default function PortalRiwayat() {
                         Sisa tagihan di atas adalah kondisi saat ini, termasuk pembayaran setelah transaksi ini.
                       </p>
                     )}
+                    {tx.order_id && !tx.gateway_closed_at && tx.status !== "paid" && tx.has_snap_token && (
+                      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                        {tx.status === "pending" && !outdated &&
+                          tx.expired_at && new Date(tx.expired_at).getTime() > Date.now() && (
+                          <Button size="sm" disabled={!!paymentAction} onClick={() => void lanjutkanPembayaran(tx)}>
+                            {paymentAction === tx.order_id ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> :
+                              <CreditCard className="mr-1.5 h-4 w-4" />}
+                            Lanjutkan Pembayaran
+                          </Button>
+                        )}
+                        <Button variant="outline" size="sm" disabled={!!paymentAction} onClick={() => setCancelTarget(tx)}>
+                          <XCircle className="mr-1.5 h-4 w-4" />
+                          Batalkan Pembayaran
+                        </Button>
+                      </div>
+                    )}
                     {canDownloadReceipt(tx.status) && (
                       <div className="mt-3 flex justify-end">
                         <Button
@@ -408,6 +493,24 @@ export default function PortalRiwayat() {
           })}
         </Accordion>
       )}
+      <AlertDialog open={!!cancelTarget} onOpenChange={(open) => { if (!open && !paymentAction) setCancelTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Batalkan sesi pembayaran ini?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Pembatalan akan diperiksa dan dikirim ke Midtrans. Tagihan sekolah tidak dihapus.
+              Setelah sesi benar-benar ditutup, Anda dapat membuat transaksi pembayaran baru.
+              Jika pembayaran ternyata sudah diterima Midtrans, pembatalan akan ditolak.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!paymentAction}>Kembali</AlertDialogCancel>
+            <AlertDialogAction disabled={!!paymentAction} onClick={(event) => { event.preventDefault(); void batalkanPembayaran(); }}>
+              {paymentAction ? "Memeriksa Midtrans..." : "Ya, Batalkan Pembayaran"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {downloadTarget && canDownloadReceipt(downloadTarget.status) && (
         <PrintKuitansiGabungan
           {...downloadTarget.receipt}
