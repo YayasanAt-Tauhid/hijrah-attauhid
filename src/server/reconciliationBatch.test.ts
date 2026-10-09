@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { runReconciliationBatch } from "./reconciliationBatch";
+import { limitReconciliationCandidates, runReconciliationBatch, reconciliationErrorMessage } from "./reconciliationBatch";
 
 describe("reconciliation batch", () => {
   const rows = Array.from({ length: 10 }, (_, i) => ({ order_id: `TEST-${i}` }));
+  it("never schedules more than two gateway sessions per Worker invocation", () => {
+    expect(limitReconciliationCandidates(rows).map(x => x.order_id)).toEqual(["TEST-0", "TEST-1"]);
+    expect(limitReconciliationCandidates([])).toEqual([]);
+  });
+  it("reports a readable Supabase error instead of object Object", () => {
+    expect(reconciliationErrorMessage({ code: "PGRST123", message: "Too many subrequests" })).toBe("Too many subrequests");
+  });
   it("visits later orders even when initial orders fail", async () => {
     let active = 0;
     let maxActive = 0;

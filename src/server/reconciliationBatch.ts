@@ -3,6 +3,12 @@
  * Used only by the authenticated, scheduled reconciliation endpoint.
  */
 export type ReconciliationOutcome = "skipped" | "checked" | "closed";
+
+// Keep the total number of Midtrans + Supabase fetches inside the Worker limit.
+export const RECONCILIATION_BATCH_LIMIT = 2;
+export function limitReconciliationCandidates<T>(candidates: T[]): T[] {
+  return candidates.slice(0, RECONCILIATION_BATCH_LIMIT);
+}
 export interface ReconciliationFailure {
   order_id: string;
   reason: string;
@@ -17,7 +23,10 @@ export interface ReconciliationResult {
 
 export function reconciliationErrorMessage(error: unknown): string {
   // Return only a bounded diagnostic in the signed scheduler response.
-  const message = error instanceof Error ? error.message : String(error ?? "Unknown error");
+  const message = error instanceof Error ? error.message
+    : typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
+      ? error.message
+      : String(error ?? "Unknown error");
   return message.slice(0, 300);
 }
 
