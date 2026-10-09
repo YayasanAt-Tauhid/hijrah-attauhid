@@ -180,7 +180,7 @@ function getKesiapanPenerimaan(row: Record<string, unknown>): KesiapanPenerimaan
   else if (!row._pmbLunas && !row._pmbGratis) kekurangan.push("pembayaran SPMB");
   if (!row.departemen_id) kekurangan.push("lembaga");
   if (!row.angkatan_id) kekurangan.push("angkatan");
-  if (!row._punyaKelas) kekurangan.push("kelas");
+  if (!detail?.tahun_ajaran_id) kekurangan.push("tahun ajaran tujuan");
   if (!detail?.dokumen_kk_path) kekurangan.push("Kartu Keluarga");
   if (!detail?.dokumen_akta_path) kekurangan.push("Akta Kelahiran");
   if (departemenPerluAsrama(departemen) && !detail?.status_asrama) kekurangan.push("pilihan asrama");
@@ -833,6 +833,10 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
   };
 
   const handleAktifkan = async (row: Record<string, unknown>) => {
+    if (!row._punyaKelas) {
+      toast.error("Belum bisa diaktifkan", { description: "Tempatkan murid di kelas jenjang tujuan terlebih dahulu. Penerimaan dan tagihan awal tidak memerlukan kelas." });
+      return;
+    }
     if (!row.nis) {
       toast.error("Murid belum siap diaktifkan", { description: "Buat NIS terlebih dahulu sebelum mengaktifkan murid." });
       return;
@@ -1147,14 +1151,16 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
                     {!kesiapan.siap && <DropdownMenuItem onSelect={() => setReadinessRow(row)} className="text-warning">Lihat {kesiapan.kekurangan.length} kekurangan</DropdownMenuItem>}
                   </>}
                   {!internalStudent && status === "diterima" && !row.nis && <DropdownMenuItem disabled={loading} onSelect={() => handleBuatNIS(row)}>Buat NIS</DropdownMenuItem>}
-                  {!internalStudent && status === "diterima" && <DropdownMenuItem disabled={loading || !row.nis} onSelect={() => handleAktifkan(row)}>Aktifkan murid</DropdownMenuItem>}
+                  {!internalStudent && status === "diterima" && <DropdownMenuItem disabled={loading || !row.nis || !row._punyaKelas} onSelect={() => handleAktifkan(row)}>Aktifkan murid</DropdownMenuItem>}
                   {internalReadyForActivation && <>
                     <DropdownMenuItem disabled={!activationDateReady} onSelect={() => openInternalActivation(row)}>Aktifkan ke jenjang tujuan</DropdownMenuItem>
                     {!activationDateReady && <DropdownMenuLabel className="whitespace-normal text-xs font-normal text-muted-foreground">Aktivasi mulai {formatTanggal(targetYearForRow?.tanggal_mulai)}</DropdownMenuLabel>}
                   </>}
                 </>}
                 {role === "admin" && detail?.spmb_status_kelulusan === "lulus" && <DropdownMenuItem onSelect={() => navigate(`/keuangan/monitoring-spmb?siswa=${row.id}`)}>Monitoring pembayaran</DropdownMenuItem>}
-                {role === "admin" && detail?.spmb_status_kelulusan === "lulus" && ((!internalStudent && row._academicStatus === "aktif") || (internalStudent && Boolean(detail?.spmb_tanggal_aktivasi))) && <>
+                {role === "admin" && detail?.spmb_status_kelulusan === "lulus" &&
+                  ((!internalStudent && ["diterima", "aktif"].includes(status)) ||
+                    (internalStudent && ["diterima", "aktif", "selesai"].includes(String(detail?.spmb_status_pendaftaran || "")))) && <>
                   <DropdownMenuSeparator /><DropdownMenuItem onSelect={() => navigate(`/keuangan/rencana-siswa-baru?siswa=${row.id}`)}>Atur tagihan</DropdownMenuItem>
                 </>}
               </DropdownMenuContent>

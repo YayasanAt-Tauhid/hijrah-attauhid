@@ -134,17 +134,14 @@ export const rekapTunggakan = createServerFn({ method: "POST" })
         per_tanggal: perTanggal,
       };
 
-    // Pembayaran parsial: satu tagihan bisa dicicil lewat beberapa baris
-    // pembayaran, jadi sisa dihitung dari total yang sudah masuk untuk
-    // kombinasi jenis+bulan+periode yang sama.
-    let pembayaranQuery = admin
+    // Pembayaran boleh diterima pada tahun buku berbeda dari tahun tagihan.
+    // Rujukan tagihan_id menjadi sumber utama; tanpa rujukan gunakan fallback
+    // periode yang sama untuk kompatibilitas pembayaran legacy.
+    const { data: payments, error: paymentsErr } = await admin
       .from("pembayaran")
-      .select("jenis_id, bulan, jumlah, tahun_ajaran_id")
+      .select("tagihan_id, jenis_id, bulan, jumlah, tahun_ajaran_id")
       .eq("siswa_id", siswa_id);
-    if (tahun_ajaran_id)
-      pembayaranQuery = pembayaranQuery.eq("tahun_ajaran_id", tahun_ajaran_id);
-
-    const { data: payments } = await pembayaranQuery;
+    if (paymentsErr) throw new Error("Gagal membaca pembayaran: " + paymentsErr.message);
 
     const kunci = (
       jenisId: string,
@@ -153,9 +150,14 @@ export const rekapTunggakan = createServerFn({ method: "POST" })
     ) => `${jenisId}|${bulan ?? "x"}|${periodeId ?? "x"}`;
 
     const terbayarMap = new Map<string, number>();
+    const terbayarPerTagihan = new Map<string, number>();
     for (const p of payments || []) {
-      const k = kunci(p.jenis_id!, p.bulan, p.tahun_ajaran_id);
-      terbayarMap.set(k, (terbayarMap.get(k) || 0) + (Number(p.jumlah) || 0));
+      if (p.tagihan_id) {
+        terbayarPerTagihan.set(p.tagihan_id, (terbayarPerTagihan.get(p.tagihan_id) || 0) + (Number(p.jumlah) || 0));
+      } else {
+        const k = kunci(p.jenis_id!, p.bulan, p.tahun_ajaran_id);
+        terbayarMap.set(k, (terbayarMap.get(k) || 0) + (Number(p.jumlah) || 0));
+      }
     }
 
     const tunggakan: TunggakanRow[] = [];
@@ -165,7 +167,7 @@ export const rekapTunggakan = createServerFn({ method: "POST" })
     for (const t of tagihanList as unknown as TagihanRow[]) {
       const nominal = Number(t.nominal) || 0;
       const k = kunci(t.jenis_id, t.bulan, t.tahun_ajaran_id);
-      const terbayar = Math.min(terbayarMap.get(k) || 0, nominal);
+      const terbayar = Math.min(Math.max(0, (terbayarPerTagihan.get(t.id) || 0) + (terbayarMap.get(k) || 0)), nominal);
       const sisa = nominal - terbayar;
       if (sisa <= 0) continue;
 
@@ -296,13 +298,14 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
       bulan: number | null;
       nominal: number | string | null;
       jatuh_tempo: string | null;
+      jenis_pembayaran?: { departemen_id: string | null } | null;
     };
     const tagihanRows: BatchTagihanRow[] = [];
     const pageSize = 1000;
     for (let from = 0; ; from += pageSize) {
       let tagihanQuery = admin
         .from("tagihan")
-        .select("id, siswa_id, bulan, nominal, jatuh_tempo")
+.select("id, siswa_id, bulan, nominal, jatuh_tempo, jenis_pembayaran:jenis_id(departemen_id)")
         .eq("jenis_id", jenis_id)
         .eq("tahun_ajaran_id", tahun_ajaran_id)
         .not("status", "in", `(${STATUS_SELESAI.join(",")})`)
@@ -329,6 +332,9 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
     const siswaMeta = new Map<string, KelasSiswaRow>();
     const studentStates = new Map<string, string>();
     const passedStudents = new Set<string>();
+    // Pendaftaran internal yang sudah diterima tetapi belum berpindah jenjang
+    // masih mempunyai kelas lama; untuk tagihan jenjang tujuan kelasnya kosong.
+    const pendingInternalTarget = new Map<string, string>();
     for (let offset = 0; offset < studentIds.length; offset += 100) {
       const ids = studentIds.slice(offset, offset + 100);
       const [studentResult, classResult, detailResult] = await Promise.all([
@@ -337,7 +343,7 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
           .select("siswa_id,kelas:kelas_id(nama,departemen_id)")
           .eq("aktif", true).in("siswa_id", ids),
         (admin as any).from("siswa_detail")
-          .select("siswa_id").in("siswa_id", ids)
+          .select("siswa_id,spmb_siswa_internal,spmb_status_pendaftaran,spmb_tanggal_aktivasi,spmb_departemen_tujuan_id").in("siswa_id", ids)
           .eq("spmb_status_kelulusan", "lulus")
           .not("spmb_gelombang_id", "is", null),
       ]);
@@ -348,7 +354,15 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
         studentStates.set(row.id, row.status);
         siswaMeta.set(row.id, { siswa_id: row.id, siswa: row, kelas: null });
       }
-      for (const row of detailResult.data || []) if (row.siswa_id) passedStudents.add(row.siswa_id);
+      for (const row of detailResult.data || []) {
+        if (!row.siswa_id) continue;
+        passedStudents.add(row.siswa_id);
+        if (row.spmb_siswa_internal === true &&
+          row.spmb_status_pendaftaran === "diterima" &&
+          !row.spmb_tanggal_aktivasi && row.spmb_departemen_tujuan_id) {
+          pendingInternalTarget.set(row.siswa_id, row.spmb_departemen_tujuan_id);
+        }
+      }
       for (const row of classResult.data || []) {
         const meta = siswaMeta.get(row.siswa_id);
         if (meta && !meta.kelas) meta.kelas = row.kelas as KelasSiswaRow["kelas"];
@@ -361,36 +375,60 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
     ));
     if (!siswaIdSet.size) return { rows: [], per_tanggal: perTanggal };
 
-    // Pembayaran parsial juga dibaca berhalaman. Filtering siswa dilakukan di
-    // server supaya tidak membangun query-string .in(...) yang sangat panjang.
+    // Pembayaran yang sudah terhubung ke tagihan harus dihitung dari ID
+    // tagihan, walaupun uang diterima pada Tahun Buku yang berbeda.
+    // Pembayaran legacy tanpa tagihan_id tetap memakai fallback tahun buku.
     type BatchPaymentRow = {
+      tagihan_id: string | null;
       siswa_id: string | null;
       bulan: number | null;
       jumlah: number | string | null;
     };
     const payments: BatchPaymentRow[] = [];
+    const billIds = tagihanRows.map(row => row.id);
+    // Batas sekitar 180 UUID menjaga panjang URL PostgREST sekaligus
+    // mengurangi jumlah subrequest Cloudflare Workers untuk SPP massal.
+    for (let offset = 0; offset < billIds.length; offset += 180) {
+      const billChunk = billIds.slice(offset, offset + 180);
+      for (let from = 0; ; from += pageSize) {
+        const { data: page, error: pErr } = await admin
+          .from("pembayaran")
+          .select("tagihan_id, siswa_id, bulan, jumlah")
+          .in("tagihan_id", billChunk)
+          .order("id", { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (pErr) throw new Error("Gagal membaca pembayaran tagihan: " + pErr.message);
+        payments.push(...((page || []) as BatchPaymentRow[]));
+        if (!page || page.length < pageSize) break;
+      }
+    }
+    // Kompatibilitas pembayaran lama yang tidak memiliki relasi tagihan.
     for (let from = 0; ; from += pageSize) {
       const { data: page, error: pErr } = await admin
         .from("pembayaran")
-        .select("siswa_id, bulan, jumlah")
+        .select("tagihan_id, siswa_id, bulan, jumlah")
         .eq("jenis_id", jenis_id)
         .eq("tahun_ajaran_id", tahun_ajaran_id)
+        .is("tagihan_id", null)
         .order("id", { ascending: true })
         .range(from, from + pageSize - 1);
-      if (pErr) throw new Error("Gagal mengambil data pembayaran: " + pErr.message);
+      if (pErr) throw new Error("Gagal membaca pembayaran legacy: " + pErr.message);
       for (const row of page || []) {
-        if (row.siswa_id && siswaIdSet.has(row.siswa_id)) {
-          payments.push(row as BatchPaymentRow);
-        }
+        if (row.siswa_id && siswaIdSet.has(row.siswa_id)) payments.push(row as BatchPaymentRow);
       }
       if (!page || page.length < pageSize) break;
     }
 
     const kunci = (siswaId: string, bulan: number | null) => `${siswaId}|${bulan ?? "x"}`;
     const terbayarMap = new Map<string, number>();
+    const terbayarPerTagihan = new Map<string, number>();
     for (const p of payments) {
-      const k = kunci(p.siswa_id!, p.bulan);
-      terbayarMap.set(k, (terbayarMap.get(k) || 0) + (Number(p.jumlah) || 0));
+      if (p.tagihan_id) {
+        terbayarPerTagihan.set(p.tagihan_id, (terbayarPerTagihan.get(p.tagihan_id) || 0) + (Number(p.jumlah) || 0));
+      } else {
+        const k = kunci(p.siswa_id!, p.bulan);
+        terbayarMap.set(k, (terbayarMap.get(k) || 0) + (Number(p.jumlah) || 0));
+      }
     }
 
     // Satu baris hasil = satu tagihan/periode. Jangan gabungkan beberapa bulan
@@ -400,20 +438,24 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
     for (const t of tagihanRows) {
       const nominal = Number(t.nominal) || 0;
       const k = kunci(t.siswa_id!, t.bulan);
-      const terbayar = Math.min(terbayarMap.get(k) || 0, nominal);
+      const terbayar = Math.min(Math.max(0, (terbayarPerTagihan.get(t.id) || 0) + (terbayarMap.get(k) || 0)), nominal);
       const sisa = nominal - terbayar;
       if (sisa <= 0) continue;
       if (!sudahMenunggak(t.jatuh_tempo, perTanggal)) continue; // belum jatuh tempo -> bukan tunggakan
 
       const ks = siswaMeta.get(t.siswa_id!);
       if (!ks || !siswaIdSet.has(t.siswa_id!)) continue;
-      if (tanpa_kelas && ks.kelas) continue;
+      const pendingTargetDept = pendingInternalTarget.get(t.siswa_id!);
+      const awaitingTargetClass = !!pendingTargetDept &&
+        pendingTargetDept === t.jenis_pembayaran?.departemen_id;
+      if (kelas_id && awaitingTargetClass) continue;
+      if (tanpa_kelas && ks.kelas && !awaitingTargetClass) continue;
 
       rows.push({
         siswa_id: t.siswa_id!,
         nis: ks.siswa?.nis ?? null,
         nama: ks.siswa?.nama ?? null,
-        kelas: ks.kelas?.nama ?? "Belum ditempatkan",
+        kelas: awaitingTargetClass ? "Belum ditempatkan" : (ks.kelas?.nama ?? "Belum ditempatkan"),
         bulan_tunggak: [t.bulan ?? 0],
         tagihan_tunggak: [{ tagihan_id: t.id, bulan: t.bulan ?? 0, sisa }],
         total: sisa,
