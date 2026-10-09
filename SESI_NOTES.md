@@ -1,3 +1,34 @@
+## Monitoring Pembayaran SPMB — siap ditinjau (9 Oktober 2026)
+
+User menyetujui menu monitoring calon siswa lulus tes berdasarkan surat
+pernyataan Non Alumni 2027/2028. Skema dipilih per pendaftaran, bukan otomatis
+untuk semua jenjang/alumni. Nominal berasal dari tagihan netto dengan tahun
+akademik dan lembaga tujuan yang sama; transaksi jenjang lama atau tagihan
+tanpa tahun akademik tidak ditebak. Tanggal lulus tes menjadi awal 14 hari;
+30 hari berikutnya dihitung ketika cicilan sebelumnya memenuhi minimum.
+Pembayaran kecil tidak memundurkan tenggat pertama. Pembayaran pertama
+lebih besar mengurangi sisa akhir.
+
+Production cmvzcpeiuompqgdvflky diperiksa read-only: 34 pendaftaran lulus
+memiliki tanggal lulus. Sebagian tagihan uang pangkal historis belum memiliki
+tahun_akademik_id; perlu verifikasi tersendiri, bukan backfill dalam fitur ini.
+Event skema/tindak lanjut/perpanjangan append-only dan terikat identitas siklus.
+Kasir membaca/mencatat tindak lanjut, admin/keuangan menetapkan skema atau
+perpanjangan. Status penerimaan dan transaksi tidak diubah.
+
+398 tes aplikasi, build, SQL pada database disposable, dan fixture browser
+desktop/mobile lulus sebelum VPS timeout. File baru bersih lint; masalah lama
+SPMB tetap 68 error 2 warning. Typecheck seluruh repo terbentur memori dan
+belum lulus. Sumber dipulihkan melalui GitHub API dari kode sesi ini;
+parent sudah memuat PR135. Setelah pemulihan, 19 skenario perhitungan
+dijalankan ulang di workspace terpisah dan semuanya lulus. Angka 398 bukan rerun suite pada main terbaru.
+Cocokkan worktree /home/attauhid/projects/hijrah-spmb-payment-monitor dengan
+commit GitHub setelah VPS pulih; perubahan lokal lama belum di-commit.
+SQL produksi belum diterapkan dan fitur belum aktif di produksi.
+Tunggu persetujuan SQL pada commit final sesuai aturan proyek; selanjutnya
+terapkan migration, cek schema/grants/advisors, merge dan verifikasi deploy.
+Detail keputusan dan batasan: docs/spmb-payment-monitor.md.
+
 ## SPMB — daftar ringkas dan statistik terpisah (7 Oktober 2026)
 
 Pengguna menyetujui perbaikan setelah melaporkan tabel sulit digeser, panel
