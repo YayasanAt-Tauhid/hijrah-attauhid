@@ -15,7 +15,9 @@ export async function handleReconciliation(request: Request) {
     });
     if (error) throw error;
     if (!allowed) return new Response("Unauthorized or already running", { status: 401 });
-    return Response.json(await reconcileOnlineSessions());
+    const summary = await reconcileOnlineSessions();
+    // A successful HTTP response must not conceal failed gateway checks.
+    return Response.json(summary, { status: summary.failed > 0 ? 502 : 200 });
   } catch {
     return Response.json({ error: "Reconciliation failed" }, { status: 500 });
   }
