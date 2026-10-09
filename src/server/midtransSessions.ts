@@ -1,6 +1,7 @@
 
 import { createAdminClient, readEnv } from "./supabase";
 import { closeGatewaySession, isGatewayPaid, readGatewayStatus, type GatewayPayload } from "./midtransGateway";
+import { runReconciliationBatch } from "./reconciliationBatch";
 
 export async function processGatewayPayment(payload: GatewayPayload) {
   // Status API is authenticated server-to-server. Feed its result through the
@@ -83,68 +84,86 @@ export async function closeOnlineSessionsForBills(billIds: string[], reason: str
   for (const transaction of transactions.values()) await closeStoredSession(transaction, reason);
 }
 
-/** Periodic fallback: synchronize paid orders, then revoke stale pages/codes. */
+interface ReconciliationCandidate {
+  id: string;
+  order_id: string;
+  status: string;
+  created_at: string;
+  expired_at: string;
+  gateway_closed_at: string | null;
+  metadata?: { bill_balances?: Record<string, number> } | null;
+}
+
+/** Periodic fallback: synchronize paid orders, then revoke stale pages/codes.
+ * Failure recording is checked, not fire-and-forget. Candidate selection is
+ * rotated atomically in the companion database migration. */
 export async function reconcileOnlineSessions() {
   const admin = createAdminClient() as any;
   const key = readEnv("MIDTRANS_SERVER_KEY");
   if (!key) throw new Error("MIDTRANS_SERVER_KEY belum dikonfigurasi");
   const { data: candidates, error } = await admin.rpc("get_midtrans_reconciliation_candidates");
   if (error) throw error;
-  const rows = await Promise.all((candidates || []).map(async (tx: any) => {
+
+  return runReconciliationBatch((candidates || []) as ReconciliationCandidate[], async (tx) => {
+    if (tx.gateway_closed_at && tx.status !== "paid") return "skipped";
+    if (Date.now() - Date.parse(tx.created_at) < 90000) return "skipped";
+
+    // Loading one transaction at a time avoids aborting the whole batch when
+    // a single historical item is malformed or its relation is unavailable.
     const { data: items, error: itemError } = await admin.from("transaksi_midtrans_item")
       .select("tagihan_id, pembayaran_id, jumlah").eq("transaksi_id", tx.id);
     if (itemError) throw itemError;
-    return { ...tx, transaksi_midtrans_item: items };
-  }));
-  let checked = 0, closed = 0, failed = 0;
-  await Promise.all((rows || []).map(async (tx: any) => {
-    const items = tx.transaksi_midtrans_item || [];
-    if (tx.status === "paid" && items.every((i: any) => i.pembayaran_id)) return;
-    if (tx.gateway_closed_at && tx.status !== "paid") return;
-    if (Date.now() - Date.parse(tx.created_at) < 90000) return;
-    try {
-      const status = await readGatewayStatus(tx.order_id, key);
-      checked++;
-      if (isGatewayPaid(status)) {
-        await processGatewayPayment(status!);
-      } else if (tx.status === "paid") {
-        throw new Error("Status pembayaran berhasil berbeda dengan gateway; perlu rekonsiliasi.");
-      } else {
-        let stale = Date.now() >= Date.parse(tx.expired_at) || tx.status !== "pending";
-        for (const item of items) {
-          if (!item.tagihan_id) { stale = true; continue; }
-          const { data: bill, error: billError } = await admin.from("tagihan")
-            .select("nominal, status, pembayaran!pembayaran_tagihan_id_fkey(jumlah)")
-            .eq("id", item.tagihan_id).single();
-          if (billError) throw billError;
-          const payments = bill.pembayaran || [];
-          const remaining = Number(bill.nominal) - payments.reduce((sum: number, p: any) => sum + Number(p.jumlah), 0);
-          // A payment booked since checkout invalidates the old amount even if
-          // the requested installment itself still fits the remaining balance.
-          const originalRemaining = tx.metadata?.bill_balances?.[item.tagihan_id];
-          if (originalRemaining != null && remaining !== Number(originalRemaining)) stale = true;
-          if (originalRemaining == null) {
-            const { data: siblings, error: siblingError } = await admin.from("transaksi_midtrans_item")
-              .select("transaksi:transaksi_id(status, paid_at)").eq("tagihan_id", item.tagihan_id);
-            if (siblingError) throw siblingError;
-            if ((siblings || []).some((s: any) => s.transaksi?.status === "paid" && Date.parse(s.transaksi.paid_at) > Date.parse(tx.created_at))) stale = true;
-          }
-          if (remaining < Number(item.jumlah) || !["belum_bayar", "sebagian", "terjadwal"].includes(bill.status)) stale = true;
-        }
-        if (stale || (status && ["expire", "cancel", "deny", "failure"].includes(status.transaction_status))) {
-          await closeStoredSession(tx, "periodic_reconciliation"); closed++;
-        }
-      }
-      await admin.from("transaksi_midtrans").update({
-        reconciliation_checked_at: new Date().toISOString(), reconciliation_error: null,
-      }).eq("id", tx.id);
-    } catch (error) {
-      failed++;
-      await admin.from("transaksi_midtrans").update({
-        reconciliation_checked_at: new Date().toISOString(),
-        reconciliation_error: error instanceof Error ? error.message : "Pemeriksaan gagal",
-      }).eq("id", tx.id);
+    const links = (items || []) as Array<{ tagihan_id: string | null; pembayaran_id: string | null; jumlah: number | string }>;
+    if (tx.status === "paid" && links.length > 0 &&
+        links.every((i) => i.pembayaran_id)) return "skipped";
+
+    const status = await readGatewayStatus(tx.order_id, key);
+    if (isGatewayPaid(status)) {
+      await processGatewayPayment(status!);
+      return "checked";
     }
-  }));
-  return { checked, closed, failed };
+    if (tx.status === "paid") {
+      throw new Error("Status pembayaran berhasil berbeda dengan gateway; perlu rekonsiliasi.");
+    }
+
+    let stale = Date.now() >= Date.parse(tx.expired_at) || tx.status !== "pending";
+    for (const item of links) {
+      if (!item.tagihan_id) { stale = true; continue; }
+      const { data: bill, error: billError } = await admin.from("tagihan")
+        .select("nominal, status, pembayaran!pembayaran_tagihan_id_fkey(jumlah)")
+        .eq("id", item.tagihan_id).single();
+      if (billError) throw billError;
+      const payments = bill.pembayaran || [];
+      const remaining = Number(bill.nominal) - payments.reduce(
+        (sum: number, p: { jumlah: number | string }) => sum + Number(p.jumlah), 0);
+      const originalRemaining = tx.metadata?.bill_balances?.[item.tagihan_id];
+      if (originalRemaining != null && remaining !== Number(originalRemaining)) stale = true;
+      if (originalRemaining == null) {
+        const { data: siblings, error: siblingError } = await admin.from("transaksi_midtrans_item")
+          .select("transaksi:transaksi_id(status, paid_at)").eq("tagihan_id", item.tagihan_id);
+        if (siblingError) throw siblingError;
+        if ((siblings || []).some((s: { transaksi?: { status: string; paid_at: string | null } }) =>
+            s.transaksi?.status === "paid" &&
+            Date.parse(s.transaksi.paid_at || "") > Date.parse(tx.created_at))) stale = true;
+      }
+      if (remaining < Number(item.jumlah) ||
+          !["belum_bayar", "sebagian", "terjadwal"].includes(bill.status)) stale = true;
+    }
+
+    if (stale || (status && ["expire", "cancel", "deny", "failure"].includes(status.transaction_status))) {
+      // This performs the Snap cancel + Core expire checks before releasing
+      // any bill. It never changes a paid transaction to expired.
+      await closeStoredSession({ ...tx, transaksi_midtrans_item: items }, "periodic_reconciliation");
+      return "closed";
+    }
+    return "checked";
+  }, async (tx, errorText) => {
+    const { data: saved, error: writeError } = await admin.from("transaksi_midtrans")
+      .update({
+        reconciliation_checked_at: new Date().toISOString(),
+        reconciliation_error: errorText,
+      }).eq("id", tx.id).select("id");
+    if (writeError) throw new Error("Gagal menyimpan hasil rekonsiliasi: " + writeError.message);
+    if (!saved?.length) throw new Error("Hasil rekonsiliasi tidak tercatat (0 baris)");
+  }, 2);
 }
