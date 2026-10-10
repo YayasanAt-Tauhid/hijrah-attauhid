@@ -96,3 +96,21 @@ atau transaksi. Setelah persetujuan: terapkan migration hanya ke project
 cmvzcpeiuompqgdvflky, verifikasi schema/grants/advisors, merge PR dan pantau
 deployment Cloudflare. Pemeriksaan browser produksi memerlukan verifikasi
 sesi yang sah, tidak membuat pembayaran uji.
+
+
+## Tampilan status terpisah (10 Oktober 2026)
+
+Status pembayaran (belum bayar, dibayar sebagian, lunas) berdasar nominal
+transaksi berhasil pada tagihan yang valid. Kesiapan administrasi (tagihan
+belum dibuat, skema belum ditentukan, perlu verifikasi, siap dipantau)
+terpisah dan dapat difilter sendiri. Ringkasan pembayaran mengecualikan
+nominal yang belum dapat dipastikan. Status skema belum ditentukan tidak
+menyembunyikan pembayaran nol/sebagian, tetapi tidak mengaktifkan tenggat.
+
+Ringkasan Perlu ditindaklanjuti menjadi pintasan filter. Tombol Tentukan skema
+langsung membuka form kesepakatan tanpa menulis sampai pengguna menyimpan
+beserta alasan. Tidak ada pengubahan hak akses, aturan cicilan atau sumber
+data. Kartu HP dan tabel desktop memakai hasil filter, urutan dan pagination
+yang sama. Kolom identitas desktop tetap terlihat saat digeser. Nominal nol
+untuk tagihan yang belum dibuat diganti keterangan; tagihan nol yang valid
+setelah keringanan tetap selesai. Asrama hanya tampil pada SMP/SMA/MTA.

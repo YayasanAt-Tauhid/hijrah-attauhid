@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  calculatePaymentProgress, selectRegistrationBills, matchesRegistration, jakartaDate,
+  calculatePaymentProgress, selectRegistrationBills, matchesRegistration, jakartaDate, monitorPaymentStatus, monitorReadiness,
   type MonitorRegistration, type MonitorEvent, type MonitorPayment,
 } from "./spmbPaymentMonitor";
 const detail: MonitorRegistration = {
@@ -26,6 +26,23 @@ function event(id: number, stage: number, deadline: string): MonitorEvent {
   };
 }
 describe("monitoring uang pangkal SPMB", () => {
+  it("pembayaran nol tetap belum bayar ketika skema belum disepakati", () => {
+    const p = progress([], { scheme: null, today: "2026-11-01" });
+    expect(monitorPaymentStatus(p)).toBe("belum_bayar");
+    expect(monitorReadiness(p)).toBe("belum_diatur");
+    expect(p).toMatchObject({ due: null, overdueDays: 0 });
+  });
+  it("pembayaran sebagian tetap terlihat tanpa skema atau di bawah minimum", () => {
+    for (const scheme of [null, "cicilan"] as const) {
+      expect(monitorPaymentStatus(progress([payment("a",1_000_000,"2026-10-05")], { scheme }))).toBe("sebagian");
+    }
+  });
+  it("tagihan yang hilang atau bermasalah tidak dihitung sebagai belum bayar atau lunas", () => {
+    expect(monitorPaymentStatus(progress([], { total: 0, billIds: [] }))).toBe("belum_ada_tagihan");
+    expect(monitorPaymentStatus(progress([], { needsVerification: true }))).toBe("perlu_verifikasi");
+    expect(monitorReadiness(progress([], { needsVerification: true }))).toBe("perlu_verifikasi");
+    expect(monitorPaymentStatus(progress([], { total: 0 }))).toBe("lunas");
+  });
   it("tenggat pertama 14 hari sejak lulus tes menurut kalender WIB", () => {
     expect(jakartaDate("2026-10-01T18:30:00Z")).toBe("2026-10-02");
     expect(progress([], { passedAt: "2026-10-01T18:30:00Z" }).due).toBe("2026-10-16");

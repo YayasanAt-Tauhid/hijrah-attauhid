@@ -34,6 +34,29 @@ export interface PaymentProgress {
   firstFulfilledAt: string | null; secondFulfilledAt: string | null;
   status: keyof typeof MONITOR_STATUS_LABELS;
 }
+export const MONITOR_PAYMENT_LABELS = {
+  belum_bayar: "Belum bayar", sebagian: "Dibayar sebagian", lunas: "Lunas",
+  belum_ada_tagihan: "Belum ada tagihan", perlu_verifikasi: "Belum dapat dipastikan",
+} as const;
+export const MONITOR_READINESS_LABELS = {
+  siap: "Siap dipantau", belum_diatur: "Skema belum ditentukan",
+  belum_ada_tagihan: "Tagihan belum dibuat", perlu_verifikasi: "Perlu verifikasi",
+} as const;
+export type MonitorPaymentStatus = keyof typeof MONITOR_PAYMENT_LABELS;
+export type MonitorReadiness = keyof typeof MONITOR_READINESS_LABELS;
+
+/** Payment facts remain visible even before a collection scheme is agreed. */
+export function monitorPaymentStatus(progress: PaymentProgress): MonitorPaymentStatus {
+  if (progress.status === "perlu_verifikasi" || progress.status === "belum_ada_tagihan") return progress.status;
+  if (progress.remaining === 0) return "lunas";
+  return progress.paid === 0 ? "belum_bayar" : "sebagian";
+}
+export function monitorReadiness(progress: PaymentProgress): MonitorReadiness {
+  if (["perlu_verifikasi", "belum_ada_tagihan", "belum_diatur"].includes(progress.status)) {
+    return progress.status as MonitorReadiness;
+  }
+  return "siap";
+}
 const DAY = 86_400_000;
 
 /** Kalender WIB, termasuk timestamp UTC di sekitar pergantian hari. */
