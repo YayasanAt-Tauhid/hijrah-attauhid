@@ -1,3 +1,28 @@
+## Monitoring Pembayaran SPMB — kejelasan status dan tampilan HP (10 Oktober 2026)
+
+Pengguna mengaudit halaman produksi melalui browser VPS, lalu menyetujui
+perbaikan UI/UX. Status pembayaran ditampilkan terpisah dari kesiapan
+administrasi: siswa yang memiliki tagihan valid dan pembayaran nol tetap
+masuk Belum bayar meskipun skema belum disepakati. Pembayaran sebagian juga
+terlihat tanpa skema. Tagihan yang belum dibuat atau perlu verifikasi tidak
+dihitung sebagai gratis/lunas/belum bayar. Tenggat tetap berasal dari skema
+kesepakatan; tampilan baru tidak mengaktifkan tenggat secara otomatis.
+
+Ringkasan menampilkan pekerjaan administrasi yang belum selesai. Tindakan
+Tentukan skema membuka form tanpa menyimpan event. Kasir tetap hanya dapat
+membaca dan mencatat tindak lanjut. HP memakai kartu; desktop mempertahankan
+nama saat tabel digeser. TK/SD tidak menampilkan peringatan data asrama.
+Production tetap cmvzcpeiuompqgdvflky. Tidak ada migration atau perubahan
+nominal, pembayaran, jurnal, tanggal lulus, maupun kesepakatan tersimpan.
+
+QA browser memakai fixture lokal terisolasi; tidak membuat transaksi atau
+catatan pada siswa produksi. Checkout utama VPS memiliki perubahan lama
+milik sesi lain; pekerjaan ini memakai worktree terpisah dari origin/main.
+Lint keseluruhan masih memiliki masalah bawaan; file perubahan bersih.
+Tes pegawai sempat timeout saat build/lint/tes bersamaan pada VPS 2 GB,
+lalu lulus sendiri. Gunakan hasil rerun suite berurutan dan CI sebagai
+bukti rilis, bukan hasil pengujian paralel yang gagal.
+
 ## Monitoring Pembayaran SPMB — siap ditinjau (9 Oktober 2026)
 
 User menyetujui menu monitoring calon siswa lulus tes berdasarkan surat
