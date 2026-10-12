@@ -1025,7 +1025,7 @@ export default function PiutangManajemen() {
 
       {/* Dialog Koreksi / Pembatalan Tagihan */}
       <Dialog open={koreksiOpen} onOpenChange={(o) => { if (!o) resetKoreksi(); else setKoreksiOpen(true); }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-info" />
