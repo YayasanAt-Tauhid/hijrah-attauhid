@@ -394,6 +394,8 @@ export function useBatalkanTagihan() {
       qc.invalidateQueries({ queryKey: ["tagihan"] });
       qc.invalidateQueries({ queryKey: ["tagihan_dibatalkan"] });
       qc.invalidateQueries({ queryKey: ["tagihan_belum_lunas_writeoff"] });
+      qc.invalidateQueries({ queryKey: ["tagihan_pembatalan_cari"] });
+      qc.invalidateQueries({ queryKey: ["tagihan_terjadwal"] });
       qc.invalidateQueries({ queryKey: ["jurnal"] });
       qc.invalidateQueries({ queryKey: ["buku_besar"] });
       qc.invalidateQueries({ queryKey: ["tunggakan"] });
@@ -425,6 +427,8 @@ export function useBatalkanTagihanBatch() {
       qc.invalidateQueries({ queryKey: ["tagihan"] });
       qc.invalidateQueries({ queryKey: ["tagihan_dibatalkan"] });
       qc.invalidateQueries({ queryKey: ["tagihan_belum_lunas_writeoff"] });
+      qc.invalidateQueries({ queryKey: ["tagihan_pembatalan_cari"] });
+      qc.invalidateQueries({ queryKey: ["tagihan_terjadwal"] });
       qc.invalidateQueries({ queryKey: ["jurnal"] });
       qc.invalidateQueries({ queryKey: ["buku_besar"] });
       qc.invalidateQueries({ queryKey: ["tunggakan"] });
