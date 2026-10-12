@@ -49,6 +49,7 @@ import {
   Users,
 } from "lucide-react";
 import { fetchAllPages } from "@/lib/fetchAll";
+import { fetchSpmbReadinessInBatches } from "@/lib/spmbReadiness";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { AdminSpmbRegistrationDialog } from "@/components/akademik/AdminSpmbRegistrationDialog";
@@ -171,6 +172,7 @@ type RegistrationSuccess = {
 
 function getKesiapanPenerimaan(row: Record<string, unknown>): KesiapanPenerimaan {
   if (row._readiness) return row._readiness as KesiapanPenerimaan;
+  if (row._readiness === null) return { siap: false, kekurangan: ["Pemeriksaan kesiapan belum tersedia. Coba lagi."] };
   const kekurangan: string[] = [];
   const departemen = row.departemen as { npsn?: string | null; kode?: string | null; nama?: string | null } | null;
   const detail = row._spmbDetail as Record<string, any> | null;
@@ -202,11 +204,19 @@ function normalizeDigits(value: string) {
 export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const refreshSpmbData = () => Promise.all([
+    qc.invalidateQueries({ queryKey: ["siswa", "calon"] }),
+    qc.invalidateQueries({ queryKey: ["spmb", "readiness"] }),
+  ]);
+  const refreshStudentData = () => Promise.all([
+    qc.invalidateQueries({ queryKey: ["siswa"] }),
+    qc.invalidateQueries({ queryKey: ["spmb", "readiness"] }),
+  ]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [extraColumns, setExtraColumns] = useState<string[]>([]);
   const [readinessRow, setReadinessRow] = useState<Record<string, unknown> | null>(null);
-  const { role } = useAuth();
+  const { role, user, departemenId } = useAuth();
   const canChangeSpmbTarget = role === "admin" || role === "admin_tu";
   const angkatanQuery = useAngkatan();
   const departemenQuery = useDepartemen();
@@ -372,8 +382,10 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
     },
   });
 
-  const { data: calonList = [], isLoading, error: listError } = useQuery({
-    queryKey: ["siswa", "calon"],
+  const { data: initialCalonList = [], isLoading, error: listError, refetch: retryList } = useQuery({
+    queryKey: ["siswa", "calon", user?.id, role, departemenId],
+    enabled: Boolean(user && role),
+    retry: 1,
     queryFn: async () => {
       const { data: visibleRows, error: visibleError } = await (supabase as any).rpc("spmb_visible_siswa_ids");
       if (visibleError) throw visibleError;
@@ -428,14 +440,10 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         for (const item of data || []) targetCohortById.set(item.id, item);
       }
 
-      const { data: readinessRows, error } = await (supabase as any).rpc("spmb_readiness_list", { p_ids: siswaIds });
-      if (error) throw error;
-      const byId = new Map<string, any>((readinessRows || []).map((r: any) => [r.siswa_id, r.readiness]));
-
       return details.flatMap((detail: any) => {
         const s = siswaById.get(detail.siswa_id);
         if (!s) return [];
-        const r = byId.get(s.id);
+        const r: any = null; // Diperiksa terpisah dari pengambilan daftar.
         const targetDeptId = detail.spmb_departemen_tujuan_id || s.departemen_id;
         const targetCohortId = detail.spmb_angkatan_tujuan_id || s.angkatan_id;
         const targetDept = targetDeptById.get(targetDeptId) || s.departemen;
@@ -499,15 +507,15 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
               : detail?.spmb_sumber_pendaftaran === "publik"
                 ? "online"
                 : "unknown",
-          _biayaSort: biayaSort,
-          _kesiapanSort: r?.siap ? "siap" : "belum",
+          _biayaSort: r ? biayaSort : "belum_diperiksa",
+          _kesiapanSort: r ? (r.siap ? "siap" : "belum") : "belum_diperiksa",
           _verifikasiSort: s.terverifikasi ? "sudah" : "belum",
           _exportNik: detail?.nik || "",
           _exportJenisKelamin: s.jenis_kelamin === "L" ? "Laki-laki" : s.jenis_kelamin === "P" ? "Perempuan" : "",
           _exportKategori: detail?.kategori || "",
           _exportJenisPendaftar: registrationTypeLabel,
           _exportTanggalPendaftaran: formatTanggal(detail?.spmb_registered_at || s.created_at),
-          _exportBiaya: r?.gratis_pendaftaran
+          _exportBiaya: !r ? "Belum diperiksa" : r?.gratis_pendaftaran
             ? "Gratis"
             : !r?.configured
               ? "Belum diatur"
@@ -526,7 +534,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           _exportTanggalLulus: formatTanggal(detail?.spmb_tanggal_lulus),
           _exportStatusDaftarUlang: detail?.spmb_tanggal_daftar_ulang ? "Sudah Daftar Ulang" : "Belum Daftar Ulang",
           _exportTanggalDaftarUlang: formatTanggal(detail?.spmb_tanggal_daftar_ulang),
-          _exportKesiapan: r?.siap ? "Siap diterima" : "Belum lengkap",
+          _exportKesiapan: !r ? "Belum diperiksa" : r.siap ? "Siap diterima" : "Belum lengkap",
           _exportKekurangan: Array.isArray(r?.kekurangan) ? r.kekurangan.join("; ") : "",
           _exportVerifikasi: s.terverifikasi ? "Sudah diverifikasi" : "Belum diverifikasi",
           _exportStatusPendaftaran: registrationStatus === "calon"
@@ -549,6 +557,72 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       });
     },
   });
+
+  // Daftar tidak boleh diblokir oleh RPC kesiapan yang berpotensi timeout.
+  const readinessIds = useMemo(
+    () => [...new Set(initialCalonList.map((row: any) => row.id as string))],
+    [initialCalonList],
+  );
+  const readinessQuery = useQuery({
+    queryKey: ["spmb", "readiness", user?.id, readinessIds],
+    staleTime: 30_000,
+    enabled: Boolean(user && role) && readinessIds.length > 0,
+    retry: false,
+    refetchOnWindowFocus: true,
+    queryFn: async ({ signal }) => {
+      const controller = new AbortController();
+      const cancel = () => controller.abort();
+      signal.addEventListener("abort", cancel);
+      const timer = setTimeout(cancel, 18000);
+      try {
+        const rows = await fetchSpmbReadinessInBatches(
+          readinessIds,
+          async (ids) => {
+            const { data, error } = await (supabase as any)
+              .rpc("spmb_readiness_list", { p_ids: ids })
+              .abortSignal(controller.signal);
+            if (error) throw error;
+            return data || [];
+          },
+          12,
+          3,
+        );
+        if (rows.length !== readinessIds.length) throw new Error("Hasil pemeriksaan SPMB tidak lengkap");
+        return rows;
+      } catch (error) {
+        controller.abort(); // Batalkan kelompok lain apabila satu RPC gagal.
+        throw error;
+      } finally {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", cancel);
+      }
+    },
+  });
+  const readinessById = useMemo(
+    () => new Map<string, any>(
+      (readinessQuery.data || []).map((row: any) => [row.siswa_id, row.readiness]),
+    ),
+    [readinessQuery.data],
+  );
+  const calonList = useMemo(() => initialCalonList.map((s: any) => {
+    const r = readinessById.get(s.id);
+    if (!r) return s;
+    return {
+      ...s,
+      _readiness: r,
+      _pmbConfigured: r.configured,
+      _pmbLunas: r.lunas,
+      _pmbGratis: r.gratis_pendaftaran,
+      _pmbTanggalBayar: r.tanggal_pembayaran,
+      _punyaKelas: r.punya_kelas,
+      _biayaSort: r.gratis_pendaftaran ? "gratis" : !r.configured ? "belum_diatur" : r.lunas ? "lunas" : "belum_bayar",
+      _kesiapanSort: r.siap ? "siap" : "belum",
+      _exportBiaya: r.gratis_pendaftaran ? "Gratis" : !r.configured ? "Belum diatur" : r.lunas ? "Lunas" : "Belum bayar",
+      _exportTanggalBayar: formatTanggal(r.tanggal_pembayaran),
+      _exportKesiapan: r.siap ? "Siap diterima" : "Belum lengkap",
+      _exportKekurangan: Array.isArray(r.kekurangan) ? r.kekurangan.join("; ") : "",
+    };
+  }), [initialCalonList, readinessById]);
 
   const activationTargetDeptId = activationRow?.departemen_id as string | undefined;
   const activationDetail = activationRow?._spmbDetail as Record<string, any> | undefined;
@@ -727,8 +801,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       if (!id) throw new Error("Pendaftaran tersimpan tetapi ID calon murid tidak diterima dari server");
 
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ["siswa"] }),
-        qc.invalidateQueries({ queryKey: ["siswa", "calon"] }),
+        refreshStudentData(),
       ]);
       setRegistrationSuccess({
         id,
@@ -788,7 +861,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           p_status: "diterima",
         });
         if (error) throw error;
-        await qc.invalidateQueries({ queryKey: ["siswa", "calon"] });
+        await refreshSpmbData();
         toast.success(`${namaSiswa} berhasil diterima pada SPMB`, {
           description: "Status akademik dan kelas saat ini tetap dipertahankan sampai proses perpindahan jenjang.",
         });
@@ -799,7 +872,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       const { error } = await supabase.from("siswa").update({ status: "diterima" } as any).eq("id", id);
       if (error) throw error;
 
-      await qc.invalidateQueries({ queryKey: ["siswa"] });
+      await refreshStudentData();
       toast.success(`${namaSiswa} berhasil diterima`, {
         description: "Calon sudah lulus dan diterima. NIS lembaga berhasil ditetapkan.",
       });
@@ -821,7 +894,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
     setNisLoadingId(id);
     try {
       const berhasil = await generateNIS(id, departemenId, angkatanId, row.nama as string);
-      if (berhasil) qc.invalidateQueries({ queryKey: ["siswa"] });
+      if (berhasil) refreshStudentData();
     } finally {
       setNisLoadingId(null);
     }
@@ -841,7 +914,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       toast.error("Gagal mengaktifkan murid: " + error.message);
       return;
     }
-    qc.invalidateQueries({ queryKey: ["siswa"] });
+    refreshStudentData();
     toast.success("Murid diaktifkan");
   };
 
@@ -854,7 +927,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         p_action: action,
       });
       if (error) throw error;
-      await qc.invalidateQueries({ queryKey: ["siswa", "calon"] });
+      await refreshSpmbData();
       toast.success(`${label} berhasil dicatat`, { description: row.nama as string });
     } catch (error: any) {
       toast.error(`Gagal mencatat ${label.toLowerCase()}`, { description: error?.message || "Terjadi kesalahan teknis" });
@@ -896,8 +969,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       if (error) throw error;
 
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ["siswa"] }),
-        qc.invalidateQueries({ queryKey: ["siswa", "calon"] }),
+        refreshStudentData(),
         qc.invalidateQueries({ queryKey: ["kelas_siswa"] }),
       ]);
 
@@ -980,8 +1052,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       const result = Array.isArray(data) ? data[0] : data;
 
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ["siswa"] }),
-        qc.invalidateQueries({ queryKey: ["siswa", "calon"] }),
+        refreshStudentData(),
         qc.invalidateQueries({ queryKey: ["siswa_detail"] }),
         qc.invalidateQueries({ queryKey: ["spmb_verification_overview"] }),
       ]);
@@ -1033,7 +1104,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         },
       });
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ["siswa", "calon"] }),
+        refreshSpmbData(),
         qc.invalidateQueries({ queryKey: ["siswa_detail"] }),
       ]);
       toast.success("Nama Pendaftar berhasil disimpan");
@@ -1082,7 +1153,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           metode: methodEditValue,
         },
       });
-      await qc.invalidateQueries({ queryKey: ["siswa", "calon"] });
+      await refreshSpmbData();
       toast.success("Metode pendaftaran berhasil diperbarui", {
         description: methodEditValue === "offline" ? "Ditandai sebagai pendaftaran Offline." : "Ditandai sebagai pendaftaran Online.",
       });
@@ -1131,7 +1202,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
                 <DropdownMenuItem onSelect={() => openSpmbDetail(row)}><Eye className="mr-2 h-4 w-4" />Detail pendaftaran</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => navigate(`/akademik/siswa/${row.id}/edit`)}><Pencil className="mr-2 h-4 w-4" />Edit / periksa data</DropdownMenuItem>
                 {canChangeSpmbTarget && !activated && !detail?.spmb_tanggal_aktivasi && detail?.spmb_status_pendaftaran !== "selesai" && (internalStudent || row._academicStatus !== "aktif") && (
-                  <DropdownMenuItem title="Ubah lembaga/jenjang tujuan SPMB" disabled={Boolean(row._pmbLunas && !row._pmbGratis)} onSelect={() => openTargetChange(row)}><ArrowRightLeft className="mr-2 h-4 w-4" />Ubah tujuan SPMB</DropdownMenuItem>
+                  <DropdownMenuItem title="Ubah lembaga/jenjang tujuan SPMB" disabled={!row._readiness || Boolean(row._pmbLunas && !row._pmbGratis)} onSelect={() => openTargetChange(row)}><ArrowRightLeft className="mr-2 h-4 w-4" />Ubah tujuan SPMB</DropdownMenuItem>
                 )}
                 {!activated && <>
                   <DropdownMenuSeparator />
@@ -1143,7 +1214,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
                   {detail?.spmb_status_kelulusan === "lulus" && !detail?.spmb_tanggal_daftar_ulang && <DropdownMenuItem disabled={daftarUlangLoading} onSelect={() => handleMilestone(row, "daftar_ulang", "Daftar Ulang")}>Catat daftar ulang</DropdownMenuItem>}
                   {status === "calon" && <>
                     <DropdownMenuItem disabled={loading || !kesiapan.siap} onSelect={() => handleTerima(row)}>Terima calon murid</DropdownMenuItem>
-                    {!kesiapan.siap && <DropdownMenuItem onSelect={() => setReadinessRow(row)} className="text-warning">Lihat {kesiapan.kekurangan.length} kekurangan</DropdownMenuItem>}
+                    {!kesiapan.siap && <DropdownMenuItem onSelect={() => setReadinessRow(row)} className="text-warning">{row._readiness ? ("Lihat " + kesiapan.kekurangan.length + " kekurangan") : "Pemeriksaan kesiapan belum tersedia"}</DropdownMenuItem>}
                   </>}
                   {!internalStudent && status === "diterima" && !row.nis && <DropdownMenuItem disabled={loading} onSelect={() => handleBuatNIS(row)}>Buat NIS</DropdownMenuItem>}
                   {!internalStudent && status === "diterima" && <DropdownMenuItem disabled={loading || !row.nis || !row._punyaKelas} onSelect={() => handleAktifkan(row)}>Aktifkan murid</DropdownMenuItem>}
@@ -1188,7 +1259,8 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         const kesiapan = getKesiapanPenerimaan(row);
         return <div className="space-y-1 text-xs">
           <p className={row.terverifikasi ? "text-success" : "text-warning"}>{row.terverifikasi ? "Terverifikasi" : "Belum diverifikasi"}</p>
-          {isSpmbAccepted(row) ? <button type="button" className="text-primary hover:underline" onClick={(event) => { event.stopPropagation(); openSpmbDetail(row); }}>Lihat data SPMB</button>
+          {!row._readiness ? <span className="text-muted-foreground">Kesiapan belum diperiksa</span>
+            : isSpmbAccepted(row) ? <button type="button" className="text-primary hover:underline" onClick={(event) => { event.stopPropagation(); openSpmbDetail(row); }}>Lihat data SPMB</button>
             : kesiapan.siap ? <span className="text-success">Siap diterima</span>
             : <button type="button" className="inline-flex items-center gap-1 text-warning underline underline-offset-2" onClick={(event) => { event.stopPropagation(); setReadinessRow(row); }}><AlertTriangle className="h-3.5 w-3.5" />{kesiapan.kekurangan.length} belum lengkap</button>}
         </div>;
@@ -1315,6 +1387,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       label: "Biaya Pendaftaran",
       sortable: true,
       render: (_, row) => {
+        if (!row._readiness) return <span className="text-xs text-muted-foreground">Belum diperiksa</span>;
         if (row._pmbGratis) return <span className="inline-flex items-center gap-1 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5" />Gratis</span>;
         if (!row._pmbConfigured) return <span className="text-xs text-warning">Belum diatur</span>;
         if (row._pmbLunas) return <span className="inline-flex items-center gap-1 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5" />Lunas</span>;
@@ -1338,7 +1411,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
     <DropdownMenuSeparator /><DropdownMenuItem onSelect={() => setExtraColumns([])}>Kembali ke kolom ringkas</DropdownMenuItem>
   </DropdownMenuContent></DropdownMenu>;
 
-  if (view === "statistics") return <SpmbStatistics rows={statistikCalonList} departments={spmbDepartemenList} years={tahunList} waves={waveQuery.data || []} scope={{ departemen: filters.departemen, tahun: filters.tahun, gelombang: filters.gelombang }} onScopeChange={setFilter} onOpenList={openListFromStatistics} loading={isLoading || departemenQuery.isLoading || tahunQuery.isLoading || waveQuery.isLoading} error={listError || departemenQuery.error || tahunQuery.error || waveQuery.error} />;
+  if (view === "statistics") return <SpmbStatistics rows={statistikCalonList} departments={spmbDepartemenList} years={tahunList} waves={waveQuery.data || []} scope={{ departemen: filters.departemen, tahun: filters.tahun, gelombang: filters.gelombang }} onScopeChange={setFilter} onOpenList={openListFromStatistics} loading={isLoading || readinessQuery.isLoading || departemenQuery.isLoading || tahunQuery.isLoading || waveQuery.isLoading} error={listError || readinessQuery.error || departemenQuery.error || tahunQuery.error || waveQuery.error} />;
 
   const optionsLoading = angkatanQuery.isLoading || departemenQuery.isLoading || tahunQuery.isLoading;
   const optionsError = angkatanQuery.error || departemenQuery.error || tahunQuery.error;
@@ -1360,8 +1433,8 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           disabled={optionsLoading || Boolean(optionsError)}
           onRegistered={async () => {
             await Promise.all([
-              qc.invalidateQueries({ queryKey: ["siswa"] }),
-              qc.invalidateQueries({ queryKey: ["siswa", "calon"] }),
+              refreshStudentData(),
+              refreshSpmbData(),
               qc.invalidateQueries({ queryKey: ["spmb_verification_overview"] }),
             ]);
           }}
@@ -1715,7 +1788,10 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           <div className="space-y-1"><Label className="text-xs">Asrama</Label><Select value={filters.asrama} onValueChange={(value) => setFilter("asrama", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="Asrama">Asrama</SelectItem><SelectItem value="Non Asrama">Non Asrama</SelectItem></SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Metode pendaftaran</Label><Select value={filters.sumber} onValueChange={(value) => setFilter("sumber", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem><SelectItem value="online">Online</SelectItem><SelectItem value="offline">Offline</SelectItem><SelectItem value="unknown">Belum diketahui</SelectItem></SelectContent></Select></div>
         </div>}
-        {(listError || waveQuery.error) && <p role="alert" className="text-sm text-destructive">Data SPMB tidak dapat dimuat lengkap. Silakan muat ulang halaman.</p>}
+        {listError && <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-destructive">Daftar pendaftar gagal dimuat. Periksa koneksi atau hak akses akun, lalu coba lagi.<Button size="sm" variant="outline" onClick={() => void retryList()}>Coba lagi</Button></div>}
+        {!listError && readinessQuery.isLoading && readinessIds.length > 0 && <p role="status" className="text-xs text-muted-foreground">Data pendaftar sudah dapat dilihat. Status kesiapan dan pembayaran sedang diperiksa.</p>}
+        {readinessQuery.isError && <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-destructive">Pemeriksaan kesiapan/pembayaran gagal. Pendaftar tetap ditampilkan, tetapi tindakan penerimaan dan perubahan tujuan yang bergantung pada pembayaran dinonaktifkan sementara.<Button size="sm" variant="outline" onClick={() => void readinessQuery.refetch()}>Periksa lagi</Button></div>}
+        {waveQuery.error && <p role="alert" className="text-sm text-destructive">Data gelombang SPMB belum dapat dimuat. Coba muat ulang halaman.</p>}
         <p className="text-xs text-muted-foreground">Urutan: {sortMode === "registration_desc" ? "Pendaftaran terbaru" : sortMode === "registration_asc" ? "Pendaftaran terlama" : sortMode === "payment_desc" ? "Pembayaran terbaru" : "Pembayaran terlama"}{advancedFilterCount ? ` · ${advancedFilterCount} filter tambahan aktif` : ""}</p>
       </div>
 
