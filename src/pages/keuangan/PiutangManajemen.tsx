@@ -1,6 +1,6 @@
 import SppCategoryPeriod from "./SppCategoryPeriod";
 import { recognitionDueDate, isMonthlySppRevenue } from "@/lib/recognitionDate";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,12 @@ import { StatsCard } from "@/components/shared/StatsCard";
 import { useLembaga, formatRupiah, BULAN_ORDER_AKADEMIK, namaBulan, namaBulanTahun } from "@/hooks/useKeuangan";
 import { usePengaturanAkun, logAuditKeuangan } from "@/hooks/useJurnal";
 import { useBatalkanTagihan, useBatalkanTagihanBatch } from "@/hooks/useTagihan";
+import { useAuth } from "@/contexts/AuthContext";
+import { fetchAllPages } from "@/lib/fetchAll";
+import {
+  collectCancelStudentIds, escapeCancelIlike, normalizeCancelSearchTerm,
+  MIN_CANCEL_SEARCH_LENGTH, MAX_CANCEL_SEARCH_STUDENTS, withinCancelDueDateRange,
+} from "@/lib/tagihanPembatalanSearch";
 import { jalankanAkrualJatuhTempo } from "@/server/akrual";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -224,6 +230,10 @@ export default function PiutangManajemen() {
   const [krMode, setKrMode] = useState<"batal" | "koreksi_nominal">("batal");
   const [krTagihanId, setKrTagihanId] = useState("");
   const [krSearch, setKrSearch] = useState("");
+  const [krDebouncedSearch, setKrDebouncedSearch] = useState("");
+  const [krDueFrom, setKrDueFrom] = useState("");
+  const [krDueTo, setKrDueTo] = useState("");
+  const { user } = useAuth();
   const [krAlasan, setKrAlasan] = useState("");
   const [krNominalBaru, setKrNominalBaru] = useState("");
   const [krTanggal, setKrTanggal] = useState(format(now, "yyyy-MM-dd"));
@@ -300,37 +310,67 @@ export default function PiutangManajemen() {
     },
     onError: (e: any) => toast.error(e?.message || "Gagal menjalankan proses akrual"),
   });
-  // Tagihan 'belum_bayar' + 'terjadwal' yang boleh dikoreksi/dibatalkan (bukan
-  // sebagian/lunas). 'terjadwal' disertakan karena baris itu belum pernah
-  // menimbulkan jurnal apa pun -- RPC batalkan_tagihan_atomik sudah menangani
-  // ini otomatis lewat pengecekan jurnal_piutang_id IS NOT NULL, jadi tidak
-  // ada jurnal pembalik yang dibuat untuk tagihan yang memang belum berjurnal.
-  const tagihanBelumBayar = useMemo(
-    () => [
-      ...(tagihanList || []).filter((t: any) => t.status === "belum_bayar"),
-      ...(terjadwalList || []).filter((t) => t.status === "terjadwal"),
-    ],
-    [tagihanList, terjadwalList]
-  );
-  const tagihanKrFiltered = useMemo(() => {
-    if (!krSearch.trim()) return tagihanBelumBayar.slice(0, 50);
-    const q = krSearch.toLowerCase();
-    return tagihanBelumBayar.filter((t: any) =>
-      t.siswa?.nis?.toLowerCase().includes(q) ||
-      t.siswa?.nama?.toLowerCase().includes(q) ||
-      t.jenis?.nama?.toLowerCase().includes(q)
-    ).slice(0, 50);
-  }, [tagihanBelumBayar, krSearch]);
-  const selectedKrTagihan = tagihanBelumBayar.find((t: any) => t.id === krTagihanId);
+  // Pencarian pembatalan langsung ke database, bukan daftar write-off 500 baris
+  // atau daftar akrual 1000 baris (keduanya bukan daftar lengkap).
+  useEffect(() => {
+    const timer = setTimeout(() => setKrDebouncedSearch(normalizeCancelSearchTerm(krSearch)), 300);
+    return () => clearTimeout(timer);
+  }, [krSearch]);
+
+  const krTerm = normalizeCancelSearchTerm(krSearch);
+  const krReady = krTerm.length >= MIN_CANCEL_SEARCH_LENGTH;
+  const krSearchingTerm = krReady && krDebouncedSearch !== krTerm;
+  const {
+    data: krQueriedBills = [], isFetching: krLoading, isError: krSearchError,
+    error: krSearchErrorDetail, refetch: retryKrSearch,
+  } = useQuery({
+    queryKey: ["tagihan_pembatalan_cari", user?.id, departemenId, krDebouncedSearch],
+    enabled: koreksiOpen && Boolean(user) && krDebouncedSearch.length >= MIN_CANCEL_SEARCH_LENGTH,
+    retry: 1,
+    queryFn: async () => {
+      const pattern = "%" + escapeCancelIlike(krDebouncedSearch) + "%";
+      // Dua filter terpisah menghindari interpolasi string bebas ke sintaks .or().
+      const lookup = async (column: "nis" | "nama") => {
+        let q = supabase.from("siswa").select("id")
+          .ilike(column, pattern).limit(MAX_CANCEL_SEARCH_STUDENTS + 1);
+        if (departemenId) q = q.eq("departemen_id", departemenId);
+        const { data, error } = await q;
+        if (error) throw error;
+        return data || [];
+      };
+      const [byNis, byName] = await Promise.all([lookup("nis"), lookup("nama")]);
+      const siswaIds = collectCancelStudentIds(byNis, byName);
+      if (!siswaIds.length) return [];
+      return fetchAllPages<any>((from, to) => (supabase as any)
+        .from("tagihan")
+        .select("id,nominal,bulan,status,jatuh_tempo,jurnal_piutang_id,siswa:siswa_id(id,nis,nama,departemen_id),jenis:jenis_id(nama),tahun_ajaran:tahun_ajaran_id(nama)")
+        .in("siswa_id", siswaIds)
+        .in("status", ["belum_bayar", "terjadwal"])
+        .is("write_off_id", null)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, to));
+    },
+  });
+  // Jangan gunakan hasil cache siswa sebelumnya selama NIS sedang diganti.
+  const tagihanKrFiltered = krReady && !krSearchingTerm && !krSearchError
+    ? krQueriedBills.filter((t: any) => withinCancelDueDateRange(t, krDueFrom, krDueTo))
+    : [];
+  const selectedKrTagihan = tagihanKrFiltered.find((t: any) => t.id === krTagihanId);
 
   const resetKoreksi = () => {
     setKoreksiOpen(false); setKrTagihanId(""); setKrSearch("");
     setKrAlasan(""); setKrNominalBaru(""); setKrMode("batal");
-    setKrSelectedIds(new Set());
+    setKrSelectedIds(new Set()); setKrDebouncedSearch("");
+    setKrDueFrom(""); setKrDueTo("");
   };
   const submitKoreksi = () => {
-    if (!krTagihanId) { toast.error("Pilih tagihan dulu"); return; }
+    if (!selectedKrTagihan) { toast.error("Pilih tagihan dari hasil pencarian yang aktif"); return; }
     if (!krAlasan.trim()) { toast.error("Alasan wajib diisi"); return; }
+    if (krLoading || krSearchingTerm || krSearchError) {
+      toast.error("Pencarian belum selesai. Periksa tagihan kembali sebelum membatalkan.");
+      return;
+    }
     koreksiTagihan.mutate(
       {
         mode: krMode,
@@ -357,8 +397,8 @@ export default function PiutangManajemen() {
     });
   };
   const krSelectedRows = useMemo(
-    () => tagihanBelumBayar.filter((t: any) => krSelectedIds.has(t.id)),
-    [tagihanBelumBayar, krSelectedIds]
+    () => tagihanKrFiltered.filter((t: any) => krSelectedIds.has(t.id)),
+    [tagihanKrFiltered, krSelectedIds]
   );
   const krSelectedTotal = krSelectedRows.reduce((s: number, t: any) => s + Number(t.nominal || 0), 0);
   const allKrFilteredSelected = tagihanKrFiltered.length > 0 && tagihanKrFiltered.every((t: any) => krSelectedIds.has(t.id));
@@ -376,7 +416,11 @@ export default function PiutangManajemen() {
 
   const submitBatalMassal = async () => {
     if (!krAlasan.trim()) { toast.error("Alasan wajib diisi"); return; }
-    const ids = Array.from(krSelectedIds);
+    if (krSelectedRows.length !== krSelectedIds.size || krLoading || krSearchingTerm) {
+      toast.error("Pilihan tagihan berubah. Cari dan pilih kembali sebelum membatalkan.");
+      return;
+    }
+    const ids = krSelectedRows.map((row: any) => row.id);
     if (ids.length === 0) return;
 
     setIsBatalMassal(true);
@@ -399,7 +443,7 @@ export default function PiutangManajemen() {
       setBatalMassalProgress({ done: ids.length, total: ids.length });
 
       const gagalDenganNama = res.gagal.map((g) => {
-        const row = tagihanBelumBayar.find((t: any) => t.id === g.tagihan_id);
+        const row = krSelectedRows.find((t: any) => t.id === g.tagihan_id);
         const label = row
           ? `${row.siswa?.nis ?? "-"} — ${row.siswa?.nama ?? "-"} (${row.jenis?.nama ?? ""}${row.bulan ? ` ${namaBulanTahun(row.bulan, { tahunBukuNama: row.tahun_ajaran?.nama })}` : ""})`
           : g.tagihan_id;
@@ -981,7 +1025,7 @@ export default function PiutangManajemen() {
 
       {/* Dialog Koreksi / Pembatalan Tagihan */}
       <Dialog open={koreksiOpen} onOpenChange={(o) => { if (!o) resetKoreksi(); else setKoreksiOpen(true); }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-info" />
@@ -1008,24 +1052,57 @@ export default function PiutangManajemen() {
             <div>
               <div className="flex items-center justify-between">
                 <Label>Cari & Pilih Tagihan *</Label>
-                {krMode === "batal" && tagihanKrFiltered.length > 0 && (
+                {krMode === "batal" && tagihanKrFiltered.length > 0 && !krLoading && (
                   <button type="button" className="text-xs text-primary hover:underline"
                     onClick={toggleSelectAllKrFiltered}>
                     {allKrFilteredSelected ? "Batalkan pilih semua" : "Pilih semua hasil"}
                   </button>
                 )}
               </div>
-              <Input placeholder="Ketik NIS atau nama siswa..." value={krSearch}
-                onChange={(e) => { setKrSearch(e.target.value); setKrTagihanId(""); }}
+              <Input placeholder="Ketik minimal 3 karakter NIS atau nama siswa..." value={krSearch}
+                onChange={(e) => {
+                  setKrSearch(e.target.value);
+                  setKrTagihanId("");
+                  setKrSelectedIds(new Set());
+                }}
                 className="mb-1" />
+              {!krReady && <p className="p-2 text-xs text-muted-foreground">Masukkan minimal 3 karakter untuk mencari tagihan langsung dari database.</p>}
+              {krReady && (krLoading || krSearchingTerm) && <p role="status" className="p-2 text-xs text-muted-foreground">Mencari semua tagihan siswa…</p>}
+              {krReady && krSearchError && !krSearchingTerm && (
+                <div role="alert" className="p-2 text-xs text-destructive">
+                  {krSearchErrorDetail instanceof Error ? krSearchErrorDetail.message : "Pencarian gagal."}
+                  <Button size="sm" variant="outline" className="ml-2" onClick={() => void retryKrSearch()}>Coba lagi</Button>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Jatuh tempo dari (opsional)</Label>
+                  <Input type="date" value={krDueFrom} onChange={(e) => {
+                    setKrDueFrom(e.target.value);
+                    setKrSelectedIds(new Set());
+                    setKrTagihanId("");
+                  }} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Sampai (opsional)</Label>
+                  <Input type="date" min={krDueFrom || undefined} value={krDueTo} onChange={(e) => {
+                    setKrDueTo(e.target.value);
+                    setKrSelectedIds(new Set());
+                    setKrTagihanId("");
+                  }} />
+                </div>
+              </div>
+              {krReady && !krLoading && !krSearchingTerm && !krSearchError && (
+                <p className="text-xs text-muted-foreground">{tagihanKrFiltered.length} tagihan sesuai pencarian dan rentang tanggal. Pastikan jenis serta bulannya sebelum memilih semua.</p>
+              )}
               {krMode === "batal" && (
                 <p className="text-xs text-muted-foreground mb-1">
-                  Centang untuk pilih beberapa tagihan sekaligus, atau klik baris untuk pilih satu.
+                  Centang tagihan yang benar. Pilih semua hasil hanya setelah rentang tanggal dan nominal diperiksa.
                 </p>
               )}
               <div className="border rounded-md max-h-40 overflow-y-auto text-xs">
                 {tagihanKrFiltered.length === 0
-                  ? <p className="p-2 text-muted-foreground">Tidak ada tagihan belum dibayar</p>
+                  ? <p className="p-2 text-muted-foreground">{krReady && !krLoading && !krSearchingTerm && !krSearchError ? "Tidak ada tagihan belum bayar/terjadwal yang cocok" : "Hasil pencarian akan tampil di sini"}</p>
                   : tagihanKrFiltered.map((t: any) => (
                     <div key={t.id}
                       className={`w-full flex items-center gap-2 px-3 py-2 border-b last:border-0 hover:bg-muted/60 transition-colors ${krTagihanId === t.id ? "bg-primary/10 font-semibold" : ""}`}>
@@ -1037,12 +1114,13 @@ export default function PiutangManajemen() {
                         />
                       )}
                       <button type="button" className="flex-1 text-left"
-                        onClick={() => { setKrTagihanId(t.id); setKrSearch(`${t.siswa?.nis} — ${t.siswa?.nama}`); }}>
+                        onClick={() => setKrTagihanId(t.id)}>
                         <span className="font-medium">{t.siswa?.nis} — {t.siswa?.nama}</span>
                         <span className="text-muted-foreground ml-2">{t.jenis?.nama}{t.bulan ? ` (${namaBulanTahun(t.bulan, { tahunBukuNama: t.tahun_ajaran?.nama })})` : ""}</span>
                         {t.status === "terjadwal" && (
                           <Badge variant="outline" className="ml-2 bg-muted text-muted-foreground text-[10px] py-0">Terjadwal</Badge>
                         )}
+                        {t.jatuh_tempo && <span className="text-muted-foreground ml-2">Jatuh tempo {t.jatuh_tempo}</span>}
                         <span className="float-right font-semibold">{formatRupiah(Number(t.nominal))}</span>
                       </button>
                     </div>
@@ -1120,12 +1198,12 @@ export default function PiutangManajemen() {
             <Button variant="outline" onClick={resetKoreksi}>Batal</Button>
             {krMode === "batal" && krSelectedIds.size > 1 ? (
               <Button variant="destructive" onClick={() => setBatalMassalOpen(true)}
-                disabled={!krAlasan.trim() || koreksiTagihan.isPending}>
+                disabled={!krAlasan.trim() || koreksiTagihan.isPending || krLoading || krSearchingTerm || krSelectedRows.length !== krSelectedIds.size}>
                 Batalkan {krSelectedIds.size} Tagihan Terpilih
               </Button>
             ) : (
               <Button onClick={submitKoreksi}
-                disabled={!krTagihanId || !krAlasan.trim() || (krMode === "koreksi_nominal" && !krNominalBaru) || koreksiTagihan.isPending}>
+                disabled={!selectedKrTagihan || !krAlasan.trim() || (krMode === "koreksi_nominal" && !krNominalBaru) || koreksiTagihan.isPending}>
                 {koreksiTagihan.isPending ? "Memproses..." : (krMode === "batal" ? "Batalkan & Buat Jurnal" : "Koreksi & Buat Jurnal")}
               </Button>
             )}
