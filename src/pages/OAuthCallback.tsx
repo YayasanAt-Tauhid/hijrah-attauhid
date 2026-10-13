@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "@/lib/router-compat";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import AuthRecovery from "@/components/auth/AuthRecovery";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { CheckCircle2 } from "lucide-react";
@@ -17,12 +17,12 @@ const JENDELA_AKUN_BARU_MS = 10 * 60 * 1000;
 
 export default function OAuthCallback() {
   const navigate = useNavigate();
-  const { user, isLoading, signOut } = useAuth();
+  const { user, role, isLoading, authError, retryAuth, signOut } = useAuth();
   const [status, setStatus] = useState<Status>("memeriksa");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || authError) return;
     if (!user) {
       setStatus("gagal");
       setError("Gagal masuk dengan Google. Silakan coba lagi.");
@@ -30,24 +30,17 @@ export default function OAuthCallback() {
     }
 
     (async () => {
-      const { data: profile } = await supabase
-        .from("users_profile")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (profile?.role === "ortu") {
+      if (role === "ortu") {
         await signOut();
         setStatus("gagal");
         setError("Akun Google ini adalah akun orang tua. Gunakan Portal Orang Tua untuk masuk.");
         return;
       }
 
-      const { data: authUser } = await supabase.auth.getUser();
-      const createdAt = authUser?.user?.created_at ? new Date(authUser.user.created_at).getTime() : 0;
+      const createdAt = user.created_at ? new Date(user.created_at).getTime() : 0;
       const akunBaruDibuat = !createdAt || Date.now() - createdAt <= JENDELA_AKUN_BARU_MS;
 
-      if (!profile?.role || akunBaruDibuat) {
+      if (!role || akunBaruDibuat) {
         await signOut();
         setStatus("gagal");
         setError(
@@ -58,8 +51,15 @@ export default function OAuthCallback() {
 
       setStatus("sukses");
       navigate("/", { replace: true });
-    })();
-  }, [user, isLoading, navigate, signOut]);
+    })().catch(() => {
+      setStatus("gagal");
+      setError("Gagal memeriksa akun. Silakan coba lagi.");
+    });
+  }, [user, role, isLoading, authError, navigate, signOut]);
+
+  if (authError && !isLoading) {
+    return <AuthRecovery message={authError} onRetry={() => void retryAuth()} />;
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">

@@ -3,7 +3,6 @@ import { useNavigate, Link } from "@/lib/router-compat";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { portalOrtuSignUp } from "@/server/portalOrtu";
 import { Button } from "@/components/ui/button";
@@ -80,41 +79,23 @@ export default function PortalLogin() {
   const onSubmit = async (data: LoginForm) => {
     setLoading(true);
     setError(null);
-
-    const { error: signInError } = await signIn(data.email, data.password);
-
-    if (signInError) {
-      setError(signInError);
+    try {
+      const { error: signInError, role: signedInRole } = await signIn(data.email, data.password);
+      if (signInError) {
+        setError(signInError);
+        return;
+      }
+      if (signedInRole !== "ortu") {
+        await signOut();
+        setError("Akun ini bukan akun orang tua. Silakan gunakan halaman login admin.");
+        return;
+      }
+      navigate("/portal", { replace: true });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Gagal masuk. Silakan coba lagi.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // Check role
-    const {
-      data: { user: signedInUser },
-    } = await supabase.auth.getUser();
-    if (!signedInUser) {
-      setError("Gagal mendapatkan data user");
-      setLoading(false);
-      return;
-    }
-
-    const { data: profile } = await supabase
-      .from("users_profile")
-      .select("role")
-      .eq("id", signedInUser.id)
-      .single();
-
-    if (profile?.role !== "ortu") {
-      await signOut();
-      setError(
-        "Akun ini bukan akun orang tua. Silakan gunakan halaman login admin."
-      );
-      setLoading(false);
-      return;
-    }
-
-    navigate("/portal", { replace: true });
   };
 
   const onSignUp = async (data: SignUpForm) => {
@@ -139,8 +120,8 @@ export default function PortalLogin() {
         return;
       }
       navigate("/portal", { replace: true });
-    } catch (err: any) {
-      setSignUpError(err?.message || "Gagal mendaftar. Coba lagi.");
+    } catch (err: unknown) {
+      setSignUpError(err instanceof Error ? err.message : "Gagal mendaftar. Coba lagi.");
     } finally {
       setSigningUp(false);
     }
@@ -212,13 +193,14 @@ export default function PortalLogin() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Password</FormLabel>
-                          <FormControl>
-                            <div className="relative">
+                          <div className="relative">
+                            <FormControl>
                               <Input
                                 placeholder="Masukkan password"
                                 type={showPassword ? "text" : "password"}
                                 {...field}
                               />
+                            </FormControl>
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -228,8 +210,7 @@ export default function PortalLogin() {
                               >
                                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                               </Button>
-                            </div>
-                          </FormControl>
+                          </div>
                           <FormMessage />
                         </FormItem>
                       )}
