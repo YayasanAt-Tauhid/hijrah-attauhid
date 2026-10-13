@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from "@tanstack/react-router";
 import { useAuth, UserRole } from "@/contexts/AuthContext";
+import AuthRecovery from "./AuthRecovery";
 import AccessGateway from "@/pages/AccessGateway";
 
 interface ProtectedRouteProps {
@@ -18,7 +19,7 @@ function LoadingScreen() {
 }
 
 export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
-  const { user, role, isLoading } = useAuth();
+  const { user, role, isLoading, authError, retryAuth } = useAuth();
   const location = useLocation();
   const isRoot = location.pathname === "/";
 
@@ -26,15 +27,12 @@ export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
     return <LoadingScreen />;
   }
 
-  if (!user) {
-    return isRoot ? <AccessGateway /> : <Navigate to="/login" replace />;
+  if (authError || (user && !role)) {
+    return <AuthRecovery message={authError || "Akses akun belum tersedia. Silakan coba lagi atau hubungi admin sekolah."} onRetry={() => void retryAuth()} />;
   }
 
-  // Fail closed: setelah sesi user tersedia, role bisa masih null beberapa saat
-  // karena users_profile diambil secara async. Jangan pernah merender route yang
-  // dibatasi role sebelum role tersebut benar-benar sudah ter-resolve.
-  if (allowedRoles && !role) {
-    return <LoadingScreen />;
+  if (!user) {
+    return isRoot ? <AccessGateway /> : <Navigate to="/login" replace />;
   }
 
   if (role === "ortu" && isRoot) {

@@ -48,14 +48,14 @@ describe("ProtectedRoute", () => {
     expect(screen.queryByTestId("outlet")).not.toBeInTheDocument();
   });
 
-  it("fails closed while an authenticated user's role is unresolved", () => {
+  it("offers recovery when role lookup has finished without access", () => {
     mockUseAuth.mockReturnValue({
       user: { id: "1" },
       role: null,
       isLoading: false,
     });
     renderWithRouter(["admin"]);
-    expect(screen.getByText("Memuat...")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Akses akun belum tersedia");
     expect(screen.queryByTestId("outlet")).not.toBeInTheDocument();
   });
 

@@ -1,9 +1,9 @@
 import { Navigate, Outlet } from "@tanstack/react-router";
 import { useAuth } from "@/contexts/AuthContext";
+import AuthRecovery from "./AuthRecovery";
 
 export default function ProtectedPortalRoute() {
-  const { user, role, isLoading } = useAuth();
-
+  const { user, role, isLoading, authError, retryAuth } = useAuth();
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -14,14 +14,9 @@ export default function ProtectedPortalRoute() {
       </div>
     );
   }
-
-  if (!user) {
-    return <Navigate to="/portal/login" replace />;
+  if (authError || (user && !role)) {
+    return <AuthRecovery message={authError || "Akses akun belum tersedia. Silakan coba lagi atau hubungi admin sekolah."} onRetry={() => void retryAuth()} />;
   }
-
-  if (role !== "ortu") {
-    return <Navigate to="/portal/login" replace />;
-  }
-
+  if (!user || role !== "ortu") return <Navigate to="/portal/login" replace />;
   return <Outlet />;
 }

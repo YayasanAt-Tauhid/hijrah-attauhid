@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import AuthRecovery from "@/components/auth/AuthRecovery";
 import { portalOrtuCompleteGoogleSignup } from "@/server/portalOrtu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +27,7 @@ type Status = "memeriksa" | "lengkapi" | "sukses" | "gagal";
 
 export default function PortalOAuthCallback() {
   const navigate = useNavigate();
-  const { user, isLoading, signOut } = useAuth();
+  const { user, role, isLoading, authError, retryAuth, signOut } = useAuth();
   const [status, setStatus] = useState<Status>("memeriksa");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -38,7 +38,7 @@ export default function PortalOAuthCallback() {
   });
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || authError) return;
     if (!user) {
       setStatus("gagal");
       setError("Gagal masuk dengan Google. Silakan coba lagi.");
@@ -46,18 +46,12 @@ export default function PortalOAuthCallback() {
     }
 
     (async () => {
-      const { data: profile } = await supabase
-        .from("users_profile")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (profile?.role === "ortu") {
+      if (role === "ortu") {
         navigate("/portal", { replace: true });
         return;
       }
 
-      if (profile?.role && profile.role !== "siswa") {
+      if (role && role !== "siswa") {
         await signOut();
         setStatus("gagal");
         setError(
@@ -71,23 +65,31 @@ export default function PortalOAuthCallback() {
       // otomatis diberi role siswa saat OAuth pertama kali.
       // Keduanya perlu lengkapi data anak untuk verifikasi.
       setStatus("lengkapi");
-    })();
-  }, [user, isLoading, navigate, signOut]);
+    })().catch(() => {
+      setStatus("gagal");
+      setError("Gagal memeriksa akun. Silakan coba lagi.");
+    });
+  }, [user, role, isLoading, authError, navigate, signOut]);
 
   const onSubmit = async (data: LengkapiForm) => {
     setSubmitting(true);
     setError(null);
     try {
       await portalOrtuCompleteGoogleSignup({ data });
+      await retryAuth();
       setStatus("sukses");
       toast.success("Pendaftaran berhasil!");
       setTimeout(() => navigate("/portal", { replace: true }), 1200);
-    } catch (err: any) {
-      setError(err?.message || "Gagal melengkapi pendaftaran. Coba lagi.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Gagal melengkapi pendaftaran. Coba lagi.");
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (authError && !isLoading) {
+    return <AuthRecovery message={authError} onRetry={() => void retryAuth()} />;
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 p-4">
