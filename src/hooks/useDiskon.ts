@@ -342,12 +342,17 @@ export function useKonfirmasiKeluarga() {
       qc.invalidateQueries({ queryKey: ["tagihan"] });
 
       const dibuat = Number(hasil.sinkronisasi?.dibuat ?? 0);
+      const diterapkan = Number(hasil.sinkronisasi?.diterapkan_ke_tagihan_existing ?? 0);
       const dilewati = Number(hasil.sinkronisasi?.dilewati_karena_diskon_lain ?? 0);
+      const tanpaKebijakan = Number(hasil.sinkronisasi?.dilewati_kebijakan ?? 0);
       toast.success(
         dibuat > 0
-          ? `Kelompok keluarga tersimpan — ${dibuat} potongan kakak/adik bulan berjalan diterapkan otomatis`
-          : "Kelompok keluarga tersimpan"
+          ? `Kelompok keluarga tersimpan — ${dibuat} keringanan bulan berjalan dibuat, ${diterapkan} diterapkan ke tagihan`
+          : "Kelompok keluarga tersimpan — tidak ada potongan baru untuk bulan berjalan"
       );
+      if (tanpaKebijakan > 0) {
+        toast.info("Sebagian siswa belum mendapat potongan karena kebijakan kakak/adik untuk jenis SPP tersebut belum tersedia.");
+      }
       if (dilewati > 0) {
         toast.info(
           `${dilewati} potongan kakak/adik tidak ditambahkan karena siswa sudah memiliki potongan lain pada periode yang sama.`
