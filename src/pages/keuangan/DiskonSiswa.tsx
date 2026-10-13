@@ -12,6 +12,7 @@
  */
 import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { filterFamilySuggestions } from "@/lib/familySuggestions";
 import Unauthorized from "@/pages/Unauthorized";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -882,7 +883,18 @@ function TabPersetujuan() {
 
 function TabKeluarga() {
   const [aktif, setAktif] = useState(false);
-  const { data: saran, isLoading } = useSaranKeluarga(aktif);
+  const { data: saran, isFetching, error, refetch } = useSaranKeluarga(aktif);
+  const [pencarian, setPencarian] = useState("");
+  const [halaman, setHalaman] = useState(1);
+  const perHalaman = 10;
+  const hasilPencarian = useMemo(
+    () => filterFamilySuggestions(saran ?? [], pencarian),
+    [saran, pencarian],
+  );
+  const jumlahHalaman = Math.max(1, Math.ceil(hasilPencarian.length / perHalaman));
+  const halamanAktif = Math.min(halaman, jumlahHalaman);
+  const awal = (halamanAktif - 1) * perHalaman;
+  const saranHalaman = hasilPencarian.slice(awal, awal + perHalaman);
   const konfirmasiMut = useKonfirmasiKeluarga();
   const [pilihan, setPilihan] = useState<Record<string, Set<string>>>({});
   const [namaKeluarga, setNamaKeluarga] = useState<Record<string, string>>({});
@@ -912,29 +924,82 @@ function TabKeluarga() {
             periksa dulu sebelum dikonfirmasi. Setelah keluarga dikonfirmasi, potongan
             kakak/adik Rp50.000 bulan berjalan disinkronkan otomatis untuk anak ke-2
             dan seterusnya selama minimal 2 saudara masih aktif di yayasan.
-            <strong> Jika sudah ada potongan lain, potongan kakak/adik tidak ditambahkan.</strong>
+            <strong> Keringanan yang sudah diinput beserta riwayatnya tetap tersimpan.</strong>{" "}
+            Jika ada keringanan berstatus diajukan atau disetujui untuk jenis pembayaran
+            dan periode yang sama, potongan kakak/adik otomatis tidak ditambahkan.
+            Keringanan yang ditolak atau dibatalkan tidak menghalangi potongan baru.
           </AlertDescription>
         </Alert>
 
-        <Button onClick={() => setAktif(true)} disabled={isLoading}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          {aktif ? "Muat Ulang Saran" : "Cari Saran Kakak-Adik"}
-        </Button>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[220px]">
+            <Label htmlFor="cari-keluarga">Cari siswa dalam saran keluarga</Label>
+            <Input
+              id="cari-keluarga"
+              value={pencarian}
+              placeholder="Nama siswa atau NIS"
+              onChange={(e) => {
+                setPencarian(e.target.value);
+                setHalaman(1);
+              }}
+            />
+          </div>
+          <Button
+            onClick={() => {
+              setHalaman(1);
+              if (aktif) void refetch();
+              else setAktif(true);
+            }}
+            disabled={isFetching}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            {aktif ? "Muat Ulang Saran" : "Cari Saran Kakak-Adik"}
+          </Button>
+        </div>
 
-        {isLoading && <p className="text-sm text-muted-foreground">Mencari...</p>}
-
-        {aktif && !isLoading && (saran ?? []).length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            Tidak ada kandidat kakak-adik yang belum dikelompokkan.
+        {isFetching && <p className="text-sm text-muted-foreground">Mencari...</p>}
+        {aktif && error && (
+          <p role="alert" className="text-sm text-destructive">
+            Gagal memuat saran keluarga. Klik Muat Ulang Saran untuk mencoba lagi.
           </p>
         )}
 
+        {aktif && !isFetching && !error && hasilPencarian.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            {pencarian.trim()
+              ? "Tidak ada saran keluarga yang cocok dengan nama atau NIS tersebut."
+              : "Tidak ada kandidat kakak-adik yang belum dikelompokkan."}
+          </p>
+        )}
+
+        {aktif && !error && hasilPencarian.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground" aria-live="polite">
+              Menampilkan {awal + 1}–{Math.min(awal + perHalaman, hasilPencarian.length)}
+              {" dari "}{hasilPencarian.length} saran
+              {pencarian.trim() ? " yang cocok" : ""}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={halamanAktif === 1 || isFetching}
+                onClick={() => setHalaman(halamanAktif - 1)}>
+                Sebelumnya
+              </Button>
+              <span className="text-sm">Halaman {halamanAktif} / {jumlahHalaman}</span>
+              <Button variant="outline" size="sm" disabled={halamanAktif === jumlahHalaman || isFetching}
+                onClick={() => setHalaman(halamanAktif + 1)}>
+                Berikutnya
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-3">
-          {(saran ?? []).map((g) => {
-            const terpilih = pilihan[g.kunci] ?? new Set<string>();
-            const nama = namaKeluarga[g.kunci] ?? "";
+          {(!error ? saranHalaman : []).map((g) => {
+            const groupKey = `${g.sumber}:${g.kunci}`;
+            const terpilih = pilihan[groupKey] ?? new Set<string>();
+            const nama = namaKeluarga[groupKey] ?? "";
             return (
-              <div key={g.kunci} className="border rounded-lg p-4 space-y-3">
+              <div key={groupKey} className="border rounded-lg p-4 space-y-3">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline">
                     {g.sumber === "no_kk"
@@ -958,7 +1023,7 @@ function TabKeluarga() {
                     >
                       <Checkbox
                         checked={terpilih.has(s.siswa_id)}
-                        onCheckedChange={() => togglePilih(g.kunci, s.siswa_id)}
+                        onCheckedChange={() => togglePilih(groupKey, s.siswa_id)}
                       />
                       <span>
                         {s.nama}{" "}
@@ -980,14 +1045,14 @@ function TabKeluarga() {
                     <Input
                       value={nama}
                       onChange={(e) =>
-                        setNamaKeluarga((p) => ({ ...p, [g.kunci]: e.target.value }))
+                        setNamaKeluarga((p) => ({ ...p, [groupKey]: e.target.value }))
                       }
                       placeholder="Mis. Keluarga Bpk. Ahmad"
                     />
                   </div>
                   <Button
                     disabled={
-                      terpilih.size < 2 || !nama.trim() || konfirmasiMut.isPending
+                      terpilih.size < 2 || !nama.trim() || konfirmasiMut.isPending || isFetching
                     }
                     onClick={() =>
                       konfirmasiMut.mutate({

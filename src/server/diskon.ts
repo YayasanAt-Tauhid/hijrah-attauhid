@@ -14,6 +14,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
+import { fetchAllFamilySuggestions } from "@/lib/familySuggestions";
 
 const ROLE_PENGAJU = ["admin", "keuangan"];
 const ROLE_PENYETUJU = ["admin", "sekretaris_yayasan"];
@@ -714,25 +715,47 @@ export interface SaranKeluargaResult {
  */
 export const saranKelompokKeluarga = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .inputValidator((d: { limit?: number } | undefined) => d ?? {})
-  .handler(async ({ data, context }): Promise<SaranKeluargaResult> => {
+  .inputValidator((d: Record<string, never> | undefined) => d ?? {})
+  .handler(async ({ context }): Promise<SaranKeluargaResult> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
     await requireRole(admin, userId, [...ROLE_PENGAJU, "sekretaris_yayasan"]);
 
-    const { data: hasil, error } = await admin.rpc("saran_kelompok_keluarga", {
-      p_limit: data?.limit ?? 200,
+    const { count, error: countError } = await admin
+      .from("siswa")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "aktif");
+    if (countError || count === null) {
+      throw new Error("Gagal menghitung kandidat keluarga: " + (countError?.message ?? "Jumlah siswa tidak tersedia"));
+    }
+
+    // Each active student contributes at most four matching keys (KK, parent
+    // NIK, parent account, names), except multiple account links. Count those
+    // separately so the RPC's internal LIMIT cannot truncate any group.
+    const { count: accountCount, error: accountError } = await admin
+      .from("ortu_siswa")
+      .select("id", { count: "exact", head: true });
+    if (accountError || accountCount === null) {
+      throw new Error("Gagal menghitung akun orang tua: " + (accountError?.message ?? "Jumlah akun tidak tersedia"));
+    }
+    const candidateLimit = Math.max(count * 3 + accountCount, 1);
+    const saran = await fetchAllFamilySuggestions(async (from, to) => {
+      const { data: hasil, error } = await admin
+        .rpc("saran_kelompok_keluarga", { p_limit: candidateLimit })
+        .order("skor", { ascending: false })
+        .order("jumlah_siswa", { ascending: false })
+        .order("sumber", { ascending: true })
+        .order("kunci", { ascending: true })
+        .range(from, to);
+      if (error) throw new Error("Gagal mengambil saran keluarga: " + error.message);
+      return (hasil ?? []).map((row) => ({
+        sumber: row.sumber as SaranKeluarga["sumber"],
+        kunci: row.kunci,
+        skor: Number(row.skor ?? 0),
+        jumlah_siswa: Number(row.jumlah_siswa ?? 0),
+        siswa: (row.siswa ?? []) as SaranKeluarga["siswa"],
+      }));
     });
-
-    if (error) throw new Error("Gagal mengambil saran keluarga: " + error.message);
-
-    const saran = (hasil ?? []).map((row) => ({
-      sumber: row.sumber as SaranKeluarga["sumber"],
-      kunci: row.kunci,
-      skor: Number(row.skor ?? 0),
-      jumlah_siswa: Number(row.jumlah_siswa ?? 0),
-      siswa: (row.siswa ?? []) as SaranKeluarga["siswa"],
-    }));
 
     return { success: true, saran };
   });
