@@ -16,7 +16,7 @@ BEGIN
   SELECT id,departemen_id INTO kind,dept FROM jenis_pembayaran
     WHERE nama='SPP TK' AND aktif=true LIMIT 1;
   SELECT id INTO scheme FROM skema_diskon
-    WHERE nama='Potongan Anak ke-2' AND kategori='kakak_adik' AND aktif=true LIMIT 1;
+    WHERE nama='Potongan Kakak-Adik' AND kategori='kakak_adik' AND aktif=true LIMIT 1;
   IF kind IS NULL OR scheme IS NULL THEN RAISE EXCEPTION 'Missing test reference data'; END IF;
   SELECT id INTO fiscal2026 FROM tahun_buku WHERE '2026-10-10'::date BETWEEN tanggal_mulai AND tanggal_selesai LIMIT 1;
   SELECT id INTO fiscal2027 FROM tahun_buku WHERE '2027-01-10'::date BETWEEN tanggal_mulai AND tanggal_selesai LIMIT 1;
@@ -27,7 +27,7 @@ BEGIN
     'nominal',50000,true,false,'2026-07-01') RETURNING id INTO policy;
   INSERT INTO keluarga(id,nama) VALUES(f,'QA existing bills'),(control_family,'QA untouched family');
   INSERT INTO siswa(id,nama,status,tanggal_lahir,keluarga_id,departemen_id) VALUES
-    (older,'QA older','aktif','2018-06-09',f,dept),
+    (older,'QA older','aktif',NULL,f,dept),
     (younger,'QA younger','aktif','2022-03-22',f,dept),
     (control_old,'QA control older','aktif','2018-06-09',control_family,dept),
     (control_young,'QA control younger','aktif','2022-03-22',control_family,dept);
@@ -49,12 +49,14 @@ BEGIN
     (paid_bill,younger,kind,fiscal2027,4,'2027-04-10',350000,350000,0,'lunas',NULL);
 
   result := sinkronkan_diskon_kakak_adik_keluarga(f,'2026-10-13');
-  IF result->>'dibuat'<>'1' OR result->>'diterapkan_ke_tagihan_existing'<>'1'
+  IF result->>'dibuat'<>'2' OR result->>'diterapkan_ke_tagihan_existing'<>'2'
      OR result->'errors'<>'[]'::jsonb THEN RAISE EXCEPTION 'Current bill sync failed: %',result; END IF;
   IF NOT EXISTS(SELECT 1 FROM tagihan WHERE id=current_bill AND nominal=300000 AND nominal_diskon=50000)
      THEN RAISE EXCEPTION 'Current bill must be reduced without any plan'; END IF;
-  IF EXISTS(SELECT 1 FROM tagihan WHERE id IN(older_bill,future_bill,control_bill) AND nominal<>350000)
-     THEN RAISE EXCEPTION 'Older child, future month or another family changed'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM tagihan WHERE id=older_bill AND nominal=300000 AND nominal_diskon=50000)
+     THEN RAISE EXCEPTION 'First child must qualify even without birthdate'; END IF;
+  IF EXISTS(SELECT 1 FROM tagihan WHERE id IN(future_bill,control_bill) AND nominal<>350000)
+     THEN RAISE EXCEPTION 'Future month or another family changed'; END IF;
   SELECT count(*) INTO before_journals FROM jurnal WHERE referensi LIKE 'DISKON:%:'||current_bill::text;
   IF before_journals<>1 THEN RAISE EXCEPTION 'Expected exactly one correction journal'; END IF;
   IF EXISTS(SELECT 1 FROM jurnal j WHERE j.referensi LIKE 'DISKON:%:'||current_bill::text
@@ -88,10 +90,16 @@ BEGIN
   result := sinkronkan_diskon_kakak_adik_keluarga(f,'2027-04-01');
   IF result->>'dibuat'<>'0' OR (SELECT nominal FROM tagihan WHERE id=paid_bill)<>350000
     THEN RAISE EXCEPTION 'Paid bill changed: %',result; END IF;
+  UPDATE siswa SET status='keluar' WHERE id=older;
+  INSERT INTO tagihan(siswa_id,jenis_id,tahun_ajaran_id,bulan,jatuh_tempo,nominal,nominal_bruto,nominal_diskon,status)
+    VALUES(younger,kind,fiscal2027,5,'2027-05-10',350000,350000,0,'terjadwal');
+  result := sinkronkan_diskon_kakak_adik_keluarga(f,'2027-05-01');
+  IF result->>'dibuat'<>'0' OR EXISTS(SELECT 1 FROM siswa_diskon WHERE siswa_id=younger AND periode_mulai='2027-05-01')
+    THEN RAISE EXCEPTION 'Only one active sibling should not qualify: %',result; END IF;
   IF has_function_privilege('anon','public.sinkronkan_diskon_kakak_adik_keluarga(uuid,date)','execute')
     OR has_function_privilege('authenticated','public.sinkronkan_diskon_kakak_adik_keluarga(uuid,date)','execute')
     THEN RAISE EXCEPTION 'Service-only RPC is exposed'; END IF;
 END;
 $test$;
-SELECT 'PASS: existing unpaid bill, journal balance, oldest child, family scope, future month, idempotency, existing/pending discount, rollback, paid bill, permissions' AS result;
+SELECT 'PASS: existing unpaid bill, journal balance, first child without birthdate, active-sibling threshold, family scope, future month, idempotency, existing/pending discount, rollback, paid bill, permissions' AS result;
 ROLLBACK;

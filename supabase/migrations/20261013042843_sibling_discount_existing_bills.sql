@@ -1,3 +1,34 @@
+-- New policy: every active sibling qualifies in a confirmed family with at
+-- least two active students. Retain historical schemes/policies and snapshots.
+INSERT INTO public.skema_diskon(nama,kategori,tipe,nilai_default,perlu_approval,aktif,keterangan)
+SELECT 'Potongan Kakak-Adik','kakak_adik','nominal',50000,false,true,
+       'Berlaku bagi semua anak dalam keluarga dengan minimal dua siswa aktif, termasuk anak pertama.'
+WHERE NOT EXISTS (SELECT 1 FROM public.skema_diskon WHERE nama='Potongan Kakak-Adik');
+
+INSERT INTO public.kebijakan_keringanan(
+  kode,versi,nama,skema_diskon_id,jenis_id,kelas_regex,tipe,nilai,
+  otomatis,perlu_pengajuan,berlaku_mulai,berlaku_selesai,aktif,keterangan
+)
+SELECT replace(old.kode,'kakak_2_','kakak_semua_'),1,
+       'Potongan Kakak-Adik - Semua Saudara Aktif',general.id,old.jenis_id,
+       old.kelas_regex,old.tipe,old.nilai,true,false,
+       GREATEST(old.berlaku_mulai,DATE '2026-10-01'),old.berlaku_selesai,true,
+       'Klarifikasi kebijakan 13 Oktober 2026: minimal dua saudara aktif; setiap anak berhak, tanpa batas urutan anak.'
+FROM (
+  SELECT DISTINCT ON (kk.jenis_id) kk.*
+  FROM public.kebijakan_keringanan kk
+  JOIN public.skema_diskon sk ON sk.id=kk.skema_diskon_id
+  WHERE sk.nama='Potongan Anak ke-2' AND kk.aktif=true AND kk.otomatis=true
+    AND (kk.berlaku_selesai IS NULL OR kk.berlaku_selesai>=DATE '2026-10-01')
+    AND kk.kode LIKE 'kakak_2_%'
+  ORDER BY kk.jenis_id,kk.berlaku_mulai DESC,kk.versi DESC
+) old
+JOIN public.skema_diskon general ON general.nama='Potongan Kakak-Adik'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.kebijakan_keringanan existing
+  WHERE existing.kode=replace(old.kode,'kakak_2_','kakak_semua_') AND existing.versi=1
+);
+
 -- Existing SPP bills are valid candidates even without a recurring plan.
 -- Family confirmation is scoped; the daily scheduler retains its old RPC.
 CREATE OR REPLACE FUNCTION public.sinkronkan_diskon_kakak_adik_keluarga(p_keluarga_id uuid, p_tanggal date DEFAULT CURRENT_DATE)
@@ -25,18 +56,12 @@ BEGIN
       SELECT
         s.id AS siswa_id,
         s.keluarga_id,
-        s.tanggal_lahir,
-        row_number() OVER (
-          PARTITION BY s.keluarga_id
-          ORDER BY s.tanggal_lahir ASC NULLS LAST,s.id
-        ) AS urutan,
-        count(*) OVER (PARTITION BY s.keluarga_id) AS jumlah,
-        count(s.tanggal_lahir) OVER (PARTITION BY s.keluarga_id) AS jumlah_lahir
+        count(*) OVER (PARTITION BY s.keluarga_id) AS jumlah
       FROM public.siswa s
       WHERE s.status='aktif' AND s.keluarga_id IS NOT NULL
         AND (p_keluarga_id IS NULL OR s.keluarga_id=p_keluarga_id)
     )
-    SELECT a.siswa_id,a.keluarga_id,a.urutan,r.jenis_id
+    SELECT a.siswa_id,a.keluarga_id,r.jenis_id
     FROM anggota a
     JOIN (
       SELECT r.siswa_id,r.jenis_id
@@ -57,9 +82,7 @@ BEGIN
             BETWEEN v_mulai AND v_selesai
     ) r ON r.siswa_id=a.siswa_id
     WHERE a.jumlah>=2
-      AND a.jumlah_lahir=a.jumlah
-      AND a.urutan>=2
-    ORDER BY a.keluarga_id,a.urutan,r.jenis_id
+    ORDER BY a.keluarga_id,a.siswa_id,r.jenis_id
   LOOP
     BEGIN
     -- Serialize cron and family confirmation for the same child/month/type.
@@ -98,9 +121,7 @@ BEGIN
     FROM public.skema_diskon sk
     WHERE sk.aktif=true
       AND sk.kategori='kakak_adik'
-      AND sk.nama=CASE WHEN v_row.urutan=2
-                       THEN 'Potongan Anak ke-2'
-                       ELSE 'Potongan Anak ke-3 dst' END
+      AND sk.nama='Potongan Kakak-Adik'
     LIMIT 1;
 
     IF v_skema_id IS NULL THEN
