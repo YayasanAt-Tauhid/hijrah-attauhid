@@ -922,8 +922,9 @@ function TabKeluarga() {
             dengan nama ayah/ibu sebagai fallback. Identitas mentah tidak ditampilkan
             pada daftar ini. Hasilnya tetap <strong>saran, bukan keputusan</strong> —
             periksa dulu sebelum dikonfirmasi. Setelah keluarga dikonfirmasi, potongan
-            kakak/adik Rp50.000 bulan berjalan disinkronkan otomatis untuk anak ke-2
-            dan seterusnya selama minimal 2 saudara masih aktif di yayasan.
+            kakak/adik bulan berjalan mengikuti kebijakan aktif untuk
+            <strong> semua anak, termasuk anak pertama</strong>, selama
+            <strong> minimal 2 saudara masih aktif</strong> di yayasan.
             <strong> Keringanan yang sudah diinput beserta riwayatnya tetap tersimpan.</strong>{" "}
             Jika ada keringanan berstatus diajukan atau disetujui untuk jenis pembayaran
             dan periode yang sama, potongan kakak/adik otomatis tidak ditambahkan.

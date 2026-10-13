@@ -773,6 +773,8 @@ export interface KonfirmasiKeluargaResult {
     dibuat?: number;
     dilewati_karena_diskon_lain?: number;
     diterapkan_ke_tagihan_existing?: number;
+    dilewati_kebijakan?: number;
+    errors?: string[];
   } | null;
   sinkron_error?: string | null;
 }
@@ -807,14 +809,14 @@ export const konfirmasiKelompokKeluarga = createServerFn({ method: "POST" })
 
     const today = new Date().toISOString().slice(0, 10);
     const { data: sinkronisasi, error: sinkronError } = await (admin as any).rpc(
-      "sinkronkan_diskon_kakak_adik_bulanan",
-      { p_tanggal: today }
+      "sinkronkan_diskon_kakak_adik_keluarga",
+      { p_keluarga_id: keluargaId, p_tanggal: today }
     );
 
     return {
       success: true,
       keluarga_id: keluargaId as string,
       sinkronisasi: (sinkronisasi || null) as KonfirmasiKeluargaResult["sinkronisasi"],
-      sinkron_error: sinkronError?.message || null,
+      sinkron_error: sinkronError?.message || (sinkronisasi?.errors?.length ? sinkronisasi.errors.join("; ") : null),
     };
   });
