@@ -1105,7 +1105,7 @@ export default function PiutangManajemen() {
                   ? <p className="p-2 text-muted-foreground">{krReady && !krLoading && !krSearchingTerm && !krSearchError ? "Tidak ada tagihan belum bayar/terjadwal yang cocok" : "Hasil pencarian akan tampil di sini"}</p>
                   : tagihanKrFiltered.map((t: any) => (
                     <div key={t.id}
-                      className={`w-full flex items-center gap-2 px-3 py-2 border-b last:border-0 hover:bg-muted/60 transition-colors ${krTagihanId === t.id ? "bg-primary/10 font-semibold" : ""}`}>
+                      className={`w-full flex items-center gap-2 px-3 py-2 border-b last:border-0 hover:bg-muted/60 transition-colors ${(krMode === "batal" ? krSelectedIds.has(t.id) : krTagihanId === t.id) ? "bg-primary/10 font-semibold" : ""}`}>
                       {krMode === "batal" && (
                         <Checkbox
                           checked={krSelectedIds.has(t.id)}
@@ -1114,7 +1114,7 @@ export default function PiutangManajemen() {
                         />
                       )}
                       <button type="button" className="flex-1 text-left"
-                        onClick={() => setKrTagihanId(t.id)}>
+                        onClick={() => krMode === "batal" ? toggleKrSelect(t.id) : setKrTagihanId(t.id)}>
                         <span className="font-medium">{t.siswa?.nis} — {t.siswa?.nama}</span>
                         <span className="text-muted-foreground ml-2">{t.jenis?.nama}{t.bulan ? ` (${namaBulanTahun(t.bulan, { tahunBukuNama: t.tahun_ajaran?.nama })})` : ""}</span>
                         {t.status === "terjadwal" && (
@@ -1196,7 +1196,7 @@ export default function PiutangManajemen() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={resetKoreksi}>Batal</Button>
-            {krMode === "batal" && krSelectedIds.size > 1 ? (
+            {krMode === "batal" && krSelectedIds.size > 0 ? (
               <Button variant="destructive" onClick={() => setBatalMassalOpen(true)}
                 disabled={!krAlasan.trim() || koreksiTagihan.isPending || krLoading || krSearchingTerm || krSelectedRows.length !== krSelectedIds.size}>
                 Batalkan {krSelectedIds.size} Tagihan Terpilih
