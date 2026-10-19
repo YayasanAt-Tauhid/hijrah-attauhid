@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  calculatePaymentProgress, selectRegistrationBills, matchesRegistration, jakartaDate, monitorPaymentStatus, monitorReadiness,
+  calculatePaymentProgress, selectRegistrationBills, matchesRegistration, jakartaDate, monitorPaymentStatus, monitorReadiness, monitorVerificationReasons, MONITOR_VERIFICATION_MESSAGES,
   type MonitorRegistration, type MonitorEvent, type MonitorPayment,
 } from "./spmbPaymentMonitor";
 const detail: MonitorRegistration = {
@@ -128,5 +128,44 @@ describe("monitoring uang pangkal SPMB", () => {
       { id: "legacy", jenis_id: "legacy" }, { id: "otherunit", jenis_id: "sd" }, { id: "spp", jenis_id: "spp" },
     ].map(patch => ({ ...bill, ...patch }))];
     expect(selectRegistrationBills(detail, bills, types).map(b => b.id)).toEqual(["valid"]);
+  });
+});
+
+describe("diagnosis verifikasi tagihan SPMB", () => {
+  const linkedBill = { id: "bill", siswa_id: "student", jenis_id: "pangkal", tahun_akademik_id: "2027", nominal: 10_100_000, status: "terjadwal" };
+  const reasons = (options: {
+    registration?: MonitorRegistration; selectedBills?: typeof linkedBill[];
+    unmatchedBills?: number; payments?: MonitorPayment[];
+    progress?: ReturnType<typeof progress>;
+  } = {}) => monitorVerificationReasons({
+    registration: options.registration || detail,
+    selectedBills: options.selectedBills ?? [linkedBill],
+    unmatchedBills: options.unmatchedBills ?? 0,
+    payments: options.payments || [],
+    progress: options.progress || progress([], { needsVerification: true }),
+    today: "2026-10-09",
+  });
+
+  it("menjelaskan tagihan tanpa penanda tahun akademik, bukan menganggap nominal belum diisi", () => {
+    const result = reasons({ selectedBills: [], unmatchedBills: 1 });
+    expect(result).toContain("tagihan_tanpa_tahun_akademik");
+    expect(MONITOR_VERIFICATION_MESSAGES.tagihan_tanpa_tahun_akademik).toContain("penanda tahun ajaran");
+  });
+  it("menjelaskan metadata pendaftaran yang hilang satu per satu", () => {
+    expect(reasons({
+      registration: { ...detail, tahun_ajaran_id: null, spmb_departemen_tujuan_id: null, spmb_registered_at: null },
+    })).toEqual(expect.arrayContaining(["tahun_ajaran_pendaftaran", "lembaga_tujuan", "tanggal_pendaftaran"]));
+  });
+  it("tidak menuduh tagihan yang sudah terhubung jika masih ada tagihan lama tanpa penanda", () => {
+    expect(reasons({ unmatchedBills: 1 })).not.toContain("tagihan_tanpa_tahun_akademik");
+  });
+  it("menjelaskan kelebihan bayar dan transaksi negatif", () => {
+    const p = payment("excess", 11_000_000, "2026-10-05");
+    expect(reasons({ payments: [p], progress: progress([p]) })).toContain("kelebihan_pembayaran");
+    const invalid = payment("negative", -1_000_000, "2026-10-05");
+    expect(reasons({ payments: [invalid], progress: progress([invalid]) })).toContain("transaksi_pembayaran");
+  });
+  it("tanpa status perlu verifikasi tidak menampilkan dugaan kesalahan", () => {
+    expect(reasons({ selectedBills: [], unmatchedBills: 1, progress: progress() })).toEqual([]);
   });
 });

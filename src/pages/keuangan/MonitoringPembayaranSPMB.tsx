@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import Unauthorized from "@/pages/Unauthorized";
 import { useNavigate, useSearchParams } from "@/lib/router-compat";
-import { MONITOR_PAYMENT_LABELS, MONITOR_READINESS_LABELS, monitorPaymentStatus, monitorReadiness, jakartaDate, type PaymentScheme } from "@/lib/spmbPaymentMonitor";
+import { MONITOR_PAYMENT_LABELS, MONITOR_READINESS_LABELS, MONITOR_VERIFICATION_MESSAGES, monitorPaymentStatus, monitorReadiness, jakartaDate, type PaymentScheme } from "@/lib/spmbPaymentMonitor";
 import { getSpmbPaymentMonitor, saveSpmbMonitorEvent, type PaymentMonitorRow } from "@/server/spmbPaymentMonitor";
 import { formatRupiah } from "@/hooks/useKeuangan";
 import { RefreshCw, ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
@@ -37,7 +37,10 @@ function MonitorIdentity({ row }: { row: PaymentMonitorRow }) {
 }
 function MonitorAmounts({ row }: { row: PaymentMonitorRow }) {
   if (row.progress.status === "belum_ada_tagihan") return <p className="text-sm text-muted-foreground">Tagihan belum dibuat</p>;
-  if (row.progress.status === "perlu_verifikasi") return <p className="text-sm text-amber-700">Nominal perlu diverifikasi</p>;
+  if (row.progress.status === "perlu_verifikasi") return <div className="space-y-1 text-sm text-amber-700">
+    <p className="font-medium">Data tagihan perlu diverifikasi</p>
+    <p className="text-xs">{MONITOR_VERIFICATION_MESSAGES[row.verificationReasons?.[0] || "pemeriksaan_manual"]}</p>
+  </div>;
   return <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm tabular-nums">
     <dt className="text-muted-foreground">Total</dt><dd className="text-right font-medium">{formatRupiah(row.progress.total)}</dd>
     <dt className="text-muted-foreground">Dibayar</dt><dd className="text-right">{formatRupiah(row.progress.paid)}</dd>
@@ -161,7 +164,7 @@ export function PaymentMonitorContent({ role }: { role: string }) {
   const rowActions = (row: PaymentMonitorRow) => <div className="flex flex-wrap gap-2">
     {editable && row.progress.status === "belum_diatur" && <Button size="sm" disabled={!historyAvailable} onClick={() => open(row, "skema")}>Tentukan skema</Button>}
     {editable && row.progress.status === "belum_ada_tagihan" && <Button size="sm" onClick={() => navigate("/keuangan/rencana-siswa-baru?siswa=" + row.siswa_id)}>Buat tagihan</Button>}
-    {editable && row.progress.status === "perlu_verifikasi" && <Button size="sm" variant="outline" onClick={() => open(row)}>Verifikasi tagihan</Button>}
+    {editable && row.progress.status === "perlu_verifikasi" && <Button size="sm" variant="outline" onClick={() => open(row)}>Lihat alasan verifikasi</Button>}
     <Button size="sm" variant="outline" onClick={() => open(row)}>Detail dan catatan</Button>
   </div>;
   const cards = [
@@ -287,6 +290,14 @@ export function PaymentMonitorContent({ role }: { role: string }) {
           </div>
           {selected.progress.due && <p className="text-sm">Target berikutnya: {formatRupiah(selected.progress.shortage)} paling lambat {dateLabel(selected.progress.due)}.
             {selected.progress.originalDue !== selected.progress.due && <> Tenggat awal: {dateLabel(selected.progress.originalDue)}.</>}</p>}
+          {selected.progress.status === "perlu_verifikasi" && <Alert><AlertDescription>
+            <p className="font-semibold">Alasan verifikasi data</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {(selected.verificationReasons?.length ? selected.verificationReasons : ["pemeriksaan_manual" as const])
+                .map((reason, i) => <li key={i}>{MONITOR_VERIFICATION_MESSAGES[reason]}</li>)}
+            </ul>
+            <p className="mt-2">Menyimpan catatan tindak lanjut tidak memperbaiki tagihan atau mengesahkan nominal. Cocokkan data tagihan terlebih dahulu; jangan menerbitkan tagihan baru sebelum dipastikan tidak ada duplikasi.</p>
+          </AlertDescription></Alert>}
           {selected.unmatchedBills > 0 && <Alert><AlertDescription>Tagihan tanpa penanda tahun ajaran tidak dihitung. Verifikasi melalui data tagihan sebelum menghubungkannya ke penerimaan ini.</AlertDescription></Alert>}
           <div className="flex gap-2 flex-wrap">
             {editable && <Button variant="outline" onClick={() => navigate("/keuangan/rencana-siswa-baru?siswa=" + selected.siswa_id)}>Atur tagihan</Button>}

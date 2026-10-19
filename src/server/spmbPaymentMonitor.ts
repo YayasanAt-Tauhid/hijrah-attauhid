@@ -6,7 +6,8 @@ import { createAdminClient } from "./supabase";
 import {
   calculatePaymentProgress, jakartaDate, matchesRegistration, selectRegistrationBills,
   type MonitorRegistration, type MonitorBill, type MonitorPayment, type MonitorFeeType,
-  type MonitorEvent, type PaymentProgress, type PaymentScheme,
+  type MonitorEvent, type PaymentProgress, type PaymentScheme, type MonitorVerificationReason,
+  monitorVerificationReasons,
 } from "@/lib/spmbPaymentMonitor";
 import { isUangPangkalPaymentName } from "@/lib/installment";
 
@@ -22,7 +23,7 @@ export interface PaymentMonitorRow extends Record<string, unknown> {
   departemen_id: string | null; departemen_nama: string; tahun_ajaran_id: string | null;
   tahun_ajaran_nama: string; status_asrama: string | null; internal: boolean;
   tanggal_lulus: string | null; skema: PaymentScheme | null; events: MonitorEvent[];
-  progress: PaymentProgress; unmatchedBills: number;
+  progress: PaymentProgress; unmatchedBills: number; verificationReasons: MonitorVerificationReason[];
 }
 const DETAIL_SELECT = "id,siswa_id,tahun_ajaran_id,spmb_departemen_tujuan_id,spmb_gelombang_id,spmb_registered_at,spmb_tanggal_lulus,spmb_status_kelulusan,status_asrama,spmb_siswa_internal";
 const ROLES = ["admin", "keuangan", "kasir"];
@@ -115,6 +116,15 @@ async function loadRows(admin: SupabaseClient, details: Detail[]) {
       && b.tahun_akademik_id === null && allowedTypes.has(b.jenis_id)).length;
     const needsVerification = !detail.tahun_ajaran_id || !detail.spmb_departemen_tujuan_id
       || !detail.spmb_registered_at || (!selectedBills.length && unmatchedBills > 0);
+    const progress = calculatePaymentProgress({
+      total: selectedBills.reduce((sum,b) => sum + Number(b.nominal),0),
+      billIds: selectedBills.map(b => b.id), payments, passedAt: detail.spmb_tanggal_lulus,
+      scheme: schemeEvent?.skema || null, events: currentEvents, schemeEventId: schemeEvent?.id,
+      today, needsVerification,
+    });
+    const verificationReasons = monitorVerificationReasons({
+      registration: detail, selectedBills, unmatchedBills, payments, progress, today,
+    });
     items.push({
       id: detail.id, siswa_id: student.id, nama: student.nama, nis: student.nis, registration: { id: detail.id, siswa_id: detail.siswa_id, tahun_ajaran_id: detail.tahun_ajaran_id, spmb_departemen_tujuan_id: detail.spmb_departemen_tujuan_id, spmb_gelombang_id: detail.spmb_gelombang_id, spmb_registered_at: detail.spmb_registered_at, spmb_tanggal_lulus: detail.spmb_tanggal_lulus },
       status_siswa: student.status, departemen_id: detail.spmb_departemen_tujuan_id,
@@ -124,12 +134,7 @@ async function loadRows(admin: SupabaseClient, details: Detail[]) {
       status_asrama: detail.status_asrama, internal: detail.spmb_siswa_internal === true,
       tanggal_lulus: detail.spmb_tanggal_lulus, skema: schemeEvent?.skema || null,
       events: currentEvents,
-      progress: calculatePaymentProgress({
-        total: selectedBills.reduce((sum,b) => sum + Number(b.nominal),0),
-        billIds: selectedBills.map(b => b.id), payments, passedAt: detail.spmb_tanggal_lulus,
-        scheme: schemeEvent?.skema || null, events: currentEvents, schemeEventId: schemeEvent?.id,
-        today, needsVerification,
-      }), unmatchedBills,
+      progress, unmatchedBills, verificationReasons,
     });
   }
   items.sort((a,b) => b.progress.overdueDays-a.progress.overdueDays || a.nama.localeCompare(b.nama,"id"));

@@ -37,12 +37,17 @@ let role = "admin", active = true;
 let detailError: { code: string; message: string } | null = null;
 let eventError: { code: string; message: string } | null = null;
 const insert = vi.fn();
+let fixtureBills: Record<string, unknown>[] = [];
+let fixtureTypes: Record<string, unknown>[] = [];
 beforeEach(() => {
   role = "admin"; active = true; detailError = eventError = null; insert.mockReset();
+  fixtureBills = []; fixtureTypes = [];
   db.from.mockReset();
   db.from.mockImplementation((table: string) => {
     const records = table === "siswa_detail" ? [detail]
       : table === "siswa" ? [{ id, nama: "Calon siswa", nis: null, status: "diterima" }]
+      : table === "tagihan" ? fixtureBills
+      : table === "jenis_pembayaran" ? fixtureTypes
       : [];
     const q = {
       select: () => q, eq: () => q, not: () => q, in: () => q, order: () => q, limit: () => q,
@@ -73,6 +78,15 @@ describe("otorisasi dan data monitoring SPMB", () => {
   it.each(["admin","keuangan","kasir"])("mengizinkan role %s membaca monitoring", async roleName => {
     role = roleName;
     expect(await get({ context: { userId: id } })).toMatchObject({ items: [{ nama: "Calon siswa" }] });
+  });
+  it("menjelaskan tagihan uang pangkal TK yang sudah diinput tetapi tanpa tahun akademik", async () => {
+    fixtureTypes = [{ id, nama: "UANG PANGKAL TK", departemen_id: id }];
+    fixtureBills = [{
+      id, siswa_id: id, jenis_id: id, tahun_akademik_id: null, nominal: 2_500_000, status: "belum_bayar",
+    }];
+    const report = await get({ context: { userId: id } }) as { items: { progress: { status: string }; verificationReasons: string[] }[] };
+    expect(report.items[0].progress.status).toBe("perlu_verifikasi");
+    expect(report.items[0].verificationReasons).toContain("tagihan_tanpa_tahun_akademik");
   });
   it("tidak mengubah kegagalan baca data menjadi laporan kosong", async () => {
     detailError = { code: "42501", message: "read denied" };
