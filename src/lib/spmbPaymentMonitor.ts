@@ -45,6 +45,19 @@ export const MONITOR_READINESS_LABELS = {
 export type MonitorPaymentStatus = keyof typeof MONITOR_PAYMENT_LABELS;
 export type MonitorReadiness = keyof typeof MONITOR_READINESS_LABELS;
 
+export const MONITOR_VERIFICATION_MESSAGES = {
+  tahun_ajaran_pendaftaran: "Tahun ajaran pendaftaran belum diisi.",
+  lembaga_tujuan: "Lembaga tujuan belum diisi.",
+  tanggal_pendaftaran: "Tanggal pendaftaran belum tercatat.",
+  tagihan_tanpa_tahun_akademik: "Tagihan uang pangkal ditemukan, tetapi penanda tahun ajaran akademiknya kosong. Cocokkan dengan pendaftaran sebelum memperbaiki data tagihan.",
+  nominal_tagihan: "Nominal tagihan tidak valid.",
+  transaksi_pembayaran: "Ada transaksi pembayaran dengan nominal tidak valid.",
+  kelebihan_pembayaran: "Total pembayaran melebihi nominal tagihan yang terhubung.",
+  tanggal_lulus: "Tanggal lulus tes belum tercatat.",
+  pemeriksaan_manual: "Periksa kecocokan tagihan, pendaftaran, dan transaksi pembayaran.",
+} as const;
+export type MonitorVerificationReason = keyof typeof MONITOR_VERIFICATION_MESSAGES;
+
 /** Payment facts remain visible even before a collection scheme is agreed. */
 export function monitorPaymentStatus(progress: PaymentProgress): MonitorPaymentStatus {
   if (progress.status === "perlu_verifikasi" || progress.status === "belum_ada_tagihan") return progress.status;
@@ -84,6 +97,36 @@ export function selectRegistrationBills(
     && bill.tahun_akademik_id === detail.tahun_ajaran_id && allowed.has(bill.jenis_id)
     && ["terjadwal", "belum_bayar", "sebagian", "lunas"].includes(bill.status));
 }
+/** Jelaskan penyebab status verifikasi tanpa menyimpulkan bahwa nominal belum diinput. */
+export function monitorVerificationReasons(input: {
+  registration: MonitorRegistration;
+  selectedBills: MonitorBill[];
+  unmatchedBills: number;
+  payments: MonitorPayment[];
+  progress: PaymentProgress;
+  today: string;
+}): MonitorVerificationReason[] {
+  if (input.progress.status !== "perlu_verifikasi") return [];
+  const reasons: MonitorVerificationReason[] = [];
+  const { registration, selectedBills, unmatchedBills, progress } = input;
+  if (!registration.tahun_ajaran_id) reasons.push("tahun_ajaran_pendaftaran");
+  if (!registration.spmb_departemen_tujuan_id) reasons.push("lembaga_tujuan");
+  if (!registration.spmb_registered_at) reasons.push("tanggal_pendaftaran");
+  if (!selectedBills.length && unmatchedBills > 0) reasons.push("tagihan_tanpa_tahun_akademik");
+
+  if (!Number.isFinite(progress.total) || progress.total < 0) reasons.push("nominal_tagihan");
+  const ids = new Set(selectedBills.map(b => b.id));
+  const relevantPayments = input.payments.filter(p => p.tagihan_id && ids.has(p.tagihan_id)
+    && p.tanggal_bayar <= jakartaDate(input.today));
+  if (relevantPayments.some(p => !Number.isFinite(Number(p.jumlah)) || Number(p.jumlah) <= 0))
+    reasons.push("transaksi_pembayaran");
+  if (Number.isFinite(progress.paid) && Number.isFinite(progress.total) && progress.paid > progress.total)
+    reasons.push("kelebihan_pembayaran");
+  if (!registration.spmb_tanggal_lulus && selectedBills.length) reasons.push("tanggal_lulus");
+  if (!reasons.length) reasons.push("pemeriksaan_manual");
+  return reasons;
+}
+
 export function calculatePaymentProgress(input: {
   total: number; billIds: string[]; payments: MonitorPayment[]; passedAt: string | null;
   scheme: PaymentScheme | null; events?: MonitorEvent[]; schemeEventId?: number;
