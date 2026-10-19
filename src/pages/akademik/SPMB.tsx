@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { SpmbStatistics } from "@/components/akademik/SpmbStatistics";
 import { isSpmbAccepted, isSpmbActivated, matchesSpmbStatus } from "@/lib/spmbAdmission";
+import { getAvailableSpmbMilestones, SPMB_MILESTONE_ACTION_LABELS, SPMB_MILESTONE_SUCCESS_LABELS } from "@/lib/spmbMilestoneActions";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
@@ -1178,9 +1179,6 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         const loading = nisLoadingId === (row.id as string);
         const kesiapan = getKesiapanPenerimaan(row);
         const detail = row._spmbDetail as Record<string, any> | undefined;
-        const tesLoading = milestoneLoadingId === `${row.id}:tes`;
-        const lulusLoading = milestoneLoadingId === `${row.id}:lulus`;
-        const daftarUlangLoading = milestoneLoadingId === `${row.id}:daftar_ulang`;
         const targetYearForRow = detail?.tahun_ajaran_id
           ? tahunList.find((item: any) => item.id === detail.tahun_ajaran_id)
           : undefined;
@@ -1194,6 +1192,8 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           && Boolean(detail?.spmb_tanggal_daftar_ulang)
           && !detail?.spmb_tanggal_aktivasi;
         const activated = isSpmbActivated(row);
+        const milestoneActions = getAvailableSpmbMilestones(detail, activated);
+        const canRecordMilestones = role === "admin" || role === "admin_tu";
         return (
           <div onClick={(event) => event.stopPropagation()}>
             <DropdownMenu>
@@ -1204,14 +1204,20 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
                 {canChangeSpmbTarget && !activated && !detail?.spmb_tanggal_aktivasi && detail?.spmb_status_pendaftaran !== "selesai" && (internalStudent || row._academicStatus !== "aktif") && (
                   <DropdownMenuItem title="Ubah lembaga/jenjang tujuan SPMB" disabled={!row._readiness || Boolean(row._pmbLunas && !row._pmbGratis)} onSelect={() => openTargetChange(row)}><ArrowRightLeft className="mr-2 h-4 w-4" />Ubah tujuan SPMB</DropdownMenuItem>
                 )}
-                {!activated && <>
+                {canRecordMilestones && milestoneActions.length > 0 && <>
                   <DropdownMenuSeparator />
-                  {!detail?.spmb_tanggal_tes && <DropdownMenuItem disabled={tesLoading} onSelect={() => handleMilestone(row, "tes", "Sudah Tes")}>Catat sudah tes</DropdownMenuItem>}
-                  {detail?.spmb_tanggal_tes && !detail?.spmb_status_kelulusan && <>
-                    <DropdownMenuItem disabled={lulusLoading} onSelect={() => handleMilestone(row, "lulus", "Lulus")}>Catat lulus tes</DropdownMenuItem>
-                    <DropdownMenuItem disabled={milestoneLoadingId === `${row.id}:tidak_lulus`} onSelect={() => handleMilestone(row, "tidak_lulus", "Tidak Lulus")}>Catat tidak lulus tes</DropdownMenuItem>
-                  </>}
-                  {detail?.spmb_status_kelulusan === "lulus" && !detail?.spmb_tanggal_daftar_ulang && <DropdownMenuItem disabled={daftarUlangLoading} onSelect={() => handleMilestone(row, "daftar_ulang", "Daftar Ulang")}>Catat daftar ulang</DropdownMenuItem>}
+                  {activated && <DropdownMenuLabel className="whitespace-normal text-xs font-normal text-muted-foreground">Lengkapi riwayat SPMB setelah aktivasi</DropdownMenuLabel>}
+                  {milestoneActions.map((action) => (
+                    <DropdownMenuItem
+                      key={action}
+                      disabled={milestoneLoadingId !== null}
+                      onSelect={() => handleMilestone(row, action, SPMB_MILESTONE_SUCCESS_LABELS[action])}
+                    >
+                      {SPMB_MILESTONE_ACTION_LABELS[action]}
+                    </DropdownMenuItem>
+                  ))}
+                </>}
+                {!activated && <>
                   {status === "calon" && <>
                     <DropdownMenuItem disabled={loading || !kesiapan.siap} onSelect={() => handleTerima(row)}>Terima calon murid</DropdownMenuItem>
                     {!kesiapan.siap && <DropdownMenuItem onSelect={() => setReadinessRow(row)} className="text-warning">{row._readiness ? ("Lihat " + kesiapan.kekurangan.length + " kekurangan") : "Pemeriksaan kesiapan belum tersedia"}</DropdownMenuItem>}

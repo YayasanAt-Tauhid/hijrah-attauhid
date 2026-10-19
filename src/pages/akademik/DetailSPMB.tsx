@@ -1,7 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { useNavigate, useParams } from "@/lib/router-compat";
-import { ArrowLeft, CheckCircle2, ClipboardList, Pencil, UserRound } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronDown, ClipboardList, Pencil, UserRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { isSpmbActivated } from "@/lib/spmbAdmission";
+import { getAvailableSpmbMilestones, SPMB_MILESTONE_ACTION_LABELS, SPMB_MILESTONE_SUCCESS_LABELS, type SpmbMilestoneAction } from "@/lib/spmbMilestoneActions";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 import { SiswaSpmbDetail } from "@/components/akademik/SiswaSpmbDetail";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,6 +64,36 @@ function SummaryItem({ label, value }: { label: string; value: React.ReactNode }
 export default function DetailSPMB() {
   const { registrationId } = useParams<{ registrationId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { role } = useAuth();
+  const [milestoneLoading, setMilestoneLoading] = useState<SpmbMilestoneAction | null>(null);
+
+  const recordMilestone = async (siswaId: string, siswaNama: string, action: SpmbMilestoneAction) => {
+    if (milestoneLoading) return;
+    setMilestoneLoading(action);
+    try {
+      const client = supabase as unknown as {
+        rpc: (fn: string, args: { p_siswa_id: string; p_action: SpmbMilestoneAction }) =>
+          Promise<{ error: { message: string } | null }>;
+      };
+      const { error } = await client.rpc("spmb_mark_milestone", {
+        p_siswa_id: siswaId,
+        p_action: action,
+      });
+      if (error) throw error;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["spmb_registration_detail", registrationId] }),
+        queryClient.invalidateQueries({ queryKey: ["siswa", "calon"] }),
+      ]);
+      toast.success(`${SPMB_MILESTONE_SUCCESS_LABELS[action]} berhasil dicatat`, { description: siswaNama });
+    } catch (error: unknown) {
+      toast.error("Gagal mencatat tahapan SPMB", {
+        description: error instanceof Error ? error.message : "Terjadi kesalahan teknis",
+      });
+    } finally {
+      setMilestoneLoading(null);
+    }
+  };
 
   const { data: detail, isLoading: detailLoading, error: detailError } = useQuery({
     queryKey: ["spmb_registration_detail", registrationId],
@@ -160,6 +196,18 @@ export default function DetailSPMB() {
   const targetDept = target.departemen || siswa.departemen;
   const targetCohort = target.angkatan || siswa.angkatan;
   const missingCount = Array.isArray(readiness?.kekurangan) ? readiness.kekurangan.length : 0;
+  const activated = isSpmbActivated({
+    status,
+    _academicStatus: siswa.status,
+    _spmbInternal: detail.spmb_siswa_internal === true,
+    _spmbTanggalAktivasi: detail.spmb_tanggal_aktivasi,
+  });
+  const canRecordMilestones = role === "admin" || role === "admin_tu";
+  const milestoneActions = getAvailableSpmbMilestones(detail, activated);
+  const canManageBilling = role === "admin" && detail.spmb_status_kelulusan === "lulus"
+    && ((!detail.spmb_siswa_internal && ["diterima", "aktif"].includes(status))
+      || (detail.spmb_siswa_internal && ["diterima", "aktif", "selesai"].includes(status)));
+  const canViewPayment = role === "admin" && detail.spmb_status_kelulusan === "lulus";
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -185,6 +233,42 @@ export default function DetailSPMB() {
           <Button size="sm" onClick={() => navigate("/akademik/siswa/" + siswa.id + "/edit")}>
             <Pencil className="mr-2 h-4 w-4" />Edit & Verifikasi
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline">Tindakan<ChevronDown className="ml-1 h-4 w-4" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuItem onSelect={() => navigate("/akademik/siswa/" + siswa.id + "/edit")}>
+                Edit / periksa data
+              </DropdownMenuItem>
+              {canRecordMilestones && milestoneActions.length > 0 && <>
+                <DropdownMenuSeparator />
+                {activated && <DropdownMenuLabel className="whitespace-normal text-xs font-normal text-muted-foreground">Lengkapi riwayat SPMB setelah aktivasi</DropdownMenuLabel>}
+                {milestoneActions.map((action) => (
+                  <DropdownMenuItem
+                    key={action}
+                    disabled={milestoneLoading !== null}
+                    onSelect={() => recordMilestone(String(siswa.id), String(siswa.nama), action)}
+                  >
+                    {SPMB_MILESTONE_ACTION_LABELS[action]}
+                  </DropdownMenuItem>
+                ))}
+              </>}
+              {canViewPayment && <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => navigate(`/keuangan/monitoring-spmb?siswa=${siswa.id}`)}>
+                  Monitoring pembayaran
+                </DropdownMenuItem>
+              </>}
+              {canManageBilling && <DropdownMenuItem onSelect={() => navigate(`/keuangan/rencana-siswa-baru?siswa=${siswa.id}`)}>
+                Atur tagihan
+              </DropdownMenuItem>}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => navigate("/akademik/spmb")}>
+                Lihat tindakan penerimaan dan aktivasi lainnya
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -210,7 +294,18 @@ export default function DetailSPMB() {
             <SummaryItem label="Tanggal Pendaftaran" value={formatDateTime(detail.spmb_registered_at || siswa.created_at)} />
             <SummaryItem label="Status Tes" value={detail.spmb_tanggal_tes ? "Sudah Tes" : "Belum Tes"} />
             <SummaryItem label="Kelulusan" value={graduationLabel(detail.spmb_status_kelulusan)} />
-            <SummaryItem label="Daftar Ulang" value={detail.spmb_tanggal_daftar_ulang ? "Sudah Daftar Ulang" : "Belum Daftar Ulang"} />
+            <SummaryItem label="Daftar Ulang" value={
+              detail.spmb_tanggal_daftar_ulang
+                ? "Sudah Daftar Ulang"
+                : <div>
+                    <p>Belum Daftar Ulang</p>
+                    {detail.spmb_status_kelulusan !== "lulus" && (
+                      <p className="mt-1 text-xs font-normal text-muted-foreground">
+                        Catat tes dan kelulusan terlebih dahulu melalui menu Tindakan.
+                      </p>
+                    )}
+                  </div>
+            } />
             <SummaryItem label="Biaya Pendaftaran" value={paymentLabel(readiness)} />
             <SummaryItem
               label="Kesiapan Penerimaan"
