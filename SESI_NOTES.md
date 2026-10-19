@@ -1,3 +1,28 @@
+## SPMB — tombol tindakan pada detail dan riwayat TK setelah aktivasi (19 Oktober 2026)
+
+Permintaan: halaman `/akademik/spmb/:registrationId` mempunyai menu Tindakan dan siswa
+TK yang sudah aktif namun belum tercatat daftar ulang tetap bisa melengkapi
+riwayat SPMB. Sebelumnya seluruh aksi milestone dalam dropdown daftar SPMB
+berada di dalam `!activated`, sedangkan label "Belum daftar ulang" hanya
+memeriksa tanggal milestone; hal ini membuat label dan ketersediaan aksi
+tidak konsisten.
+
+Keputusan: pisahkan aksi pencatatan tes, lulus, dan daftar ulang dari aksi
+penerimaan/aktivasi; untuk siswa yang sudah aktif jangan tawarkan perubahan
+keputusan "tidak lulus". RPC existing `spmb_mark_milestone` tetap menjaga
+urutan, hak akses, dan idempotensi. Halaman detail menawarkan milestone
+beserta monitoring pembayaran/atur tagihan yang sesuai role; tindakan
+penerimaan, NIS, dan aktivasi kompleks tetap dijalankan dari daftar SPMB
+melalui tautan tindakan lanjutan. Tidak ada backfill otomatis, perubahan
+tagihan, SQL/migration, atau penulisan data produksi.
+
+Pengujian branch terpisah: 495 tes pada 76 file lulus; `npm run build`
+berhasil; lint dua file helper baru bersih. Audit data kasus TK dan ID
+pendaftaran yang dilaporkan belum diverifikasi langsung karena konektor
+Supabase mengembalikan error permission. Perlu pemeriksaan manual data
+produksi/role ketika deploy, terutama siswa yang belum pernah dicatat
+tes atau kelulusannya; isi tahap itu dulu sebelum daftar ulang.
+
 ## Monitoring Pembayaran SPMB — kejelasan status dan tampilan HP (10 Oktober 2026)
 
 Pengguna mengaudit halaman produksi melalui browser VPS, lalu menyetujui
