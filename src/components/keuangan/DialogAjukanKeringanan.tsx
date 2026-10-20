@@ -77,7 +77,13 @@ export function DialogAjukan({
       ? bulanKeTanggal(bulanSelesai)
       : "";
 
-  const { data: kebijakanAktif } = useKebijakanKeringananAktif({
+  const {
+    data: kebijakanAktif,
+    isPending: kebijakanPending,
+    isFetching: kebijakanFetching,
+    error: kebijakanError,
+    refetch: muatUlangKebijakan,
+  } = useKebijakanKeringananAktif({
     konteks_spmb: !!siswaTetap,
     siswa_id: siswa?.id,
     skema_diskon_id: skemaId || undefined,
@@ -102,6 +108,13 @@ export function DialogAjukan({
   }
 
   const kekurangan: string[] = [];
+  const perluKebijakan = !!(siswa && skemaId && jenisId && periodeMulaiAktif);
+  if (perluKebijakan && (kebijakanPending || kebijakanFetching)) {
+    kekurangan.push("Tunggu sampai kebijakan keringanan selesai dimuat");
+  }
+  if (perluKebijakan && kebijakanError) {
+    kekurangan.push("Kebijakan keringanan gagal dimuat. Muat ulang sebelum mengajukan.");
+  }
   if (!siswa) kekurangan.push("Siswa belum dipilih");
   if (!skemaId) kekurangan.push("Skema keringanan belum dipilih");
   if (!jenisId) kekurangan.push("Jenis pembayaran belum dipilih");
@@ -424,6 +437,11 @@ export function DialogAjukan({
             />
           </div>
 
+          {perluKebijakan && kebijakanError && (
+            <Button variant="outline" onClick={() => void muatUlangKebijakan()} disabled={kebijakanFetching}>
+              Muat Ulang Kebijakan
+            </Button>
+          )}
           {kekurangan.length > 0 && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
