@@ -215,6 +215,10 @@ const menuItems: MenuItem[] = [
     roles: ["admin", "kepala_sekolah"],
   },
   {
+    title: "Pengajuan Penghapusan", url: "/pengajuan-penghapusan", icon: ShieldCheck,
+    roles: ["admin", "admin_tu", "kepala_sekolah", "keuangan", "kasir", "guru", "pustakawan", "sekretaris_yayasan"],
+  },
+  {
     title: "Pengaturan", url: "/pengaturan", icon: Settings,
     roles: ["admin"],
     subGroups: [

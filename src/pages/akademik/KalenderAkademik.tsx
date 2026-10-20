@@ -1,3 +1,4 @@
+import { deleteWithApproval, deletionMessage } from "@/lib/dataDeletion";
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -71,8 +72,8 @@ export default function KalenderAkademik() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("kalender_akademik").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["kalender"] }); toast.success("Event dihapus"); },
+    mutationFn: async (id: string) => deleteWithApproval("kalender_akademik", id),
+    onSuccess: (result) => { qc.invalidateQueries({ queryKey: ["kalender"] }); toast.success(deletionMessage(result, "Event dihapus")); },
     onError: (e: any) => toast.error(e.message),
   });
 

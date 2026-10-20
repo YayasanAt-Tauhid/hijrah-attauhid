@@ -399,7 +399,10 @@ export function useBatalkanTagihan() {
       qc.invalidateQueries({ queryKey: ["jurnal"] });
       qc.invalidateQueries({ queryKey: ["buku_besar"] });
       qc.invalidateQueries({ queryKey: ["tunggakan"] });
-      if (res.mode === "batal") {
+      if (res.pending) {
+        qc.invalidateQueries({ queryKey: ["deletion_requests"] });
+        toast.success("Pengajuan tersimpan. Tagihan belum diubah dan menunggu persetujuan admin.");
+      } else if (res.mode === "batal") {
         toast.success("Tagihan berhasil dibatalkan & jurnal piutang dibalik.");
       } else if (res.warn_no_jurnal) {
         toast.warning("Nominal dikoreksi, tapi jurnal piutang baru tidak dibuat — cek akun piutang siswa / akun pendapatan jenis.");
@@ -432,7 +435,12 @@ export function useBatalkanTagihanBatch() {
       qc.invalidateQueries({ queryKey: ["jurnal"] });
       qc.invalidateQueries({ queryKey: ["buku_besar"] });
       qc.invalidateQueries({ queryKey: ["tunggakan"] });
-      if (res.gagal.length === 0) {
+      if (res.pending) {
+        qc.invalidateQueries({ queryKey: ["deletion_requests"] });
+        const message = `${res.diajukan || 0} pengajuan tersimpan; tagihan belum dibatalkan.`;
+        if (res.gagal.length) toast.warning(message + ` ${res.gagal.length} gagal diajukan.`);
+        else toast.success(message);
+      } else if (res.gagal.length === 0) {
         toast.success(`${res.berhasil} tagihan berhasil dibatalkan.`);
       } else if (res.berhasil === 0) {
         toast.error(`Semua ${res.gagal.length} tagihan gagal dibatalkan.`);

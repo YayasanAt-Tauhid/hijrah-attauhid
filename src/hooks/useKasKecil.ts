@@ -1,3 +1,4 @@
+import { deleteWithApproval, deletionMessage } from "@/lib/dataDeletion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -170,16 +171,10 @@ export function useUpdateTransaksiKasKecil() {
 export function useDeleteTransaksiKasKecil() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await (supabase as any)
-        .from("transaksi_kas_kecil")
-        .delete()
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
+    mutationFn: async (id: string) => deleteWithApproval("transaksi_kas_kecil", id),
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["transaksi_kas_kecil"] });
-      toast.success("Transaksi dihapus");
+      toast.success(deletionMessage(result, "Transaksi dihapus"));
     },
     onError: (e: any) => toast.error(e.message),
   });

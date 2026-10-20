@@ -1,3 +1,4 @@
+import { deleteWithApproval, deletionMessage } from "@/lib/dataDeletion";
 import SppCategoryPeriod from "./SppCategoryPeriod";
 import { recognitionDueDate, isMonthlySppRevenue } from "@/lib/recognitionDate";
 import { useState, useMemo, useEffect } from "react";
@@ -527,11 +528,8 @@ export default function PiutangManajemen() {
 
   // ─── Mutation: Hapus Penyisihan ──────────────────────────────────────────
   const deletePenyisihan = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await (supabase.from("penyisihan_piutang" as any).delete().eq("id", id) as any);
-      if (error) throw error;
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["penyisihan_piutang"] }); toast.success("Penyisihan dihapus"); },
+    mutationFn: async (id: string) => deleteWithApproval("penyisihan_piutang", id),
+    onSuccess: (result) => { qc.invalidateQueries({ queryKey: ["penyisihan_piutang"] }); toast.success(deletionMessage(result, "Penyisihan dihapus")); },
     onError: (e: any) => toast.error(e.message),
   });
 

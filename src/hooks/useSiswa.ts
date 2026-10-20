@@ -1,3 +1,4 @@
+import { deleteWithApproval, deletionMessage } from "@/lib/dataDeletion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllPages } from "@/lib/fetchAll";
@@ -165,15 +166,12 @@ export function useUpdateSiswa() {
 export function useDeleteSiswa() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("siswa").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
+    mutationFn: async (id: string) => deleteWithApproval("siswa", id),
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["siswa"] });
       qc.invalidateQueries({ queryKey: ["statistik_siswa"] });
       qc.invalidateQueries({ queryKey: ["siswa_detail"] });
-      toast.success("Siswa berhasil dihapus");
+      toast.success(deletionMessage(result, "Siswa berhasil dihapus"));
     },
     onError: (err: Error) => {
       toast.error("Gagal menghapus siswa: " + err.message);

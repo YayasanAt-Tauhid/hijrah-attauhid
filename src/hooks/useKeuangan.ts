@@ -1,3 +1,4 @@
+import { deleteWithApproval, deletionMessage } from "@/lib/dataDeletion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -255,13 +256,10 @@ export function useUpdatePengeluaran() {
 export function useDeletePengeluaran() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("pengeluaran").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
+    mutationFn: async (id: string) => deleteWithApproval("pengeluaran", id),
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["pengeluaran"] });
-      toast.success("Pengeluaran berhasil dihapus");
+      toast.success(deletionMessage(result, "Pengeluaran berhasil dihapus"));
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -654,30 +652,10 @@ export function useUpdateJenisPembayaran() {
 export function useDeleteJenisPembayaran() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string): Promise<{ action: "deleted" | "deactivated" }> => {
-      const { error } = await supabase.from("jenis_pembayaran").delete().eq("id", id);
-      if (!error) return { action: "deleted" };
-
-      // Jenis penerimaan yang sudah dipakai transaksi/tagihan wajib tetap ada
-      // agar histori akuntansi tidak kehilangan referensi. FK 23503 adalah
-      // sinyal bahwa record sedang direferensikan tabel lain.
-      if (error.code !== "23503") throw error;
-
-      const { error: deactivateError } = await supabase
-        .from("jenis_pembayaran")
-        .update({ aktif: false })
-        .eq("id", id);
-      if (deactivateError) throw deactivateError;
-
-      return { action: "deactivated" };
-    },
+    mutationFn: async (id: string) => deleteWithApproval("jenis_pembayaran", id),
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["jenis_pembayaran"] });
-      if (result.action === "deactivated") {
-        toast.warning("Jenis penerimaan sudah digunakan, sehingga tidak dihapus. Statusnya dinonaktifkan agar histori transaksi tetap aman.");
-      } else {
-        toast.success("Jenis penerimaan berhasil dihapus");
-      }
+      toast.success(deletionMessage(result, "Jenis penerimaan berhasil dihapus"));
     },
     onError: (e: any) => toast.error("Gagal memproses jenis penerimaan: " + e.message),
   });
@@ -717,13 +695,10 @@ export function useUpdateJenisPengeluaran() {
 export function useDeleteJenisPengeluaran() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("jenis_pengeluaran").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
+    mutationFn: async (id: string) => deleteWithApproval("jenis_pengeluaran", id),
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["jenis_pengeluaran"] });
-      toast.success("Jenis pengeluaran berhasil dihapus");
+      toast.success(deletionMessage(result, "Jenis pengeluaran berhasil dihapus"));
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -860,21 +835,10 @@ export function useUpdateTahunAjaran() {
 export function useDeleteTahunAjaran() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { data: payments } = await supabase
-        .from("pembayaran")
-        .select("id")
-        .eq("tahun_ajaran_id", id)
-        .limit(1);
-      if (payments && payments.length > 0) {
-        throw new Error("Tahun ajaran ini tidak bisa dihapus karena sudah memiliki data pembayaran.");
-      }
-      const { error } = await supabase.from("tahun_ajaran").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
+    mutationFn: async (id: string) => deleteWithApproval("tahun_ajaran", id),
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["tahun_ajaran"] });
-      toast.success("Tahun ajaran berhasil dihapus");
+      toast.success(deletionMessage(result, "Tahun ajaran berhasil dihapus"));
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -968,22 +932,10 @@ export function useUpdateTahunBuku() {
 export function useDeleteTahunBuku() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      // Cek apakah sudah ada transaksi yang menggunakan tahun buku ini
-      const { data: payments } = await supabase
-        .from("pembayaran")
-        .select("id")
-        .eq("tahun_ajaran_id", id)
-        .limit(1);
-      if (payments && payments.length > 0) {
-        throw new Error("Tahun buku ini tidak bisa dihapus karena sudah memiliki data pembayaran.");
-      }
-      const { error } = await (supabase.from("tahun_buku" as any) as any).delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
+    mutationFn: async (id: string) => deleteWithApproval("tahun_buku", id),
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["tahun_buku"] });
-      toast.success("Tahun buku berhasil dihapus");
+      toast.success(deletionMessage(result, "Tahun buku berhasil dihapus"));
     },
     onError: (e: any) => toast.error(e.message),
   });

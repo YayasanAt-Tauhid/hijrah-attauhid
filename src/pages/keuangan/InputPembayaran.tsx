@@ -140,6 +140,7 @@ function useBatalkanPembayaran() {
       const data = await batalkanPembayaran({
         data: { pembayaran_id: payload.pembayaran_id, alasan: payload.alasan },
       });
+      if (data.pending) return data;
       // catat ke audit (best-effort, di sisi klien agar nama pengguna terekam)
       await logAuditKeuangan({
         tabel_sumber: "pembayaran",
@@ -151,14 +152,17 @@ function useBatalkanPembayaran() {
       });
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["pembayaran"] });
       qc.invalidateQueries({ queryKey: ["pembayaran_siswa"] });
       qc.invalidateQueries({ queryKey: ["tagihan"] });
       qc.invalidateQueries({ queryKey: ["open_bills_payment_ui"] });
       qc.invalidateQueries({ queryKey: ["jurnal"] });
       qc.invalidateQueries({ queryKey: ["tunggakan"] });
-      toast.success("Pembayaran berhasil dibatalkan & jurnal dibalik");
+      qc.invalidateQueries({ queryKey: ["deletion_requests"] });
+      toast.success(result.pending
+        ? "Pengajuan tersimpan. Pembayaran belum dibatalkan dan menunggu persetujuan admin."
+        : "Pembayaran berhasil dibatalkan & jurnal dibalik");
     },
     onError: (e: Error) => toast.error(e.message),
   });
