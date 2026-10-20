@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, cleanup } from "@testing-library/react";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
-const m = vi.hoisted(() => ({ submit: vi.fn(), once: false }));
+const m = vi.hoisted(() => ({ submit: vi.fn(), once: false, loading: false, error: null as Error | null, retry: vi.fn() }));
 vi.mock("@/hooks/useKeuangan", () => ({
   formatRupiah: (n: number) => `Rp ${n}`,
   useAllJenisPembayaran: () => ({ data: [
@@ -13,7 +13,7 @@ vi.mock("@/hooks/useKeuangan", () => ({
 vi.mock("@/hooks/useDiskon", () => ({
   useSkemaDiskon: () => ({ data: [{ id: "khusus", nama: "Khusus", kategori: "keringanan", tipe: "nominal", nilai_default: 50000 }] }),
   useAjukanDiskon: () => ({ mutate: m.submit, isPending: false }),
-  useKebijakanKeringananAktif: () => ({ data: null }),
+  useKebijakanKeringananAktif: () => ({ data: null, isPending: m.loading, isFetching: m.loading, error: m.error, refetch: m.retry }),
   useTagihanDiskonTarget: () => ({ data: m.once ? [{
     id: "tagihan", tahun_akademik_nama: "2027/2028", jatuh_tempo: "2027-07-10",
     periode_mulai: "2027-07-01", periode_selesai: "2027-07-31",
@@ -34,7 +34,7 @@ vi.mock("@/components/ui/select", () => ({
 }));
 import { DialogAjukan } from "./DialogAjukanKeringanan";
 const siswa = { id: "siswa-internal", nama: "Siswa Internal", nis: null, departemen_id: "tujuan" };
-beforeEach(() => { vi.clearAllMocks(); m.once = false; });
+beforeEach(() => { vi.clearAllMocks(); m.once = false; m.loading = false; m.error = null; });
 afterEach(cleanup);
 describe("pengajuan keringanan dari rencana siswa baru", () => {
   it("mengunci siswa dan menawarkan jenis pembayaran jenjang tujuan", () => {
@@ -75,6 +75,23 @@ describe("pengajuan keringanan dari rencana siswa baru", () => {
       siswa_id: siswa.id, jenis_id: "pangkal", tagihan_id: "tagihan", tipe: "persen", nilai: 100,
       periode_mulai: "2027-07-01", periode_selesai: "2027-07-31",
     }), expect.any(Object));
+  });
+  it.each(["loading", "error"])("memblokir pengajuan default saat kebijakan %s", (state) => {
+    if (state === "loading") m.loading = true;
+    else m.error = new Error("Pembacaan tujuan gagal");
+    render(<DialogAjukan open onOpenChange={vi.fn()} siswaTetap={siswa} />);
+    fireEvent.change(screen.getAllByRole("combobox")[0], { target: { value: "khusus" } });
+    fireEvent.change(screen.getAllByRole("combobox")[1], { target: { value: "spp" } });
+    fireEvent.change(screen.getByLabelText("Mulai Bulan"), { target: { value: "2027-07" } });
+    fireEvent.change(screen.getByLabelText("Sampai Bulan"), { target: { value: "2028-06" } });
+    const submit = screen.getByRole("button", { name: "Ajukan" });
+    expect(submit).toBeDisabled();
+    fireEvent.click(submit);
+    expect(m.submit).not.toHaveBeenCalled();
+    if (state === "error") {
+      fireEvent.click(screen.getByRole("button", { name: "Muat Ulang Kebijakan" }));
+      expect(m.retry).toHaveBeenCalled();
+    }
   });
   it("form umum tetap mengizinkan pencarian siswa", () => {
     render(<DialogAjukan open onOpenChange={vi.fn()} />);

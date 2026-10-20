@@ -94,6 +94,7 @@ export function useBuatVersiKebijakanKeringanan() {
 
 export function useKebijakanKeringananAktif(input: {
   siswa_id?: string;
+  konteks_spmb?: boolean;
   skema_diskon_id?: string;
   jenis_id?: string;
   periode_mulai?: string;
@@ -113,6 +114,7 @@ export function useKebijakanKeringananAktif(input: {
       const hasil = await cariKebijakanKeringananAktif({
         data: {
           siswa_id: input.siswa_id!,
+          konteks_spmb: input.konteks_spmb === true,
           skema_diskon_id: input.skema_diskon_id!,
           jenis_id: input.jenis_id!,
           periode_mulai: input.periode_mulai!,
