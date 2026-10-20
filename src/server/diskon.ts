@@ -146,6 +146,7 @@ export const buatVersiKebijakanKeringanan = createServerFn({ method: "POST" })
 
 export interface CariKebijakanKeringananInput {
   siswa_id: string;
+  konteks_spmb?: boolean;
   skema_diskon_id: string;
   jenis_id: string;
   periode_mulai: string;
@@ -164,14 +165,58 @@ export const cariKebijakanKeringananAktif = createServerFn({ method: "POST" })
       return { item: null };
     }
 
-    const { data: kelasRows } = await (admin as any)
-      .from("kelas_siswa")
-      .select("kelas:kelas_id(nama)")
-      .eq("siswa_id", data.siswa_id)
-      .eq("aktif", true)
-      .order("id", { ascending: false })
-      .limit(1);
-    const kelasNama = String(kelasRows?.[0]?.kelas?.nama || "");
+    let kelasNama = "";
+    if (data.konteks_spmb === true) {
+      // Resolve canonical SPMB context on the server. An internal applicant's
+      // active class can still belong to their previous department/year.
+      const { data: detail, error: detailError } = await (admin as any)
+        .from("siswa_detail")
+        .select("spmb_kelas_tujuan_id,spmb_departemen_tujuan_id,tahun_ajaran_id")
+        .eq("siswa_id", data.siswa_id)
+        .eq("spmb_status_kelulusan", "lulus")
+        .not("spmb_gelombang_id", "is", null)
+        .order("spmb_registered_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (detailError) throw new Error("Gagal membaca tujuan SPMB: " + detailError.message);
+      if (!detail) throw new Error("Data SPMB lulus tidak ditemukan");
+
+      if (detail.spmb_departemen_tujuan_id && detail.tahun_ajaran_id) {
+        const { data: placements, error: placementError } = await (admin as any)
+          .from("kelas_siswa")
+          .select("kelas:kelas_id(nama,departemen_id,aktif)")
+          .eq("siswa_id", data.siswa_id)
+          .eq("tahun_ajaran_id", detail.tahun_ajaran_id)
+          .eq("aktif", true);
+        if (placementError) throw new Error("Gagal membaca penempatan tujuan: " + placementError.message);
+        const placed = (placements || []).find((row: { kelas?: { nama?: string; departemen_id?: string; aktif?: boolean } }) =>
+          row.kelas?.departemen_id === detail.spmb_departemen_tujuan_id && row.kelas?.aktif !== false
+        );
+        kelasNama = String(placed?.kelas?.nama || "");
+      }
+      if (!kelasNama && detail.spmb_kelas_tujuan_id && detail.spmb_departemen_tujuan_id) {
+        const { data: targetClass, error: classError } = await (admin as any)
+          .from("kelas")
+          .select("nama")
+          .eq("id", detail.spmb_kelas_tujuan_id)
+          .eq("departemen_id", detail.spmb_departemen_tujuan_id)
+          .eq("aktif", true)
+          .maybeSingle();
+        if (classError) throw new Error("Gagal membaca kelas tujuan: " + classError.message);
+        kelasNama = String(targetClass?.nama || "");
+      }
+      // No target class means class-scoped policies are deferred.
+    } else {
+      const { data: kelasRows, error: kelasError } = await (admin as any)
+        .from("kelas_siswa")
+        .select("kelas:kelas_id(nama)")
+        .eq("siswa_id", data.siswa_id)
+        .eq("aktif", true)
+        .order("id", { ascending: false })
+        .limit(1);
+      if (kelasError) throw new Error("Gagal membaca kelas siswa: " + kelasError.message);
+      kelasNama = String(kelasRows?.[0]?.kelas?.nama || "");
+    }
 
     let q = (admin as any)
       .from("kebijakan_keringanan")

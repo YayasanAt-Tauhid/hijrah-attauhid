@@ -78,6 +78,7 @@ export function DialogAjukan({
       : "";
 
   const { data: kebijakanAktif } = useKebijakanKeringananAktif({
+    konteks_spmb: !!siswaTetap,
     siswa_id: siswa?.id,
     skema_diskon_id: skemaId || undefined,
     jenis_id: jenisId || undefined,
@@ -168,6 +169,13 @@ export function DialogAjukan({
               Untuk biaya sekali bayar, terbitkan tagihan awal terlebih dahulu lalu pilih tagihan tujuannya.
             </AlertDescription>
           </Alert>
+          {siswaTetap && (
+            <p className="text-xs text-muted-foreground">
+              Kebijakan berbasis kelas mengikuti kelas tujuan SPMB.
+              Jika kelas tujuan belum ditentukan, kebijakan khusus kelas belum dipilih otomatis.
+              Isi nilai manual sesuai keputusan yayasan bila diperlukan.
+            </p>
+          )}
           <div>
             <Label>Siswa</Label>
             <SiswaCombobox
