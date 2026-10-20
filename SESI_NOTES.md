@@ -1,3 +1,18 @@
+## Admin TU — pengecualian rute induk Keuangan (20 Oktober 2026)
+
+Tindak lanjut PR149: halaman monitoring, AppLayout, menu, dan endpoint sudah
+mengizinkan Admin TU, tetapi route induk _protected._app.keuangan masih
+menolak role tersebut. HTTP200/bundle baru dan tes halaman terpisah tidak
+membuktikan bahwa guard induknya mengizinkan akses.
+
+Pengecualian kini ditambahkan pada guard Keuangan hanya untuk path monitoring
+SPMB yang tepat (termasuk trailing slash); role lain dan path Keuangan lainnya
+tetap memakai izin semula. Tidak ada SQL, perubahan scope, transaksi, atau
+perubahan endpoint. Tes memakai router bertingkat sungguhan serta komponen
+route produksi; Navigate dicatat sebagai target redirect untuk mengisolasi
+penjadwalan layout-effect jsdom. Tiga skenario Admin TU mereproduksi penolakan
+pada parent lama; setelah perbaikan 52 tes route/layout/UI/server terkait lulus.
+
 ## Akses baca Monitoring Pembayaran SPMB untuk Admin TU (20 Oktober 2026)
 
 Admin TU aktif dapat membuka menu Keuangan > Transaksi Harian > Monitoring
