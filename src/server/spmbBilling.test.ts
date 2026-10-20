@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const data = vi.hoisted(() => ({
- status:"diterima", internal:false,
+ status:"diterima", internal:false, boarding:null as string|null,
  activeClasses:[] as any[], targetClass:null as any,
  activeAt:null as string|null,
 }));
@@ -25,7 +25,7 @@ function records(table:string){
  switch(table){
  case "siswa_detail":return [{siswa_id:id,tahun_ajaran_id:academicYear,
  spmb_status_kelulusan:"lulus",spmb_status_pendaftaran:"diterima",spmb_departemen_tujuan_id:targetDept,
- spmb_kelas_tujuan_id:data.targetClass?.id??null,spmb_siswa_internal:data.internal,
+ status_asrama:data.boarding,spmb_kelas_tujuan_id:data.targetClass?.id??null,spmb_siswa_internal:data.internal,
  spmb_tanggal_aktivasi:data.activeAt,spmb_gelombang_id:"wave"}];
  case "siswa":return [{id,nama:"Calon diterima",nis:null,status:data.status,departemen_id:data.internal?oldDept:targetDept}];
  case "kelas_siswa":return data.activeClasses;
@@ -38,7 +38,7 @@ function records(table:string){
 }
 const run=async()=>(await (getSpmbBillingCandidates as any)({})).items[0];
 beforeEach(()=>{
- data.status="diterima";data.internal=false;data.activeClasses=[];data.targetClass=null;data.activeAt=null;
+ data.boarding=null;data.status="diterima";data.internal=false;data.activeClasses=[];data.targetClass=null;data.activeAt=null;
  db.from.mockImplementation((table:string)=>{
  const q={select:()=>q,eq:()=>q,not:()=>q,order:()=>q,limit:()=>q,in:()=>q,
  then:(resolve:any)=>resolve({data:records(table),error:null})};return q;
@@ -71,5 +71,11 @@ describe("penagihan SPMB sebelum penempatan kelas",()=>{
  it("memakai penempatan aktif walau pilihan kelas tersimpan berbeda",async()=>{
  data.status="aktif";data.activeClasses=[classRow()];data.targetClass=classRow(targetDept,academicYear,"selected-only").kelas;
  expect(await run()).toMatchObject({kelas_id:classId,ready_for_spp:true});
+ });
+});
+
+describe("status asrama calon siswa",()=>{
+ it.each(["asrama","non_asrama",null])("meneruskan status %s tanpa menebak data kosong",async(status)=>{
+ data.boarding=status;expect((await run()).status_asrama).toBe(status);
  });
 });
