@@ -1,3 +1,4 @@
+import { DialogAjukan } from "@/components/keuangan/DialogAjukanKeringanan";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +38,12 @@ const BULAN_AKHIR_OPTIONS = [
   { value: 5, label: "Mei" },
   { value: 6, label: "Juni" },
 ];
+
+function asramaLabel(value?: string | null) {
+  if (value === "asrama") return "Asrama";
+  if (value === "non_asrama") return "Non Asrama";
+  return "Belum ditentukan";
+}
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -91,6 +98,8 @@ export default function RencanaTagihanSiswaBaru() {
   });
   const candidates = candidatesData?.items ?? [];
 
+  const [keringananSiswa, setKeringananSiswa] = useState<SpmbBillingCandidate | null>(null);
+  const [filterAsrama, setFilterAsrama] = useState("__all__");
   const [search, setSearch] = useState("");
   const [filterDept, setFilterDept] = useState("__all__");
   const [filterStatus, setFilterStatus] = useState("__all__");
@@ -120,6 +129,7 @@ export default function RencanaTagihanSiswaBaru() {
   const filteredCandidates = useMemo(() => {
     const q = search.trim().toLowerCase();
     return candidates.filter((row) => {
+      if (filterAsrama !== "__all__" && (row.status_asrama || "belum") !== filterAsrama) return false;
       if (filterDept !== "__all__" && row.target_departemen_id !== filterDept) return false;
       if (filterStatus === "ready" && !row.ready_for_billing) return false;
       if (filterStatus === "planned" && !row.rencana_spp) return false;
@@ -134,7 +144,7 @@ export default function RencanaTagihanSiswaBaru() {
         row.tahun_ajaran_nama,
       ].filter(Boolean).join(" ").toLowerCase().includes(q);
     });
-  }, [candidates, search, filterDept, filterStatus]);
+  }, [candidates, search, filterDept, filterStatus, filterAsrama]);
 
   const availableJenis = useMemo(() => {
     if (!selected) return [];
@@ -527,6 +537,12 @@ export default function RencanaTagihanSiswaBaru() {
       ),
     },
     {
+      key: "status_asrama",
+      label: "Asrama",
+      className: "min-w-[130px]",
+      render: (_, row) => <Badge variant="outline">{asramaLabel(row.status_asrama)}</Badge>,
+    },
+    {
       key: "tahun_ajaran_nama",
       label: "Tahun Masuk",
       className: "min-w-[140px]",
@@ -568,14 +584,19 @@ export default function RencanaTagihanSiswaBaru() {
       label: "Aksi",
       className: "min-w-[130px]",
       render: (_, row) => (
-        <Button
-          size="sm"
-          variant={row.rencana_spp ? "outline" : "default"}
-          disabled={!row.ready_for_billing}
-          onClick={() => openPlan(row)}
-        >
-          {!row.ready_for_spp ? "Terbitkan Tagihan Awal" : row.rencana_spp ? "Edit Rencana" : "Atur Tagihan"}
-        </Button>
+        <div className="flex flex-col items-start gap-2">
+          <Button
+            size="sm"
+            variant={row.rencana_spp ? "outline" : "default"}
+            disabled={!row.ready_for_billing}
+            onClick={() => openPlan(row)}
+          >
+            {!row.ready_for_spp ? "Terbitkan Tagihan Awal" : row.rencana_spp ? "Edit Rencana" : "Atur Tagihan"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setKeringananSiswa(row)}>
+            Input Keringanan
+          </Button>
+        </div>
       ),
     },
   ];
@@ -624,7 +645,7 @@ export default function RencanaTagihanSiswaBaru() {
           <CardTitle className="text-lg">Siswa SPMB Lulus</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-2 md:grid-cols-[minmax(260px,1fr)_220px_190px]">
+          <div className="grid gap-2 xl:grid-cols-[minmax(260px,1fr)_220px_190px_190px]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -639,6 +660,15 @@ export default function RencanaTagihanSiswaBaru() {
               <SelectContent>
                 <SelectItem value="__all__">Semua Jenjang</SelectItem>
                 {departments.map(([id, label]) => <SelectItem key={id} value={id}>{label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterAsrama} onValueChange={setFilterAsrama}>
+              <SelectTrigger aria-label="Filter asrama"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Semua Asrama</SelectItem>
+                <SelectItem value="asrama">Asrama</SelectItem>
+                <SelectItem value="non_asrama">Non Asrama</SelectItem>
+                <SelectItem value="belum">Belum ditentukan</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -674,6 +704,7 @@ export default function RencanaTagihanSiswaBaru() {
                   <p className="text-xs text-muted-foreground">Siswa</p>
                   <p className="font-semibold">{selected.nama}</p>
                   <p className="text-xs text-muted-foreground">NIS {selected.nis || "—"}</p>
+                  <Badge variant="outline" className="mt-1">{asramaLabel(selected.status_asrama)}</Badge>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Tujuan SPMB</p>
@@ -851,6 +882,20 @@ export default function RencanaTagihanSiswaBaru() {
                 </CardContent>
               </Card>
 
+              <Card>
+                <CardHeader className="pb-3"><CardTitle className="text-base">Keringanan</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Ajukan potongan nominal atau persentase untuk SPP maupun tagihan awal.
+                    Pengajuan mengikuti persetujuan sekretaris yayasan.
+                    Untuk biaya sekali bayar, simpan/terbitkan tagihan awal terlebih dahulu.
+                  </p>
+                  <Button variant="outline" onClick={() => setKeringananSiswa(selected)} disabled={saving}>
+                    Input Keringanan
+                  </Button>
+                </CardContent>
+              </Card>
+
               {selected.rencana_spp && (
                 <Alert>
                   <Info className="h-4 w-4" />
@@ -872,6 +917,20 @@ export default function RencanaTagihanSiswaBaru() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {keringananSiswa && (
+        <DialogAjukan
+          key={keringananSiswa.id}
+          open
+          onOpenChange={(open) => { if (!open) setKeringananSiswa(null); }}
+          siswaTetap={{
+            id: keringananSiswa.id,
+            nama: keringananSiswa.nama,
+            nis: keringananSiswa.nis,
+            departemen_id: keringananSiswa.target_departemen_id,
+          }}
+        />
+      )}
+
     </div>
   );
 }

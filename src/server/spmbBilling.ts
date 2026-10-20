@@ -17,6 +17,7 @@ export interface SpmbBillingCandidate {
   tahun_ajaran_selesai: string | null;
   kelas_id: string | null;
   kelas_nama: string | null;
+  status_asrama: string | null;
   spmb_internal: boolean;
   spmb_tanggal_lulus: string | null;
   spmb_tanggal_aktivasi: string | null;
@@ -45,7 +46,7 @@ export const getSpmbBillingCandidates = createServerFn({ method: "GET" })
     const { data: detailRows, error: detailError } = await (admin as any)
       .from("siswa_detail")
       .select(
-        "siswa_id,tahun_ajaran_id,spmb_status_kelulusan,spmb_status_pendaftaran,spmb_tanggal_lulus,spmb_departemen_tujuan_id,spmb_kelas_tujuan_id,spmb_siswa_internal,spmb_tanggal_aktivasi,spmb_registered_at,spmb_gelombang_id"
+        "siswa_id,tahun_ajaran_id,status_asrama,spmb_status_kelulusan,spmb_status_pendaftaran,spmb_tanggal_lulus,spmb_departemen_tujuan_id,spmb_kelas_tujuan_id,spmb_siswa_internal,spmb_tanggal_aktivasi,spmb_registered_at,spmb_gelombang_id"
       )
       .eq("spmb_status_kelulusan", "lulus")
       .not("spmb_gelombang_id", "is", null)
@@ -206,6 +207,7 @@ export const getSpmbBillingCandidates = createServerFn({ method: "GET" })
         tahun_ajaran_selesai: tahun?.tanggal_selesai || null,
         kelas_id: effectiveClass?.id || activeInTarget?.kelas_id || null,
         kelas_nama: effectiveClass?.nama || null,
+        status_asrama: detail.status_asrama || null,
         spmb_internal: isInternal,
         spmb_tanggal_lulus: detail.spmb_tanggal_lulus || null,
         spmb_tanggal_aktivasi: detail.spmb_tanggal_aktivasi || null,

@@ -12,7 +12,7 @@ const hardening = readFileSync(
 );
 const server = readFileSync(resolve(process.cwd(), "src/server/diskon.ts"), "utf8");
 const page = readFileSync(
-  resolve(process.cwd(), "src/pages/keuangan/DiskonSiswa.tsx"),
+  resolve(process.cwd(), "src/components/keuangan/DialogAjukanKeringanan.tsx"),
   "utf8",
 );
 const reference = readFileSync(
