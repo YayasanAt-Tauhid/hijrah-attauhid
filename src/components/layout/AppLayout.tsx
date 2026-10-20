@@ -10,7 +10,8 @@ export function AppLayout() {
 
   if (role === "admin_tu") {
     if (!departemenId) return <Navigate to="/unauthorized" replace />;
-    if (!location.pathname.startsWith("/akademik")) {
+    if (!location.pathname.startsWith("/akademik")
+      && location.pathname.replace(/\/+$/, "") !== "/keuangan/monitoring-spmb") {
       return <Navigate to="/akademik" replace />;
     }
   }

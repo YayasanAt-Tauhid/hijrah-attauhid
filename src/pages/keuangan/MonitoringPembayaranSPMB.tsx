@@ -73,17 +73,19 @@ function MonitorTarget({ row }: { row: PaymentMonitorRow }) {
   </div>;
 }
 export default function MonitoringPembayaranSPMB() {
-  const { role } = useAuth();
-  if (!role || !["admin","keuangan","kasir"].includes(role)) return <Unauthorized />;
+  const { role, isLoading } = useAuth();
+  if (isLoading) return <Skeleton className="h-64 w-full" />;
+  if (!role || !["admin","keuangan","kasir","admin_tu"].includes(role)) return <Unauthorized />;
   return <PaymentMonitorContent role={role} />;
 }
 export function PaymentMonitorContent({ role }: { role: string }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [params] = useSearchParams();
   const requestedStudent = params.get("siswa");
   const qc = useQueryClient();
   const query = useQuery({
-    queryKey: ["spmb_payment_monitor"], queryFn: () => getSpmbPaymentMonitor(),
+    queryKey: ["spmb_payment_monitor", user?.id, role], queryFn: () => getSpmbPaymentMonitor(),
     refetchOnWindowFocus: true, refetchInterval: 60_000,
   });
   const rows = useMemo(() => query.data?.items || [], [query.data]);
@@ -101,7 +103,8 @@ export function PaymentMonitorContent({ role }: { role: string }) {
   const [deadline, setDeadline] = useState("");
   const [note, setNote] = useState("");
   const selected = rows.find(row => row.id === selectedId);
-  const editable = role !== "kasir";
+  const editable = role === "admin" || role === "keuangan";
+  const canFollowUp = editable || role === "kasir";
   const historyAvailable = query.data?.historyAvailable !== false;
   const departments = useMemo(() => [...new Map(rows.filter(r => r.departemen_id)
     .map(r => [r.departemen_id as string,r.departemen_nama])).entries()].sort((a,b) => a[1].localeCompare(b[1])), [rows]);
@@ -181,6 +184,7 @@ export function PaymentMonitorContent({ role }: { role: string }) {
         <p className="text-sm text-muted-foreground">Pantau uang pangkal calon siswa lulus tes, target pembayaran, dan tindak lanjut.</p></div>
       <Button variant="outline" disabled={query.isFetching} onClick={() => query.refetch()}><RefreshCw className="mr-2 h-4 w-4" />Muat ulang</Button>
     </div>
+    {role === "admin_tu" && <Alert><AlertDescription>Akses baca sesuai lembaga tujuan SPMB yang menjadi kewenangan Anda.</AlertDescription></Alert>}
     <details className="rounded-lg border bg-card px-4 py-3 text-sm">
       <summary className="cursor-pointer font-medium">Panduan tenggat dan pembayaran</summary>
       <p className="mt-2 text-muted-foreground">Tenggat pertama 14 hari sejak lulus tes. Cicilan berikutnya 30 hari setelah cicilan sebelumnya memenuhi minimum.
@@ -290,9 +294,9 @@ export function PaymentMonitorContent({ role }: { role: string }) {
           {selected.unmatchedBills > 0 && <Alert><AlertDescription>Tagihan tanpa penanda tahun ajaran tidak dihitung. Verifikasi melalui data tagihan sebelum menghubungkannya ke penerimaan ini.</AlertDescription></Alert>}
           <div className="flex gap-2 flex-wrap">
             {editable && <Button variant="outline" onClick={() => navigate("/keuangan/rencana-siswa-baru?siswa=" + selected.siswa_id)}>Atur tagihan</Button>}
-            <Button variant="outline" onClick={() => navigate("/keuangan/pembayaran")}>Buka kasir</Button>
+            {canFollowUp && <Button variant="outline" onClick={() => navigate("/keuangan/pembayaran")}>Buka kasir</Button>}
           </div>
-          <div className="space-y-3 border-t pt-4">
+          {canFollowUp && <div className="space-y-3 border-t pt-4">
             <Label>Tindakan monitoring</Label>
             <Select value={action} onValueChange={value => { setAction(value as typeof action); setNote(""); setDeadline(""); }}>
               <SelectTrigger aria-label="Tindakan monitoring"><SelectValue /></SelectTrigger><SelectContent>
@@ -321,7 +325,7 @@ export function PaymentMonitorContent({ role }: { role: string }) {
             <Button onClick={() => save.mutate()} disabled={!historyAvailable || save.isPending || note.trim().length < 5
               || (action === "skema" && !scheme) || (action === "perpanjangan" && !deadline)}>
               {save.isPending ? "Menyimpan..." : action === "skema" ? "Simpan skema" : action === "perpanjangan" ? "Simpan perpanjangan" : "Simpan catatan"}</Button>
-          </div>
+          </div>}
           <div className="space-y-2 border-t pt-4"><h2 className="font-semibold">Riwayat monitoring</h2>
             {!selected.events.length && <p className="text-sm text-muted-foreground">Belum ada catatan untuk penerimaan ini.</p>}
             {selected.events.map(event => <div key={event.id} className="border-b pb-2 text-sm">

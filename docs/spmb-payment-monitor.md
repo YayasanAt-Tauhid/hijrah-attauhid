@@ -1,7 +1,7 @@
 # Monitoring Pembayaran SPMB
 
 Menu Keuangan > Monitoring Pembayaran SPMB berada di /keuangan/monitoring-spmb.
-Halaman SPMB menyediakan tindakan Monitoring pembayaran untuk admin.
+Halaman SPMB menyediakan tindakan Monitoring pembayaran untuk admin dan Admin TU.
 Fitur memantau uang pangkal pendaftaran lulus tes, termasuk siswa yang telah
 diaktifkan. Tidak mengubah status penerimaan, tagihan, pembayaran, atau jurnal.
 
@@ -54,7 +54,10 @@ berubah. Koreksi skema mengakhiri keberlakuan perpanjangan versi sebelumnya.
 
 Admin/keuangan aktif dapat memilih skema dan memperpanjang tahap berjalan.
 Kasir aktif dapat membaca dan menambah tindak lanjut. Ortu, guru, kepala
-sekolah, dan TU tidak memperoleh endpoint keuangan ini.
+sekolah tidak memperoleh endpoint keuangan ini. Admin TU aktif memperoleh akses
+baca saja, dibatasi lembaga tujuan pendaftaran melalui RPC scope akademik
+yang juga mendukung beberapa lembaga. Semua mutasi monitoring ditolak
+untuk Admin TU, termasuk jika endpoint dipanggil langsung.
 RLS aktif, akses anon/authenticated dicabut, dan fungsi server memverifikasi
 JWT serta profil aktif sebelum memakai service role. Tidak ada kunci
 server di browser. Tidak ada UPDATE/DELETE lewat aplikasi; trigger juga

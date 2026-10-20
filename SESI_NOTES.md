@@ -1,3 +1,14 @@
+## Akses baca Monitoring Pembayaran SPMB untuk Admin TU (20 Oktober 2026)
+
+Admin TU aktif dapat membuka menu Keuangan > Transaksi Harian > Monitoring
+Pembayaran SPMB dan pintasan dari daftar/detail SPMB. Server membatasi data
+berdasarkan lembaga tujuan pendaftaran memakai can_manage_akademik_departemen,
+termasuk scope multi-lembaga dan siswa internal. Tanpa scope, data kosong;
+kegagalan pemeriksaan scope ditolak. Admin TU hanya membaca: semua jenis
+penulisan event ditolak server, dan tombol transaksi/pengaturan disembunyikan.
+Cache monitoring dipisah berdasarkan pengguna dan role. Tidak ada migration
+atau perubahan tagihan, pembayaran, jurnal, maupun konfigurasi scope akun.
+
 ## SPMB — tombol tindakan pada detail dan riwayat TK setelah aktivasi (19 Oktober 2026)
 
 Permintaan: halaman `/akademik/spmb/:registrationId` mempunyai menu Tindakan dan siswa
