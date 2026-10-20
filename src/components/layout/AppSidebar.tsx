@@ -96,7 +96,7 @@ const menuItems: MenuItem[] = [
   },
   {
     title: "Keuangan", url: "/keuangan", icon: Wallet,
-    roles: ["admin", "keuangan", "kasir", "sekretaris_yayasan"],
+    roles: ["admin", "keuangan", "kasir", "sekretaris_yayasan", "admin_tu"],
     subGroups: [
       {
         // Sekretaris yayasan hanya punya akses ke sub-grup ini (untuk
@@ -111,11 +111,11 @@ const menuItems: MenuItem[] = [
       {
         title: "Transaksi Harian",
         icon: Receipt,
-        roles: ["admin", "keuangan", "kasir"],
+        roles: ["admin", "keuangan", "kasir", "admin_tu"],
         items: [
           { title: "Input Pembayaran", url: "/keuangan/pembayaran", roles: ["admin", "keuangan", "kasir"] },
           { title: "Pembayaran SPMB", url: "/keuangan/pembayaran-spmb", roles: ["admin", "keuangan", "kasir"] },
-          { title: "Monitoring Pembayaran SPMB", url: "/keuangan/monitoring-spmb", roles: ["admin", "keuangan", "kasir"] },
+          { title: "Monitoring Pembayaran SPMB", url: "/keuangan/monitoring-spmb", roles: ["admin", "keuangan", "kasir", "admin_tu"] },
           { title: "Rencana Tagihan Siswa Baru", url: "/keuangan/rencana-siswa-baru", roles: ["admin", "keuangan"] },
           { title: "Penerimaan Lain", url: "/keuangan/penerimaan-lain", roles: ["admin", "keuangan"] },
           { title: "Pengeluaran", url: "/keuangan/pengeluaran", roles: ["admin", "keuangan"] },

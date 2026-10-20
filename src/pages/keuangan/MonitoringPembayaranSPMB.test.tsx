@@ -3,12 +3,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { calculatePaymentProgress } from "@/lib/spmbPaymentMonitor";
 import type { PaymentMonitorRow } from "@/server/spmbPaymentMonitor";
-const mocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn(), navigate: vi.fn() }));
+const mocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn(), navigate: vi.fn(), role: "admin", isLoading: false }));
 vi.mock("@/server/spmbPaymentMonitor", () => ({ getSpmbPaymentMonitor: mocks.load, saveSpmbMonitorEvent: mocks.save }));
 vi.mock("@/lib/router-compat", () => ({ useNavigate: () => mocks.navigate, useSearchParams: () => [new URLSearchParams()] }));
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ role: "admin" }) }));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ role: mocks.role, isLoading: mocks.isLoading, user: { id: "test-user" } }) }));
 vi.mock("@/hooks/useKeuangan", () => ({ formatRupiah: (n: number) => `Rp ${n.toLocaleString("id-ID")}` }));
-import { PaymentMonitorContent } from "./MonitoringPembayaranSPMB";
+import MonitoringPembayaranSPMB, { PaymentMonitorContent } from "./MonitoringPembayaranSPMB";
 function row(id: string, total: number, paid: number, billIds = ["bill"], needsVerification = false): PaymentMonitorRow {
   return { id, siswa_id: id, nama: id, nis: null, status_siswa: "calon", registration: {} as PaymentMonitorRow["registration"],
     departemen_id: "tk", departemen_nama: "TK", tahun_ajaran_id: "2027", tahun_ajaran_nama: "2027/2028",
@@ -18,11 +18,11 @@ function row(id: string, total: number, paid: number, billIds = ["bill"], needsV
 }
 const fixtures = [row("Belum Skema", 4200000, 0), row("Sebagian Skema", 4200000, 1000000), row("Lunas Siswa", 4200000, 4200000),
   row("Tanpa Tagihan", 0, 0, []), row("Verifikasi Siswa", 0, 0, [], true)];
-function mount(role = "admin") {
+function mount(role = "admin", guard = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><PaymentMonitorContent role={role} /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}>{guard ? <MonitoringPembayaranSPMB /> : <PaymentMonitorContent role={role} />}</QueryClientProvider>);
 }
-beforeEach(() => { vi.clearAllMocks(); mocks.load.mockResolvedValue({ items: fixtures, historyAvailable: true }); });
+beforeEach(() => { vi.clearAllMocks(); mocks.role = "admin"; mocks.isLoading = false; mocks.load.mockResolvedValue({ items: fixtures, historyAvailable: true }); });
 describe("monitoring payment workflow", () => {
   it("counts unpaid and partial payments without a scheme; excludes missing or unverified bills", async () => {
     mount();
@@ -53,6 +53,28 @@ describe("monitoring payment workflow", () => {
     expect(screen.queryByRole("button", { name: "Buat tagihan" })).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "Detail dan catatan" })[0]);
     expect(within(screen.getByRole("dialog")).queryByRole("combobox", { name: "Skema pembayaran" })).not.toBeInTheDocument();
+  });
+  it("Admin TU can open the page, read details and history, but sees no write or cashier actions", async () => {
+    mocks.role = "admin_tu";
+    mount("admin_tu", true);
+    await screen.findAllByText("Belum Skema");
+    expect(screen.getByText(/Akses baca sesuai lembaga tujuan/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tentukan skema" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Buat tagihan" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Detail dan catatan" })[0]);
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Riwayat monitoring")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("combobox", { name: "Tindakan monitoring" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Simpan catatan" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Atur tagihan" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Buka kasir" })).not.toBeInTheDocument();
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it("waits for role resolution before loading monitoring", () => {
+    mocks.role = "admin_tu"; mocks.isLoading = true;
+    mount("admin_tu", true);
+    expect(mocks.load).not.toHaveBeenCalled();
+    expect(screen.queryByText("Monitoring Pembayaran SPMB")).not.toBeInTheDocument();
   });
   it("does not imply zero bills are free, prompt paid students for a scheme, or show boarding warnings for TK", async () => {
     mount();

@@ -207,7 +207,7 @@ export default function DetailSPMB() {
   const canManageBilling = role === "admin" && detail.spmb_status_kelulusan === "lulus"
     && ((!detail.spmb_siswa_internal && ["diterima", "aktif"].includes(status))
       || (detail.spmb_siswa_internal && ["diterima", "aktif", "selesai"].includes(status)));
-  const canViewPayment = role === "admin" && detail.spmb_status_kelulusan === "lulus";
+  const canViewPayment = (role === "admin" || role === "admin_tu") && detail.spmb_status_kelulusan === "lulus";
 
   return (
     <div className="space-y-6 animate-fade-in">

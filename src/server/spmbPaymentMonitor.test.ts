@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const { db } = vi.hoisted(() => ({ db: { from: vi.fn() } }));
+const { db } = vi.hoisted(() => ({ db: { from: vi.fn(), rpc: vi.fn() } }));
 vi.mock("./supabase", () => ({ createAdminClient: () => db }));
 vi.mock("./auth", () => ({
   authMiddleware: {},
@@ -33,19 +33,36 @@ const input = {
 type Handler = (args: { context?: { userId: string }; data?: unknown }) => Promise<unknown>;
 const get = getSpmbPaymentMonitor as unknown as Handler;
 const save = saveSpmbMonitorEvent as unknown as Handler;
+const otherId = "00000000-0000-4000-8000-000000000002";
+const thirdId = "00000000-0000-4000-8000-000000000003";
 let role = "admin", active = true;
+let allowedDepartments: string[] = [];
+let scopeError = false;
+let details = [detail];
 let detailError: { code: string; message: string } | null = null;
 let eventError: { code: string; message: string } | null = null;
 const insert = vi.fn();
 beforeEach(() => {
   role = "admin"; active = true; detailError = eventError = null; insert.mockReset();
-  db.from.mockReset();
+  db.from.mockReset(); db.rpc.mockReset();
+  details = [detail]; allowedDepartments = [id]; scopeError = false;
+  db.rpc.mockImplementation(async (_name: string, args: { _departemen_id: string }) => ({
+    data: allowedDepartments.includes(args._departemen_id),
+    error: scopeError ? { message: "scope unavailable" } : null,
+  }));
   db.from.mockImplementation((table: string) => {
-    const records = table === "siswa_detail" ? [detail]
+    let records = table === "siswa_detail" ? details
+      : table === "departemen" ? [{ id }, { id: otherId }, { id: thirdId }]
       : table === "siswa" ? [{ id, nama: "Calon siswa", nis: null, status: "diterima" }]
       : [];
     const q = {
-      select: () => q, eq: () => q, not: () => q, in: () => q, order: () => q, limit: () => q,
+      select: () => q, eq: () => q, not: () => q,
+      in: (column: string, values: string[]) => {
+        if (column === "spmb_departemen_tujuan_id") {
+          records = records.filter(record => values.includes((record as typeof detail).spmb_departemen_tujuan_id));
+        }
+        return q;
+      }, order: () => q, limit: () => q,
       single: async () => table === "users_profile"
         ? { data: { role, aktif: active }, error: null } : { data: detail, error: detailError },
       range: async () => ({ data: records, error: table === "siswa_detail" ? detailError : null }),
@@ -60,7 +77,7 @@ describe("otorisasi dan data monitoring SPMB", () => {
     await expect(get({})).rejects.toThrow("Unauthorized");
     expect(db.from).not.toHaveBeenCalled();
   });
-  it.each(["ortu","siswa","admin_tu","kepala_sekolah","guru"])("menolak role %s sebelum membaca calon siswa", async roleName => {
+  it.each(["ortu","siswa","kepala_sekolah","guru"])("menolak role %s sebelum membaca calon siswa", async roleName => {
     role = roleName;
     await expect(get({ context: { userId: id } })).rejects.toThrow("Forbidden");
     expect(db.from.mock.calls).toEqual([["users_profile"]]);
@@ -73,6 +90,37 @@ describe("otorisasi dan data monitoring SPMB", () => {
   it.each(["admin","keuangan","kasir"])("mengizinkan role %s membaca monitoring", async roleName => {
     role = roleName;
     expect(await get({ context: { userId: id } })).toMatchObject({ items: [{ nama: "Calon siswa" }] });
+  });
+  it("Admin TU membaca hanya pendaftaran lembaga tujuan dalam scope multi-lembaga", async () => {
+    role = "admin_tu"; allowedDepartments = [id, otherId];
+    details = [detail, { ...detail, id: otherId, spmb_departemen_tujuan_id: otherId },
+      { ...detail, id: thirdId, spmb_departemen_tujuan_id: thirdId }];
+    const result = await get({ context: { userId: id } }) as { items: { id: string }[] };
+    expect(result.items.map(row => row.id).sort()).toEqual([id, otherId]);
+    expect(db.rpc).toHaveBeenCalledWith("can_manage_akademik_departemen", { _user_id: id, _departemen_id: otherId });
+  });
+  it("Admin TU tanpa scope tidak membaca pendaftaran atau transaksi", async () => {
+    role = "admin_tu"; allowedDepartments = [];
+    expect(await get({ context: { userId: id } })).toMatchObject({ items: [] });
+    expect(db.from.mock.calls.map(call => call[0])).toEqual(["users_profile", "departemen"]);
+  });
+  it("gagal tertutup jika pemeriksaan scope Admin TU error", async () => {
+    role = "admin_tu"; scopeError = true;
+    await expect(get({ context: { userId: id } })).rejects.toThrow("Forbidden");
+    expect(db.from.mock.calls.map(call => call[0])).toEqual(["users_profile", "departemen"]);
+  });
+  it("Admin TU nonaktif ditolak sebelum membaca data", async () => {
+    role = "admin_tu"; active = false;
+    await expect(get({ context: { userId: id } })).rejects.toThrow("Forbidden");
+    expect(db.from.mock.calls).toEqual([["users_profile"]]);
+  });
+  it.each(["skema","tindak_lanjut","perpanjangan"])("Admin TU tidak dapat menulis %s meski memanggil server langsung", async jenis => {
+    role = "admin_tu";
+    const data = jenis === "skema" ? { ...input, jenis, skema: "cicilan" }
+      : jenis === "perpanjangan" ? { ...input, jenis, tahap: 1, tenggat: "2026-10-30" } : input;
+    await expect(save({ context: { userId: id }, data })).rejects.toThrow("Forbidden");
+    expect(insert).not.toHaveBeenCalled();
+    expect(db.from.mock.calls).toEqual([["users_profile"]]);
   });
   it("tidak mengubah kegagalan baca data menjadi laporan kosong", async () => {
     detailError = { code: "42501", message: "read denied" };

@@ -25,7 +25,7 @@ export interface PaymentMonitorRow extends Record<string, unknown> {
   progress: PaymentProgress; unmatchedBills: number;
 }
 const DETAIL_SELECT = "id,siswa_id,tahun_ajaran_id,spmb_departemen_tujuan_id,spmb_gelombang_id,spmb_registered_at,spmb_tanggal_lulus,spmb_status_kelulusan,status_asrama,spmb_siswa_internal";
-const ROLES = ["admin", "keuangan", "kasir"];
+const ROLES = ["admin", "keuangan", "kasir", "admin_tu"];
 const uuid = z.string().uuid();
 export const monitorEventSchema = z.object({
   detail_id: uuid, tahun_ajaran_id: uuid, departemen_id: uuid, gelombang_id: uuid,
@@ -140,9 +140,29 @@ export const getSpmbPaymentMonitor = createServerFn({ method: "GET" })
   .middleware([authMiddleware]).handler(async ({ context }) => {
     const { userId } = requireContext(context);
     const admin = createAdminClient() as SupabaseClient;
-    await authorize(admin, userId);
-    const details = await pages<Detail>((from,to) => admin.from("siswa_detail").select(DETAIL_SELECT)
-      .eq("spmb_status_kelulusan","lulus").not("spmb_gelombang_id","is",null).order("id").range(from,to));
+    const role = await authorize(admin, userId);
+    let allowedDepartments: string[] | null = null;
+    if (role === "admin_tu") {
+      const departments = await pages<{ id: string }>((from,to) => admin.from("departemen")
+        .select("id").order("id").range(from,to));
+      const access = await Promise.all(departments.map(async department => {
+        const { data, error } = await admin.rpc("can_manage_akademik_departemen", {
+          _user_id: userId, _departemen_id: department.id,
+        });
+        if (error) throw new ForbiddenError();
+        return data === true ? department.id : null;
+      }));
+      allowedDepartments = access.filter((id): id is string => id !== null);
+      if (!allowedDepartments.length) return { items: [] as PaymentMonitorRow[], historyAvailable: true };
+    }
+    // Scope by the registration destination, including internal students whose
+    // current school is still the origin. Never load financial rows out of scope.
+    const details = await pages<Detail>((from,to) => {
+      let query = admin.from("siswa_detail").select(DETAIL_SELECT)
+        .eq("spmb_status_kelulusan","lulus").not("spmb_gelombang_id","is",null);
+      if (allowedDepartments) query = query.in("spmb_departemen_tujuan_id", allowedDepartments);
+      return query.order("id").range(from,to);
+    });
     return loadRows(admin, details);
   });
 
@@ -152,7 +172,7 @@ export const saveSpmbMonitorEvent = createServerFn({ method: "POST" })
     const { userId } = requireContext(context);
     const admin = createAdminClient() as SupabaseClient;
     const role = await authorize(admin, userId);
-    if (data.jenis !== "tindak_lanjut" && role === "kasir") throw new ForbiddenError();
+    if (role === "admin_tu" || (data.jenis !== "tindak_lanjut" && role === "kasir")) throw new ForbiddenError();
     const { data: raw, error } = await admin.from("siswa_detail").select(DETAIL_SELECT).eq("id", data.detail_id).single();
     if (error || !raw || raw.spmb_status_kelulusan !== "lulus" || !raw.spmb_gelombang_id)
       throw new Error("Pendaftaran lulus tes tidak ditemukan");
