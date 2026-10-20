@@ -117,3 +117,11 @@ data. Kartu HP dan tabel desktop memakai hasil filter, urutan dan pagination
 yang sama. Kolom identitas desktop tetap terlihat saat digeser. Nominal nol
 untuk tagihan yang belum dibuat diganti keterangan; tagihan nol yang valid
 setelah keringanan tetap selesai. Asrama hanya tampil pada SMP/SMA/MTA.
+
+## Guard rute induk Keuangan (20 Oktober 2026)
+
+Selain izin halaman dan server, rute induk Keuangan harus memberi pengecualian
+Admin TU khusus pada /keuangan/monitoring-spmb. Guard induk inilah yang masih
+menolak akses sesudah PR149. Regresi menguji rantai route staf, AppLayout,
+Keuangan, dan halaman monitoring dengan router bertingkat, termasuk query
+siswa dan trailing slash. Penulisan event serta data di luar scope tetap ditolak.
