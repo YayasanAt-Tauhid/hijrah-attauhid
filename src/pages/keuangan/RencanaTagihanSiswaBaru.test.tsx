@@ -3,9 +3,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 const fixtures = [
- { id: "a", nama: "Asrama Siswa", status_asrama: "asrama" },
- { id: "b", nama: "Non Asrama Siswa", status_asrama: "non_asrama" },
- { id: "c", nama: "Belum Status Siswa", status_asrama: null },
+ { id: "a", spmb_internal: true, nama: "Asrama Siswa", status_asrama: "asrama" },
+ { id: "b", spmb_internal: false, nama: "Non Asrama Siswa", status_asrama: "non_asrama" },
+ { id: "c", spmb_internal: false, nama: "Belum Status Siswa", status_asrama: null },
 ].map((r) => ({ ...r, target_departemen_id: "tujuan", target_departemen_kode: "SMP", tahun_ajaran_nama: "2027/2028", rencana_spp: null, ready_for_billing: true, ready_for_spp: false }));
 vi.mock("@/server/spmbBilling", () => ({
  getSpmbBillingCandidates: async () => ({ items: fixtures }),
@@ -43,6 +43,15 @@ describe("rencana tagihan status asrama dan keringanan", () => {
    expect(screen.getByRole("row", { name: /Non Asrama Siswa/ })).toBeInTheDocument();
    expect(screen.queryByRole("row", { name: /^Asrama Siswa/ })).not.toBeInTheDocument();
    expect(screen.queryByRole("row", { name: /Belum Status Siswa/ })).not.toBeInTheDocument();
+   expect(screen.getByRole("row", { name: /Non Asrama Siswa/ })).toHaveTextContent("Eksternal");
+   fireEvent.change(screen.getAllByRole("combobox")[2], { target: { value: "internal" } });
+   expect(screen.queryByRole("row", { name: /Non Asrama Siswa/ })).not.toBeInTheDocument();
+   fireEvent.change(screen.getAllByRole("combobox")[1], { target: { value: "__all__" } });
+   expect(screen.getByRole("row", { name: /^Asrama Siswa/ })).toHaveTextContent("Internal");
+   expect(screen.queryByRole("row", { name: /Belum Status Siswa/ })).not.toBeInTheDocument();
+   fireEvent.change(screen.getAllByRole("combobox")[2], { target: { value: "eksternal" } });
+   expect(screen.queryByRole("row", { name: /^Asrama Siswa/ })).not.toBeInTheDocument();
+   expect(screen.getByRole("row", { name: /Belum Status Siswa/ })).toHaveTextContent("Eksternal");
  });
  it("membuka input keringanan calon siswa sebelum penempatan dengan lembaga tujuan", async () => {
    mount();

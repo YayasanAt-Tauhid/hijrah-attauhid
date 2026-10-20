@@ -100,6 +100,7 @@ export default function RencanaTagihanSiswaBaru() {
 
   const [keringananSiswa, setKeringananSiswa] = useState<SpmbBillingCandidate | null>(null);
   const [filterAsrama, setFilterAsrama] = useState("__all__");
+  const [filterPendaftar, setFilterPendaftar] = useState("__all__");
   const [search, setSearch] = useState("");
   const [filterDept, setFilterDept] = useState("__all__");
   const [filterStatus, setFilterStatus] = useState("__all__");
@@ -130,6 +131,8 @@ export default function RencanaTagihanSiswaBaru() {
     const q = search.trim().toLowerCase();
     return candidates.filter((row) => {
       if (filterAsrama !== "__all__" && (row.status_asrama || "belum") !== filterAsrama) return false;
+      if (filterPendaftar === "internal" && !row.spmb_internal) return false;
+      if (filterPendaftar === "eksternal" && row.spmb_internal) return false;
       if (filterDept !== "__all__" && row.target_departemen_id !== filterDept) return false;
       if (filterStatus === "ready" && !row.ready_for_billing) return false;
       if (filterStatus === "planned" && !row.rencana_spp) return false;
@@ -144,7 +147,7 @@ export default function RencanaTagihanSiswaBaru() {
         row.tahun_ajaran_nama,
       ].filter(Boolean).join(" ").toLowerCase().includes(q);
     });
-  }, [candidates, search, filterDept, filterStatus, filterAsrama]);
+  }, [candidates, search, filterDept, filterStatus, filterAsrama, filterPendaftar]);
 
   const availableJenis = useMemo(() => {
     if (!selected) return [];
@@ -537,6 +540,12 @@ export default function RencanaTagihanSiswaBaru() {
       ),
     },
     {
+      key: "spmb_internal",
+      label: "Jenis Pendaftar",
+      className: "min-w-[140px]",
+      render: (_, row) => <Badge variant="secondary">{row.spmb_internal ? "Internal" : "Eksternal"}</Badge>,
+    },
+    {
       key: "status_asrama",
       label: "Asrama",
       className: "min-w-[130px]",
@@ -645,8 +654,8 @@ export default function RencanaTagihanSiswaBaru() {
           <CardTitle className="text-lg">Siswa SPMB Lulus</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-2 xl:grid-cols-[minmax(260px,1fr)_220px_190px_190px]">
-            <div className="relative">
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            <div className="relative md:col-span-2 xl:col-span-4">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-9"
@@ -669,6 +678,14 @@ export default function RencanaTagihanSiswaBaru() {
                 <SelectItem value="asrama">Asrama</SelectItem>
                 <SelectItem value="non_asrama">Non Asrama</SelectItem>
                 <SelectItem value="belum">Belum ditentukan</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterPendaftar} onValueChange={setFilterPendaftar}>
+              <SelectTrigger aria-label="Filter jenis pendaftar"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Semua Jenis Pendaftar</SelectItem>
+                <SelectItem value="internal">Internal</SelectItem>
+                <SelectItem value="eksternal">Eksternal</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -704,7 +721,10 @@ export default function RencanaTagihanSiswaBaru() {
                   <p className="text-xs text-muted-foreground">Siswa</p>
                   <p className="font-semibold">{selected.nama}</p>
                   <p className="text-xs text-muted-foreground">NIS {selected.nis || "—"}</p>
-                  <Badge variant="outline" className="mt-1">{asramaLabel(selected.status_asrama)}</Badge>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    <Badge variant="outline">{asramaLabel(selected.status_asrama)}</Badge>
+                    <Badge variant="secondary">{selected.spmb_internal ? "Internal" : "Eksternal"}</Badge>
+                  </div>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Tujuan SPMB</p>
