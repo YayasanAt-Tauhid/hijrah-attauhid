@@ -1,6 +1,6 @@
 /**
  * Server function: generateNis
- * Format resmi NIS per lembaga: YY-KK-NNN.
+ * Format resmi NIS per lembaga: YYKKNNN (tanpa tanda hubung).
  * siswa.id tetap identitas permanen; riwayat NIS per lembaga disimpan di
  * siswa_tahun_masuk_departemen.
  */
