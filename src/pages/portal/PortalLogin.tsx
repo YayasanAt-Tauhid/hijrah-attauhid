@@ -49,7 +49,7 @@ type SignUpForm = z.infer<typeof signUpSchema>;
 
 export default function PortalLogin() {
   const navigate = useNavigate();
-  const { signIn, signInWithGoogle, signOut, user, role } = useAuth();
+  const { signIn, signInWithGoogle, signOut, user, role, isLoading, authError } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -58,10 +58,15 @@ export default function PortalLogin() {
   const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
-    if (user && role === "ortu") {
+    if (!user || isLoading || authError) return;
+    if (role === "ortu") {
       navigate("/portal", { replace: true });
+    } else if (!role) {
+      // Resume child verification for accounts stranded after staff sign-in.
+      // The server still verifies the child before granting the parent role.
+      navigate("/portal/oauth-callback", { replace: true });
     }
-  }, [user, role, navigate]);
+  }, [user, role, isLoading, authError, navigate]);
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),

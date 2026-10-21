@@ -71,6 +71,19 @@ export default function PortalOAuthCallback() {
     });
   }, [user, role, isLoading, authError, navigate, signOut]);
 
+  const switchAccount = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await signOut();
+      navigate("/portal/login", { replace: true });
+    } catch {
+      setError("Belum berhasil keluar. Silakan coba lagi.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const onSubmit = async (data: LengkapiForm) => {
     setSubmitting(true);
     setError(null);
@@ -96,7 +109,7 @@ export default function PortalOAuthCallback() {
       <div className="w-full max-w-md">
         <Card className="shadow-lg border-emerald-200">
           <CardHeader className="text-center">
-            <h1 className="text-lg font-semibold text-emerald-800">Masuk dengan Google</h1>
+            <h1 className="text-lg font-semibold text-emerald-800">Verifikasi Akun Orang Tua</h1>
           </CardHeader>
           <CardContent className="space-y-4">
             {status === "memeriksa" && (
@@ -130,7 +143,7 @@ export default function PortalOAuthCallback() {
             {status === "lengkapi" && (
               <>
                 <p className="text-sm text-muted-foreground">
-                  Akun Google Anda belum terhubung ke data anak. Lengkapi data berikut untuk verifikasi
+                  Akun Anda belum terhubung ke data anak. Lengkapi data berikut untuk verifikasi
                   sebagai orang tua.
                 </p>
                 {error && (
@@ -203,6 +216,9 @@ export default function PortalOAuthCallback() {
                     </Button>
                   </form>
                 </Form>
+                <Button type="button" variant="outline" className="w-full" disabled={submitting} onClick={() => void switchAccount()}>
+                  Keluar dan gunakan akun lain
+                </Button>
               </>
             )}
           </CardContent>
