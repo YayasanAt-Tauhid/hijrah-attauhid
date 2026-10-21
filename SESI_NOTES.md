@@ -1,3 +1,16 @@
+## Empat jenis seragam dan edit nama (21 Oktober 2026, koreksi pengguna)
+
+Daftar barang/komponen pada lampiran awal bukan empat jenis seragam yang
+sebenarnya. Klarifikasi terbaru menentukan empat nama bawaan untuk SD/SMP/SMA
+menurut ikhwan/akhwat. Nama boleh diubah per siswa dan ukuran dapat diisi
+kemudian. Bukan perubahan master nama untuk semua siswa.
+
+Nama/ukuran versi sebelumnya yang sudah tersimpan dipertahankan. Kolom JSONB
+existing tetap digunakan; constraint diperlonggar agar nama saja boleh disimpan,
+sementara ukuran tanpa nama tetap ditolak. Tidak ada backfill data maupun
+perubahan izin. TK belum tersedia; default empat nama MTA belum diberikan,
+sehingga data lamanya dipertahankan dan nama bisa dilengkapi manual.
+
 ## Statistik kelulusan dan ukuran empat stel (21 Oktober 2026)
 
 Statistik memakai hasil tes eksplisit, termasuk pendaftar yang sudah aktif;

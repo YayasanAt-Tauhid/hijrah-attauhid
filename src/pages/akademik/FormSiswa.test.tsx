@@ -52,7 +52,7 @@ it("memuat ukuran tersimpan, menyimpan empat stel bersama data siswa, dan memper
   fireEvent.click(screen.getByRole("button", { name: "Simpan Perubahan" }));
   await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1));
   const saved = mocks.update.mock.calls[0][0];
-  expect(saved.detail.ukuran_seragam).toEqual([mocks.sizes[0], { ...mocks.sizes[1], ukuran: "XXL" }, mocks.sizes[2], mocks.sizes[3]]);
+  expect(saved.detail.ukuran_seragam).toEqual([mocks.sizes[0], { ...mocks.sizes[1], ukuran: "XXL" }, mocks.sizes[2], { jenis: "Gamis Biru", ukuran: "" }]);
   expect(saved.detail.ukuran_baju).toBe("X3L");
 });
 it("perubahan data lain tidak menimpa ukuran seragam yang tersimpan", async () => {
@@ -62,11 +62,32 @@ it("perubahan data lain tidak menimpa ukuran seragam yang tersimpan", async () =
   await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1));
   expect(mocks.update.mock.calls[0][0].detail).not.toHaveProperty("ukuran_seragam");
 });
-it("isian stel sebagian ditolak sebelum mengirim data", async () => {
+it("menyimpan nama jenis seragam yang diedit meskipun ukuran belum diisi", async () => {
   render(<FormSiswa />);
   openUniformTab();
-  fireEvent.change(await screen.findByLabelText("Jenis seragam stel 4"), { target: { value: "SETELAN SERAGAM BIRU" } });
+  fireEvent.change(await screen.findByLabelText("Nama jenis seragam stel 4"), { target: { value: "Gamis Biru Pesanan" } });
   fireEvent.click(screen.getByRole("button", { name: "Simpan Perubahan" }));
-  expect(await screen.findByText("Lengkapi jenis dan ukuran seragam stel 4.")).toBeInTheDocument();
+  await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1));
+  expect(mocks.update.mock.calls[0][0].detail.ukuran_seragam[3]).toEqual({ jenis: "Gamis Biru Pesanan", ukuran: "" });
+});
+it("ukuran tanpa nama ditolak sebelum mengirim data", async () => {
+  render(<FormSiswa />);
+  openUniformTab();
+  fireEvent.change(await screen.findByLabelText("Nama jenis seragam stel 1"), { target: { value: "" } });
+  fireEvent.click(screen.getByRole("button", { name: "Simpan Perubahan" }));
+  expect(await screen.findByText("Isi nama jenis seragam stel 1.")).toBeInTheDocument();
   expect(mocks.update).not.toHaveBeenCalled();
+});
+it("siswa tanpa ukuran tersimpan mendapat empat nama bawaan yang bisa disimpan", async () => {
+  const original = mocks.detail.ukuran_seragam;
+  mocks.detail.ukuran_seragam = null;
+  try {
+    render(<FormSiswa />);
+    openUniformTab();
+    expect(await screen.findByLabelText("Nama jenis seragam stel 1")).toHaveValue("Olah raga");
+    fireEvent.change(screen.getByLabelText("Ukuran stel 3"), { target: { value: "L" } });
+    fireEvent.click(screen.getByRole("button", { name: "Simpan Perubahan" }));
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1));
+    expect(mocks.update.mock.calls[0][0].detail.ukuran_seragam.map((item: { jenis: string }) => item.jenis)).toEqual(["Olah raga", "Putih Merah", "Coklat", "Gamis Biru"]);
+  } finally { mocks.detail.ukuran_seragam = original; }
 });
