@@ -35,7 +35,7 @@ async function cariSiswaTervalidasi(
   admin: SupabaseClient<Database>,
   input: { nis: string; nama: string; tanggal_lahir: string }
 ): Promise<SiswaBrief> {
-  const nis = (input.nis || "").trim();
+  const nis = (input.nis || "").trim().replace(/-/g, "");
   const nama = (input.nama || "").trim();
   const tanggal_lahir = (input.tanggal_lahir || "").trim();
   if (!nis || !nama || !tanggal_lahir) {

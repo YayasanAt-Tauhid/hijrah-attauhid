@@ -43,6 +43,20 @@ describe("prepareImportRows", () => {
     expect(tooLong.errors.join(" ")).toContain("NIS maksimal 13 karakter");
   });
 
+  it("menghapus tanda hubung NIS saat impor dan mencocokkan identitas tanpa duplikasi", () => {
+    const [existingWithHyphens] = prepare([{ nis: "26-0001", nama: "Nama Sama" }]);
+    expect(existingWithHyphens.action).toBe("update");
+    expect(existingWithHyphens.existingId).toBe(STUDENT_A);
+    expect(existingWithHyphens.siswaPayload.nis).toBe("260001");
+
+    const [generatedFormat] = prepare([{ siswa_id: STUDENT_A, nis: "26-02-001" }]);
+    expect(generatedFormat.errors).toEqual([]);
+    expect(generatedFormat.siswaPayload.nis).toBe("2602001");
+
+    const duplikat = prepare([{ siswa_id: STUDENT_A, nis: "26-02-001" }, { siswa_id: STUDENT_B, nis: "2602001" }]);
+    expect(duplikat[0].errors.join(" ")).toContain("NIS ganda dalam file");
+  });
+
   it("allows correcting NIS by siswa_id but rejects a NIS owned by another student", () => {
     const [corrected] = prepare([{ siswa_id: STUDENT_A, nis: "260099" }]);
     expect(corrected.errors).toEqual([]);

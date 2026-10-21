@@ -10,7 +10,7 @@ export function NISPreview({ kodeLembaga, namaAngkatan, estimasiUrut }: NISPrevi
   if (!kodeLembaga || !namaAngkatan) return null;
 
   const c = parseNISComponents(kodeLembaga, namaAngkatan, estimasiUrut);
-  if (c.kodeLembaga === "--" || c.tahun2 === "--") return null;
+  if (c.kodeLembaga === "??" || c.tahun2 === "??") return null;
 
   const segments = [
     { value: c.tahun2, label: "Tahun Masuk", color: "bg-primary/10 text-primary border-primary/30" },
@@ -24,7 +24,7 @@ export function NISPreview({ kodeLembaga, namaAngkatan, estimasiUrut }: NISPrevi
       <div className="flex items-center gap-1">
         {segments.map((seg, index) => (
           <div key={seg.label} className="flex items-center gap-1">
-            {index > 0 && <span className="text-muted-foreground">-</span>}
+            {index > 0 && <span className="sr-only">bagian NIS berikutnya</span>}
             <div className="flex flex-col items-center gap-1">
               <span className={`px-2 py-1 rounded border text-sm font-mono font-bold ${seg.color}`}>
                 {seg.value}
@@ -35,7 +35,7 @@ export function NISPreview({ kodeLembaga, namaAngkatan, estimasiUrut }: NISPrevi
         ))}
       </div>
       <p className="text-xs text-muted-foreground">
-        NIS: <span className="font-mono font-semibold text-foreground">{c.tahun2}-{c.kodeLembaga}-{c.nomorUrut}</span>
+        NIS: <span className="font-mono font-semibold text-foreground">{c.tahun2}{c.kodeLembaga}{c.nomorUrut}</span>
       </p>
     </div>
   );

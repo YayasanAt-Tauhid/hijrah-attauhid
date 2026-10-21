@@ -19,11 +19,11 @@ export function getKodeLembagaNIS(kodeAtauNama: string): string {
     || /(^|\s)(MTA|MTQ)(\s|$)/.test(value)
   ) return "05";
 
-  return "--";
+  return "??";
 }
 
 /**
- * Parse komponen preview NIS baru: YY-KK-NNN.
+ * Parse komponen preview NIS baru: YYKKNNN.
  */
 export function parseNISComponents(
   kodeLembaga: string,
@@ -31,7 +31,7 @@ export function parseNISComponents(
   nomorUrut: number,
 ): NISComponents {
   const tahunMatch = String(namaAngkatan || "").trim().match(/\d{4}/);
-  const tahun2 = tahunMatch ? tahunMatch[0].slice(-2) : "--";
+  const tahun2 = tahunMatch ? tahunMatch[0].slice(-2) : "??";
 
   return {
     tahun2,
@@ -49,7 +49,7 @@ export function generateNISPreview(
   nomorUrut: number,
 ): string {
   const c = parseNISComponents(kodeLembaga, namaAngkatan, nomorUrut);
-  return `${c.tahun2}-${c.kodeLembaga}-${c.nomorUrut}`;
+  return `${c.tahun2}${c.kodeLembaga}${c.nomorUrut}`;
 }
 
 /**

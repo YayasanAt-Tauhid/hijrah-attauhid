@@ -48,7 +48,7 @@ export const cariSiswaRingkas = createServerFn({ method: "POST" })
         .from("siswa")
         .select(select)
         .eq("status", "aktif")
-        .ilike("nis", `%${search}%`)
+        .ilike("nis", `%${search.replace(/-/g, "")}%`)
         .limit(limit),
     ]);
 
