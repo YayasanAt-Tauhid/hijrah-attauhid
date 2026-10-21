@@ -23,7 +23,7 @@ import { fetchSpmbVerificationState, saveSpmbVerificationFields, spmbVerificatio
 import { ArrowLeft, Save, Wand2, Pencil, Loader2 } from "lucide-react";
 import { PENGHASILAN_CHOICES } from "@/lib/penghasilanOrangtua";
 import { UniformSizeFields } from "@/components/akademik/UniformSizeFields";
-import { emptyUniformSizes, readUniformSizes, uniformDepartment, uniformOptions, validateUniformSizes } from "@/lib/ukuranSeragam";
+import { emptyUniformSizes, readUniformSizes, uniformDepartment, defaultUniformSizes, validateUniformSizes } from "@/lib/ukuranSeragam";
 
 const optionalString = z.string().optional();
 const siswaSchema = z.object({
@@ -300,7 +300,6 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
   const boardingDeptCode = String(boardingDept?.kode || boardingDept?.nama || "").trim().toUpperCase();
   const uniformDeptCode = uniformDepartment(boardingDept);
   const uniformGender = form.watch("jenis_kelamin") || "";
-  const uniformCatalog = uniformOptions(uniformDeptCode, uniformGender);
 
   const wajibAsrama = perluPilihanAsrama(boardingDept);
   const wajibNisn = ["SMP", "SMA", "MTA"].some((kode) => selectedDeptCode === kode || selectedDeptCode.startsWith(kode + " "));
@@ -389,6 +388,16 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
     });
   }, [siswa, detail, isEdit, form]);
 
+  useEffect(() => {
+    if (isEdit && (!siswa || detailRaw === undefined)) return;
+    if (!uniformDeptCode || !uniformGender || dirtyFields.ukuran_seragam) return;
+    const current = readUniformSizes(form.getValues("ukuran_seragam"));
+    const next = defaultUniformSizes(current, uniformDeptCode, uniformGender);
+    if (JSON.stringify(current) !== JSON.stringify(next)) {
+      form.setValue("ukuran_seragam", next, { shouldDirty: false });
+    }
+  }, [uniformDeptCode, uniformGender, siswa, detailRaw, dirtyFields.ukuran_seragam, isEdit, form]);
+
   const invokeGenerateNis = async (siswaId: string, deptId: string, angkatanId: string, kelasId: string) => {
     setIsGeneratingNis(true);
     try {
@@ -459,7 +468,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
 
     const uniformChanged = Boolean(dirtyFields.ukuran_seragam);
     if (uniformChanged) {
-      const uniformError = validateUniformSizes(readUniformSizes(values.ukuran_seragam), uniformCatalog);
+      const uniformError = validateUniformSizes(readUniformSizes(values.ukuran_seragam));
       if (uniformError) {
         form.setError("ukuran_seragam", { message: uniformError });
         toast.error(uniformError);

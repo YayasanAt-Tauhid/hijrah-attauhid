@@ -2,35 +2,33 @@ import { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { UniformSizeFields } from "./UniformSizeFields";
-import { emptyUniformSizes, type UniformSize } from "@/lib/ukuranSeragam";
+import { defaultUniformSizes, type UniformSize } from "@/lib/ukuranSeragam";
 
 afterEach(cleanup);
-function Fixture({ department = "SMP", gender = "L", initial = emptyUniformSizes() }: { department?: string; gender?: string; initial?: UniformSize[] }) {
-  const [value, setValue] = useState(initial);
+function Fixture({ department = "SMP", gender = "L", initial }: { department?: string; gender?: string; initial?: UniformSize[] }) {
+  const [value, setValue] = useState(initial || defaultUniformSizes(null, department, gender));
   return <><UniformSizeFields department={department} gender={gender} value={value} onChange={setValue} /><output data-testid="value">{JSON.stringify(value)}</output></>;
 }
-describe("empat isian seragam", () => {
-  it("mengubah ukuran satu stel tanpa mengubah stel lainnya lalu memuat nilai tersimpan", () => {
-    const initial = [{ jenis: "PRAMUKA", ukuran: "S" }, { jenis: "PUTIH BIRU", ukuran: "M" }, { jenis: "PRAMUKA", ukuran: "L" }, { jenis: "PUTIH BIRU", ukuran: "XL" }];
+describe("nama dan ukuran empat jenis seragam", () => {
+  it("menampilkan empat nama sesuai akhwat SMP, tanpa dropdown jenis tambahan", () => {
+    render(<Fixture gender="P" />);
+    expect(screen.getAllByRole("textbox").map((input) => (input as HTMLInputElement).value)).toEqual(["Olah raga", "Putih Biru", "Coklat", "Gamis Ungu"]);
+    expect(screen.getAllByRole("combobox")).toHaveLength(4);
+  });
+  it("mengedit nama tanpa menghilangkan ukuran, dan perubahan tetap per stel", () => {
+    const initial = defaultUniformSizes(null, "SMP", "L").map((item, index) => ({ ...item, ukuran: ["S", "M", "L", "XL"][index] }));
     render(<Fixture initial={initial} />);
-    expect(screen.getByLabelText("Ukuran stel 4")).toHaveValue("XL");
+    fireEvent.change(screen.getByLabelText("Nama jenis seragam stel 2"), { target: { value: "Putih Biru Khusus" } });
+    expect(screen.getByLabelText("Ukuran stel 2")).toHaveValue("M");
     fireEvent.change(screen.getByLabelText("Ukuran stel 2"), { target: { value: "XXL" } });
-    expect(JSON.parse(screen.getByTestId("value").textContent!)).toEqual([initial[0], { jenis: "PUTIH BIRU", ukuran: "XXL" }, initial[2], initial[3]]);
-    fireEvent.click(screen.getByRole("button", { name: "Kosongkan stel 2" }));
-    expect(screen.getByLabelText("Jenis seragam stel 2")).toHaveValue("");
+    expect(JSON.parse(screen.getByTestId("value").textContent!)).toEqual([initial[0], { jenis: "Putih Biru Khusus", ukuran: "XXL" }, initial[2], initial[3]]);
+    fireEvent.click(screen.getByRole("button", { name: "Kosongkan ukuran stel 2" }));
+    expect(screen.getByLabelText("Nama jenis seragam stel 2")).toHaveValue("Putih Biru Khusus");
     expect(screen.getByLabelText("Ukuran stel 2")).toHaveValue("");
   });
-  it("mereset ukuran saat ganti jenis dan mengisi otomatis ukuran tunggal", () => {
-    render(<Fixture department="SD" />);
-    fireEvent.change(screen.getByLabelText("Jenis seragam stel 1"), { target: { value: "SETELAN OLAH RAGA" } });
-    expect(screen.getByLabelText("Ukuran stel 1")).toHaveValue("ALL SIZE");
-    fireEvent.change(screen.getByLabelText("Jenis seragam stel 1"), { target: { value: "SETELAN SERAGAM BIRU" } });
-    expect(screen.getByLabelText("Ukuran stel 1")).toHaveValue("");
-  });
-  it("menampilkan keterangan TK dan menonaktifkan pilihan tanpa katalog", () => {
+  it("menonaktifkan isian TK sampai datanya tersedia", () => {
     render(<Fixture department="TK" />);
     expect(screen.getByText("Data jenis dan ukuran seragam TK belum tersedia.")).toBeInTheDocument();
-    expect(screen.getAllByRole("combobox")).toHaveLength(8);
-    for (const select of screen.getAllByRole("combobox")) expect(select).toBeDisabled();
+    for (const input of [...screen.getAllByRole("combobox"), ...screen.getAllByRole("textbox")]) expect(input).toBeDisabled();
   });
 });
