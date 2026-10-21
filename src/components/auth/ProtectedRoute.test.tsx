@@ -17,7 +17,7 @@ vi.mock("@/pages/AccessGateway", () => ({
 vi.mock("@tanstack/react-router", () => ({
   Navigate: ({ to }: { to: string }) => <div data-testid="navigate">{to}</div>,
   Outlet: () => <div data-testid="outlet">Outlet</div>,
-  useLocation: () => ({ pathname: mockPathname }),
+  useMatches: ({ select }: { select: (matches: { pathname: string }[]) => unknown }) => select([{ pathname: mockPathname }]),
 }));
 
 function renderWithRouter(allowedRoles?: any[]) {
@@ -57,6 +57,22 @@ describe("ProtectedRoute", () => {
     renderWithRouter(["admin"]);
     expect(screen.getByRole("alert")).toHaveTextContent("Akses akun belum tersedia");
     expect(screen.queryByTestId("outlet")).not.toBeInTheDocument();
+  });
+
+  it("keeps entry choices available for an unclassified account at home", () => {
+    mockPathname = "/";
+    mockUseAuth.mockReturnValue({ user: { id: "unclassified" }, role: null, isLoading: false, authError: null });
+    renderWithRouter(["admin"]);
+    expect(screen.getByTestId("access-gateway")).toBeInTheDocument();
+    expect(screen.queryByTestId("outlet")).not.toBeInTheDocument();
+  });
+
+  it("does not treat a failed profile lookup as an unclassified account", () => {
+    mockPathname = "/";
+    mockUseAuth.mockReturnValue({ user: { id: "parent" }, role: null, isLoading: false, authError: "Koneksi gagal" });
+    renderWithRouter(["admin"]);
+    expect(screen.getByRole("alert")).toHaveTextContent("Koneksi gagal");
+    expect(screen.queryByTestId("access-gateway")).not.toBeInTheDocument();
   });
 
   it("redirects to /unauthorized when user role is not allowed", () => {

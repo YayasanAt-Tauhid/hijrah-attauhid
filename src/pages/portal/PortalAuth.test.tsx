@@ -41,6 +41,28 @@ describe("parent sign-in screens", () => {
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith("/portal", { replace: true }));
     expect(mocks.signOut).not.toHaveBeenCalled();
   });
+  it("resumes child verification when an unclassified account chooses parent login", async () => {
+    mocks.state = { user: { id: "unclassified" }, role: null, isLoading: false, authError: null };
+    render(<PortalLogin />);
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith("/portal/oauth-callback", { replace: true }));
+    expect(mocks.completeGoogle).not.toHaveBeenCalled();
+  });
+  it.each([
+    { isLoading: true, authError: null },
+    { isLoading: false, authError: "Koneksi gagal" },
+  ])("waits for successful role lookup before resuming verification: %j", state => {
+    mocks.state = { user: { id: "parent" }, role: null, ...state };
+    render(<PortalLogin />);
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+  it("lets an unclassified parent switch to another account", async () => {
+    mocks.state = { user: { id: "unclassified" }, role: null, isLoading: false, authError: null };
+    render(<PortalOAuthCallback />);
+    fireEvent.click(await screen.findByRole("button", { name: "Keluar dan gunakan akun lain" }));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith("/portal/login", { replace: true }));
+    expect(mocks.signOut).toHaveBeenCalledOnce();
+    expect(mocks.completeGoogle).not.toHaveBeenCalled();
+  });
   it("keeps login usable after a failed role lookup", async () => {
     mocks.signIn.mockResolvedValue({ error: "Akun belum berhasil diperiksa." });
     render(<PortalLogin />);
