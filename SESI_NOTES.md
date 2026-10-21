@@ -1,3 +1,18 @@
+## Statistik seragam SPMB (21 Oktober 2026)
+
+Statistik seragam berada di /akademik/spmb/statistik dan memakai baris yang
+sudah dibatasi hak akses lembaga serta filter tahun/gelombang existing.
+Filter ikhwan/akhwat dan kelulusan di bagian seragam berlaku hanya untuk rekap
+seragam. Default semua pendaftar, bukan hanya yang lulus tes.
+
+Satuan adalah stel. Lengkap berarti empat entri memiliki nama dan ukuran
+tersimpan. Nama bawaan hanya melabeli entri kosong, tidak dihitung sebagai
+ukuran tersimpan; ukuran_baju lama tidak digandakan menjadi empat stel.
+TK dikecualikan dan jumlahnya dijelaskan karena katalog belum tersedia.
+Nama khusus dipertahankan; kapital/spasi nama serta ukuran X3L/X4L/X5L
+normalisasi untuk pengelompokan tanpa mengubah data. Ekspor memakai rekap
+sesuai filter/pencarian tabel. Tidak ada SQL, backfill, atau izin baru.
+
 ## Empat jenis seragam dan edit nama (21 Oktober 2026, koreksi pengguna)
 
 Daftar barang/komponen pada lampiran awal bukan empat jenis seragam yang

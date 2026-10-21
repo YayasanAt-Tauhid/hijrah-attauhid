@@ -1,3 +1,4 @@
+import { UniformStatistics } from "./UniformStatistics";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -60,6 +61,7 @@ export function SpmbStatistics({ rows, departments, years, waves, scope, onScope
           { key: "passed", label: "Lulus tes" }, { key: "failed", label: "Tidak lulus tes" }, { key: "undecided", label: "Belum ditentukan" },
         ]} />
         {summary.total === 0 && <p className="text-sm text-muted-foreground">Belum ada pendaftar pada periode dan lembaga yang dipilih.</p>}
+        <UniformStatistics rows={rows} departments={departments} />
         <div><h2 className="mb-3 font-semibold">Tahapan seleksi dan kelengkapan</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatsCard title="Belum tes" value={count("_spmbTesStatus", "belum")} icon={Clock} color="warning" onClick={() => onOpenList({ tes: "belum" })} />
           <StatsCard title="Sudah daftar ulang" value={rows.filter((row) => row._spmbTanggalDaftarUlang).length} icon={CheckCircle2} color="info" onClick={() => onOpenList({ daftarUlang: "sudah" })} />
