@@ -459,7 +459,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
 
     const uniformChanged = Boolean(dirtyFields.ukuran_seragam);
     if (uniformChanged) {
-      const uniformError = validateUniformSizes(values.ukuran_seragam, uniformCatalog);
+      const uniformError = validateUniformSizes(readUniformSizes(values.ukuran_seragam), uniformCatalog);
       if (uniformError) {
         form.setError("ukuran_seragam", { message: uniformError });
         toast.error(uniformError);
@@ -664,7 +664,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                   <p className="text-sm text-muted-foreground">Verifikasi wajib mencakup data inti yang dapat dicocokkan dengan Kartu Keluarga serta No. HP / WhatsApp yang Bisa Dihubungi. Data akademik, kemampuan, penghasilan, dan dokumen selain KK tetap dapat diperiksa tetapi bersifat opsional. Checklist disimpan bersama tombol Simpan Perubahan.</p>
                 )}
                 {dokumenSpmb.map(([kind, label]) => {
-                  const name = `dokumen_${kind}_path` as keyof SiswaForm;
+                  const name = `dokumen_${kind}_path` as const;
                   const verificationKey = String(name);
                   return (
                     <div key={kind} className="space-y-2">
@@ -718,7 +718,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
               <Card><CardContent className="pt-6">
                 <FormField control={form.control} name="ukuran_seragam" render={({ field }) => (
                   <FormItem>
-                    <UniformSizeFields department={uniformDeptCode} gender={uniformGender} value={field.value} onChange={(value) => {
+                    <UniformSizeFields department={uniformDeptCode} gender={uniformGender} value={readUniformSizes(field.value)} onChange={(value) => {
                       field.onChange(value);
                       form.clearErrors("ukuran_seragam");
                     }} disabled={updateSiswa.isPending || createSiswa.isPending} />
