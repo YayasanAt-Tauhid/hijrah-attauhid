@@ -1,3 +1,23 @@
+## Statistik kelulusan dan ukuran empat stel (21 Oktober 2026)
+
+Statistik memakai hasil tes eksplisit, termasuk pendaftar yang sudah aktif;
+status akademik aktif tidak dianggap bukti lulus. Kartu dan tabel penerimaan/
+aktivasi di statistik diganti hasil kelulusan; filter daftar tidak diubah.
+
+Seragam menggunakan empat slot independen (jenis + ukuran). Jenis boleh
+berulang karena katalog SMP/SMA/MTA putra hanya memiliki dua jenis; empat
+slot tidak berarti harus empat jenis unik. Katalog mengikuti lampiran
+pengguna apa adanya, termasuk PUTIH BIRU untuk SMA putra, ALL SIZE, STANDART,
+dan batas ukuran berbeda per jenis. TK dan MTA putri tidak ditebak.
+Katalog memakai lembaga tujuan SPMB untuk siswa internal. Ukuran lama
+ukuran_baju dipertahankan; tidak ada pengisian otomatis dari ukuran lama.
+
+Simpan memakai RPC akademik_save_siswa yang sudah ada agar atomik dan tetap
+memakai RLS/izin lembaga. Kolom ukuran_seragam hanya dikirim bila diubah,
+sehingga edit lain tidak menimpa data seragam. Migration tambahan hanya
+menambah kolom JSONB nullable dan pemeriksaan struktur empat slot; tidak
+mengubah kebijakan akses maupun data siswa yang sudah ada.
+
 ## Admin TU — pengecualian rute induk Keuangan (20 Oktober 2026)
 
 Tindak lanjut PR149: halaman monitoring, AppLayout, menu, dan endpoint sudah

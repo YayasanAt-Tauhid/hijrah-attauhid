@@ -3728,6 +3728,7 @@ export type Database = {
       }
       siswa_detail: {
         Row: {
+          ukuran_seragam: Json | null
           alamat_ortu: string | null
           alasan_pindah: string | null
           asal_sekolah: string | null
@@ -3743,6 +3744,7 @@ export type Database = {
           telepon_ortu: string | null
         }
         Insert: {
+          ukuran_seragam?: Json | null
           alamat_ortu?: string | null
           alasan_pindah?: string | null
           asal_sekolah?: string | null
@@ -3758,6 +3760,7 @@ export type Database = {
           telepon_ortu?: string | null
         }
         Update: {
+          ukuran_seragam?: Json | null
           alamat_ortu?: string | null
           alasan_pindah?: string | null
           asal_sekolah?: string | null

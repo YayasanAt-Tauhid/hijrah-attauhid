@@ -22,6 +22,8 @@ import { SpmbFieldVerification } from "@/components/akademik/SpmbFieldVerificati
 import { fetchSpmbVerificationState, saveSpmbVerificationFields, spmbVerificationQueryKey, useSpmbVerificationState } from "@/hooks/useSpmbVerification";
 import { ArrowLeft, Save, Wand2, Pencil, Loader2 } from "lucide-react";
 import { PENGHASILAN_CHOICES } from "@/lib/penghasilanOrangtua";
+import { UniformSizeFields } from "@/components/akademik/UniformSizeFields";
+import { emptyUniformSizes, readUniformSizes, uniformDepartment, uniformOptions, validateUniformSizes } from "@/lib/ukuranSeragam";
 
 const optionalString = z.string().optional();
 const siswaSchema = z.object({
@@ -59,6 +61,7 @@ const siswaSchema = z.object({
   berat_badan_kg: optionalString,
   lingkar_kepala_cm: optionalString,
   ukuran_baju: optionalString,
+  ukuran_seragam: z.array(z.object({ jenis: z.string(), ukuran: z.string() })).length(4),
   penyakit_pernah_diderita: optionalString,
   jarak_rumah_km: optionalString,
   waktu_perjalanan_menit: optionalString,
@@ -143,7 +146,7 @@ function perluPilihanAsrama(dept?: { kode?: string | null; nama?: string | null 
 
 function TextField({ form, name, label, type = "text", placeholder, inputMode, disabled, onValueChange, after }: {
   form: UseFormReturn<SiswaForm>;
-  name: keyof SiswaForm;
+  name: Exclude<keyof SiswaForm, "ukuran_seragam">;
   label: string;
   type?: string;
   placeholder?: string;
@@ -153,7 +156,7 @@ function TextField({ form, name, label, type = "text", placeholder, inputMode, d
   after?: ReactNode;
 }) {
   return (
-    <FormField control={form.control} name={name as any} render={({ field }) => (
+    <FormField control={form.control} name={name} render={({ field }) => (
       <FormItem>
         <FormLabel>{label}</FormLabel>
         <FormControl>
@@ -178,14 +181,14 @@ function TextField({ form, name, label, type = "text", placeholder, inputMode, d
 
 function TextAreaField({ form, name, label, placeholder, onValueChange, after }: {
   form: UseFormReturn<SiswaForm>;
-  name: keyof SiswaForm;
+  name: Exclude<keyof SiswaForm, "ukuran_seragam">;
   label: string;
   placeholder?: string;
   onValueChange?: (value: string) => void;
   after?: ReactNode;
 }) {
   return (
-    <FormField control={form.control} name={name as any} render={({ field }) => (
+    <FormField control={form.control} name={name} render={({ field }) => (
       <FormItem>
         <FormLabel>{label}</FormLabel>
         <FormControl>
@@ -207,7 +210,7 @@ function TextAreaField({ form, name, label, placeholder, onValueChange, after }:
 
 function SelectField({ form, name, label, options, placeholder = "Pilih", onValueChange, after, legacyValueLabel }: {
   form: UseFormReturn<SiswaForm>;
-  name: keyof SiswaForm;
+  name: Exclude<keyof SiswaForm, "ukuran_seragam">;
   label: string;
   options: Choice[];
   placeholder?: string;
@@ -216,7 +219,7 @@ function SelectField({ form, name, label, options, placeholder = "Pilih", onValu
   legacyValueLabel?: (value: string) => string;
 }) {
   return (
-    <FormField control={form.control} name={name as any} render={({ field }) => {
+    <FormField control={form.control} name={name} render={({ field }) => {
       const currentValue = String(field.value || "");
       const isLegacyValue = Boolean(currentValue) && !options.some((option) => option.value === currentValue);
       return (
@@ -274,9 +277,10 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
 
   const form = useForm<SiswaForm>({
     resolver: zodResolver(siswaSchema),
-    defaultValues: { status: "aktif", agama: "Islam", jenis_pendaftaran: "baru" },
+    defaultValues: { ukuran_seragam: emptyUniformSizes(), status: "aktif", agama: "Islam", jenis_pendaftaran: "baru" },
   });
 
+  const { dirtyFields } = form.formState;
   const watchDept = form.watch("departemen_id");
   const watchTingkat = form.watch("tingkat_id");
   const watchAngkatan = form.watch("angkatan_id");
@@ -294,6 +298,10 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
     ? departemenList.find((d: any) => d.id === detail.spmb_departemen_tujuan_id)
     : selectedDept;
   const boardingDeptCode = String(boardingDept?.kode || boardingDept?.nama || "").trim().toUpperCase();
+  const uniformDeptCode = uniformDepartment(boardingDept);
+  const uniformGender = form.watch("jenis_kelamin") || "";
+  const uniformCatalog = uniformOptions(uniformDeptCode, uniformGender);
+
   const wajibAsrama = perluPilihanAsrama(boardingDept);
   const wajibNisn = ["SMP", "SMA", "MTA"].some((kode) => selectedDeptCode === kode || selectedDeptCode.startsWith(kode + " "));
   const mtaWajibAsrama = (boardingDeptCode === "MTA" || boardingDeptCode.startsWith("MTA ")) && watchJenisPendaftaran !== "alumni_internal";
@@ -364,6 +372,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
       nik: detail?.nik || "", nik_dapodik: detail?.nik_dapodik || "", no_kk: detail?.no_kk || "", kategori: detail?.kategori || "", status_asrama: detail?.status_asrama || "",
       anak_ke: detail?.anak_ke?.toString?.() || "", jumlah_bersaudara: detail?.jumlah_bersaudara?.toString?.() || "",
       tinggi_badan_cm: detail?.tinggi_badan_cm?.toString?.() || "", berat_badan_kg: detail?.berat_badan_kg?.toString?.() || "",
+      ukuran_seragam: readUniformSizes(detail?.ukuran_seragam),
       lingkar_kepala_cm: detail?.lingkar_kepala_cm?.toString?.() || "", ukuran_baju: detail?.ukuran_baju || "",
       penyakit_pernah_diderita: detail?.penyakit_pernah_diderita || "", jarak_rumah_km: detail?.jarak_rumah_km?.toString?.() || "",
       waktu_perjalanan_menit: detail?.waktu_perjalanan_menit?.toString?.() || "", transportasi: detail?.transportasi || "",
@@ -448,6 +457,16 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
       return;
     }
 
+    const uniformChanged = Boolean(dirtyFields.ukuran_seragam);
+    if (uniformChanged) {
+      const uniformError = validateUniformSizes(readUniformSizes(values.ukuran_seragam), uniformCatalog);
+      if (uniformError) {
+        form.setError("ukuran_seragam", { message: uniformError });
+        toast.error(uniformError);
+        return;
+      }
+    }
+
     const siswaData: Record<string, unknown> = {
       nama: values.nama, nis: values.nis || null, nisn: values.nisn || null, jenis_kelamin: values.jenis_kelamin,
       tempat_lahir: values.tempat_lahir || null, tanggal_lahir: values.tanggal_lahir || null,
@@ -482,6 +501,10 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
       alasan_pindah: values.alasan_pindah || null, kemampuan_iqro: values.kemampuan_iqro || null,
       membaca_latin: values.membaca_latin || null, menulis_latin: values.menulis_latin || null, hafalan_quran: values.hafalan_quran || null,
     };
+
+    // The existing RPC writes detail and student data in the same transaction.
+    // Omit untouched uniform data so unrelated edits preserve the saved values.
+    if (uniformChanged) detailData.ukuran_seragam = values.ukuran_seragam.some((item) => item.jenis || item.ukuran) ? values.ukuran_seragam : null;
 
     if (isEdit) {
       const kelasData = values.kelas_id && values.tahun_ajaran_id ? { kelas_id: values.kelas_id, tahun_ajaran_id: values.tahun_ajaran_id } : undefined;
@@ -555,6 +578,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
               <TabsTrigger value="pribadi">Data Pribadi</TabsTrigger>
               <TabsTrigger value="akademik">Data Akademik</TabsTrigger>
               <TabsTrigger value="spmb">Data SPMB</TabsTrigger>
+              <TabsTrigger value="seragam">Ukuran Seragam</TabsTrigger>
               <TabsTrigger value="orangtua">Data Orang Tua</TabsTrigger>
               <TabsTrigger value="sekolah">Sekolah & Kemampuan</TabsTrigger>
             </TabsList>
@@ -640,7 +664,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                   <p className="text-sm text-muted-foreground">Verifikasi wajib mencakup data inti yang dapat dicocokkan dengan Kartu Keluarga serta No. HP / WhatsApp yang Bisa Dihubungi. Data akademik, kemampuan, penghasilan, dan dokumen selain KK tetap dapat diperiksa tetapi bersifat opsional. Checklist disimpan bersama tombol Simpan Perubahan.</p>
                 )}
                 {dokumenSpmb.map(([kind, label]) => {
-                  const name = `dokumen_${kind}_path` as keyof SiswaForm;
+                  const name = `dokumen_${kind}_path` as const;
                   const verificationKey = String(name);
                   return (
                     <div key={kind} className="space-y-2">
@@ -688,6 +712,20 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                   </FormSection>
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="seragam">
+              <Card><CardContent className="pt-6">
+                <FormField control={form.control} name="ukuran_seragam" render={({ field }) => (
+                  <FormItem>
+                    <UniformSizeFields department={uniformDeptCode} gender={uniformGender} value={readUniformSizes(field.value)} onChange={(value) => {
+                      field.onChange(value);
+                      form.clearErrors("ukuran_seragam");
+                    }} disabled={updateSiswa.isPending || createSiswa.isPending} />
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </CardContent></Card>
             </TabsContent>
 
             <TabsContent value="orangtua">
