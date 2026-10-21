@@ -3,7 +3,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { DataTable } from "@/components/shared/DataTable";
-import { summarizeSpmbAdmissions } from "@/lib/spmbAdmission";
 import { Users, UserCheck, Clock, CheckCircle2, ArrowLeft, AlertTriangle } from "lucide-react";
 
 type Registration = Record<string, unknown>;
@@ -21,18 +20,24 @@ export function SpmbStatistics({ rows, departments, years, waves, scope, onScope
   loading: boolean;
   error?: unknown;
 }) {
-  const summary = summarizeSpmbAdmissions(rows);
+  const summarize = (list: Registration[]) => ({
+    total: list.length,
+    passed: list.filter((row) => row._spmbStatusKelulusan === "lulus").length,
+    failed: list.filter((row) => row._spmbStatusKelulusan === "tidak_lulus").length,
+    undecided: list.filter((row) => !row._spmbStatusKelulusan).length,
+  });
+  const summary = summarize(rows);
   const count = (key: string, value: unknown) => rows.filter((row) => row[key] === value).length;
   const perDepartment = departments.map((dept) => {
     const list = rows.filter((row) => row.departemen_id === dept.id);
-    return { id: dept.id, lembaga: dept.kode || dept.nama, ...summarizeSpmbAdmissions(list) };
+    return { id: dept.id, lembaga: dept.kode || dept.nama, ...summarize(list) };
   }).filter((dept) => scope.departemen === "all" || dept.id === scope.departemen);
   const ready = (row: Registration) => (row._readiness as { siap?: boolean } | undefined)?.siap;
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h1 className="text-2xl font-bold">Statistik SPMB</h1><p className="text-sm text-muted-foreground">Penerimaan dan aktivasi murid pada periode pendaftaran yang dipilih.</p></div>
+        <div><h1 className="text-2xl font-bold">Statistik SPMB</h1><p className="text-sm text-muted-foreground">Pendaftaran dan kelulusan tes pada periode pendaftaran yang dipilih.</p></div>
         <Button variant="outline" onClick={() => onOpenList()}><ArrowLeft className="mr-2 h-4 w-4" />Daftar Pendaftar</Button>
       </div>
       <div className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-3">
@@ -45,20 +50,18 @@ export function SpmbStatistics({ rows, departments, years, waves, scope, onScope
       {error ? <div role="alert" className="rounded-lg border border-destructive/30 p-4 text-destructive">Statistik tidak dapat dimuat. Silakan muat ulang halaman.</div> : loading ? <p role="status" className="py-8 text-muted-foreground">Memuat statistik SPMB…</p> : <>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatsCard title="Total Pendaftar" value={summary.total} icon={Users} onClick={() => onOpenList()} />
-          <StatsCard title="Diterima" value={summary.accepted} icon={UserCheck} color="success" onClick={() => onOpenList({ status: "diterima" })} />
-          <StatsCard title="Belum diaktifkan" value={summary.awaitingActivation} icon={Clock} color="warning" onClick={() => onOpenList({ status: "belum_aktif" })} />
-          <StatsCard title="Sudah diaktifkan" value={summary.activated} icon={CheckCircle2} color="info" onClick={() => onOpenList({ status: "selesai" })} />
+          <StatsCard title="Lulus tes" value={summary.passed} icon={UserCheck} color="success" onClick={() => onOpenList({ kelulusan: "lulus" })} />
+          <StatsCard title="Tidak lulus tes" value={summary.failed} icon={AlertTriangle} color="destructive" onClick={() => onOpenList({ kelulusan: "tidak_lulus" })} />
+          <StatsCard title="Belum ditentukan" value={summary.undecided} icon={Clock} color="warning" onClick={() => onOpenList({ kelulusan: "belum" })} />
         </div>
-        <p className="text-sm text-muted-foreground">Diterima mencakup murid yang belum maupun sudah diaktifkan. Klik kartu untuk membuka daftar yang sesuai.</p>
+        <p className="text-sm text-muted-foreground">Jumlah kelulusan berdasarkan hasil tes yang tercatat. Klik kartu untuk membuka daftar yang sesuai.</p>
         <DataTable searchable={false} data={perDepartment} pageSize={10} emptyMessage="Tidak ada lembaga dalam cakupan ini" onRowClick={(row) => onOpenList({ departemen: String(row.id) })} columns={[
           { key: "lembaga", label: "Lembaga" }, { key: "total", label: "Pendaftar" },
-          { key: "accepted", label: "Diterima" }, { key: "awaitingActivation", label: "Belum diaktifkan" }, { key: "activated", label: "Sudah diaktifkan" },
+          { key: "passed", label: "Lulus tes" }, { key: "failed", label: "Tidak lulus tes" }, { key: "undecided", label: "Belum ditentukan" },
         ]} />
         {summary.total === 0 && <p className="text-sm text-muted-foreground">Belum ada pendaftar pada periode dan lembaga yang dipilih.</p>}
         <div><h2 className="mb-3 font-semibold">Tahapan seleksi dan kelengkapan</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatsCard title="Belum tes" value={count("_spmbTesStatus", "belum")} icon={Clock} color="warning" onClick={() => onOpenList({ tes: "belum" })} />
-          <StatsCard title="Lulus tes" value={count("_spmbStatusKelulusan", "lulus")} icon={UserCheck} color="success" onClick={() => onOpenList({ kelulusan: "lulus" })} />
-          <StatsCard title="Tidak lulus tes" value={count("_spmbStatusKelulusan", "tidak_lulus")} icon={AlertTriangle} color="destructive" onClick={() => onOpenList({ kelulusan: "tidak_lulus" })} />
           <StatsCard title="Sudah daftar ulang" value={rows.filter((row) => row._spmbTanggalDaftarUlang).length} icon={CheckCircle2} color="info" onClick={() => onOpenList({ daftarUlang: "sudah" })} />
           <StatsCard title="Belum diverifikasi" value={rows.filter((row) => !row.terverifikasi).length} icon={AlertTriangle} color="warning" onClick={() => onOpenList({ verifikasi: "belum" })} />
           <StatsCard title="Calon belum lengkap" value={rows.filter((row) => row.status === "calon" && !ready(row)).length} icon={AlertTriangle} color="warning" onClick={() => onOpenList({ status: "calon", kesiapan: "belum" })} />
