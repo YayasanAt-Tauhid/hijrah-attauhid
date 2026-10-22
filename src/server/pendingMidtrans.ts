@@ -89,7 +89,7 @@ export async function findReusablePaymentForBills(userId: string, items: Payment
   const billIds = items.map(item => item.tagihan_id).filter(Boolean);
   if (!billIds.length) return null;
   const { data: rows, error } = await admin.from("transaksi_midtrans_item")
-    .select("transaksi_id, tagihan_id, jumlah, pembayaran_id, transaksi:transaksi_id(id,order_id,user_id,status,snap_token,gateway_closed_at,expired_at)")
+    .select("transaksi_id, tagihan_id, jumlah, pembayaran_id, transaksi:transaksi_id(id,order_id,user_id,status,snap_token,gateway_closed_at,expired_at,created_at,metadata)")
     .in("tagihan_id", [...new Set(billIds)]);
   if (error) throw error;
   const blockers = new Map<string, any>();
@@ -98,6 +98,15 @@ export async function findReusablePaymentForBills(userId: string, items: Payment
     if (!tx) continue;
     if (blocksNewPayment({ status: tx.status, gateway_closed_at: tx.gateway_closed_at,
       snap_token: tx.snap_token, pembayaran_id: item.pembayaran_id })) blockers.set(tx.id, tx);
+  }
+  // Checkout already verified access to these bills. Close expired blockers
+  // through the same verified gateway path as the periodic reconciler, even if
+  // another linked parent created the old session. Active sessions stay intact.
+  for (const [id, tx] of blockers) {
+    if (tx.status !== "paid" && tx.expired_at && Date.parse(tx.expired_at) <= Date.now()) {
+      await closeStoredSession(tx, "expired_session_at_checkout");
+      blockers.delete(id);
+    }
   }
   if (!blockers.size) return null;
   if (blockers.size !== 1) {
