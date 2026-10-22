@@ -107,6 +107,7 @@ export default function RencanaTagihanSiswaBaru() {
   const [selected, setSelected] = useState<SpmbBillingCandidate | null>(null);
   const [sppJenisId, setSppJenisId] = useState("");
   const [sppNominal, setSppNominal] = useState("");
+  const [includeInitialSpp, setIncludeInitialSpp] = useState(false);
   const [bulanMulai, setBulanMulai] = useState("");
   const [bulanTerakhir, setBulanTerakhir] = useState(6);
   const [endMode, setEndMode] = useState<EndMode>("level");
@@ -211,6 +212,7 @@ export default function RencanaTagihanSiswaBaru() {
 
   const openPlan = (row: SpmbBillingCandidate) => {
     setSelected(row);
+    setIncludeInitialSpp(false);
 
     const currentPlan = row.rencana_spp;
     const defaultSpp =
@@ -319,7 +321,7 @@ export default function RencanaTagihanSiswaBaru() {
     }
     const onlyInitial = !selected.ready_for_spp;
     const sppAmount = Number(sppNominal);
-    if (!onlyInitial) {
+    if (!onlyInitial || includeInitialSpp) {
     if (!sppJenisId) {
       toast.error("Pilih jenis SPP");
       return;
@@ -334,18 +336,18 @@ export default function RencanaTagihanSiswaBaru() {
       toast.error("Pilih bulan mulai SPP yang valid");
       return;
     }
-    if (sppGeneratePeriods.missing.length) {
+    if (!onlyInitial && sppGeneratePeriods.missing.length) {
       toast.error("Tahun Buku untuk periode SPP yang dipilih belum tersedia", {
         description: "Buat Tahun Buku yang hilang di Referensi Keuangan lalu ulangi.",
       });
       return;
     }
-    if (sppGeneratePeriods.groups.length === 0) {
+    if (!onlyInitial && sppGeneratePeriods.groups.length === 0) {
       toast.error("Periode tagihan tidak dapat dipetakan ke Tahun Buku");
       return;
     }
 
-    if (endMode === "date") {
+    if (!onlyInitial && endMode === "date") {
       if (!manualEndDate) {
         toast.error("Pilih bulan terakhir rencana SPP");
         return;
@@ -363,8 +365,8 @@ export default function RencanaTagihanSiswaBaru() {
     }
 
     const checkedInitial = initialJenisList.filter((jenis: any) => initialFees[jenis.id]?.checked);
-    if (onlyInitial && checkedInitial.length === 0) {
-      toast.error("Pilih setidaknya satu biaya awal untuk diterbitkan.");
+    if (onlyInitial && checkedInitial.length === 0 && !includeInitialSpp) {
+      toast.error("Pilih SPP awal atau setidaknya satu biaya awal untuk diterbitkan.");
       return;
     }
     for (const jenis of checkedInitial as any[]) {
@@ -379,6 +381,19 @@ export default function RencanaTagihanSiswaBaru() {
     const failures: string[] = [];
     const existingInitialFees: string[] = [];
     try {
+      if (onlyInitial && includeInitialSpp) {
+        const { data: result, error } = await supabase.rpc("terbitkan_spp_awal_spmb", {
+          p_siswa_id: selected.id,
+          p_tahun_akademik_id: selectedAcademicYear.id,
+          p_jenis_id: sppJenisId,
+          p_bulan_mulai: bulanMulai,
+          p_nominal: sppAmount,
+        });
+        if (error) throw new Error(error.message || "Gagal menerbitkan SPP awal");
+        if (result && typeof result === "object" && !Array.isArray(result) && result.skipped) {
+          existingInitialFees.push("SPP awal");
+        }
+      }
       if (!onlyInitial) {
       const sppPayload = {
         p_tarif_rows: sppGeneratePeriods.groups.map((group) => ({
@@ -491,8 +506,8 @@ export default function RencanaTagihanSiswaBaru() {
       if (failures.length === 0) {
         toast.success(onlyInitial ? "Tagihan awal calon siswa berhasil diterbitkan" : "Rencana tagihan siswa baru berhasil disimpan", {
           description: onlyInitial ? (existingInitialFees.length
-            ? `${existingInitialFees.length} jenis biaya sudah mempunyai tagihan dan tidak diterbitkan ulang. SPP menyusul setelah aktivasi/penempatan.`
-            : "Rencana SPP baru dapat diaktifkan setelah aktivasi dan penempatan akademik.") : endMode === "level"
+            ? `${existingInitialFees.length} tagihan sudah ada dan tidak diterbitkan ulang. Rencana SPP lanjutan dibuat setelah aktivasi/penempatan.`
+            : "Tagihan belum jatuh tempo tidak masuk tunggakan. Rencana SPP lanjutan dibuat setelah aktivasi/penempatan.") : endMode === "level"
             ? `SPP ${formatRupiah(sppAmount)} · otomatis sampai ${namaBulan(bulanTerakhir)} akhir ${phaseLabel(selected) || "jenjang"}.`
             : `SPP ${formatRupiah(sppAmount)} · otomatis sampai ${formatDate(manualEndDate)}.`,
         });
@@ -622,8 +637,8 @@ export default function RencanaTagihanSiswaBaru() {
       <Alert>
         <Info className="h-4 w-4" />
         <AlertDescription className="text-sm">
-          Calon siswa yang sudah lulus dapat diterbitkan biaya awal tanpa penempatan kelas.
-          Rencana SPP otomatis baru dibuat setelah aktivasi dan penempatan pada jenjang tujuan.
+          Calon siswa yang sudah lulus dapat diterbitkan biaya awal dan SPP awal per bulan tanpa penempatan kelas.
+          Rencana SPP lanjutan baru dibuat setelah aktivasi dan penempatan pada jenjang tujuan.
           SPP yang belum jatuh tempo bukan tunggakan.
         </AlertDescription>
       </Alert>
@@ -741,11 +756,47 @@ export default function RencanaTagihanSiswaBaru() {
                   <Info className="h-4 w-4" />
                   <AlertDescription>
                     Siswa sudah lulus SPMB tetapi belum diaktifkan/ditempatkan di jenjang tujuan.
-                    Biaya awal dapat diterbitkan sekarang tanpa kelas. Rencana SPP otomatis ditunda
-                    sampai aktivasi akademik agar tidak memakai kelas lama atau menagih terlalu dini.
+                    Biaya awal dan SPP awal untuk bulan yang dipilih dapat diterbitkan tanpa kelas.
+                    Setelah penempatan, laporan mengikuti kelas pada tahun ajaran tujuan.
+                    Rencana SPP lanjutan tetap menunggu aktivasi akademik.
                   </AlertDescription>
                 </Alert>
               )}
+              {!selected.ready_for_spp && <Card>
+                <CardHeader className="pb-3"><CardTitle className="text-base">SPP awal tanpa kelas</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={includeInitialSpp} onCheckedChange={(value) => setIncludeInitialSpp(value === true)} />
+                    Terbitkan SPP awal (satu bulan)
+                  </label>
+                  {includeInitialSpp && <>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <Label>Jenis SPP *</Label>
+                        <Select value={sppJenisId} onValueChange={setSppJenisId}>
+                          <SelectTrigger><SelectValue placeholder="Pilih jenis SPP" /></SelectTrigger>
+                          <SelectContent>{sppJenisList.map((jenis) => <SelectItem key={jenis.id} value={jenis.id}>{jenis.nama}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Nominal SPP siswa *</Label>
+                        <RupiahInput value={sppNominal} onChange={setSppNominal} />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Periode SPP awal *</Label>
+                      <Select value={bulanMulai} onValueChange={setBulanMulai}>
+                        <SelectTrigger><SelectValue placeholder="Pilih bulan" /></SelectTrigger>
+                        <SelectContent>{academicCalendar.map((item) => <SelectItem key={item.tanggal} value={item.tanggal}>{namaBulan(item.bulan)} {item.tahun}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Hanya satu bulan yang diterbitkan. Orang tua dapat membayar sebelum kelas tersedia.
+                      SPP belum jatuh tempo bukan tunggakan. Tagihan yang sudah ada tidak diterbitkan ulang.
+                    </p>
+                  </>}
+                </CardContent>
+              </Card>}
               {selected.ready_for_spp && <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-base">

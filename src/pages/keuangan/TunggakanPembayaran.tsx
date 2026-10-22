@@ -258,7 +258,7 @@ function TunggakanPembayaranContent() {
       <div className="flex items-center justify-between gap-4 mb-3">
         <div>
           <h1 className="text-xl font-bold text-foreground">Tunggakan Pembayaran</h1>
-          <p className="text-xs text-muted-foreground">Laporan siswa yang belum membayar</p>
+          <p className="text-xs text-muted-foreground">Tagihan lewat jatuh tempo. Kelas mengikuti penempatan pada tahun ajaran tagihan, termasuk penempatan yang dicatat belakangan.</p>
         </div>
         {jenisId && tunggakanData && (
           <div className="flex items-center gap-2 flex-wrap justify-end">
