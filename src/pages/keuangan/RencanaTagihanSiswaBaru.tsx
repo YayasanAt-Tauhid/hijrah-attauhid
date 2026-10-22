@@ -1,4 +1,5 @@
 import { DialogAjukan } from "@/components/keuangan/DialogAjukanKeringanan";
+import { DialogUangPangkalSpmb } from "@/components/keuangan/DialogUangPangkalSpmb";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
@@ -99,6 +100,7 @@ export default function RencanaTagihanSiswaBaru() {
   const candidates = candidatesData?.items ?? [];
 
   const [keringananSiswa, setKeringananSiswa] = useState<SpmbBillingCandidate | null>(null);
+  const [pangkalSiswa, setPangkalSiswa] = useState<SpmbBillingCandidate | null>(null);
   const [filterAsrama, setFilterAsrama] = useState("__all__");
   const [filterPendaftar, setFilterPendaftar] = useState("__all__");
   const [search, setSearch] = useState("");
@@ -609,6 +611,9 @@ export default function RencanaTagihanSiswaBaru() {
       className: "min-w-[130px]",
       render: (_, row) => (
         <div className="flex flex-col items-start gap-2">
+          <Button size="sm" variant="outline" disabled={!row.ready_for_billing} onClick={() => setPangkalSiswa(row)}>
+            Uang Pangkal Otomatis
+          </Button>
           <Button
             size="sm"
             variant={row.rencana_spp ? "outline" : "default"}
@@ -988,6 +993,7 @@ export default function RencanaTagihanSiswaBaru() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {pangkalSiswa && <DialogUangPangkalSpmb key={pangkalSiswa.id} siswa={pangkalSiswa} onClose={() => setPangkalSiswa(null)} />}
       {keringananSiswa && (
         <DialogAjukan
           key={keringananSiswa.id}

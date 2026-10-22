@@ -5006,6 +5006,14 @@ export type Database = {
       }
     }
     Functions: {
+      preview_uang_pangkal_spmb: {
+        Args: { p_siswa_id: string; p_tahun_akademik_id: string; p_alumni_asrama?: string; p_fase_mta?: string | null }
+        Returns: Json
+      }
+      verifikasi_uang_pangkal_spmb: {
+        Args: { p_siswa_id: string; p_tahun_akademik_id: string; p_alumni_asrama: string; p_fase_mta: string | null; p_nominal_bruto: number; p_catatan: string | null; p_preview_hash: string; p_confirmed: boolean }
+        Returns: Json
+      }
       spmb_readiness: {
         Args: { p_siswa_id: string }
         Returns: Json
