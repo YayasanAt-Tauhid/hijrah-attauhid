@@ -1,3 +1,15 @@
+## NIS sebelum kelas dan identitas portal (22 Oktober 2026)
+NIS tujuan SPMB disimpan pada riwayat per lembaga sebelum aktivasi, sehingga
+siswa yang masih SD tidak dipindahkan sekolah/kelas hanya untuk memperoleh NIS SMP.
+Pembuatan maupun input manual NIS tujuan menggunakan endpoint server dengan
+otorisasi lembaga tujuan; RPC hanya dapat dipanggil service_role dan memvalidasi
+tujuan/angkatan terhadap pendaftaran tersimpan. NIS tujuan yang sudah ada digunakan
+kembali saat aktivasi. Tidak ada backfill atau penetapan NIS massal.
+Kasus Abdullah memiliki lembaga akademik SD, tujuan SMP 2027, dan flag pendaftar
+eksternal; flag/status asal itu tidak dikoreksi otomatis tanpa pemeriksaan tersendiri.
+Portal memakai pilihan eksplisit NIS/NISN pada daftar email, verifikasi Google,
+dan tambah anak. Nama lengkap dan tanggal lahir tetap wajib; NISN ganda ditolak.
+
 ## Statistik seragam SPMB (21 Oktober 2026)
 
 Statistik seragam berada di /akademik/spmb/statistik dan memakai baris yang

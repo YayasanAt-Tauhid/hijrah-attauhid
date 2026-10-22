@@ -16,7 +16,8 @@ import { toast } from "sonner";
 
 const lengkapiSchema = z.object({
   hubungan: z.enum(["ayah", "ibu", "wali"]),
-  nis: z.string().min(1, "NIS anak wajib diisi"),
+  jenis_identitas: z.enum(["nis", "nisn"]).default("nis"),
+  nis: z.string().min(1, "NIS/NISN anak wajib diisi"),
   nama_siswa: z.string().min(1, "Nama lengkap anak wajib diisi"),
   tanggal_lahir_siswa: z.string().min(1, "Tanggal lahir anak wajib diisi"),
 });
@@ -34,7 +35,7 @@ export default function PortalOAuthCallback() {
 
   const form = useForm<LengkapiForm>({
     resolver: zodResolver(lengkapiSchema),
-    defaultValues: { hubungan: "wali", nis: "", nama_siswa: "", tanggal_lahir_siswa: "" },
+    defaultValues: { hubungan: "wali", jenis_identitas: "nis", nis: "", nama_siswa: "", tanggal_lahir_siswa: "" },
   });
 
   useEffect(() => {
@@ -88,7 +89,11 @@ export default function PortalOAuthCallback() {
     setSubmitting(true);
     setError(null);
     try {
-      await portalOrtuCompleteGoogleSignup({ data });
+      await portalOrtuCompleteGoogleSignup({ data: {
+        nis: data.nis || "", jenis_identitas: data.jenis_identitas,
+        nama_siswa: data.nama_siswa || "", tanggal_lahir_siswa: data.tanggal_lahir_siswa || "",
+        hubungan: data.hubungan || "wali",
+      } });
       await retryAuth();
       setStatus("sukses");
       toast.success("Pendaftaran berhasil!");
@@ -171,13 +176,29 @@ export default function PortalOAuthCallback() {
                         </FormItem>
                       )}
                     />
-                    <FormField
+                    <FormField control={form.control} name="jenis_identitas" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Gunakan Identitas Anak</FormLabel>
+                          <Select value={field.value} onValueChange={value => {
+                            field.onChange(value);
+                            form.setValue("nis", "");
+                          }}>
+                            <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="nis">NIS</SelectItem>
+                              <SelectItem value="nisn">NISN</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField
                       control={form.control}
                       name="nis"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>NIS Anak</FormLabel>
-                          <FormControl><Input placeholder="Nomor Induk Siswa" {...field} /></FormControl>
+                          <FormLabel>{form.watch("jenis_identitas") === "nisn" ? "NISN Anak" : "NIS Anak"}</FormLabel>
+                          <FormControl><Input placeholder={form.watch("jenis_identitas") === "nisn" ? "NISN 10 digit" : "Nomor Induk Siswa"} inputMode="numeric" {...field} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}

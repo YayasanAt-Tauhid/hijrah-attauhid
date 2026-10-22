@@ -111,3 +111,21 @@ describe("parent sign-in screens", () => {
     expect(screen.queryByLabelText("NIS Anak")).not.toBeInTheDocument();
   });
 });
+
+it("mengirim pilihan NISN untuk verifikasi anak akun Google", async () => {
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+  mocks.state = { user: { id: "google" }, role: null, isLoading: false, authError: null };
+  mocks.completeGoogle.mockResolvedValue({ success: true, nama: "Anak Uji" });
+  mocks.retryAuth.mockResolvedValue(undefined);
+  render(<PortalOAuthCallback />);
+  const choice = await screen.findByLabelText("Gunakan Identitas Anak");
+  fireEvent.keyDown(choice, { key: "ArrowDown" });
+  fireEvent.click(await screen.findByRole("option", { name: "NISN", exact: true }));
+  fireEvent.change(screen.getByLabelText("NISN Anak"), { target: { value: "0012345678" } });
+  fireEvent.change(screen.getByLabelText("Nama Lengkap Anak"), { target: { value: "Anak Uji" } });
+  fireEvent.change(screen.getByLabelText("Tanggal Lahir Anak"), { target: { value: "2014-07-15" } });
+  fireEvent.click(screen.getByRole("button", { name: "Selesaikan Pendaftaran" }));
+  await waitFor(() => expect(mocks.completeGoogle).toHaveBeenCalledWith({
+    data: expect.objectContaining({ jenis_identitas: "nisn", nis: "0012345678", nama_siswa: "Anak Uji", tanggal_lahir_siswa: "2014-07-15" }),
+  }));
+});

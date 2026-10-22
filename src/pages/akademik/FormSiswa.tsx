@@ -6,6 +6,7 @@ import { z } from "zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSiswaDetail, useSiswaDetailOrangtua, useCreateSiswa, useUpdateSiswa } from "@/hooks/useSiswa";
 import { useAngkatan, useDepartemenPendidikan, useTingkat, useKelas, useTahunAjaran } from "@/hooks/useAkademikData";
+import { SpmbNisField } from "@/components/akademik/SpmbNisField";
 import { generateNis } from "@/server/nis";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -305,7 +306,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
   const wajibNisn = ["SMP", "SMA", "MTA"].some((kode) => selectedDeptCode === kode || selectedDeptCode.startsWith(kode + " "));
   const mtaWajibAsrama = (boardingDeptCode === "MTA" || boardingDeptCode.startsWith("MTA ")) && watchJenisPendaftaran !== "alumni_internal";
   const siswaPindahan = watchKategori === "MURID PINDAHAN" || watchJenisPendaftaran === "pindahan";
-  const nisParamsComplete = !!(watchDept && watchAngkatan && watchKelas);
+  const nisParamsComplete = !!(watchDept && watchAngkatan);
   const dokumenSpmb: Array<readonly ["kk" | "akta" | "rapor" | "ijazah", string]> = [
     ["kk", isEdit ? "Kartu Keluarga (wajib untuk verifikasi)" : "Kartu Keluarga (wajib)"],
     ["akta", isEdit ? "Akta Kelahiran (opsional untuk verifikasi)" : "Akta Kelahiran (wajib)"],
@@ -398,7 +399,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
     }
   }, [uniformDeptCode, uniformGender, siswa, detailRaw, dirtyFields.ukuran_seragam, isEdit, form]);
 
-  const invokeGenerateNis = async (siswaId: string, deptId: string, angkatanId: string, kelasId: string) => {
+  const invokeGenerateNis = async (siswaId: string, deptId: string, angkatanId: string, kelasId?: string) => {
     setIsGeneratingNis(true);
     try {
       const data = await generateNis({ data: { siswa_id: siswaId, departemen_id: deptId, angkatan_id: angkatanId, kelas_id: kelasId } });
@@ -410,7 +411,7 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
 
   const handleGenerateNisClick = async () => {
     const siswaId = isEdit ? id! : savedSiswaId;
-    if (!siswaId || !watchDept || !watchAngkatan || !watchKelas) return;
+    if (!siswaId || !watchDept || !watchAngkatan) return;
     try {
       const nis = await invokeGenerateNis(siswaId, watchDept, watchAngkatan, watchKelas);
       form.setValue("nis", nis);
@@ -620,6 +621,14 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
                         <FormField control={form.control} name="nis" render={({ field }) => (
                           <FormItem><FormLabel>NIS</FormLabel><FormControl><Input {...field} maxLength={13} disabled={nisMode !== "ketik"} placeholder={nisMode === "otomatis" ? "Dibuat otomatis saat simpan" : nisMode === "manual" ? "Gunakan tombol Generate NIS" : "Ketik NIS (maks. 13 karakter)"} /></FormControl><FormMessage /></FormItem>
                         )} />
+                        {isEdit && detail?.spmb_departemen_tujuan_id && detail?.spmb_angkatan_tujuan_id
+                          && detail.spmb_departemen_tujuan_id !== siswa?.departemen_id
+                          && !detail.spmb_tanggal_aktivasi && (
+                          <SpmbNisField siswaId={id!} departemenId={detail.spmb_departemen_tujuan_id}
+                            angkatanId={detail.spmb_angkatan_tujuan_id}
+                            namaLembaga={boardingDept?.nama || "SPMB"} />
+                        )}
+                        <p className="text-xs text-muted-foreground">NIS lembaga saat ini hanya memerlukan lembaga dan angkatan; kelas boleh diisi kemudian.</p>
                         <TextField form={form} name="nisn" label={!isEdit && wajibNisn ? "NISN *" : "NISN"} inputMode="numeric" onValueChange={() => resetVerification("nisn")} after={verificationControl("nisn")} />
                         {nisMode === "manual" && (
                           <Button type="button" size="sm" variant="outline" disabled={!canGenerateManual || isGeneratingNis} onClick={handleGenerateNisClick}>

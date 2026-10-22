@@ -4,6 +4,7 @@
  * siswa.id tetap identitas permanen; riwayat NIS per lembaga disimpan di
  * siswa_tahun_masuk_departemen.
  */
+import { z } from "zod";
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware, requireAcademicDepartment, requireContext } from "./auth";
 import { createAdminClient } from "./supabase";
@@ -17,11 +18,17 @@ export interface GenerateNisInput {
    * Format NIS baru tidak bergantung pada kelas/rombel.
    */
   kelas_id?: string;
+  tujuan?: "current" | "spmb";
+  nis_manual?: string;
 }
 
 export const generateNis = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .inputValidator((d: GenerateNisInput) => d)
+  .inputValidator((d: GenerateNisInput) => z.object({
+    siswa_id: z.string().uuid(), departemen_id: z.string().uuid(), angkatan_id: z.string().uuid(),
+    tujuan: z.enum(["current", "spmb"]).optional(),
+    nis_manual: z.string().trim().min(1).max(16).optional(),
+  }).parse(d))
   .handler(async ({ data, context }): Promise<{ success: true; nis: string }> => {
     const admin = createAdminClient();
     const { siswa_id, departemen_id, angkatan_id } = data;
@@ -36,12 +43,14 @@ export const generateNis = createServerFn({ method: "POST" })
       throw new Error("siswa_id, departemen_id, dan angkatan_id diperlukan");
     }
 
+    if (data.nis_manual !== undefined && data.tujuan !== "spmb") {
+      throw new Error("Input NIS tujuan harus menggunakan mode SPMB");
+    }
     const { data: nis, error } = await (admin as any).rpc(
-      "akademik_generate_nis_current",
+      data.tujuan === "spmb" ? "akademik_generate_nis_spmb" : "akademik_generate_nis_current",
       {
-        p_siswa_id: siswa_id,
-        p_departemen_id: departemen_id,
-        p_angkatan_id: angkatan_id,
+        p_siswa_id: siswa_id, p_departemen_id: departemen_id, p_angkatan_id: angkatan_id,
+        ...(data.tujuan === "spmb" ? { p_nis: data.nis_manual ?? null } : {}),
       },
     );
 

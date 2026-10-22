@@ -60,6 +60,7 @@ export async function generateNISViaEdgeFunction(payload: {
   departemen_id: string;
   angkatan_id: string;
   kelas_id?: string;
+  tujuan?: "current" | "spmb";
 }): Promise<{ nis: string }> {
   const data = await generateNis({ data: payload });
   return { nis: data.nis };

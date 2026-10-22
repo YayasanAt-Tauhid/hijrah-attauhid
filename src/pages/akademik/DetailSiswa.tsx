@@ -21,6 +21,18 @@ export default function DetailSiswa() {
   const { data: detailRaw } = useSiswaDetailOrangtua(id || "");
   const detail = detailRaw as Record<string, any> | null | undefined;
 
+  const { data: nisPerLembaga = [] } = useQuery({
+    queryKey: ["siswa_nis_departemen", id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("siswa_tahun_masuk_departemen")
+        .select("departemen_id,nis,departemen:departemen_id(nama)")
+        .eq("siswa_id", id!).order("tahun_masuk");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id,
+  });
+
   const { data: nilaiList = [] } = useQuery({
     queryKey: ["penilaian", id],
     queryFn: async () => {
@@ -159,6 +171,11 @@ export default function DetailSiswa() {
             <CardContent>
               <InfoRow label="Nama Lengkap" value={siswa.nama} />
               <InfoRow label="NIS" value={siswa.nis || "-"} />
+              {nisPerLembaga.filter(item => item.nis && item.departemen_id !== siswa.departemen_id).map(item => (
+                <InfoRow key={item.departemen_id}
+                  label={"NIS " + (item.departemen?.nama || "Lembaga") + (item.departemen_id === detail?.spmb_departemen_tujuan_id ? " (tujuan)" : "")}
+                  value={item.nis} />
+              ))}
               <InfoRow label="NISN" value={siswa.nisn || "-"} />
               <InfoRow label="NIK Hijrah" value={detail?.nik || "-"} />
               <InfoRow label="NIK Dapodik" value={detail?.nik_dapodik || "-"} />
