@@ -270,13 +270,12 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
     }
     if (kelas_id && tanpa_kelas) throw new Error("Filter kelas tidak valid");
 
-    // Filter kelas bersifat opsional. Sumber tunggakan adalah tagihan,
-    // bukan tabel kelas_siswa: calon siswa lulus SPMB bisa belum ditempatkan.
-    // Bila kelas dipilih, batasi berdasarkan penempatan aktif seperti sebelumnya.
+    // Batasi volume untuk laporan satu kelas, tetapi jangan membuang
+    // penempatan TA lampau yang sudah tidak aktif. TA dicocokkan per tagihan.
     let selectedClassStudentIds: Set<string> | null = null;
     if (kelas_id) {
       const { data: matching, error } = await admin.from("kelas_siswa")
-        .select("siswa_id").eq("aktif", true).eq("kelas_id", kelas_id);
+        .select("siswa_id").eq("kelas_id", kelas_id);
       if (error) throw new Error("Gagal mengambil siswa kelas: " + error.message);
       selectedClassStudentIds = new Set((matching || []).map(row => row.siswa_id));
       if (!selectedClassStudentIds.size) return { rows: [], per_tanggal: perTanggal };
@@ -298,6 +297,9 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
       bulan: number | null;
       nominal: number | string | null;
       jatuh_tempo: string | null;
+      tanggal_pengakuan: string | null;
+      tahun_akademik_id: string | null;
+      kelas_id: string | null;
       jenis_pembayaran?: { departemen_id: string | null } | null;
     };
     const tagihanRows: BatchTagihanRow[] = [];
@@ -305,17 +307,16 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
     for (let from = 0; ; from += pageSize) {
       let tagihanQuery = admin
         .from("tagihan")
-.select("id, siswa_id, bulan, nominal, jatuh_tempo, jenis_pembayaran:jenis_id(departemen_id)")
+        .select("id, siswa_id, bulan, nominal, jatuh_tempo, tanggal_pengakuan, tahun_akademik_id, kelas_id, jenis_pembayaran:jenis_id(departemen_id)")
         .eq("jenis_id", jenis_id)
         .eq("tahun_ajaran_id", tahun_ajaran_id)
         .not("status", "in", `(${STATUS_SELESAI.join(",")})`)
-        .order("id", { ascending: true })
-        .range(from, from + pageSize - 1);
+        .order("id", { ascending: true });
       if (bulan_list && bulan_list.length > 0) {
         tagihanQuery = tagihanQuery.in("bulan", bulan_list);
       }
 
-      const { data: page, error: tErr } = await tagihanQuery;
+      const { data: page, error: tErr } = await tagihanQuery.range(from, from + pageSize - 1);
       if (tErr) throw new Error("Gagal mengambil data tagihan: " + tErr.message);
       for (const row of page || []) {
         if (row.siswa_id && (!selectedClassStudentIds || selectedClassStudentIds.has(row.siswa_id))) {
@@ -326,22 +327,28 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
     }
     if (!tagihanRows.length) return { rows: [], per_tanggal: perTanggal };
 
+    const { data: academicYears, error: academicError } = await admin.from("tahun_ajaran")
+      .select("id,tanggal_mulai,tanggal_selesai");
+    if (academicError) throw new Error("Gagal membaca tahun ajaran tagihan: " + academicError.message);
+    type Placement = {
+      siswa_id: string; kelas_id: string | null; tahun_ajaran_id: string | null; aktif: boolean | null;
+      kelas: { nama: string | null; departemen_id: string | null } | null;
+    };
+    const placements = new Map<string, Placement[]>();
+
     // Ambil identitas siswa dari tagihan yang benar-benar ada. Hindari
     // menganggap calon yang belum lulus (atau mantan siswa) sebagai penunggak.
     const studentIds = [...new Set(tagihanRows.map(row => row.siswa_id).filter((id): id is string => Boolean(id)))];
     const siswaMeta = new Map<string, KelasSiswaRow>();
     const studentStates = new Map<string, string>();
     const passedStudents = new Set<string>();
-    // Pendaftaran internal yang sudah diterima tetapi belum berpindah jenjang
-    // masih mempunyai kelas lama; untuk tagihan jenjang tujuan kelasnya kosong.
-    const pendingInternalTarget = new Map<string, string>();
     for (let offset = 0; offset < studentIds.length; offset += 100) {
       const ids = studentIds.slice(offset, offset + 100);
       const [studentResult, classResult, detailResult] = await Promise.all([
         admin.from("siswa").select("id,nama,nis,status").in("id", ids),
         admin.from("kelas_siswa")
-          .select("siswa_id,kelas:kelas_id(nama,departemen_id)")
-          .eq("aktif", true).in("siswa_id", ids),
+          .select("siswa_id,kelas_id,tahun_ajaran_id,aktif,kelas:kelas_id(nama,departemen_id)")
+          .in("siswa_id", ids).order("aktif", { ascending: false }).order("id", { ascending: true }),
         (admin as any).from("siswa_detail")
           .select("siswa_id,spmb_siswa_internal,spmb_status_pendaftaran,spmb_tanggal_aktivasi,spmb_departemen_tujuan_id").in("siswa_id", ids)
           .eq("spmb_status_kelulusan", "lulus")
@@ -357,15 +364,11 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
       for (const row of detailResult.data || []) {
         if (!row.siswa_id) continue;
         passedStudents.add(row.siswa_id);
-        if (row.spmb_siswa_internal === true &&
-          row.spmb_status_pendaftaran === "diterima" &&
-          !row.spmb_tanggal_aktivasi && row.spmb_departemen_tujuan_id) {
-          pendingInternalTarget.set(row.siswa_id, row.spmb_departemen_tujuan_id);
-        }
       }
       for (const row of classResult.data || []) {
         const meta = siswaMeta.get(row.siswa_id);
         if (meta && !meta.kelas) meta.kelas = row.kelas as KelasSiswaRow["kelas"];
+        placements.set(row.siswa_id, [...(placements.get(row.siswa_id) || []), row as Placement]);
       }
     }
     const siswaIdSet = new Set(studentIds.filter(id =>
@@ -445,17 +448,26 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
 
       const ks = siswaMeta.get(t.siswa_id!);
       if (!ks || !siswaIdSet.has(t.siswa_id!)) continue;
-      const pendingTargetDept = pendingInternalTarget.get(t.siswa_id!);
-      const awaitingTargetClass = !!pendingTargetDept &&
-        pendingTargetDept === t.jenis_pembayaran?.departemen_id;
-      if (kelas_id && awaitingTargetClass) continue;
-      if (tanpa_kelas && ks.kelas && !awaitingTargetClass) continue;
+      // Tahun Buku bukan tahun ajaran akademik. Penempatan diinput belakangan
+      // tetap berlaku untuk seluruh periode TA tersebut, termasuk SPP Juli.
+      // Histori tidak boleh mengikuti kelas aktif pada TA lain.
+      const serviceDate = t.tanggal_pengakuan || t.jatuh_tempo;
+      const matchingYears = (academicYears || []).filter(year => serviceDate &&
+        serviceDate >= year.tanggal_mulai && serviceDate <= year.tanggal_selesai);
+      const academicId = t.tahun_akademik_id || (matchingYears.length === 1 ? matchingYears[0].id : null);
+      const deptId = t.jenis_pembayaran?.departemen_id;
+      if (data.departemen_id && deptId && deptId !== data.departemen_id) continue;
+      const placement = (placements.get(t.siswa_id!) || []).find(row =>
+        row.kelas && (!deptId || row.kelas.departemen_id === deptId) &&
+        (t.kelas_id ? row.kelas_id === t.kelas_id : Boolean(academicId) && row.tahun_ajaran_id === academicId));
+      if (kelas_id && placement?.kelas_id !== kelas_id) continue;
+      if (tanpa_kelas && placement) continue;
 
       rows.push({
         siswa_id: t.siswa_id!,
         nis: ks.siswa?.nis ?? null,
         nama: ks.siswa?.nama ?? null,
-        kelas: awaitingTargetClass ? "Belum ditempatkan" : (ks.kelas?.nama ?? "Belum ditempatkan"),
+        kelas: placement?.kelas?.nama ?? "Belum ditempatkan",
         bulan_tunggak: [t.bulan ?? 0],
         tagihan_tunggak: [{ tagihan_id: t.id, bulan: t.bulan ?? 0, sisa }],
         total: sisa,
