@@ -1,3 +1,11 @@
+## NIS asal kembali terlihat di SPMB (22 Oktober 2026)
+PR161 menampilkan hanya NIS tujuan pada daftar SPMB sehingga NIS asal 52
+pendaftar internal tidak terlihat, padahal nomor di database tetap ada.
+NIS tujuan tetap menjadi nilai untuk tindakan penerimaan/aktivasi; NIS asal
+ditampilkan terpisah agar tidak keliru dianggap memenuhi NIS jenjang tujuan.
+Pencarian dan ekspor memuat kedua nomor. Tidak ada generator yang dipanggil,
+backfill, penggantian nomor, ataupun perubahan database pada perbaikan tampilan ini.
+
 ## NIS sebelum kelas dan identitas portal (22 Oktober 2026)
 NIS tujuan SPMB disimpan pada riwayat per lembaga sebelum aktivasi, sehingga
 siswa yang masih SD tidak dipindahkan sekolah/kelas hanya untuk memperoleh NIS SMP.

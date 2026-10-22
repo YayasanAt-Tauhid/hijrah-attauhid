@@ -1,3 +1,4 @@
+import { SpmbNisDisplay } from "@/components/akademik/SpmbNisDisplay";
 import { nisHistoryClient } from "@/lib/nisHistory";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "@/lib/router-compat";
@@ -57,13 +58,6 @@ import { toast } from "sonner";
 import { AdminSpmbRegistrationDialog } from "@/components/akademik/AdminSpmbRegistrationDialog";
 import { spmbAdminUpdateRegistrantName, spmbAdminUpdateRegistrationMethod } from "@/server/pmb";
 
-function diagnosaNIS(row: Record<string, unknown>): { alasan?: "no_dept_angkatan" } {
-  const departemenId = row.departemen_id as string | null;
-  const angkatanId = row.angkatan_id as string | null;
-  if (!departemenId || !angkatanId) return { alasan: "no_dept_angkatan" };
-  return {};
-}
-
 function departemenPerluAsrama(dept: any): boolean {
   const kode = (dept?.kode || "").trim().toUpperCase();
   const nama = (dept?.nama || "").trim().toUpperCase();
@@ -120,7 +114,9 @@ const DEFAULT_FILTERS: SpmbFilterState = {
 
 const SPMB_EXPORT_COLUMNS = [
   { key: "nama", label: "Nama Siswa" },
-  { key: "nis", label: "NIS" },
+  { key: "_academicNis", label: "NIS Lembaga Saat Ini" },
+  { key: "_academicLembagaNama", label: "Lembaga Saat Ini" },
+  { key: "nis", label: "NIS Tujuan" },
   { key: "nisn", label: "NISN" },
   { key: "_exportNik", label: "NIK" },
   { key: "_exportJenisKelamin", label: "Jenis Kelamin" },
@@ -482,6 +478,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           angkatan_id: targetCohortId,
           departemen: targetDept,
           angkatan: targetCohort,
+          _academicNis: s.nis || null,
           _academicStatus: s.status,
           _academicDepartemenId: s.departemen_id,
           _academicLembagaNama: s.departemen?.nama || "",
@@ -1300,7 +1297,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           title="Buka detail pendaftaran SPMB"
         >
           <span className="block max-w-[14rem] whitespace-normal">{String(value || "-")}</span>
-          <span className="mt-1 block text-xs font-normal text-muted-foreground">NIS: {String(row.nis || "Belum ada")} · {row.jenis_kelamin === "L" ? "L" : "P"}</span>
+          <span className="mt-1 block text-xs font-normal text-muted-foreground"><SpmbNisDisplay row={row} />{row.jenis_kelamin === "L" ? "L" : "P"}</span>
         </button>
       ),
     },
@@ -1322,23 +1319,9 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
     },
     {
       key: "nis",
-      label: "NIS",
+      label: "NIS asal / tujuan",
       sortable: true,
-      render: (value, row) => {
-        if (value) return <span className="font-mono text-xs">{value as string}</span>;
-        if (row.status === "diterima") {
-          const { alasan } = diagnosaNIS(row);
-          return (
-            <span
-              className="inline-flex cursor-help items-center gap-1 text-xs text-warning"
-              title={alasan === "no_dept_angkatan" ? "Lembaga/angkatan belum diisi" : "NIS dapat dibuat sebelum penempatan kelas"}
-            >
-              <AlertTriangle className="h-3 w-3" />Belum ada
-            </span>
-          );
-        }
-        return <span className="text-xs text-muted-foreground">-</span>;
-      },
+      render: (_, row) => <span className="text-xs"><SpmbNisDisplay row={row} /></span>,
     },
     { key: "jenis_kelamin", label: "JK", sortable: true, render: (value) => value === "L" ? "L" : "P" },
     { key: "_lembagaNama", label: "Tujuan", sortable: true, render: (value, row) => <div className="space-y-1"><p className="font-medium">{String(value || "-")}</p><p className="text-xs text-muted-foreground">Angkatan {String(row._angkatanNama || "-")}</p>{row._spmbAsrama !== "-" && <p className="text-xs text-muted-foreground">{String(row._spmbAsrama)}</p>}</div> },
@@ -1816,7 +1799,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       <DataTable
         key={JSON.stringify(filters)}
         columns={visibleColumns}
-        searchKeys={["nama", "nis", "_spmbJenisPendaftarLabel", "_lembagaNama", "_angkatanNama", "_spmbInputer"]}
+        searchKeys={["nama", "nis", "_academicNis", "_spmbJenisPendaftarLabel", "_lembagaNama", "_angkatanNama", "_spmbInputer"]}
         horizontalNavigation
         actions={columnPicker}
         data={sortedCalonList as Record<string, unknown>[]}
