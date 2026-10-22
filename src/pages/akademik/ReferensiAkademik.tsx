@@ -1,3 +1,4 @@
+import { deleteWithApproval, deletionMessage } from "@/lib/dataDeletion";
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -90,8 +91,8 @@ function TabMapel({ canEdit }: { canEdit: boolean }) {
   });
 
   const deleteMut = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("mata_pelajaran").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["mata_pelajaran_all"] }); toast.success("Berhasil dihapus"); },
+    mutationFn: async (id: string) => deleteWithApproval("mata_pelajaran", id),
+    onSuccess: (result) => { qc.invalidateQueries({ queryKey: ["mata_pelajaran_all"] }); toast.success(deletionMessage(result, "Berhasil dihapus")); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -203,8 +204,8 @@ function TabKelas({ canEdit }: { canEdit: boolean }) {
   });
 
   const deleteMut = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("kelas").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["kelas_all_ref"] }); toast.success("Dihapus"); },
+    mutationFn: async (id: string) => deleteWithApproval("kelas", id),
+    onSuccess: (result) => { qc.invalidateQueries({ queryKey: ["kelas_all_ref"] }); toast.success(deletionMessage(result, "Dihapus")); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -276,8 +277,8 @@ function TabTingkat({ canEdit }: { canEdit: boolean }) {
   });
 
   const deleteMut = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("tingkat").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tingkat_all_ref"] }); toast.success("Dihapus"); },
+    mutationFn: async (id: string) => deleteWithApproval("tingkat", id),
+    onSuccess: (result) => { qc.invalidateQueries({ queryKey: ["tingkat_all_ref"] }); toast.success(deletionMessage(result, "Dihapus")); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -346,8 +347,8 @@ function TabAngkatan({ canEdit }: { canEdit: boolean }) {
   });
 
   const deleteMut = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("angkatan").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["angkatan"] }); qc.invalidateQueries({ queryKey: ["angkatan_all_ref"] }); toast.success("Dihapus"); },
+    mutationFn: async (id: string) => deleteWithApproval("angkatan", id),
+    onSuccess: (result) => { qc.invalidateQueries({ queryKey: ["angkatan"] }); qc.invalidateQueries({ queryKey: ["angkatan_all_ref"] }); toast.success(deletionMessage(result, "Dihapus")); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -430,14 +431,8 @@ function TabTahunAjaran({ canEdit }: { canEdit: boolean }) {
   });
 
   const deleteMut = useMutation({
-    mutationFn: async (id: string) => {
-      // Cek apakah sudah ada kelas_siswa
-      const { data: cek } = await supabase.from("kelas_siswa").select("id").eq("tahun_ajaran_id", id).limit(1);
-      if (cek && cek.length > 0) throw new Error("Tahun ajaran ini tidak bisa dihapus karena sudah memiliki data kelas siswa.");
-      const { error } = await supabase.from("tahun_ajaran").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tahun_ajaran_all_ref"] }); qc.invalidateQueries({ queryKey: ["tahun_ajaran"] }); toast.success("Tahun ajaran berhasil dihapus"); },
+    mutationFn: async (id: string) => deleteWithApproval("tahun_ajaran", id),
+    onSuccess: (result) => { qc.invalidateQueries({ queryKey: ["tahun_ajaran_all_ref"] }); qc.invalidateQueries({ queryKey: ["tahun_ajaran"] }); toast.success(deletionMessage(result, "Tahun ajaran berhasil dihapus")); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -541,8 +536,8 @@ function TabSemester({ canEdit }: { canEdit: boolean }) {
   });
 
   const deleteMut = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("semester").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["semester"] }); qc.invalidateQueries({ queryKey: ["semester_all_ref"] }); toast.success("Dihapus"); },
+    mutationFn: async (id: string) => deleteWithApproval("semester", id),
+    onSuccess: (result) => { qc.invalidateQueries({ queryKey: ["semester"] }); qc.invalidateQueries({ queryKey: ["semester_all_ref"] }); toast.success(deletionMessage(result, "Dihapus")); },
     onError: (e: any) => toast.error(e.message),
   });
 

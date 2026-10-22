@@ -1,3 +1,4 @@
+import { deleteWithApproval, deletionMessage } from "@/lib/dataDeletion";
 /**
  * Hooks: diskon/keringanan SPP
  *
@@ -200,13 +201,10 @@ export function useUpdateSkemaDiskon() {
 export function useDeleteSkemaDiskon() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("skema_diskon").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
+    mutationFn: async (id: string) => deleteWithApproval("skema_diskon", id),
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["skema_diskon"] });
-      toast.success("Skema diskon dihapus");
+      toast.success(deletionMessage(result, "Skema diskon dihapus"));
     },
     onError: (e: Error) =>
       toast.error(

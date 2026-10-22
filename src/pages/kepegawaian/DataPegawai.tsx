@@ -1,3 +1,4 @@
+import { deleteWithApproval, deletionMessage } from "@/lib/dataDeletion";
 import { useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -159,13 +160,10 @@ export default function DataPegawai() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("pegawai").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
+    mutationFn: async (id: string) => deleteWithApproval("pegawai", id),
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["pegawai_list"] });
-      toast.success("Pegawai berhasil dihapus");
+      toast.success(deletionMessage(result, "Pegawai berhasil dihapus"));
     },
     onError: (e: any) => toast.error(e.message),
   });

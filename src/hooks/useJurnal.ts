@@ -1,3 +1,4 @@
+import { deleteWithApproval, deletionMessage } from "@/lib/dataDeletion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -65,19 +66,10 @@ export function useUpdateAkunRekening() {
 export function useDeleteAkunRekening() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { data: used } = await supabase
-        .from("jurnal_detail")
-        .select("id")
-        .eq("akun_id", id)
-        .limit(1);
-      if (used && used.length > 0) throw new Error("Akun ini sudah digunakan dalam jurnal dan tidak bisa dihapus");
-      const { error } = await supabase.from("akun_rekening").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
+    mutationFn: async (id: string) => deleteWithApproval("akun_rekening", id),
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["akun_rekening"] });
-      toast.success("Akun rekening berhasil dihapus");
+      toast.success(deletionMessage(result, "Akun rekening berhasil dihapus"));
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -381,28 +373,10 @@ export function useUpdateJurnal() {
 export function useDeleteJurnal() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { data: existing } = await supabase
-        .from("jurnal")
-        .select("status, nomor, keterangan, tanggal, total_debit, departemen_id")
-        .eq("id", id)
-        .single();
-      if ((existing as any)?.status === "posted") throw new Error("Jurnal yang sudah diposting tidak bisa dihapus");
-      const { error } = await supabase.from("jurnal").delete().eq("id", id);
-      if (error) throw error;
-
-      await logAuditKeuangan({
-        tabel_sumber: "jurnal",
-        record_id: id,
-        aksi: "DELETE",
-        data_lama: existing,
-        keterangan: `Hapus jurnal ${(existing as any)?.nomor || id}`,
-        departemen_id: (existing as any)?.departemen_id,
-      });
-    },
-    onSuccess: () => {
+    mutationFn: async (id: string) => deleteWithApproval("jurnal", id),
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["jurnal"] });
-      toast.success("Jurnal berhasil dihapus");
+      toast.success(deletionMessage(result, "Jurnal berhasil dihapus"));
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -714,13 +688,10 @@ export function useCreatePengaturanAkun() {
 export function useDeletePengaturanAkun() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("pengaturan_akun").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
+    mutationFn: async (id: string) => deleteWithApproval("pengaturan_akun", id),
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["pengaturan_akun"] });
-      toast.success("Setting akun berhasil dihapus");
+      toast.success(deletionMessage(result, "Setting akun berhasil dihapus"));
     },
     onError: (e: any) => toast.error(e.message),
   });
