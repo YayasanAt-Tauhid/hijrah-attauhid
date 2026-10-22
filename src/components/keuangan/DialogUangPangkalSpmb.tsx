@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -38,6 +38,8 @@ export function DialogUangPangkalSpmb({ siswa, onClose }: { siswa: SpmbBillingCa
       return data as unknown as UangPangkalPreview;
     },
   });
+  useEffect(() => { setConfirmed(false); }, [preview?.preview_hash]);
+
   const bruto = brutoKhusus === null ? Number(preview?.verifikasi?.nominal_bruto ?? preview?.bruto_acuan ?? 0) : Number(brutoKhusus);
   const discount = Number(preview?.verifikasi?.keringanan_diajukan ?? preview?.keringanan_alumni ?? 0);
   const changed = Boolean(preview && bruto !== Number(preview.bruto_acuan));
