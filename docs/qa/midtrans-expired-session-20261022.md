@@ -8,7 +8,7 @@ Checkout also closes expired blockers through this verified path before deciding
 
 ## Validation
 
-- Existing 573 tests plus 17 new regression tests passed (590 total across local runs).
+- Existing 573 tests plus 18 new regression tests passed (591 total across local runs).
 - Production build completed successfully.
 - Real Midtrans Sandbox test reproduced the exact expiry error: Core 404 → cancel 400 expiry validation → Core 404 → same-order replacement 201 → cancellation 200 with `canceled_at` → Core 404.
 - Regression coverage includes an issued payment code, settlement before/during recovery, database write races, replacement cancellation failure, metadata preservation, and active sessions from another parent.

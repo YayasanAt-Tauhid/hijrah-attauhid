@@ -115,6 +115,14 @@ describe("expired uncharged Snap sessions", () => {
     ]),persist);
     expect(persist).toHaveBeenCalledWith("recovered",expect.objectContaining({expiry:expect.objectContaining({duration:5})}),expect.any(String));
   });
+  it("recovers after a previous replacement invalidated a token before persistence", async () => {
+    const persist = vi.fn();
+    await closeGatewaySession(expiredSession,"key",vi.fn(),mockGateway([
+      [200,noCore],[404,{error_messages:["token not found"]}],[200,noCore],
+      [201,{token:"recovered-after-crash"}],[200,success],[200,noCore],
+    ]),persist);
+    expect(persist).toHaveBeenCalledWith("recovered-after-crash",expect.any(Object),expect.any(String));
+  });
   it("does not release the bill when replacement revocation fails", async () => {
     await expect(closeGatewaySession(expiredSession,"key",vi.fn(),mockGateway([
       [200,noCore],[400,expiredCancel],[200,noCore],[201,{token:"replacement"}],

@@ -100,10 +100,12 @@ export async function closeGatewaySession(
     cancellation = await cancel();
   }
   // Midtrans may reject cancellation of an expired uncharged token with an
-  // expiry-validation error. Rotate that same order, persist, then revoke it.
+  // expiry-validation error. A missing token can also follow a crashed recovery.
+  // Rotate that same uncharged order, persist, then revoke it.
   // An error alone never releases a bill; successful revocation is still needed.
-  if (message(cancellation.data).includes("expiry must be greater than the current time") &&
-      persistReplacement && session.metadata?.snap_request) {
+  const needsRecovery = message(cancellation.data).includes("expiry must be greater than the current time") ||
+    message(cancellation.data).includes("token not found");
+  if (needsRecovery && persistReplacement && session.metadata?.snap_request) {
     await replaceUnchargedSession();
     cancellation = await cancel();
   }
