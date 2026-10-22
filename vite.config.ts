@@ -3,6 +3,7 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import path from "path";
+import { securityHeaders } from "./src/server/httpSecurity";
 
 // https://tanstack.com/start
 export default defineConfig({
@@ -27,6 +28,13 @@ export default defineConfig({
     nitro({
       preset: process.env.SERVER_PRESET ?? "cloudflare-module",
       compatibilityDate: "2026-07-09",
+      plugins: ["./src/server/plugins/securityHeaders.ts"],
+      routeRules: {
+        "/**": {
+          headers: securityHeaders,
+        },
+        "/docs/**": { headers: { "X-Robots-Tag": "noindex, nofollow, noarchive" } },
+      },
     }),
   ],
 });

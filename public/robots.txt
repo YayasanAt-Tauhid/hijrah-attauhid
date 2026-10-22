@@ -1,8 +1,6 @@
 User-agent: *
 Allow: /
 Disallow: /api/
-Disallow: /docs/Hijrah-Integration-v1.postman_collection.json
-Disallow: /docs/openapi-integration-v1.yaml
-Disallow: /docs/integration-api.md
+Disallow: /docs/
 
 Sitemap: https://app.hijrah-attauhid.or.id/sitemap.xml
