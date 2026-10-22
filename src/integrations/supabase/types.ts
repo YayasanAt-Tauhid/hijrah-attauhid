@@ -5006,6 +5006,14 @@ export type Database = {
       }
     }
     Functions: {
+      spmb_readiness: {
+        Args: { p_siswa_id: string }
+        Returns: Json
+      }
+      can_manage_akademik_departemen: {
+        Args: { _user_id: string; _departemen_id: string }
+        Returns: boolean
+      }
       terbitkan_spp_awal_spmb: {
         Args: {
           p_siswa_id: string
