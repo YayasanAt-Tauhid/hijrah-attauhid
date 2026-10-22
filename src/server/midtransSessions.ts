@@ -23,36 +23,23 @@ export async function closeStoredSession(transaction: any, reason: string) {
   const key = readEnv("MIDTRANS_SERVER_KEY");
   if (!key) throw new Error("MIDTRANS_SERVER_KEY belum dikonfigurasi");
   try {
-    if (!transaction.snap_token && transaction.metadata?.snap_request &&
-        Date.now() - Date.parse(transaction.created_at) > 90000) {
-      const status = await readGatewayStatus(transaction.order_id, key);
-      if (isGatewayPaid(status)) {
-        await processGatewayPayment(status!);
-        throw new Error("Pembayaran online sudah berhasil. Muat ulang tagihan.");
-      }
-      if (!status) {
-        // Midtrans documents that recreating an uncharged order invalidates
-        // the old token. The replacement token is then canceled, not presented.
-        const base = key.startsWith("SB-") ? "https://app.sandbox.midtrans.com" : "https://app.midtrans.com";
-        const response = await fetch(base + "/snap/v1/transactions", {
-          method: "POST", headers: { "Content-Type": "application/json", Authorization: `Basic ${btoa(key + ":")}` },
-          body: JSON.stringify(transaction.metadata.snap_request), signal: AbortSignal.timeout(12000),
-        });
-        const recovered = await response.json();
-        if (!response.ok || !recovered.token) throw new Error("Sesi Midtrans belum dapat dipulihkan. Pembayaran baru tetap ditahan.");
-        const { data: saved, error: saveError } = await admin.from("transaksi_midtrans")
-          .update({ snap_token: recovered.token }).eq("id", transaction.id).eq("status", "pending")
-          .is("gateway_closed_at", null).select("id");
-        if (saveError || !saved?.length) throw new Error("Status sesi berubah. Silakan muat ulang tagihan.");
-        transaction = { ...transaction, snap_token: recovered.token };
-      }
-    }
-    await closeGatewaySession(transaction, key, processGatewayPayment);
+    await closeGatewaySession(transaction, key, processGatewayPayment, fetch,
+      async (token, snapRequest, recoveredAt) => {
+        const metadata = { ...(transaction.metadata || {}), snap_request: snapRequest, snap_recovered_at: recoveredAt };
+        let query = admin.from("transaksi_midtrans")
+          .update({ snap_token: token, metadata }).eq("id", transaction.id)
+          .neq("status", "paid").is("paid_at", null).is("gateway_closed_at", null);
+        query = transaction.snap_token ? query.eq("snap_token", transaction.snap_token) : query.is("snap_token", null);
+        const { data: saved, error: saveError } = await query.select("id");
+        if (saveError) throw saveError;
+        if (!saved?.length) throw new Error("Status sesi berubah. Silakan muat ulang tagihan.");
+        transaction = { ...transaction, snap_token: token, metadata };
+      });
     const { data, error } = await admin.from("transaksi_midtrans").update({
       status: "expired", gateway_closed_at: new Date().toISOString(),
       reconciliation_checked_at: new Date().toISOString(), reconciliation_error: null,
       metadata: { ...(transaction.metadata || {}), session_closure: { reason, source: "automatic", closed_at: new Date().toISOString() } },
-    }).eq("id", transaction.id).neq("status", "paid").is("paid_at", null).is("gateway_closed_at", null).select("id");
+    }).eq("id", transaction.id).eq("snap_token", transaction.snap_token).neq("status", "paid").is("paid_at", null).is("gateway_closed_at", null).select("id");
     if (error) throw error;
     if (!data?.length) throw new Error("Status transaksi online berubah. Muat ulang tagihan.");
   } catch (error) {

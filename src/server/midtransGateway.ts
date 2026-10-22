@@ -4,6 +4,7 @@ export interface GatewaySession {
   order_id: string;
   snap_token: string | null;
   created_at: string;
+  metadata?: { snap_request?: GatewayPayload; snap_recovered_at?: string };
 }
 const paid = (p: GatewayPayload | null) => p?.transaction_status === "settlement" ||
   (p?.transaction_status === "capture" && p?.fraud_status === "accept");
@@ -14,9 +15,10 @@ export const isGatewayPaid = paid;
 function endpoint(key: string, kind: "api" | "app") {
   return `https://${kind}${key.startsWith("SB-") ? ".sandbox" : ""}.midtrans.com`;
 }
-async function request(key: string, url: string, method: string, fetcher: typeof fetch) {
+async function request(key: string, url: string, method: string, fetcher: typeof fetch, body?: GatewayPayload) {
   const response = await fetcher(url, {
-    method, headers: { Authorization: `Basic ${btoa(key + ":")}`, Accept: "application/json" },
+    method, headers: { Authorization: `Basic ${btoa(key + ":")}`, Accept: "application/json", "Content-Type": "application/json" },
+    ...(body ? { body: JSON.stringify(body) } : {}),
     signal: AbortSignal.timeout(12000),
   });
   const data = await response.json() as GatewayPayload;
@@ -37,6 +39,7 @@ export async function closeGatewaySession(
   session: GatewaySession, key: string,
   processPaid: (payload: GatewayPayload) => Promise<void>,
   fetcher = fetch,
+  persistReplacement?: (token: string, snapRequest: GatewayPayload, recoveredAt: string) => Promise<void>,
 ): Promise<void> {
   let state = await readGatewayStatus(session.order_id, key, fetcher);
   async function rejectPaid() {
@@ -46,8 +49,38 @@ export async function closeGatewaySession(
     }
   }
   await rejectPaid();
-  if (!session.snap_token) throw new Error("Sesi pembayaran sedang dibuat atau perlu diperiksa. Silakan coba lagi.");
-  const snapUrl = `${endpoint(key, "app")}/snap/v1/transactions/${encodeURIComponent(session.snap_token)}/cancel`;
+  // Re-creating an uncharged order invalidates the previous Snap token. Never
+  // do this if Core has a transaction (including a pending VA/QR payment).
+  async function replaceUnchargedSession() {
+    state = await readGatewayStatus(session.order_id, key, fetcher);
+    await rejectPaid();
+    const savedRequest = session.metadata?.snap_request;
+    if (state || !persistReplacement ||
+        savedRequest?.transaction_details?.order_id !== session.order_id) {
+      throw new Error("Sesi pembayaran lama belum dapat dipulihkan. Pembayaran baru ditahan; silakan coba lagi.");
+    }
+    const now = new Date();
+    // The stored absolute expiry may already be in the past. A short-lived
+    // replacement is used only for revocation, never shown to the customer.
+    const snapRequest = { ...savedRequest,
+      expiry: { ...paymentExpiry(now), unit: "minutes", duration: 5 },
+      page_expiry: { unit: "minutes", duration: 5 },
+    };
+    const recovered = await request(key, `${endpoint(key, "app")}/snap/v1/transactions`, "POST", fetcher, snapRequest);
+    if (!recovered.response.ok || typeof recovered.data.token !== "string" ||
+        !recovered.data.token || recovered.data.token === session.snap_token) {
+      throw new Error("Sesi Midtrans belum dapat dipulihkan. Pembayaran baru tetap ditahan.");
+    }
+    await persistReplacement(recovered.data.token, snapRequest, now.toISOString());
+    session = { ...session, snap_token: recovered.data.token,
+      metadata: { ...session.metadata, snap_request: snapRequest, snap_recovered_at: now.toISOString() } };
+  }
+  if (!session.snap_token) {
+    if (!session.metadata?.snap_request || Date.now() - Date.parse(session.created_at) <= 90000) {
+      throw new Error("Sesi pembayaran sedang dibuat atau perlu diperiksa. Silakan coba lagi.");
+    }
+    await replaceUnchargedSession();
+  }
   const expire = async () => {
     const result = await request(key, `${endpoint(key, "api")}/v2/${encodeURIComponent(session.order_id)}/expire`, "POST", fetcher);
     if (!result.response.ok || !terminal(result.data)) {
@@ -56,7 +89,7 @@ export async function closeGatewaySession(
       if (!terminal(state)) throw new Error("Kode pembayaran lama belum dapat ditutup di Midtrans. Silakan coba lagi.");
     }
   };
-  const cancel = () => request(key, snapUrl, "POST", fetcher);
+  const cancel = () => request(key, `${endpoint(key, "app")}/snap/v1/transactions/${encodeURIComponent(session.snap_token!)}/cancel`, "POST", fetcher);
   let cancellation = await cancel();
   const message = (data: GatewayPayload) =>
     [data.message, data.status_message, ...(Array.isArray(data.error_messages) ? data.error_messages : [])].filter(Boolean).join(" ").toLowerCase();
@@ -66,11 +99,21 @@ export async function closeGatewaySession(
     if (state?.transaction_status === "pending") await expire();
     cancellation = await cancel();
   }
+  // Midtrans may reject cancellation of an expired uncharged token with an
+  // expiry-validation error. A missing token can also follow a crashed recovery.
+  // Rotate that same uncharged order, persist, then revoke it.
+  // An error alone never releases a bill; successful revocation is still needed.
+  const needsRecovery = message(cancellation.data).includes("expiry must be greater than the current time") ||
+    message(cancellation.data).includes("token not found");
+  if (needsRecovery && persistReplacement && session.metadata?.snap_request) {
+    await replaceUnchargedSession();
+    cancellation = await cancel();
+  }
   const alreadyCanceled = message(cancellation.data).includes("token already canceled");
   // Tokens have a documented maximum lifetime of seven days. Only use this
   // fallback for an old missing token; payment codes still need Core expiry.
   const agedMissingToken = message(cancellation.data).includes("token not found") &&
-    Date.now() - Date.parse(session.created_at) > 7 * 24 * 3600 * 1000;
+    Date.now() - Date.parse(session.metadata?.snap_recovered_at || session.created_at) > 7 * 24 * 3600 * 1000;
   if (!(cancellation.response.ok && cancellation.data.canceled_at) && !alreadyCanceled && !agedMissingToken) {
     throw new Error("Sesi pembayaran lama belum dapat ditutup di Midtrans. Pembayaran baru ditahan; silakan coba lagi.");
   }
