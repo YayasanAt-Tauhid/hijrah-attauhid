@@ -1,3 +1,4 @@
+import { nisHistoryClient } from "@/lib/nisHistory";
 import { useParams, useNavigate } from "@/lib/router-compat";
 import { useSiswaDetail, useSiswaDetailOrangtua } from "@/hooks/useSiswa";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,7 +25,7 @@ export default function DetailSiswa() {
   const { data: nisPerLembaga = [] } = useQuery({
     queryKey: ["siswa_nis_departemen", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("siswa_tahun_masuk_departemen")
+      const { data, error } = await nisHistoryClient.from("siswa_tahun_masuk_departemen")
         .select("departemen_id,nis,departemen:departemen_id(nama)")
         .eq("siswa_id", id!).order("tahun_masuk");
       if (error) throw error;

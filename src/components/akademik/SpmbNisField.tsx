@@ -1,6 +1,6 @@
+import { nisHistoryClient } from "@/lib/nisHistory";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { generateNis } from "@/server/nis";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ export function SpmbNisField({ siswaId, departemenId, angkatanId, namaLembaga }:
   const history = useQuery({
     queryKey: ["nis_spmb", siswaId, departemenId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("siswa_tahun_masuk_departemen")
+      const { data, error } = await nisHistoryClient.from("siswa_tahun_masuk_departemen")
         .select("nis").eq("siswa_id", siswaId).eq("departemen_id", departemenId).maybeSingle();
       if (error) throw error;
       return data?.nis || "";

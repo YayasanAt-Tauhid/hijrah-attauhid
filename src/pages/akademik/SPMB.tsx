@@ -1,3 +1,4 @@
+import { nisHistoryClient } from "@/lib/nisHistory";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "@/lib/router-compat";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -428,7 +429,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       const nisByDepartment = new Map<string, string>();
       for (let i = 0; i < siswaIds.length; i += 150) {
         const chunk = siswaIds.slice(i, i + 150);
-        const rows = await fetchAllPages((from, to) => supabase.from("siswa_tahun_masuk_departemen")
+        const rows = await fetchAllPages((from, to) => nisHistoryClient.from("siswa_tahun_masuk_departemen")
           .select("siswa_id,departemen_id,nis").in("siswa_id", chunk).order("id").range(from, to));
         for (const item of rows) {
           if (item.nis) nisByDepartment.set(item.siswa_id + ":" + item.departemen_id, item.nis);
