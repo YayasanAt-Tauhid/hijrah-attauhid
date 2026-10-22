@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import FormSiswa from "./FormSiswa";
+import { generateNis } from "@/server/nis";
 
 const mocks = vi.hoisted(() => {
   const dept = { id: "00000000-0000-4000-8000-000000000001", kode: "SD", nama: "SD" };
   const sizes = [{ jenis: "SETELAN SERAGAM BIRU", ukuran: "S" }, { jenis: "SETELAN SERAGAM (MERAH PUTIH DAN COKLAT)", ukuran: "M" }, { jenis: "SETELAN OLAH RAGA", ukuran: "ALL SIZE" }, { jenis: "", ukuran: "" }];
   return {
     dept, sizes, departments: [dept], empty: [],
-    siswa: { id: "student", nama: "Siswa Uji", jenis_kelamin: "L", status: "aktif", departemen_id: dept.id },
+    siswa: { id: "student", nama: "Siswa Uji", jenis_kelamin: "L", status: "aktif", angkatan_id: "00000000-0000-4000-8000-000000000002", departemen_id: dept.id },
     detail: { ukuran_seragam: sizes, ukuran_baju: "X3L" },
     update: vi.fn().mockResolvedValue(undefined),
     client: { invalidateQueries: vi.fn().mockResolvedValue(undefined), setQueryData: vi.fn() },
@@ -28,6 +29,7 @@ vi.mock("@/hooks/useAkademikData", () => ({
   useTingkat: () => ({ data: mocks.empty }),
   useKelas: () => ({ data: mocks.empty }),
 }));
+vi.mock("@/components/akademik/SpmbNisField", () => ({ SpmbNisField: () => null }));
 vi.mock("@/server/nis", () => ({ generateNis: vi.fn() }));
 vi.mock("@/hooks/useSpmbVerification", () => ({
   useSpmbVerificationState: () => ({}),
@@ -90,4 +92,21 @@ it("siswa tanpa ukuran tersimpan mendapat empat nama bawaan yang bisa disimpan",
     await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1));
     expect(mocks.update.mock.calls[0][0].detail.ukuran_seragam.map((item: { jenis: string }) => item.jenis)).toEqual(["Olah raga", "Putih Merah", "Coklat", "Gamis Biru"]);
   } finally { mocks.detail.ukuran_seragam = original; }
+});
+
+it("membuat NIS tanpa kelas ketika lembaga dan angkatan sudah tersedia", async () => {
+  vi.mocked(generateNis).mockResolvedValue({ success: true, nis: "2602001" });
+  render(<FormSiswa />);
+  const button = await screen.findByRole("button", { name: "Generate NIS", exact: true });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  await waitFor(() => expect(generateNis).toHaveBeenCalledWith({
+    data: expect.objectContaining({
+      siswa_id: "student",
+      departemen_id: mocks.dept.id,
+      angkatan_id: "00000000-0000-4000-8000-000000000002",
+      kelas_id: "",
+    }),
+  }));
+  await waitFor(() => expect(screen.getByLabelText("NIS", { exact: true })).toHaveValue("2602001"));
 });

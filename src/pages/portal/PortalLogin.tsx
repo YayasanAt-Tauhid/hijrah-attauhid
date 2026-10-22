@@ -36,7 +36,8 @@ const signUpSchema = z
     password: z.string().min(8, "Password minimal 8 karakter"),
     konfirmasi: z.string(),
     hubungan: z.enum(["ayah", "ibu", "wali"]),
-    nis: z.string().min(1, "NIS anak wajib diisi"),
+    jenis_identitas: z.enum(["nis", "nisn"]).default("nis"),
+  nis: z.string().min(1, "NIS/NISN anak wajib diisi"),
     nama_siswa: z.string().min(1, "Nama lengkap anak wajib diisi"),
     tanggal_lahir_siswa: z.string().min(1, "Tanggal lahir anak wajib diisi"),
   })
@@ -77,7 +78,7 @@ export default function PortalLogin() {
     resolver: zodResolver(signUpSchema),
     defaultValues: {
       email: "", password: "", konfirmasi: "", hubungan: "wali",
-      nis: "", nama_siswa: "", tanggal_lahir_siswa: "",
+      jenis_identitas: "nis", nis: "", nama_siswa: "", tanggal_lahir_siswa: "",
     },
   });
 
@@ -113,6 +114,7 @@ export default function PortalLogin() {
           password: data.password,
           hubungan: data.hubungan,
           nis: data.nis,
+          jenis_identitas: data.jenis_identitas,
           nama_siswa: data.nama_siswa,
           tanggal_lahir_siswa: data.tanggal_lahir_siswa,
         },
@@ -361,13 +363,29 @@ export default function PortalLogin() {
 
                     <div className="border-t pt-3 space-y-3">
                       <p className="text-xs font-medium text-muted-foreground">Data Anak (untuk verifikasi)</p>
+                      <FormField control={signUpForm.control} name="jenis_identitas" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Gunakan Identitas Anak</FormLabel>
+                          <Select value={field.value} onValueChange={value => {
+                            field.onChange(value);
+                            signUpForm.setValue("nis", "");
+                          }}>
+                            <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="nis">NIS</SelectItem>
+                              <SelectItem value="nisn">NISN</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
                       <FormField
                         control={signUpForm.control}
                         name="nis"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>NIS Anak</FormLabel>
-                            <FormControl><Input placeholder="Nomor Induk Siswa" {...field} /></FormControl>
+                            <FormLabel>{signUpForm.watch("jenis_identitas") === "nisn" ? "NISN Anak" : "NIS Anak"}</FormLabel>
+                            <FormControl><Input placeholder={signUpForm.watch("jenis_identitas") === "nisn" ? "NISN 10 digit" : "Nomor Induk Siswa"} inputMode="numeric" {...field} /></FormControl>
                             <FormMessage />
                           </FormItem>
                         )}

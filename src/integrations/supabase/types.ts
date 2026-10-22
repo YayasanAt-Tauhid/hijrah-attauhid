@@ -3637,6 +3637,7 @@ export type Database = {
           keluarga_id: string | null
           nama: string
           nis: string | null
+          nisn: string | null
           status: string | null
           tanggal_lahir: string | null
           telepon: string | null
@@ -3656,6 +3657,7 @@ export type Database = {
           keluarga_id?: string | null
           nama: string
           nis?: string | null
+          nisn?: string | null
           status?: string | null
           tanggal_lahir?: string | null
           telepon?: string | null
@@ -3675,6 +3677,7 @@ export type Database = {
           keluarga_id?: string | null
           nama?: string
           nis?: string | null
+          nisn?: string | null
           status?: string | null
           tanggal_lahir?: string | null
           telepon?: string | null

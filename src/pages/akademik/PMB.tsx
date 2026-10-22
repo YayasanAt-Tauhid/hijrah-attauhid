@@ -222,13 +222,8 @@ const labelDepartemenSpmb = (d: any) => {
   };
 
   const generateNIS = async (siswaId: string, departemenId: string, angkatanId: string, namaSiswa: string): Promise<boolean> => {
-    const { data: kelasSiswa } = await supabase.from("kelas_siswa").select("kelas_id").eq("siswa_id", siswaId).eq("aktif", true).maybeSingle();
-    if (!kelasSiswa?.kelas_id) {
-      toast.warning(`NIS belum dibuat untuk ${namaSiswa}`, { description: "Siswa belum dimasukkan ke kelas. Atur kelas melalui Data Siswa lalu buat NIS.", duration: 8000 });
-      return false;
-    }
     try {
-      const { nis } = await generateNISViaEdgeFunction({ siswa_id: siswaId, departemen_id: departemenId, angkatan_id: angkatanId, kelas_id: kelasSiswa.kelas_id });
+      const { nis } = await generateNISViaEdgeFunction({ siswa_id: siswaId, departemen_id: departemenId, angkatan_id: angkatanId });
       toast.success(`NIS berhasil dibuat: ${nis}`, { description: namaSiswa });
       return true;
     } catch (e: any) {

@@ -1,3 +1,4 @@
+import { nisHistoryClient } from "@/lib/nisHistory";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "@/lib/router-compat";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -56,7 +57,7 @@ import { toast } from "sonner";
 import { AdminSpmbRegistrationDialog } from "@/components/akademik/AdminSpmbRegistrationDialog";
 import { spmbAdminUpdateRegistrantName, spmbAdminUpdateRegistrationMethod } from "@/server/pmb";
 
-function diagnosaNIS(row: Record<string, unknown>): { alasan?: "no_dept_angkatan" | "no_kelas" } {
+function diagnosaNIS(row: Record<string, unknown>): { alasan?: "no_dept_angkatan" } {
   const departemenId = row.departemen_id as string | null;
   const angkatanId = row.angkatan_id as string | null;
   if (!departemenId || !angkatanId) return { alasan: "no_dept_angkatan" };
@@ -425,6 +426,15 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         siswaRows.push(...(data || []));
       }
       const siswaById = new Map<string, any>(siswaRows.map((row: any) => [row.id, row]));
+      const nisByDepartment = new Map<string, string>();
+      for (let i = 0; i < siswaIds.length; i += 150) {
+        const chunk = siswaIds.slice(i, i + 150);
+        const rows = await fetchAllPages((from, to) => nisHistoryClient.from("siswa_tahun_masuk_departemen")
+          .select("siswa_id,departemen_id,nis").in("siswa_id", chunk).order("id").range(from, to));
+        for (const item of rows) {
+          if (item.nis) nisByDepartment.set(item.siswa_id + ":" + item.departemen_id, item.nis);
+        }
+      }
 
       const targetDeptIds = [...new Set(details.map((d: any) => d.spmb_departemen_tujuan_id).filter(Boolean))];
       const targetCohortIds = [...new Set(details.map((d: any) => d.spmb_angkatan_tujuan_id).filter(Boolean))];
@@ -466,6 +476,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
               : "belum_bayar";
         return [{
           ...s,
+          nis: targetDeptId === s.departemen_id ? s.nis : (nisByDepartment.get(s.id + ":" + targetDeptId) || null),
           status: registrationStatus,
           departemen_id: targetDeptId,
           angkatan_id: targetCohortId,
@@ -827,6 +838,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
     try {
       const { nis } = await generateNISViaEdgeFunction({
         siswa_id: siswaId,
+        tujuan: "spmb",
         departemen_id: departemenId,
         angkatan_id: angkatanId,
       });
@@ -1222,7 +1234,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
                     <DropdownMenuItem disabled={loading || !kesiapan.siap} onSelect={() => handleTerima(row)}>Terima calon murid</DropdownMenuItem>
                     {!kesiapan.siap && <DropdownMenuItem onSelect={() => setReadinessRow(row)} className="text-warning">{row._readiness ? ("Lihat " + kesiapan.kekurangan.length + " kekurangan") : "Pemeriksaan kesiapan belum tersedia"}</DropdownMenuItem>}
                   </>}
-                  {!internalStudent && status === "diterima" && !row.nis && <DropdownMenuItem disabled={loading} onSelect={() => handleBuatNIS(row)}>Buat NIS</DropdownMenuItem>}
+                  {!row.nis && ["calon", "diterima"].includes(status) && <DropdownMenuItem disabled={loading} onSelect={() => handleBuatNIS(row)}>Buat NIS</DropdownMenuItem>}
                   {!internalStudent && status === "diterima" && <DropdownMenuItem disabled={loading || !row.nis || !row._punyaKelas} onSelect={() => handleAktifkan(row)}>Aktifkan murid</DropdownMenuItem>}
                   {internalReadyForActivation && <>
                     <DropdownMenuItem disabled={!activationDateReady} onSelect={() => openInternalActivation(row)}>Aktifkan ke jenjang tujuan</DropdownMenuItem>
@@ -1319,7 +1331,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           return (
             <span
               className="inline-flex cursor-help items-center gap-1 text-xs text-warning"
-              title={alasan === "no_dept_angkatan" ? "Lembaga/angkatan belum diisi" : "Kelas belum diatur"}
+              title={alasan === "no_dept_angkatan" ? "Lembaga/angkatan belum diisi" : "NIS dapat dibuat sebelum penempatan kelas"}
             >
               <AlertTriangle className="h-3 w-3" />Belum ada
             </span>

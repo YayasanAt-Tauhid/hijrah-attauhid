@@ -8,7 +8,7 @@
  *    Google OAuth (role NULL untuk akun baru; legacy bisa masih 'siswa')
  *    agar menjadi role 'ortu' + terhubung ke anaknya.
  *
- * Verifikasi identitas anak memakai kombinasi NIS + nama + tanggal lahir
+ * Verifikasi identitas anak memakai kombinasi NIS/NISN + nama + tanggal lahir
  * (bukan NIS+nama saja) karena NIS & nama relatif mudah diketahui pihak lain
  * (tercetak di rapor/kartu pelajar); tanggal lahir menambah lapisan agar
  * tidak sembarang orang bisa mengklaim siswa yang bukan anaknya. Pesan galat
@@ -16,45 +16,11 @@
  * risiko enumerasi data siswa.
  */
 import { createServerFn } from "@tanstack/react-start";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/integrations/supabase/types";
+import { cariSiswaTervalidasi, type ChildIdentityType } from "./portalChildIdentity";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
 
 const HUBUNGAN_OPTIONS = ["ayah", "ibu", "wali"];
-const GAGAL_VERIFIKASI =
-  "Data siswa tidak ditemukan. Periksa kembali NIS, nama lengkap, dan tanggal lahir anak.";
-
-interface SiswaBrief {
-  id: string;
-  nama: string;
-  nis: string | null;
-}
-
-async function cariSiswaTervalidasi(
-  admin: SupabaseClient<Database>,
-  input: { nis: string; nama: string; tanggal_lahir: string }
-): Promise<SiswaBrief> {
-  const nis = (input.nis || "").trim().replace(/-/g, "");
-  const nama = (input.nama || "").trim();
-  const tanggal_lahir = (input.tanggal_lahir || "").trim();
-  if (!nis || !nama || !tanggal_lahir) {
-    throw new Error("NIS, nama lengkap, dan tanggal lahir anak wajib diisi");
-  }
-
-  const { data } = await admin
-    .from("siswa")
-    .select("id, nama, nis")
-    .eq("nis", nis)
-    .eq("tanggal_lahir", tanggal_lahir)
-    .maybeSingle();
-
-  if (!data || data.nama.trim().toLowerCase() !== nama.toLowerCase()) {
-    throw new Error(GAGAL_VERIFIKASI);
-  }
-  return data;
-}
-
 function normalisasiHubungan(v: string | undefined): string {
   return HUBUNGAN_OPTIONS.includes(v || "") ? (v as string) : "wali";
 }
@@ -65,6 +31,7 @@ export interface PortalOrtuSignUpInput {
   password: string;
   hubungan: string;
   nis: string;
+  jenis_identitas?: ChildIdentityType;
   nama_siswa: string;
   tanggal_lahir_siswa: string;
 }
@@ -85,6 +52,7 @@ export const portalOrtuSignUp = createServerFn({ method: "POST" })
 
     const siswa = await cariSiswaTervalidasi(admin, {
       nis: data.nis,
+      jenis_identitas: data.jenis_identitas,
       nama: data.nama_siswa,
       tanggal_lahir: data.tanggal_lahir_siswa,
     });
@@ -132,6 +100,7 @@ export const portalOrtuSignUp = createServerFn({ method: "POST" })
 // ─── Orang tua (sudah login) menambahkan anak lain ke akunnya ───
 export interface PortalOrtuTambahAnakInput {
   nis: string;
+  jenis_identitas?: ChildIdentityType;
   nama_siswa: string;
   tanggal_lahir_siswa: string;
   hubungan: string;
@@ -147,6 +116,7 @@ export const portalOrtuTambahAnak = createServerFn({ method: "POST" })
 
     const siswa = await cariSiswaTervalidasi(admin, {
       nis: data.nis,
+      jenis_identitas: data.jenis_identitas,
       nama: data.nama_siswa,
       tanggal_lahir: data.tanggal_lahir_siswa,
     });
@@ -174,6 +144,7 @@ export const portalOrtuTambahAnak = createServerFn({ method: "POST" })
 // ─── Lengkapi akun Google baru/belum terklasifikasi jadi akun orang tua ───
 export interface PortalOrtuCompleteGoogleSignupInput {
   nis: string;
+  jenis_identitas?: ChildIdentityType;
   nama_siswa: string;
   tanggal_lahir_siswa: string;
   hubungan: string;
@@ -226,6 +197,7 @@ export const portalOrtuCompleteGoogleSignup = createServerFn({ method: "POST" })
 
     const siswa = await cariSiswaTervalidasi(admin, {
       nis: data.nis,
+      jenis_identitas: data.jenis_identitas,
       nama: data.nama_siswa,
       tanggal_lahir: data.tanggal_lahir_siswa,
     });
