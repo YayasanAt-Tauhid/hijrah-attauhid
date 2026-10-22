@@ -26,10 +26,11 @@ Pengajuan berstatus **diajukan**, tidak diputuskan otomatis. Potongan baru mengu
 - Pratinjau memiliki hash keadaan siswa, tarif, dan tagihan. Data berubah berarti petugas harus memeriksa ulang.
 - Transaksi mengunci pendaftaran dan kunci biaya sekali bayar. Penerbitan ulang tidak menggandakan tagihan/pengajuan maupun mengubah nominal, pembayaran, atau keputusan yang sudah ada.
 - Tagihan lama dengan bruto berbeda atau pengajuan lain yang tumpang tindih memerlukan koreksi; bukan ditimpa otomatis.
+- Persetujuan alumni lama hanya dapat dipakai jika sudah tercermin pada tagihan dengan bruto, potongan, dan neto yang sesuai. Jika belum, penerbitan ditolak agar diperiksa melalui penerapan/koreksi keringanan.
 - Audit menyimpan pendaftaran, TA, versi tarif, bruto, nilai pengajuan, ID tagihan/pengajuan, petugas, waktu, dan snapshot pratinjau.
 
 ## Verifikasi
 
 `DialogUangPangkalSpmb.test.tsx` menguji pilihan alumni wajib, bruto penuh, konfirmasi, bruto khusus dengan alasan, penolakan penerbitan ulang, dan fase MTA.
 
-`scripts/test-spmb-uang-pangkal.sql` membuat fixture sementara di clone dan melakukan rollback: 8 tarif program, 6 kombinasi alumni, bruto tetap penuh sampai persetujuan, keputusan melalui RPC yang ada, neto setelah persetujuan, deduplikasi, stale preview, input bruto, akses authenticated, hak tulis langsung dan RLS non-staff.
+`scripts/test-spmb-uang-pangkal.sql` membuat fixture sementara di clone dan melakukan rollback: 8 tarif program, 6 kombinasi alumni, bruto tetap penuh sampai persetujuan, keputusan melalui RPC yang ada, neto setelah persetujuan, deduplikasi, penolakan persetujuan lama yang belum diterapkan, stale preview, input bruto, akses authenticated, hak tulis langsung dan RLS non-staff.

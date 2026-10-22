@@ -14,6 +14,7 @@ DECLARE
   r record;
   v_expected numeric;
   v_rejected boolean;
+  v_discount_id uuid;
   v_staff uuid:=auth.uid();
   v_count integer:=0;
 BEGIN
@@ -81,6 +82,51 @@ BEGIN
     v_count:=v_count+1;
   END LOOP;
 
+  -- Historical approval without a bill must require manual application/review.
+  SELECT id INTO v_dept FROM public.departemen WHERE kode='SMA';
+  v_sid:=gen_random_uuid();
+  INSERT INTO public.siswa(id,nama,departemen_id,status) VALUES(v_sid,'QA historical alumni approval',v_dept,'diterima');
+  INSERT INTO public.siswa_detail(siswa_id,tahun_ajaran_id,spmb_gelombang_id,spmb_status_kelulusan,
+    spmb_status_pendaftaran,spmb_departemen_tujuan_id,status_asrama,spmb_registered_at)
+  VALUES(v_sid,v_year,v_wave,'lulus','diterima',v_dept,'non_asrama',now());
+  v_quote:=public.preview_uang_pangkal_spmb(v_sid,v_year,'asrama',NULL);
+  INSERT INTO public.siswa_diskon(siswa_id,skema_diskon_id,jenis_id,periode_mulai,periode_selesai,nilai,status,diajukan_oleh,tipe_snapshot)
+  VALUES(v_sid,(v_quote->>'skema_diskon_id')::uuid,(v_quote->>'jenis_id')::uuid,'2027-07-01','2027-07-31',4600000,'diajukan',v_staff,'nominal')
+  RETURNING id INTO v_discount_id;
+  PERFORM public.putuskan_diskon_siswa(v_discount_id,true,v_staff,NULL);
+  v_quote:=public.preview_uang_pangkal_spmb(v_sid,v_year,'asrama',NULL);
+  v_rejected:=false;
+  BEGIN PERFORM public.verifikasi_uang_pangkal_spmb(v_sid,v_year,'asrama',NULL,10100000,NULL,v_quote->>'preview_hash',true);
+  EXCEPTION WHEN OTHERS THEN v_rejected:=SQLERRM LIKE 'Keringanan alumni sudah disetujui tetapi%'; END;
+  IF NOT v_rejected OR EXISTS(SELECT 1 FROM public.tagihan WHERE siswa_id=v_sid)
+    OR EXISTS(SELECT 1 FROM public.spmb_uang_pangkal_verifikasi WHERE siswa_id=v_sid) THEN
+    RAISE EXCEPTION 'unapplied historical approval generated a full-gross invoice';
+  END IF;
+  -- An old full-gross invoice also needs review; a correctly applied one can
+  -- be adopted without another invoice or approval request.
+  PERFORM public.simpan_tarif_generate_dan_rencana_atomik(
+    p_tarif_rows=>jsonb_build_array(jsonb_build_object('jenis_id',(v_quote->>'jenis_id')::uuid,'siswa_id',v_sid,
+      'kelas_id',NULL,'angkatan_id',NULL,'tahun_ajaran_id',(v_quote->>'tahun_buku_id')::uuid,'nominal',10100000)),
+    p_tahun_akademik_id=>v_year,p_jenis_id=>(v_quote->>'jenis_id')::uuid,
+    p_generate_groups=>jsonb_build_array(jsonb_build_object('tahun_buku_id',(v_quote->>'tahun_buku_id')::uuid,'bulan_list',jsonb_build_array(NULL))),
+    p_departemen_id=>v_dept,p_siswa_id=>v_sid,p_sampai_akhir_jenjang=>false);
+  v_quote:=public.preview_uang_pangkal_spmb(v_sid,v_year,'asrama',NULL);
+  v_rejected:=false;
+  BEGIN PERFORM public.verifikasi_uang_pangkal_spmb(v_sid,v_year,'asrama',NULL,10100000,NULL,v_quote->>'preview_hash',true);
+  EXCEPTION WHEN OTHERS THEN v_rejected:=SQLERRM LIKE 'Keringanan alumni sudah disetujui tetapi%'; END;
+  IF NOT v_rejected OR EXISTS(SELECT 1 FROM public.spmb_uang_pangkal_verifikasi WHERE siswa_id=v_sid) THEN
+    RAISE EXCEPTION 'unapplied historical approval adopted an incorrect invoice';
+  END IF;
+  PERFORM public.terapkan_diskon_siswa(v_discount_id,v_staff);
+  v_quote:=public.preview_uang_pangkal_spmb(v_sid,v_year,'asrama',NULL);
+  v_result:=public.verifikasi_uang_pangkal_spmb(v_sid,v_year,'asrama',NULL,10100000,NULL,v_quote->>'preview_hash',true);
+  IF NOT (v_result->>'tagihan_sudah_ada')::boolean
+    OR (SELECT count(*) FROM public.tagihan WHERE siswa_id=v_sid)<>1
+    OR (SELECT count(*) FROM public.siswa_diskon WHERE siswa_id=v_sid)<>1
+    OR (SELECT nominal FROM public.tagihan WHERE id=(v_result->>'tagihan_id')::uuid)<>5500000 THEN
+    RAISE EXCEPTION 'correctly applied historical approval was not reused';
+  END IF;
+
   SELECT id INTO v_dept FROM public.departemen WHERE kode='SD';
   v_sid:=gen_random_uuid();
   INSERT INTO public.siswa(id,nama,departemen_id,status) VALUES(v_sid,'QA validation',v_dept,'diterima');
@@ -142,5 +188,5 @@ BEGIN
 END;
 $authenticated$;
 RESET ROLE;
-SELECT 'PASS: '||current_setting('qa.pangkal_cases')||' SK/program/alumni cases; gross preserved until approval; repeat-safe invoice/request; validation and role checks' AS result;
+SELECT 'PASS: '||current_setting('qa.pangkal_cases')||' SK/program/alumni cases; gross preserved until approval; repeat-safe invoice/request; historical approval guards; validation and role checks' AS result;
 ROLLBACK;
