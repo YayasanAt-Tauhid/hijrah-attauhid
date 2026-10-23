@@ -11,11 +11,16 @@ export function SpmbNisDisplay({ row }: Props) {
   const targetSchool = String(row._lembagaKode || row._lembagaNama || "tujuan");
   const differentSchools = Boolean(row._academicDepartemenId && row.departemen_id
     && row._academicDepartemenId !== row.departemen_id);
-  if (!differentSchools) {
-    return <span className="block">NIS: <span className="font-mono">{targetNis || sourceNis || "Belum ada"}</span></span>;
+  // Lembaga yang berbeda tidak otomatis berarti siswa internal. Pendaftar
+  // eksternal tidak memiliki NIS asal At-Tauhid dan tidak boleh ditampilkan
+  // seolah-olah sedang menjalani mutasi jenjang.
+  if (!differentSchools || row._spmbInternal !== true) {
+    const nis = targetNis || (!differentSchools ? sourceNis : "");
+    const label = differentSchools ? "NIS tujuan" : "NIS";
+    return <span className="block">{label}: <span className="font-mono">{nis || "Belum dibuat"}</span></span>;
   }
   return <span className="block space-y-0.5">
-    <span className="block">NIS asal ({sourceSchool}): <span className="font-mono">{sourceNis || "Belum ada"}</span></span>
+    <span className="block">NIS asal ({sourceSchool}): <span className="font-mono">{sourceNis || "Belum ada (bukan syarat penerimaan)"}</span></span>
     <span className="block">NIS tujuan ({targetSchool}): <span className="font-mono">{targetNis || "Belum dibuat"}</span></span>
   </span>;
 }
