@@ -1,4 +1,5 @@
 import { SpmbNisDisplay } from "@/components/akademik/SpmbNisDisplay";
+import { needsNisSyncForExternalAcceptance } from "@/lib/spmbAcceptance";
 import { nisHistoryClient } from "@/lib/nisHistory";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "@/lib/router-compat";
@@ -877,8 +878,11 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         });
         return;
       }
-      // Database mensyaratkan NIS sebelum menerima calon murid.
-      if (!row.nis && !await generateNIS(id, departemenId, angkatanId, namaSiswa)) return;
+      // NIS tujuan bisa sudah tercatat di histori lembaga tetapi belum
+      // tersinkron ke siswa.nis. Trigger penerimaan memeriksa siswa.nis.
+      // RPC generator SPMB idempotent: NIS tujuan lama tetap dipakai.
+      if (needsNisSyncForExternalAcceptance(row)
+        && !await generateNIS(id, departemenId, angkatanId, namaSiswa)) return;
       const { error } = await supabase.from("siswa").update({ status: "diterima" } as any).eq("id", id);
       if (error) throw error;
 
