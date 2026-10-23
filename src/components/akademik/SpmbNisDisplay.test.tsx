@@ -6,7 +6,7 @@ import { DataTable } from "@/components/shared/DataTable";
 afterEach(cleanup);
 const internal = {
   nama: "Siswa Internal", _academicNis: "2538023125", nis: null,
-  _academicDepartemenId: "sd", departemen_id: "smp",
+  _academicDepartemenId: "sd", departemen_id: "smp", _spmbInternal: true,
   _academicLembagaKode: "SD", _lembagaKode: "SMP",
 };
 it("keeps the old SD NIS visible when an SMP NIS has not been assigned", () => {
@@ -22,7 +22,7 @@ it("shows both numbers when the destination NIS is available", () => {
 });
 it("shows Abdullah's saved destination NIS even when the current-school NIS is empty", () => {
   render(<SpmbNisDisplay row={{ ...internal, _academicNis: null, nis: "2703013" }} />);
-  expect(screen.getByText("NIS asal (SD):")).toHaveTextContent("Belum ada");
+  expect(screen.getByText("NIS asal (SD):")).toHaveTextContent("Belum ada (bukan syarat penerimaan)");
   expect(screen.getByText("NIS tujuan (SMP):")).toHaveTextContent("2703013");
 });
 it("shows a single number for a student already in the destination school", () => {
@@ -39,4 +39,19 @@ it.each(["2538023125", "2703013"])("finds the same applicant by either school NI
   fireEvent.change(screen.getByPlaceholderText("Cari..."), { target: { value: nis } });
   expect(screen.getByText("Siswa Internal")).toBeInTheDocument();
   expect(screen.queryByText("Siswa Lain")).not.toBeInTheDocument();
+});
+
+it("does not require or display source-school NIS for an external applicant", () => {
+  render(<SpmbNisDisplay row={{
+    ...internal, _spmbInternal: false, _academicNis: null, nis: "2703013",
+  }} />);
+  expect(screen.queryByText(/NIS asal/)).not.toBeInTheDocument();
+  expect(screen.getByText("NIS tujuan:")).toHaveTextContent("2703013");
+});
+it("does not use an unrelated previous-school NIS for an external applicant", () => {
+  render(<SpmbNisDisplay row={{
+    ...internal, _spmbInternal: false, _academicNis: "991234", nis: null,
+  }} />);
+  expect(screen.queryByText("991234")).not.toBeInTheDocument();
+  expect(screen.getByText("NIS tujuan:")).toHaveTextContent("Belum dibuat");
 });
