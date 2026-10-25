@@ -1,9 +1,11 @@
+import type { SpmbInputBill } from "@/lib/spmbBillingStatus";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const data = vi.hoisted(() => ({
  status:"diterima", internal:false, boarding:null as string|null,
  activeClasses:[] as any[], targetClass:null as any,
  activeAt:null as string|null,
+ bills:[] as SpmbInputBill[], billingError:false,
 }));
 const id="11111111-1111-4111-8111-111111111111";
 const targetDept="22222222-2222-4222-8222-222222222222";
@@ -32,16 +34,21 @@ function records(table:string){
  case "rencana_tagihan_siswa":return [];
  case "departemen":return [{id:targetDept,nama:"SMP",kode:"SMP"}];
  case "tahun_ajaran":return [{id:academicYear,nama:"2027/2028",tanggal_mulai:"2027-07-01",tanggal_selesai:"2028-06-30"}];
+ case "jenis_pembayaran":return [{id:"spp",nama:"SPP SMP",tipe:"bulanan",departemen_id:targetDept},{id:"pangkal",nama:"UANG PANGKAL SMP",tipe:"sekali",departemen_id:targetDept}];
+ case "tagihan":return data.bills;
  case "kelas":return data.targetClass?[data.targetClass]:[];
  default:return [];
  }
 }
 const run=async()=>(await (getSpmbBillingCandidates as any)({})).items[0];
 beforeEach(()=>{
+ data.bills=[];data.billingError=false;
  data.boarding=null;data.status="diterima";data.internal=false;data.activeClasses=[];data.targetClass=null;data.activeAt=null;
  db.from.mockImplementation((table:string)=>{
+ let page:{from:number;to:number}|null=null;
  const q={select:()=>q,eq:()=>q,not:()=>q,order:()=>q,limit:()=>q,in:()=>q,
- then:(resolve:any)=>resolve({data:records(table),error:null})};return q;
+ range:(from:number,to:number)=>{page={from,to};return q;},
+ then:(resolve:any)=>{const rows=records(table);return resolve({data:page?rows.slice(page.from,page.to+1):rows,error:table==="tagihan"&&data.billingError?{message:"read failed"}:null});}};return q;
  });
 });
 describe("penagihan SPMB sebelum penempatan kelas",()=>{
@@ -77,5 +84,21 @@ describe("penagihan SPMB sebelum penempatan kelas",()=>{
 describe("status asrama calon siswa",()=>{
  it.each(["asrama","non_asrama",null])("meneruskan status %s tanpa menebak data kosong",async(status)=>{
  data.boarding=status;expect((await run()).status_asrama).toBe(status);
+ });
+});
+
+describe("status input tagihan pada kandidat",()=>{
+ it("membaca status dari tagihan aktual pada tahun akademik dan lembaga tujuan",async()=>{
+  data.bills=[{id:"bill",siswa_id:id,jenis_id:"spp",tahun_ajaran_id:"book",tahun_akademik_id:academicYear,bulan:7,nominal:500000,status:"terjadwal",jenis:{nama:"SPP SMP",tipe:"bulanan",departemen_id:targetDept},tahun_buku:{tanggal_mulai:"2027-01-01",tanggal_selesai:"2027-12-31"}}];
+  expect(await run()).toMatchObject({spp_awal:{status:"sudah_diinput",nominal:500000},uang_pangkal:{status:"belum_diinput"}});
+ });
+ it("tidak menampilkan kegagalan baca sebagai belum diinput",async()=>{
+  data.billingError=true;
+  await expect(run()).rejects.toThrow("read failed");
+ });
+ it("memuat semua halaman tagihan setelah batas 1000 baris",async()=>{
+  data.bills=Array.from({length:1001},(_,index)=>({id:String(index),siswa_id:id,jenis_id:"spp",tahun_ajaran_id:"book",tahun_akademik_id:academicYear,bulan:7,nominal:1,status:"terjadwal",jenis:{nama:"SPP SMP",tipe:"bulanan",departemen_id:targetDept},tahun_buku:{tanggal_mulai:"2027-01-01",tanggal_selesai:"2027-12-31"}}));
+  expect((await run()).spp_awal).toMatchObject({status:"sudah_diinput",nominal:1001,tagihan:expect.any(Array)});
+  expect((await run()).spp_awal.tagihan).toHaveLength(1001);
  });
 });

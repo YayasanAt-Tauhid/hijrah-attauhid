@@ -502,3 +502,9 @@ Ringkasan (detail lengkap ada di versi lama file ini: `git log -p SESI_NOTES.md`
 ### SPMB: dokumen pindahan, penanda verifikasi, tabel seragam (26 Oktober 2026)
 
 Batas dokumen pindahan harus konsisten pada formulir publik, pendaftaran admin, server, dan guard database: hanya SMP/SMA/MTA berdasarkan lembaga tujuan. Migrasi mempersempit guard yang aktif tanpa mengganti ACL atau menghapus unggahan lama siswa pindahan TK/SD. Uji SQL rollback tersedia untuk lima jenjang. Tanda bintang mengikuti requirements server; kebijakan wajib/opsional verifikasi tetap sama. Statistik menyajikan ukuran sebagai kolom dan memisahkan belum diisi dari total stel berukuran. Pengujian database dilakukan pada clone sebelum penerapan produksi; status rilis akhir dicatat di checkpoint operasional.
+
+### Rekap seragam dan status input tagihan SPMB (26 Oktober 2026, lanjutan)
+
+Pengguna meminta ukuran seragam vertikal dengan kepala kolom lembaga → jenis kelamin → jenis seragam. Rekap gabungan dan rincian masing-masing mempunyai total per ukuran di kanan, total per jenis di bawah, serta baris belum diisi terpisah. Pencarian menyaring kolom rincian saja; rekap gabungan mengikuti filter pendaftar.
+
+Pada rencana siswa baru, SPP awal sudah tersedia di RPC, tetapi aksesnya tersembunyi di dialog biaya awal. Tombol langsung sekarang mengaktifkan pilihan SPP tanpa menyimpan otomatis. Status input dibaca dari tagihan aktual, termasuk input manual, berdasarkan jenjang tujuan dan tahun akademik/tahun buku yang sesuai. Rencana SPP bukan bukti tagihan sudah terbit; pembatalan/dihapusbuku ditandai perlu diperiksa. Tidak diperlukan migrasi atau penerbitan tagihan produksi untuk perubahan ini.

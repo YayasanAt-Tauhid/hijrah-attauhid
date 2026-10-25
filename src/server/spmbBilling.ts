@@ -1,3 +1,6 @@
+import { fetchAllPages } from "@/lib/fetchAll";
+import { isSppPaymentName, isUangPangkalPaymentName } from "@/lib/installment";
+import { summarizeSpmbBillingInputs, type SpmbInputBill, type SpmbInputStatus } from "@/lib/spmbBillingStatus";
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
@@ -24,6 +27,8 @@ export interface SpmbBillingCandidate {
   ready_for_billing: boolean;
   ready_for_spp: boolean;
   ready_reason: string | null;
+  spp_awal: SpmbInputStatus;
+  uang_pangkal: SpmbInputStatus;
   rencana_spp: {
     id: string;
     jenis_id: string;
@@ -153,7 +158,7 @@ export const getSpmbBillingCandidates = createServerFn({ method: "GET" })
       }
     }
 
-    const items: SpmbBillingCandidate[] = [];
+    const items: Omit<SpmbBillingCandidate, "spp_awal" | "uang_pangkal">[] = [];
     for (const [siswaId, detail] of latestDetailBySiswa.entries()) {
       const siswa = siswaById.get(siswaId) as any;
       if (!siswa) continue;
@@ -229,8 +234,35 @@ export const getSpmbBillingCandidates = createServerFn({ method: "GET" })
       });
     }
 
-    items.sort((a, b) => a.nama.localeCompare(b.nama, "id-ID"));
-    return { items };
+    const billingDeptIds = [...new Set(items.map((row) => row.target_departemen_id).filter((id): id is string => Boolean(id)))];
+    const feeTypes = billingDeptIds.length
+      ? await admin.from("jenis_pembayaran").select("id,nama,tipe,departemen_id").in("departemen_id", billingDeptIds)
+      : { data: [], error: null };
+    if (feeTypes.error) throw new Error("Gagal membaca jenis biaya awal: " + feeTypes.error.message);
+    const feeTypeIds = (feeTypes.data || []).filter((jenis) =>
+      (jenis.tipe === "bulanan" && isSppPaymentName(jenis.nama))
+      || (jenis.tipe === "sekali" && isUangPangkalPaymentName(jenis.nama))).map((jenis) => jenis.id);
+    const billsByStudent = new Map<string, SpmbInputBill[]>();
+    if (feeTypeIds.length) {
+      // Bound URL length and paginate every batch, including more than 1000 bills.
+      for (let offset = 0; offset < siswaIds.length; offset += 100) {
+        const batch = siswaIds.slice(offset, offset + 100);
+        const bills = await fetchAllPages<SpmbInputBill>((from, to) => admin.from("tagihan")
+          .select("id,siswa_id,jenis_id,tahun_ajaran_id,tahun_akademik_id,bulan,nominal,status,jenis:jenis_id(nama,tipe,departemen_id),tahun_buku:tahun_ajaran_id(tanggal_mulai,tanggal_selesai)")
+          .in("siswa_id", batch).in("jenis_id", feeTypeIds).order("id").range(from, to)
+          .then((result) => ({ data: result.data as unknown as SpmbInputBill[] | null, error: result.error })));
+        for (const bill of bills) {
+          const current = billsByStudent.get(bill.siswa_id) || [];
+          current.push(bill);
+          billsByStudent.set(bill.siswa_id, current);
+        }
+      }
+    }
+    const withInputStatus: SpmbBillingCandidate[] = items.map((row) => ({
+      ...row, ...summarizeSpmbBillingInputs(row, billsByStudent.get(row.id) || []),
+    }));
+    withInputStatus.sort((a, b) => a.nama.localeCompare(b.nama, "id-ID"));
+    return { items: withInputStatus };
   });
 
 export const updateSpmbBillingPlanEndMonth = createServerFn({ method: "POST" })

@@ -73,3 +73,44 @@ export function buildUniformSizeTable(rekap: UniformCountRow[]) {
   }
   return { sizes, rows: [...groups.values()] };
 }
+
+// Gabungkan rincian lembaga/jenis kelamin untuk rekap tiap jenis seragam.
+export function summarizeUniformSizeTotals(rows: UniformSizeCountRow[], sizes: string[]) {
+  const empty = (id: string, jenis: string): UniformSizeCountRow => ({
+    id, jenis, lembaga: "", jenisKelamin: "", jumlah: 0, belumDiisi: 0,
+    ...Object.fromEntries(sizes.map((_, index) => ["size_" + index, 0])),
+  });
+  const total = empty("total", "Total per ukuran");
+  const groups = new Map<string, UniformSizeCountRow>();
+  const add = (target: UniformSizeCountRow, row: UniformSizeCountRow) => {
+    target.jumlah += row.jumlah;
+    target.belumDiisi += row.belumDiisi;
+    sizes.forEach((_, index) => {
+      const key = "size_" + index;
+      target[key] = Number(target[key]) + Number(row[key] || 0);
+    });
+  };
+  for (const row of rows) {
+    const label = row.jenis.trim().replace(/\s+/g, " ");
+    const key = label.toLocaleLowerCase("id");
+    const group = groups.get(key) || empty(key, label);
+    add(group, row);
+    add(total, row);
+    groups.set(key, group);
+  }
+  return {
+    rows: [...groups.values()].sort((a, b) => a.jenis.localeCompare(b.jenis, "id")),
+    total,
+  };
+}
+
+export function transposeUniformSizeTable(columns: UniformSizeCountRow[], sizes: string[]) {
+  const makeRow = (id: string, ukuran: string, key: string) => {
+    const values = columns.map((column, index) => ["column_" + index, Number(column[key] || 0)] as const);
+    return { id, ukuran, ...Object.fromEntries(values), jumlah: values.reduce((sum, [, value]) => sum + value, 0) };
+  };
+  return {
+    rows: [...sizes.map((size, index) => makeRow("size_" + index, size, "size_" + index)), makeRow("missing", "Belum diisi", "belumDiisi")],
+    total: makeRow("total", "Total per jenis", "jumlah"),
+  };
+}
