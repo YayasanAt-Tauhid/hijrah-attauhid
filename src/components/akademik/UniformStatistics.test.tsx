@@ -17,6 +17,10 @@ describe("statistik seragam", () => {
   it("menampilkan rekap tersimpan serta pengecualian TK, dan mengekspor hasil filter", () => {
     render(<UniformStatistics rows={rows} departments={departments} />);
     expect(screen.getByRole("region", { name: "Statistik seragam" })).toBeInTheDocument();
+    for (const size of ["S", "M", "L", "XL", "XXL", "3XL", "4XL", "ALL SIZE"]) {
+      expect(screen.getByRole("columnheader", { name: size, exact: true })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole("columnheader", { name: "Ukuran", exact: true })).not.toBeInTheDocument();
     expect(screen.getByText("1 pendaftar TK belum dihitung karena data seragam TK belum tersedia.")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Jenis kelamin seragam"), { target: { value: "P" } });
     fireEvent.change(screen.getByLabelText("Kelulusan untuk rekap"), { target: { value: "lulus" } });
@@ -24,15 +28,15 @@ describe("statistik seragam", () => {
     expect(screen.queryByText("Putih Biru Ikhwan")).not.toBeInTheDocument();
     expect(screen.queryByText("Gamis Putri Cadangan")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Ekspor uji" }));
-    expect(exportSpy).toHaveBeenLastCalledWith(expect.arrayContaining([expect.objectContaining({ jenis: "Gamis Ungu Khusus", ukuran: "XL", jumlah: 1 })]));
+    expect(exportSpy).toHaveBeenLastCalledWith(expect.arrayContaining([expect.objectContaining({ jenis: "Gamis Ungu Khusus", size_3: 1, jumlah: 1 })]));
     expect(exportSpy.mock.calls[0][0].every((row: Record<string, unknown>) => row.jenisKelamin === "Akhwat")).toBe(true);
   });
   it("pencarian mengekspor hanya rekap yang cocok dan data kosong tidak membuat pesanan palsu", () => {
     render(<UniformStatistics rows={rows.slice(0, 1)} departments={departments} />);
-    fireEvent.change(screen.getByPlaceholderText("Cari lembaga, jenis, atau ukuran seragam..."), { target: { value: "Putih Biru Ikhwan" } });
+    fireEvent.change(screen.getByPlaceholderText("Cari lembaga, jenis kelamin, atau jenis seragam..."), { target: { value: "Putih Biru Ikhwan" } });
     fireEvent.click(screen.getByRole("button", { name: "Ekspor uji" }));
     expect(exportSpy.mock.calls[0][0]).toHaveLength(1);
-    expect(exportSpy.mock.calls[0][0][0]).toMatchObject({ jenis: "Putih Biru Ikhwan", ukuran: "S", jumlah: 1 });
+    expect(exportSpy.mock.calls[0][0][0]).toMatchObject({ jenis: "Putih Biru Ikhwan", size_0: 1, jumlah: 1 });
   });
   it("menampilkan keadaan kosong ketika tidak ada pendaftar sesuai filter", () => {
     render(<UniformStatistics rows={[]} departments={departments} />);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeUniforms } from "./uniformStatistics";
+import { summarizeUniforms, buildUniformSizeTable } from "./uniformStatistics";
 const departments = [{ id: "sd", nama: "SD", kode: "SD" }, { id: "smp", nama: "SMP", kode: "SMP" }, { id: "tk", nama: "TK", kode: "TK" }];
 const make = (dep: string, gender: string, sizes: unknown) => ({ departemen_id: dep, jenis_kelamin: gender, _spmbDetail: { ukuran_seragam: sizes } });
 describe("rekap seragam SPMB", () => {
@@ -48,5 +48,26 @@ describe("rekap seragam SPMB", () => {
     expect(result.rekap.every((row) => row.lembaga === "SMP")).toBe(true);
     expect(result.rekap.some((row) => row.jenis === "Gamis Ungu")).toBe(true);
     expect(result.rekap.some((row) => row.jenis === "Putih Merah")).toBe(false);
+  });
+});
+
+describe("tabel silang ukuran seragam", () => {
+  it("menggabungkan ukuran per jenis tanpa mencampur lembaga/gender dan mengecualikan ukuran kosong dari total", () => {
+    const rekap = summarizeUniforms([
+      make("sd", "L", [{ jenis: "Olah raga", ukuran: "S" }]),
+      make("sd", "L", [{ jenis: "Olah raga", ukuran: "M" }]),
+      make("sd", "L", [{ jenis: "Olah raga", ukuran: "" }]),
+      make("sd", "P", [{ jenis: "Olah raga", ukuran: "S" }]),
+      make("smp", "L", [{ jenis: "Olah raga", ukuran: "JUMBO" }]),
+    ], departments).rekap;
+    const matrix = buildUniformSizeTable(rekap);
+    const row = matrix.rows.find((row) => row.lembaga === "SD" && row.jenisKelamin === "Ikhwan" && row.jenis === "Olah raga");
+    expect(row).toMatchObject({ size_0: 1, size_1: 1, jumlah: 2, belumDiisi: 1 });
+    expect(matrix.rows.filter((row) => row.jenis === "Olah raga")).toHaveLength(3);
+    const customIndex = matrix.sizes.indexOf("JUMBO");
+    expect(customIndex).toBeGreaterThan(0);
+    expect(matrix.rows.find((row) => row.lembaga === "SMP" && row.jenis === "Olah raga")?.["size_" + customIndex]).toBe(1);
+    expect(matrix.rows.reduce((sum, row) => sum + row.jumlah, 0)).toBe(4);
+    expect(matrix.rows.reduce((sum, row) => sum + row.belumDiisi, 0)).toBe(16);
   });
 });

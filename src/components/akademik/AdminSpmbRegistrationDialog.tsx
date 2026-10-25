@@ -1,3 +1,4 @@
+import { requiresTransferDocuments } from "@/lib/spmbPolicy";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@/lib/router-compat";
 import { supabase } from "@/integrations/supabase/client";
@@ -145,6 +146,7 @@ export function AdminSpmbRegistrationDialog({
   const akhwatNonBoarding = ["SMP", "SMA"].includes(code) && form.jenis_kelamin === "P";
   const ikhwanBoardingChoice = ["SMP", "SMA"].includes(code) && form.jenis_kelamin === "L";
   const isTransfer = form.kategori === SPMB_TRANSFER_CATEGORY_VALUE;
+  const needsTransferDocuments = requiresTransferDocuments(form.kategori, code);
   const inputer = inputerName;
 
   useEffect(() => {
@@ -232,7 +234,7 @@ export function AdminSpmbRegistrationDialog({
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return "Format email tidak valid.";
     if (ikhwanBoardingChoice && !form.status_asrama) return "Pilih Asrama / Non Asrama untuk SMP/SMA Ikhwan.";
     if (!documents.kk || !documents.akta) return "Kartu Keluarga dan Akta Kelahiran wajib diunggah.";
-    if (isTransfer && (!documents.rapor || !documents.ijazah)) return "Rapor dan Ijazah / SKHUN wajib diunggah untuk Siswa Pindahan.";
+    if (needsTransferDocuments && (!documents.rapor || !documents.ijazah)) return "Rapor dan Ijazah / SKHUN wajib diunggah untuk Siswa Pindahan.";
     return null;
   }
 
@@ -244,7 +246,8 @@ export function AdminSpmbRegistrationDialog({
     try {
       const [kk, akta, rapor, ijazah] = await Promise.all([
         upload("kk", documents.kk), upload("akta", documents.akta),
-        upload("rapor", documents.rapor), upload("ijazah", documents.ijazah),
+        needsTransferDocuments ? upload("rapor", documents.rapor) : undefined,
+        needsTransferDocuments ? upload("ijazah", documents.ijazah) : undefined,
       ]);
       const result = await spmbAdminDaftar({ data: {
         ...form,
@@ -386,10 +389,10 @@ export function AdminSpmbRegistrationDialog({
                 <div className="grid gap-4 md:grid-cols-2">
                   <DocumentPicker label="Kartu Keluarga" required value={documents.kk} onChange={(file) => setDocuments((current) => ({ ...current, kk: file }))} />
                   <DocumentPicker label="Akta Kelahiran" required value={documents.akta} onChange={(file) => setDocuments((current) => ({ ...current, akta: file }))} />
-                  {isTransfer && <DocumentPicker label="Rapor Siswa Pindahan" required value={documents.rapor} onChange={(file) => setDocuments((current) => ({ ...current, rapor: file }))} />}
-                  {isTransfer && <DocumentPicker label="Ijazah / SKHUN Siswa Pindahan" required value={documents.ijazah} onChange={(file) => setDocuments((current) => ({ ...current, ijazah: file }))} />}
+                  {needsTransferDocuments && <DocumentPicker label="Rapor Siswa Pindahan" required value={documents.rapor} onChange={(file) => setDocuments((current) => ({ ...current, rapor: file }))} />}
+                  {needsTransferDocuments && <DocumentPicker label="Ijazah / SKHUN Siswa Pindahan" required value={documents.ijazah} onChange={(file) => setDocuments((current) => ({ ...current, ijazah: file }))} />}
                 </div>
-                <div className="flex items-start gap-2 rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground"><Upload className="mt-0.5 h-4 w-4 shrink-0" />KK dan Akta wajib. Rapor dan Ijazah/SKHUN wajib hanya untuk Siswa Pindahan.</div>
+                <div className="flex items-start gap-2 rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground"><Upload className="mt-0.5 h-4 w-4 shrink-0" />KK dan Akta wajib. Rapor dan Ijazah/SKHUN wajib hanya untuk Siswa Pindahan jenjang SMP, SMA, dan MTA.</div>
               </FormSection>
             </fieldset>
 
