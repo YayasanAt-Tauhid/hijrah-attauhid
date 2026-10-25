@@ -6,7 +6,10 @@ const fixtures = [
  { id: "a", spmb_internal: true, nama: "Asrama Siswa", status_asrama: "asrama" },
  { id: "b", spmb_internal: false, nama: "Non Asrama Siswa", status_asrama: "non_asrama" },
  { id: "c", spmb_internal: false, nama: "Belum Status Siswa", status_asrama: null },
-].map((r) => ({ ...r, target_departemen_id: "tujuan", target_departemen_kode: "SMP", tahun_ajaran_nama: "2027/2028", rencana_spp: null, ready_for_billing: true, ready_for_spp: false }));
+].map((r) => ({ ...r, target_departemen_id: "tujuan", target_departemen_kode: "SMP", tahun_ajaran_nama: "2027/2028", rencana_spp: null,
+ spp_awal: {status: r.id==="b" ? "sudah_diinput" : "belum_diinput",nominal:r.id==="b"?500000:0,dibatalkan:0,tagihan:r.id==="b"?[{id:"spp",periode:"2027-07-01"}]:[]},
+ uang_pangkal: {status:r.id==="a"?"sudah_diinput":r.id==="c"?"perlu_diperiksa":"belum_diinput",nominal:r.id==="a"?10000000:0,dibatalkan:r.id==="c"?1:0,tagihan:[]},
+ ready_for_billing: true, ready_for_spp: false }));
 vi.mock("@/server/spmbBilling", () => ({
  getSpmbBillingCandidates: async () => ({ items: fixtures }),
  updateSpmbBillingPlanEndMonth: vi.fn(),
@@ -59,4 +62,20 @@ describe("rencana tagihan status asrama dan keringanan", () => {
    fireEvent.click(within(row).getByRole("button", { name: "Input Keringanan" }));
    expect(screen.getByRole("dialog")).toHaveTextContent("Keringanan b tujuan");
  });
+});
+
+it("menampilkan status input SPP dan uang pangkal serta memfilter sudah/belum input",async()=>{
+ mount();
+ const paid=await screen.findByRole("row",{name:/Non Asrama Siswa/});
+ expect(paid).toHaveTextContent("Sudah diinput");
+ expect(paid).toHaveTextContent("Juli 2027");
+ expect(paid).toHaveTextContent("Belum diinput");
+ expect(screen.getByRole("row",{name:/Belum Status Siswa/})).toHaveTextContent("Perlu diperiksa");
+ fireEvent.change(screen.getAllByRole("combobox")[4],{target:{value:"sudah_diinput"}});
+ expect(screen.getByRole("row",{name:/Non Asrama Siswa/})).toBeInTheDocument();
+ expect(screen.queryByRole("row",{name:/^Asrama Siswa/})).not.toBeInTheDocument();
+ fireEvent.change(screen.getAllByRole("combobox")[5],{target:{value:"sudah_diinput"}});
+ expect(screen.queryByRole("row",{name:/Non Asrama Siswa/})).not.toBeInTheDocument();
+ fireEvent.change(screen.getAllByRole("combobox")[4],{target:{value:"__all__"}});
+ expect(screen.getByRole("row",{name:/^Asrama Siswa/})).toBeInTheDocument();
 });

@@ -52,3 +52,14 @@ describe("SPP awal tanpa kelas", () => {
    }));
  });
 });
+
+it("membuka SPP awal tanpa kelas melalui tombol langsung dengan pilihan SPP sudah aktif", async () => {
+  mocks.rpc.mockClear();
+  mount();
+  const row=await screen.findByRole("row",{name:/Non Asrama Siswa/});
+  fireEvent.click(within(row).getByRole("button",{name:"SPP awal tanpa kelas",exact:true}));
+  const dialog=await screen.findByRole("dialog");
+  expect(within(dialog).getByRole("checkbox",{name:"Terbitkan SPP awal (satu bulan)"})).toBeChecked();
+  expect(dialog).toHaveTextContent("Periode SPP awal");
+  expect(mocks.rpc).not.toHaveBeenCalled();
+});

@@ -1,3 +1,4 @@
+import { SpmbBillingInputStatus } from "@/components/keuangan/SpmbBillingInputStatus";
 import { DialogAjukan } from "@/components/keuangan/DialogAjukanKeringanan";
 import { DialogUangPangkalSpmb } from "@/components/keuangan/DialogUangPangkalSpmb";
 import { useEffect, useMemo, useState } from "react";
@@ -93,7 +94,7 @@ export default function RencanaTagihanSiswaBaru() {
   const { data: jenisList = [] } = useAllJenisPembayaran();
   const { data: tahunBukuList = [] } = useTahunBuku();
 
-  const { data: candidatesData, isLoading } = useQuery({
+  const { data: candidatesData, isLoading, error: candidatesError } = useQuery({
     queryKey: ["spmb_billing_candidates"],
     queryFn: async () => getSpmbBillingCandidates(),
   });
@@ -101,6 +102,8 @@ export default function RencanaTagihanSiswaBaru() {
 
   const [keringananSiswa, setKeringananSiswa] = useState<SpmbBillingCandidate | null>(null);
   const [pangkalSiswa, setPangkalSiswa] = useState<SpmbBillingCandidate | null>(null);
+  const [filterSppAwal, setFilterSppAwal] = useState("__all__");
+  const [filterPangkal, setFilterPangkal] = useState("__all__");
   const [filterAsrama, setFilterAsrama] = useState("__all__");
   const [filterPendaftar, setFilterPendaftar] = useState("__all__");
   const [search, setSearch] = useState("");
@@ -133,6 +136,8 @@ export default function RencanaTagihanSiswaBaru() {
   const filteredCandidates = useMemo(() => {
     const q = search.trim().toLowerCase();
     return candidates.filter((row) => {
+      if (filterSppAwal !== "__all__" && row.spp_awal?.status !== filterSppAwal) return false;
+      if (filterPangkal !== "__all__" && row.uang_pangkal?.status !== filterPangkal) return false;
       if (filterAsrama !== "__all__" && (row.status_asrama || "belum") !== filterAsrama) return false;
       if (filterPendaftar === "internal" && !row.spmb_internal) return false;
       if (filterPendaftar === "eksternal" && row.spmb_internal) return false;
@@ -150,7 +155,7 @@ export default function RencanaTagihanSiswaBaru() {
         row.tahun_ajaran_nama,
       ].filter(Boolean).join(" ").toLowerCase().includes(q);
     });
-  }, [candidates, search, filterDept, filterStatus, filterAsrama, filterPendaftar]);
+  }, [candidates, search, filterDept, filterStatus, filterAsrama, filterPendaftar, filterSppAwal, filterPangkal]);
 
   const availableJenis = useMemo(() => {
     if (!selected) return [];
@@ -212,9 +217,9 @@ export default function RencanaTagihanSiswaBaru() {
   );
   const manualEndDate = useMemo(() => lastDayOfMonth(manualEndMonth), [manualEndMonth]);
 
-  const openPlan = (row: SpmbBillingCandidate) => {
+  const openPlan = (row: SpmbBillingCandidate, initialSpp = false) => {
     setSelected(row);
-    setIncludeInitialSpp(false);
+    setIncludeInitialSpp(initialSpp);
 
     const currentPlan = row.rencana_spp;
     const defaultSpp =
@@ -537,7 +542,7 @@ export default function RencanaTagihanSiswaBaru() {
     {
       key: "nama",
       label: "Siswa",
-      className: "min-w-[220px]",
+      className: "sticky left-0 z-10 min-w-[220px] bg-card",
       render: (_, row) => (
         <div>
           <p className="font-medium">{row.nama}</p>
@@ -590,6 +595,18 @@ export default function RencanaTagihanSiswaBaru() {
       ),
     },
     {
+      key: "spp_awal",
+      label: "SPP Awal",
+      className: "min-w-[190px]",
+      render: (_, row) => <SpmbBillingInputStatus value={row.spp_awal} showPeriod />,
+    },
+    {
+      key: "uang_pangkal",
+      label: "Uang Pangkal",
+      className: "min-w-[170px]",
+      render: (_, row) => <SpmbBillingInputStatus value={row.uang_pangkal} />,
+    },
+    {
       key: "rencana_spp",
       label: "Rencana SPP",
       className: "min-w-[210px]",
@@ -612,8 +629,11 @@ export default function RencanaTagihanSiswaBaru() {
       render: (_, row) => (
         <div className="flex flex-col items-start gap-2">
           <Button size="sm" variant="outline" disabled={!row.ready_for_billing} onClick={() => setPangkalSiswa(row)}>
-            Uang Pangkal Otomatis
+            {row.uang_pangkal?.status === "sudah_diinput" ? "Lihat Uang Pangkal" : "Uang Pangkal Otomatis"}
           </Button>
+          {!row.ready_for_spp && <Button size="sm" variant="outline" disabled={!row.ready_for_billing} onClick={() => openPlan(row, true)}>
+            SPP awal tanpa kelas
+          </Button>}
           <Button
             size="sm"
             variant={row.rencana_spp ? "outline" : "default"}
@@ -717,10 +737,25 @@ export default function RencanaTagihanSiswaBaru() {
                 <SelectItem value="planned">Rencana Aktif</SelectItem>
               </SelectContent>
             </Select>
+            {([
+              ["Filter SPP awal", filterSppAwal, setFilterSppAwal, "Semua Status SPP Awal"],
+              ["Filter uang pangkal", filterPangkal, setFilterPangkal, "Semua Status Uang Pangkal"],
+            ] as const).map(([label, value, change, allLabel]) => <Select key={label} value={value} onValueChange={change}>
+              <SelectTrigger aria-label={label}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">{allLabel}</SelectItem>
+                <SelectItem value="belum_diinput">Belum diinput</SelectItem>
+                <SelectItem value="sudah_diinput">Sudah diinput</SelectItem>
+                <SelectItem value="perlu_diperiksa">Perlu diperiksa</SelectItem>
+              </SelectContent>
+            </Select>)}
           </div>
 
+          {candidatesError && <p role="alert" className="text-sm text-destructive">Gagal memuat status tagihan. Muat ulang halaman untuk mencoba lagi.</p>}
           <DataTable
             columns={columns}
+            horizontalNavigation
+            searchable={false}
             data={filteredCandidates}
             loading={isLoading}
             pageSize={20}
@@ -731,7 +766,7 @@ export default function RencanaTagihanSiswaBaru() {
       <Dialog open={!!selected} onOpenChange={(open) => { if (!open) closePlan(); }}>
         <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{selected && !selected.ready_for_spp ? "Terbitkan Tagihan Awal Calon Siswa" : selected?.rencana_spp ? "Edit" : "Buat"} Rencana Tagihan Siswa Baru</DialogTitle>
+            <DialogTitle>{includeInitialSpp && selected && !selected.ready_for_spp ? "SPP Awal Tanpa Kelas —" : selected && !selected.ready_for_spp ? "Terbitkan Tagihan Awal Calon Siswa" : selected?.rencana_spp ? "Edit" : "Buat"} Rencana Tagihan Siswa Baru</DialogTitle>
           </DialogHeader>
 
           {selected && (
