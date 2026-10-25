@@ -497,3 +497,8 @@ Ringkasan (detail lengkap ada di versi lama file ini: `git log -p SESI_NOTES.md`
 - Production aktif tetap cmvzcpeiuompqgdvflky. Perbaikan indeks sudah diterapkan langsung melalui migration MCP setelah persetujuan user; aplikasi tidak memerlukan perubahan frontend.
 - Uji RPC cicilan kedua, pelunasan, jurnal/kuitansi, penolakan kelebihan bayar dan tagihan lunas, serta duplikasi non-SPP berhasil. Semua transaksi uji di-rollback.
 - Saldo Azka sebelum/sesudah perbaikan: tagihan September Rp450.000, dibayar Rp100.000, sisa Rp350.000. Pembayaran lanjutan tetap diinput petugas saat menerima uang.
+
+
+### SPMB: dokumen pindahan, penanda verifikasi, tabel seragam (26 Oktober 2026)
+
+Batas dokumen pindahan harus konsisten pada formulir publik, pendaftaran admin, server, dan guard database: hanya SMP/SMA/MTA berdasarkan lembaga tujuan. Migrasi mempersempit guard yang aktif tanpa mengganti ACL atau menghapus unggahan lama siswa pindahan TK/SD. Uji SQL rollback tersedia untuk lima jenjang. Tanda bintang mengikuti requirements server; kebijakan wajib/opsional verifikasi tetap sama. Statistik menyajikan ukuran sebagai kolom dan memisahkan belum diisi dari total stel berukuran. Pengujian database dilakukan pada clone sebelum penerapan produksi; status rilis akhir dicatat di checkpoint operasional.

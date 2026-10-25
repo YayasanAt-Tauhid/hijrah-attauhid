@@ -9,6 +9,7 @@ import {
 } from "@/server/pmbPayment";
 import { spmbGetPolicyStatus, spmbGetPublicWave, type SpmbPolicyStatusResult, type SpmbPublicWaveResult, type SpmbWaveSummary } from "@/server/spmbPolicy";
 import {
+  requiresTransferDocuments,
   SPMB_CATEGORY_LABEL,
   SPMB_CATEGORY_VALUE,
   SPMB_TRANSFER_CATEGORY_LABEL,
@@ -501,6 +502,7 @@ export default function SPMBDaftarOnlineV2() {
   );
   const wajibNisn = useMemo(() => perluNisn(selectedDept), [selectedDept]);
   const siswaPindahan = form.kategori === SPMB_TRANSFER_CATEGORY_VALUE;
+  const perluDokumenPindahan = requiresTransferDocuments(form.kategori, deptCode);
   const registrationOpen = publicWave?.registration_open === true;
   const currentWave = publicWave?.current_wave || null;
   const nextWave = publicWave?.next_wave || null;
@@ -684,7 +686,7 @@ export default function SPMBDaftarOnlineV2() {
       toast.error(message);
       return;
     }
-    if (siswaPindahan && (!documents.rapor || !documents.ijazah)) {
+    if (perluDokumenPindahan && (!documents.rapor || !documents.ijazah)) {
       const message = "Rapor dan Ijazah / SKHUN wajib diunggah untuk Siswa Pindahan.";
       setSubmitError(message);
       toast.error(message);
@@ -695,8 +697,8 @@ export default function SPMBDaftarOnlineV2() {
     try {
       const dokumenKk = await uploadDocument("kk", documents.kk);
       const dokumenAkta = await uploadDocument("akta", documents.akta);
-      const dokumenRapor = siswaPindahan ? await uploadDocument("rapor", documents.rapor) : undefined;
-      const dokumenIjazah = siswaPindahan ? await uploadDocument("ijazah", documents.ijazah) : undefined;
+      const dokumenRapor = perluDokumenPindahan ? await uploadDocument("rapor", documents.rapor) : undefined;
+      const dokumenIjazah = perluDokumenPindahan ? await uploadDocument("ijazah", documents.ijazah) : undefined;
       const result = await pmbDaftar({ data: {
         ...form,
         pendaftar_nama: form.pendaftar_nama.trim(),
@@ -1081,10 +1083,10 @@ export default function SPMBDaftarOnlineV2() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <DocumentPicker label="Kartu Keluarga" required value={documents.kk} upload={documentUploads.kk} disabled={loading} onChange={(file) => selectDocument("kk", file)} />
                     <DocumentPicker label="Akta Kelahiran" required value={documents.akta} upload={documentUploads.akta} disabled={loading} onChange={(file) => selectDocument("akta", file)} />
-                    {siswaPindahan && <DocumentPicker label="Rapor Siswa Pindahan" required value={documents.rapor} upload={documentUploads.rapor} disabled={loading} onChange={(file) => selectDocument("rapor", file)} />}
-                    {siswaPindahan && <DocumentPicker label="Ijazah / SKHUN Siswa Pindahan" required value={documents.ijazah} upload={documentUploads.ijazah} disabled={loading} onChange={(file) => selectDocument("ijazah", file)} />}
+                    {perluDokumenPindahan && <DocumentPicker label="Rapor Siswa Pindahan" required value={documents.rapor} upload={documentUploads.rapor} disabled={loading} onChange={(file) => selectDocument("rapor", file)} />}
+                    {perluDokumenPindahan && <DocumentPicker label="Ijazah / SKHUN Siswa Pindahan" required value={documents.ijazah} upload={documentUploads.ijazah} disabled={loading} onChange={(file) => selectDocument("ijazah", file)} />}
                   </div>
-                  <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900"><Upload className="mt-0.5 h-4 w-4 shrink-0" />Kartu Keluarga dan Akta Kelahiran wajib untuk semua pendaftar. Rapor dan Ijazah/SKHUN hanya ditampilkan dan wajib untuk kategori Siswa Pindahan.</div>
+                  <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900"><Upload className="mt-0.5 h-4 w-4 shrink-0" />Kartu Keluarga dan Akta Kelahiran wajib untuk semua pendaftar. Rapor dan Ijazah/SKHUN hanya ditampilkan dan wajib untuk Siswa Pindahan jenjang SMP, SMA, dan MTA.</div>
                 </FormSection>
               </fieldset>
 

@@ -1,3 +1,4 @@
+import { requiresTransferDocuments } from "@/lib/spmbPolicy";
 /**
  * Server functions SPMB publik.
  *
@@ -335,7 +336,6 @@ async function performPmbRegistration(
     const tahun_ajaran_id = (data.tahun_ajaran_id || "").trim() || null;
     const kategori = cleanChoice(data.kategori, KATEGORI_OPTIONS, "Kategori") || "MURID BARU";
     const jenis_pendaftaran = kategori === "MURID PINDAHAN" ? "pindahan" : "baru";
-    const isTransfer = kategori === "MURID PINDAHAN";
 
     if (!nama || nama.length < 2 || nama.length > 200) throw new Error("Nama lengkap wajib diisi (2-200 karakter)");
     if (!departemen_id) throw new Error("Departemen/lembaga wajib dipilih");
@@ -345,8 +345,6 @@ async function performPmbRegistration(
 
     const dokumenKkPath = validateDocumentPath(data.dokumen_kk_path, "kk", true);
     const dokumenAktaPath = validateDocumentPath(data.dokumen_akta_path, "akta", true);
-    const dokumenRaporPath = validateDocumentPath(data.dokumen_rapor_path, "rapor", isTransfer);
-    const dokumenIjazahPath = validateDocumentPath(data.dokumen_ijazah_path, "ijazah", isTransfer);
 
     const { data: dept } = await admin.from("departemen")
       .select("id, nama, kode")
@@ -361,6 +359,11 @@ async function performPmbRegistration(
     }
 
     const deptCode = kodeDepartemen(dept);
+    const needsTransferDocuments = requiresTransferDocuments(kategori, deptCode);
+    const dokumenRaporPath = needsTransferDocuments
+      ? validateDocumentPath(data.dokumen_rapor_path, "rapor", true) : null;
+    const dokumenIjazahPath = needsTransferDocuments
+      ? validateDocumentPath(data.dokumen_ijazah_path, "ijazah", true) : null;
     const jenisKelamin = data.jenis_kelamin === "P" ? "P" : "L";
     const perluAsrama = departemenPerluAsrama(dept, jenisKelamin);
     const perluNisn = departemenPerluNisn(dept);
