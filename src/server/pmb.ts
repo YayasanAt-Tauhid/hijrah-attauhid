@@ -801,3 +801,58 @@ export const spmbAdminUpdateRegistrationMethod = createServerFn({ method: "POST"
 
     return { success: true, metode };
   });
+
+export interface SpmbLulusAcceptResult {
+  success: true;
+  nis: string;
+  status_pendaftaran: string | null;
+  siswa_internal: boolean;
+  diterima: boolean;
+}
+
+export const spmbMarkLulusAndAccept = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: { siswa_id: string }) => d)
+  .handler(async ({ data, context }): Promise<SpmbLulusAcceptResult> => {
+    const actor = requireContext(context);
+    const admin = createAdminClient();
+    const siswaId = cleanText(data.siswa_id, 100);
+    if (!siswaId) throw new Error("Data siswa tidak valid");
+
+    const { data: detail, error: detailError } = await (admin.from("siswa_detail") as any)
+      .select("spmb_departemen_tujuan_id,spmb_gelombang_id")
+      .eq("siswa_id", siswaId)
+      .not("spmb_gelombang_id", "is", null)
+      .order("spmb_registered_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (detailError) throw new Error(detailError.message);
+    if (!detail?.spmb_gelombang_id) throw new Error("Pendaftaran SPMB tidak ditemukan");
+
+    let departemenId = detail.spmb_departemen_tujuan_id as string | null;
+    if (!departemenId) {
+      const { data: siswa, error: siswaError } = await admin
+        .from("siswa")
+        .select("departemen_id")
+        .eq("id", siswaId)
+        .maybeSingle();
+      if (siswaError) throw new Error(siswaError.message);
+      departemenId = siswa?.departemen_id || null;
+    }
+
+    await requireAcademicDepartment(admin, actor.userId, departemenId, ["admin", "admin_tu"]);
+
+    const { data: result, error } = await (admin as any).rpc("spmb_mark_lulus_and_accept", {
+      p_siswa_id: siswaId,
+    });
+    if (error) throw new Error(error.message);
+    if (!result?.nis) throw new Error("Penerimaan otomatis gagal membuat NIS tujuan");
+
+    return {
+      success: true,
+      nis: String(result.nis),
+      status_pendaftaran: result.status_pendaftaran ? String(result.status_pendaftaran) : null,
+      siswa_internal: result.siswa_internal === true,
+      diterima: result.diterima === true,
+    };
+  });
