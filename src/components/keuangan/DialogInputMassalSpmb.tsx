@@ -141,9 +141,10 @@ export function DialogInputMassalSpmb({ siswa, jenis, tahunBuku, onClose, onKeri
           </div>
           <p className="text-xs text-muted-foreground">Pilihan alumni dan fase MTA tetap diperiksa per siswa. Isian di tabel dapat diubah setelah penerapan.</p>
         </fieldset>
+        <p className="text-xs text-muted-foreground sm:hidden">Geser tabel ke samping untuk melihat isian SPP, uang pangkal, dan hasil pemeriksaan.</p>
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full min-w-[1050px] text-sm">
-            <thead className="bg-muted"><tr><th className="sticky left-0 z-10 min-w-[190px] bg-muted p-3 text-left">Siswa</th><th className="min-w-[260px] p-3 text-left">SPP dan bulan mulai</th><th className="min-w-[300px] p-3 text-left">Uang pangkal bruto</th><th className="min-w-[260px] p-3 text-left">Pemeriksaan / hasil</th></tr></thead>
+            <thead className="bg-muted"><tr><th className="min-w-[190px] bg-muted p-3 text-left sm:sticky sm:left-0 sm:z-10">Siswa</th><th className="min-w-[260px] p-3 text-left">SPP dan bulan mulai</th><th className="min-w-[300px] p-3 text-left">Uang pangkal bruto</th><th className="min-w-[260px] p-3 text-left">Pemeriksaan / hasil</th></tr></thead>
             <tbody>{drafts.map(draft => {
               const student = draft.siswa;
               const row = prepared?.find(item => item.draft.siswa.id === student.id);
@@ -154,7 +155,7 @@ export function DialogInputMassalSpmb({ siswa, jenis, tahunBuku, onClose, onKeri
               const calendar = bulanKalenderTahunAjaran(student.tahun_ajaran_id && student.tahun_ajaran_mulai && student.tahun_ajaran_selesai
                 ? { id: student.tahun_ajaran_id, tanggal_mulai: student.tahun_ajaran_mulai, tanggal_selesai: student.tahun_ajaran_selesai } : null);
               return <tr key={student.id} className="border-t align-top">
-                <td className="sticky left-0 z-10 bg-background p-3">
+                <td className="bg-background p-3 sm:sticky sm:left-0 sm:z-10">
                   <p className="font-semibold">{student.nama}</p><p className="text-xs text-muted-foreground">NIS {student.nis || "—"}</p>
                   <p className="mt-1 text-xs">{student.target_departemen_kode} · {student.tahun_ajaran_nama}</p>
                   <p className="text-xs">{student.status_asrama === "asrama" ? "Asrama" : student.status_asrama === "non_asrama" ? "Non Asrama" : "Asrama belum ditentukan"} · {student.spmb_internal ? "Internal" : "Eksternal"}</p>
