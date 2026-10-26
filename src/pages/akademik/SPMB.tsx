@@ -57,7 +57,7 @@ import { fetchSpmbReadinessInBatches } from "@/lib/spmbReadiness";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { AdminSpmbRegistrationDialog } from "@/components/akademik/AdminSpmbRegistrationDialog";
-import { spmbAdminUpdateRegistrantName, spmbAdminUpdateRegistrationMethod } from "@/server/pmb";
+import { spmbAdminUpdateRegistrantName, spmbAdminUpdateRegistrationMethod, spmbMarkLulusAndAccept } from "@/server/pmb";
 
 function departemenPerluAsrama(dept: any): boolean {
   const kode = (dept?.kode || "").trim().toUpperCase();
@@ -250,6 +250,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
   const [registrationSuccess, setRegistrationSuccess] = useState<RegistrationSuccess | null>(null);
   const [nisLoadingId, setNisLoadingId] = useState<string | null>(null);
   const [milestoneLoadingId, setMilestoneLoadingId] = useState<string | null>(null);
+  const [lulusConfirmRow, setLulusConfirmRow] = useState<Record<string, unknown> | null>(null);
   const [activationRow, setActivationRow] = useState<Record<string, unknown> | null>(null);
   const [activationClassId, setActivationClassId] = useState("");
   const [activationLoading, setActivationLoading] = useState(false);
@@ -936,13 +937,25 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
     const loadingKey = `${row.id}:${action}`;
     setMilestoneLoadingId(loadingKey);
     try {
-      const { error } = await (supabase as any).rpc("spmb_mark_milestone", {
-        p_siswa_id: row.id,
-        p_action: action,
+      let result: any = null;
+      if (action === "lulus") {
+        result = await spmbMarkLulusAndAccept({
+          data: { siswa_id: String(row.id || "") },
+        });
+        await refreshStudentData();
+      } else {
+        const { error } = await (supabase as any).rpc("spmb_mark_milestone", {
+          p_siswa_id: row.id,
+          p_action: action,
+        });
+        if (error) throw error;
+        await refreshSpmbData();
+      }
+      toast.success(`${label} berhasil dicatat`, {
+        description: action === "lulus" && result?.nis
+          ? `${row.nama as string} otomatis diterima · NIS tujuan ${result.nis}`
+          : row.nama as string,
       });
-      if (error) throw error;
-      await refreshSpmbData();
-      toast.success(`${label} berhasil dicatat`, { description: row.nama as string });
     } catch (error: any) {
       toast.error(`Gagal mencatat ${label.toLowerCase()}`, { description: error?.message || "Terjadi kesalahan teknis" });
     } finally {
@@ -1224,7 +1237,13 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
                     <DropdownMenuItem
                       key={action}
                       disabled={milestoneLoadingId !== null}
-                      onSelect={() => handleMilestone(row, action, SPMB_MILESTONE_SUCCESS_LABELS[action])}
+                      onSelect={() => {
+                        if (action === "lulus") {
+                          setLulusConfirmRow(row);
+                          return;
+                        }
+                        void handleMilestone(row, action, SPMB_MILESTONE_SUCCESS_LABELS[action]);
+                      }}
                     >
                       {SPMB_MILESTONE_ACTION_LABELS[action]}
                     </DropdownMenuItem>
@@ -1739,6 +1758,29 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={Boolean(lulusConfirmRow)} onOpenChange={(open) => { if (!open) setLulusConfirmRow(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Nyatakan calon murid lulus?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {String(lulusConfirmRow?.nama || "Calon murid")} akan otomatis diterima dan NIS tujuan akan dibuat. Sistem akan memeriksa kelengkapan terlebih dahulu; jika belum lengkap, seluruh proses dibatalkan tanpa perubahan parsial.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const row = lulusConfirmRow;
+                setLulusConfirmRow(null);
+                if (row) void handleMilestone(row, "lulus", SPMB_MILESTONE_SUCCESS_LABELS.lulus);
+              }}
+            >
+              Lulus &amp; Terima Murid
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}>
         <AlertDialogContent>
