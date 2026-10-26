@@ -1,3 +1,4 @@
+import { deleteWithApproval, deletionMessage } from "@/lib/dataDeletion";
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -101,8 +102,8 @@ function SetupKD() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("kompetensi_dasar").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["kompetensi_dasar"] }); toast.success("KD dihapus"); },
+    mutationFn: async (id: string) => deleteWithApproval("kompetensi_dasar", id),
+    onSuccess: (result) => { qc.invalidateQueries({ queryKey: ["kompetensi_dasar"] }); toast.success(deletionMessage(result, "KD dihapus")); },
     onError: (e: any) => toast.error(e.message),
   });
 

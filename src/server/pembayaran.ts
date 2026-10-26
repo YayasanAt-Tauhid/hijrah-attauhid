@@ -1,3 +1,4 @@
+import { processDeletion } from "./dataDeletion";
 import { isMonthlySppRevenue } from "@/lib/recognitionDate";
 /**
  * Server functions: prosesPembayaran, batalkanPembayaran
@@ -1092,20 +1093,25 @@ export const batalkanPembayaran = createServerFn({ method: "POST" })
     async ({
       data,
       context,
-    }): Promise<{ success: true; jurnal_pembalik_id: string | null }> => {
+    }): Promise<{ success: true; jurnal_pembalik_id: string | null; pending?: boolean; request_id?: string }> => {
       const admin = createAdminClient();
       const { userId } = requireContext(context);
       // BUKAN kasir — hanya admin/keuangan
-      await requireRole(admin, userId, [
+      const role = await requireRole(admin, userId, [
         "admin",
         "keuangan",
       ]);
 
       const { pembayaran_id, alasan } = data;
-      const tanggal = data.tanggal || new Date().toISOString().split("T")[0];
+      const tanggal = data.tanggal || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
 
       if (!pembayaran_id) throw new Error("pembayaran_id wajib diisi");
       if (!alasan || !alasan.trim()) throw new Error("Alasan wajib diisi");
+
+      if (role !== "admin") {
+        const queued = await processDeletion(admin, userId, "pembayaran", pembayaran_id, alasan, "cancel_payment", { tanggal });
+        return { success: true, jurnal_pembalik_id: null, pending: queued.pending, request_id: queued.request_id };
+      }
 
       const { data: periodeData } = await admin
         .from("tahun_buku")

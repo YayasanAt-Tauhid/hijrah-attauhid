@@ -1,3 +1,4 @@
+import { deleteWithApproval, deletionMessage } from "@/lib/dataDeletion";
 import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -107,8 +108,8 @@ function JadwalPerKelas() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("jadwal").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["jadwal_kelas"] }); toast.success("Jadwal dihapus"); },
+    mutationFn: async (id: string) => deleteWithApproval("jadwal", id),
+    onSuccess: (result) => { qc.invalidateQueries({ queryKey: ["jadwal_kelas"] }); toast.success(deletionMessage(result, "Jadwal dihapus")); },
     onError: (e: any) => toast.error(e.message),
   });
 

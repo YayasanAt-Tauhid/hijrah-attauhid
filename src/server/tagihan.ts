@@ -1,3 +1,4 @@
+import { processDeletion } from "./dataDeletion";
 /**
  * Server function: generateTagihan
  * Migrasi dari supabase/functions/generate-tagihan.
@@ -319,6 +320,8 @@ export interface KoreksiTagihanResult {
   mode: "batal" | "koreksi_nominal";
   tagihan_id: string;
   jurnal_pembalik_id: string | null;
+  pending?: boolean;
+  request_id?: string;
   jurnal_baru_id?: string | null;
   warn_no_jurnal?: boolean;
 }
@@ -329,18 +332,24 @@ export const batalkanTagihan = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<KoreksiTagihanResult> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, [
+    const role = await requireRole(admin, userId, [
       "admin",
       "keuangan",
     ]);
 
     const { tagihan_id, mode, alasan, nominal_baru } = data;
-    const tanggal = data.tanggal || new Date().toISOString().split("T")[0];
+    const tanggal = data.tanggal || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
 
     if (!tagihan_id) throw new Error("tagihan_id wajib diisi");
     if (!alasan || !alasan.trim()) throw new Error("Alasan wajib diisi");
     if (mode === "koreksi_nominal" && (!nominal_baru || nominal_baru <= 0)) {
       throw new Error("Nominal baru harus lebih dari 0");
+    }
+
+    if (role !== "admin") {
+      const queued = await processDeletion(admin, userId, "tagihan", tagihan_id, alasan,
+        mode === "batal" ? "cancel_bill" : "correct_bill", { tanggal, nominal_baru });
+      return { success: true, mode, tagihan_id, jurnal_pembalik_id: null, pending: queued.pending, request_id: queued.request_id };
     }
 
     const { data: result, error: rpcErr } = await admin.rpc(
@@ -387,6 +396,8 @@ export interface BatalkanTagihanBatchInput {
 export interface BatalkanTagihanBatchResult {
   success: true;
   berhasil: number;
+  pending?: boolean;
+  diajukan?: number;
   gagal: { tagihan_id: string; error: string }[];
 }
 
@@ -402,13 +413,13 @@ export const batalkanTagihanBatch = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<BatalkanTagihanBatchResult> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, [
+    const role = await requireRole(admin, userId, [
       "admin",
       "keuangan",
     ]);
 
     const { tagihan_ids, alasan } = data;
-    const tanggal = data.tanggal || new Date().toISOString().split("T")[0];
+    const tanggal = data.tanggal || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
 
     if (!Array.isArray(tagihan_ids) || tagihan_ids.length === 0) {
       throw new Error("tagihan_ids wajib diisi (minimal 1)");
@@ -419,6 +430,19 @@ export const batalkanTagihanBatch = createServerFn({ method: "POST" })
       );
     }
     if (!alasan || !alasan.trim()) throw new Error("Alasan wajib diisi");
+
+    if (role !== "admin") {
+      const { data: rows, error } = await (admin as any).rpc("queue_bill_deletion_batch", {
+        p_actor: userId, p_ids: tagihan_ids, p_reason: alasan, p_date: tanggal,
+      });
+      if (error) throw new Error(error.message);
+      const failed = (rows || []).filter((row: any) => !row.berhasil);
+      return {
+        success: true, berhasil: 0, pending: true,
+        diajukan: (rows || []).length - failed.length,
+        gagal: failed.map((row: any) => ({ tagihan_id: row.tagihan_id, error: row.error_message })),
+      };
+    }
 
     // SATU panggilan RPC untuk seluruh batch (1 subrequest dari sisi Worker),
     // bukan loop admin.rpc() per tagihan seperti versi sebelumnya. Versi loop

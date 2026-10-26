@@ -1,3 +1,4 @@
+import { DeletionReasonDialog } from "@/components/shared/DeletionReasonDialog";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { TopNavbar } from "./TopNavbar";
@@ -11,7 +12,8 @@ export function AppLayout() {
   if (role === "admin_tu") {
     if (!departemenId) return <Navigate to="/unauthorized" replace />;
     if (!location.pathname.startsWith("/akademik")
-      && location.pathname.replace(/\/+$/, "") !== "/keuangan/monitoring-spmb") {
+      && location.pathname.replace(/\/+$/, "") !== "/keuangan/monitoring-spmb"
+      && location.pathname.replace(/\/+$/, "") !== "/pengajuan-penghapusan") {
       return <Navigate to="/akademik" replace />;
     }
   }
@@ -20,6 +22,7 @@ export function AppLayout() {
     <SidebarProvider>
       <div className="min-h-screen flex w-full print:block print:min-h-0">
         <AppSidebar />
+        <DeletionReasonDialog />
         <div className="flex-1 flex flex-col min-w-0 print:block">
           <TopNavbar />
           <main className="flex-1 p-4 md:p-6 overflow-auto print:overflow-visible print:h-auto print:p-0">

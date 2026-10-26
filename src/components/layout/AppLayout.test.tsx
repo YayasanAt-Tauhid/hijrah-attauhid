@@ -15,7 +15,7 @@ import { AppLayout } from "./AppLayout";
 
 beforeEach(() => { state.role = "admin_tu"; state.departemenId = "tk"; state.pathname = "/keuangan/monitoring-spmb"; });
 describe("Admin TU navigation", () => {
-  it.each(["/keuangan/monitoring-spmb", "/keuangan/monitoring-spmb/", "/akademik/spmb"])("allows %s", pathname => {
+  it.each(["/keuangan/monitoring-spmb", "/keuangan/monitoring-spmb/", "/akademik/spmb", "/pengajuan-penghapusan", "/pengajuan-penghapusan/"])("allows %s", pathname => {
     state.pathname = pathname; render(<AppLayout />);
     expect(screen.getByText("Protected content")).toBeInTheDocument();
   });

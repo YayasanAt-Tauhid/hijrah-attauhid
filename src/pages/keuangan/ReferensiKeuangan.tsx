@@ -1,3 +1,4 @@
+import { deleteWithApproval, deletionMessage } from "@/lib/dataDeletion";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1069,11 +1070,14 @@ function TabProgramDana() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    const { error } = await (supabase.from("program_dana") as any).delete().eq("id", deleteId);
-    if (error) toast.error("Gagal menghapus: " + error.message);
-    else toast.success("Program dana dihapus");
-    queryClient.invalidateQueries({ queryKey: ["program_dana"] });
-    setDeleteId(null);
+    try {
+      const result = await deleteWithApproval("program_dana", deleteId);
+      toast.success(deletionMessage(result, "Program dana dihapus"));
+      queryClient.invalidateQueries({ queryKey: ["program_dana"] });
+      setDeleteId(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal menghapus program dana");
+    }
   };
 
   const columns: DataTableColumn<any>[] = [
