@@ -40,20 +40,20 @@ afterEach(cleanup);
 describe("rencana tagihan status asrama dan keringanan", () => {
  it("membedakan data asrama kosong dari nonasrama dan memfilter siswa", async () => {
    mount();
-   await screen.findByRole("row", { name: /^Asrama Siswa.*Asrama/ });
+   await screen.findByRole("row", { name: /^Pilih Asrama Siswa.*Asrama/ });
    expect(screen.getByRole("row", { name: /Belum Status Siswa/ })).toHaveTextContent("Belum ditentukan");
    fireEvent.change(screen.getAllByRole("combobox")[1], { target: { value: "non_asrama" } });
    expect(screen.getByRole("row", { name: /Non Asrama Siswa/ })).toBeInTheDocument();
-   expect(screen.queryByRole("row", { name: /^Asrama Siswa/ })).not.toBeInTheDocument();
+   expect(screen.queryByRole("row", { name: /^Pilih Asrama Siswa/ })).not.toBeInTheDocument();
    expect(screen.queryByRole("row", { name: /Belum Status Siswa/ })).not.toBeInTheDocument();
    expect(screen.getByRole("row", { name: /Non Asrama Siswa/ })).toHaveTextContent("Eksternal");
    fireEvent.change(screen.getAllByRole("combobox")[2], { target: { value: "internal" } });
    expect(screen.queryByRole("row", { name: /Non Asrama Siswa/ })).not.toBeInTheDocument();
    fireEvent.change(screen.getAllByRole("combobox")[1], { target: { value: "__all__" } });
-   expect(screen.getByRole("row", { name: /^Asrama Siswa/ })).toHaveTextContent("Internal");
+   expect(screen.getByRole("row", { name: /^Pilih Asrama Siswa/ })).toHaveTextContent("Internal");
    expect(screen.queryByRole("row", { name: /Belum Status Siswa/ })).not.toBeInTheDocument();
    fireEvent.change(screen.getAllByRole("combobox")[2], { target: { value: "eksternal" } });
-   expect(screen.queryByRole("row", { name: /^Asrama Siswa/ })).not.toBeInTheDocument();
+   expect(screen.queryByRole("row", { name: /^Pilih Asrama Siswa/ })).not.toBeInTheDocument();
    expect(screen.getByRole("row", { name: /Belum Status Siswa/ })).toHaveTextContent("Eksternal");
  });
  it("membuka input keringanan calon siswa sebelum penempatan dengan lembaga tujuan", async () => {
@@ -73,9 +73,9 @@ it("menampilkan status input SPP dan uang pangkal serta memfilter sudah/belum in
  expect(screen.getByRole("row",{name:/Belum Status Siswa/})).toHaveTextContent("Perlu diperiksa");
  fireEvent.change(screen.getAllByRole("combobox")[4],{target:{value:"sudah_diinput"}});
  expect(screen.getByRole("row",{name:/Non Asrama Siswa/})).toBeInTheDocument();
- expect(screen.queryByRole("row",{name:/^Asrama Siswa/})).not.toBeInTheDocument();
+ expect(screen.queryByRole("row",{name:/^Pilih Asrama Siswa/})).not.toBeInTheDocument();
  fireEvent.change(screen.getAllByRole("combobox")[5],{target:{value:"sudah_diinput"}});
  expect(screen.queryByRole("row",{name:/Non Asrama Siswa/})).not.toBeInTheDocument();
  fireEvent.change(screen.getAllByRole("combobox")[4],{target:{value:"__all__"}});
- expect(screen.getByRole("row",{name:/^Asrama Siswa/})).toBeInTheDocument();
+ expect(screen.getByRole("row",{name:/^Pilih Asrama Siswa/})).toBeInTheDocument();
 });
