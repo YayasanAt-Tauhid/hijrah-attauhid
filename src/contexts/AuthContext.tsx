@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, Re
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { withAuthTimeout } from "@/lib/authTimeout";
+import { clearAllSpmbAdminDrafts } from "@/lib/spmbAdminDraft";
 
 export type UserRole = "admin" | "admin_tu" | "kepala_sekolah" | "guru" | "keuangan" | "siswa" | "pustakawan" | "kasir" | "ortu" | "sekretaris_yayasan";
 type SignInResult = { error: string | null; role?: UserRole | null };
@@ -124,6 +125,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Return synchronously and defer profile queries until the auth lock is released.
       // Sign-out invalidates old profile requests immediately.
       if (!nextSession) {
+        // Draf SPMB berisi data pribadi calon murid; jangan tertinggal di komputer bersama setelah logout.
+        if (_event === "SIGNED_OUT") clearAllSpmbAdminDrafts();
         void resolveSession(null);
         return;
       }

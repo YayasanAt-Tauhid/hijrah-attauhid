@@ -154,6 +154,19 @@ describe("AuthProvider recovery and session ordering", () => {
     expect(auth.isLoading).toBe(false);
   });
 
+  it("clears SPMB registration drafts on SIGNED_OUT only", async () => {
+    mocks.getSession.mockResolvedValue(stored(session()));
+    await start();
+    localStorage.setItem("spmb-admin-draft:v1:parent", JSON.stringify({ savedAt: 1, form: {} }));
+    localStorage.setItem("unrelated-key", "kept");
+    await event(null, "INITIAL_SESSION");
+    expect(localStorage.getItem("spmb-admin-draft:v1:parent")).not.toBeNull();
+    await event(null, "SIGNED_OUT");
+    expect(localStorage.getItem("spmb-admin-draft:v1:parent")).toBeNull();
+    expect(localStorage.getItem("unrelated-key")).toBe("kept");
+    localStorage.removeItem("unrelated-key");
+  });
+
   it("keeps a verified portal open while the same account refreshes its token", async () => {
     mocks.getSession.mockResolvedValue(stored(session()));
     await start();

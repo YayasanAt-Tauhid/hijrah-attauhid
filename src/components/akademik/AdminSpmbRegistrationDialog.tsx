@@ -1,5 +1,5 @@
 import { requiresTransferDocuments } from "@/lib/spmbPolicy";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@/lib/router-compat";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,6 +12,24 @@ import {
   SPMB_TARGET_ACADEMIC_YEAR,
   SPMB_TARGET_COHORT,
 } from "@/lib/spmbPolicy";
+import {
+  clearSpmbAdminDraft,
+  isSpmbAdminFormDirty,
+  loadSpmbAdminDraft,
+  restoreSpmbAdminForm,
+  saveSpmbAdminDraft,
+  type SpmbAdminDraft,
+} from "@/lib/spmbAdminDraft";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -130,6 +148,9 @@ export function AdminSpmbRegistrationDialog({
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState<{ id: string; nama: string; inputer?: string | null } | null>(null);
   const [inputerName, setInputerName] = useState("Petugas");
+  const [pendingDraft, setPendingDraft] = useState<SpmbAdminDraft | null>(null);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const userId = user?.id ?? null;
 
   const targetYear = useMemo(
     () => academicYears.find((item) => String(item.nama || "").trim() === SPMB_TARGET_ACADEMIC_YEAR),
@@ -195,6 +216,61 @@ export function AdminSpmbRegistrationDialog({
     setForm({ ...emptyForm, tahun_ajaran_id: targetYear?.id || "" });
     setDocuments({ kk: null, akta: null, rapor: null, ijazah: null });
     setSuccess(null);
+  };
+
+  const formDirty = isSpmbAdminFormDirty(form, emptyForm);
+  const hasUnsavedInput = formDirty || Object.values(documents).some(Boolean);
+  const guardUnload = open && !saving && !success && hasUnsavedInput;
+
+  // Draf tersimpan otomatis setelah jeda 500 ms. Tidak berjalan selama tawaran draf lama masih
+  // tampil, supaya formulir kosong tidak menimpa draf yang belum dipilih Lanjutkan/Buang.
+  useEffect(() => {
+    if (!open || saving || success || pendingDraft || !userId) return;
+    const timer = window.setTimeout(() => {
+      if (formDirty) saveSpmbAdminDraft(userId, form);
+      else clearSpmbAdminDraft(userId);
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [open, saving, success, pendingDraft, userId, form, formDirty]);
+
+  // Cegah tab tertutup / di-refresh tanpa sengaja; simpan draf terakhir sebelum halaman pergi.
+  useEffect(() => {
+    if (!guardUnload) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      if (!pendingDraft && formDirty) saveSpmbAdminDraft(userId, form);
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [guardUnload, pendingDraft, formDirty, userId, form]);
+
+  const closeDialog = () => {
+    if (!pendingDraft && formDirty && !success) saveSpmbAdminDraft(userId, form);
+    setConfirmClose(false);
+    setOpen(false);
+  };
+
+  // Klik di luar, Esc, tombol X, dan Batal lewat sini: bila ada isian, minta konfirmasi dulu.
+  const requestClose = () => {
+    if (saving) return;
+    if (hasUnsavedInput && !success) setConfirmClose(true);
+    else closeDialog();
+  };
+
+  const resumeDraft = () => {
+    if (!pendingDraft) return;
+    setForm((current) => ({
+      ...restoreSpmbAdminForm(emptyForm, pendingDraft.form),
+      tahun_ajaran_id: current.tahun_ajaran_id,
+      angkatan_id: current.angkatan_id,
+    }));
+    setPendingDraft(null);
+  };
+
+  const discardDraft = () => {
+    clearSpmbAdminDraft(userId);
+    setPendingDraft(null);
   };
 
   const set = (key: keyof typeof emptyForm) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -264,6 +340,7 @@ export function AdminSpmbRegistrationDialog({
         dokumen_rapor_path: rapor,
         dokumen_ijazah_path: ijazah,
       } });
+      clearSpmbAdminDraft(userId);
       await onRegistered(result.siswa_id);
       setSuccess({ id: result.siswa_id, nama: form.nama.trim(), inputer: result.inputer_nama || inputer });
       toast.success("Pendaftaran SPMB berhasil disimpan", { description: `Nama Pendaftar: ${result.inputer_nama || inputer}` });
@@ -275,10 +352,13 @@ export function AdminSpmbRegistrationDialog({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(next) => {
       if (saving) return;
-      setOpen(next);
-      if (next) reset();
+      if (!next) return requestClose();
+      reset();
+      setPendingDraft(loadSpmbAdminDraft(userId));
+      setOpen(true);
     }}>
       <DialogTrigger asChild>
         <Button className="min-h-11 px-4" disabled={disabled}><UserPlus className="mr-2 h-4 w-4" />Daftarkan Calon Murid</Button>
@@ -302,7 +382,22 @@ export function AdminSpmbRegistrationDialog({
               <p className="mt-2 text-sm text-muted-foreground">Pendaftaran offline oleh Admin/TU dengan data dan aturan yang sama seperti /spmb.</p>
             </div>
 
-            <fieldset disabled={saving} className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-6 py-5 touch-pan-y disabled:opacity-70">
+            {pendingDraft && (
+              <div role="status" className="flex shrink-0 flex-col gap-3 border-b bg-warning/10 px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm">
+                  <p className="font-medium">Ada draf pendaftaran yang belum disimpan</p>
+                  <p className="text-xs text-muted-foreground">
+                    Tersimpan {new Date(pendingDraft.savedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}. Dokumen (KK, Akta, dan lainnya) perlu dipilih lagi.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={discardDraft}>Buang Draf</Button>
+                  <Button type="button" size="sm" onClick={resumeDraft}>Lanjutkan</Button>
+                </div>
+              </div>
+            )}
+
+            <fieldset disabled={saving || Boolean(pendingDraft)} className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-6 py-5 touch-pan-y disabled:opacity-70">
               <FormSection title="Nama Pendaftar" description="Dicatat otomatis dari akun yang sedang login">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div><Label>Nama Pendaftar *</Label><Input value={inputer} disabled /></div>
@@ -397,7 +492,7 @@ export function AdminSpmbRegistrationDialog({
             </fieldset>
 
             <div className="flex shrink-0 flex-col-reverse gap-2 border-t bg-background px-6 py-4 sm:flex-row sm:justify-end">
-              <Button type="button" variant="outline" disabled={saving} onClick={() => setOpen(false)}>Batal</Button>
+              <Button type="button" variant="outline" disabled={saving} onClick={requestClose}>Batal</Button>
               <Button type="submit" disabled={saving || !targetYear || !targetCohort}>
                 {saving ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Mengunggah & menyimpan…</> : <><UserPlus className="mr-2 h-4 w-4" />Simpan Pendaftaran</>}
               </Button>
@@ -406,5 +501,22 @@ export function AdminSpmbRegistrationDialog({
         )}
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={confirmClose} onOpenChange={setConfirmClose}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Tutup formulir pendaftaran?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Isian yang sudah diketik tersimpan otomatis sebagai draf di browser ini selama 24 jam, jadi bisa dilanjutkan nanti.
+            Dokumen yang sudah dipilih (KK, Akta, dan lainnya) tidak ikut tersimpan dan perlu dipilih lagi.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Lanjut Mengisi</AlertDialogCancel>
+          <AlertDialogAction onClick={closeDialog}>Ya, Tutup</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
