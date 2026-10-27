@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { isAkunKas } from "@/lib/posIsak35";
 
 // ============================================================
 // TIPE FILTER PERIODE — bisa per tahun atau rentang tanggal
@@ -365,11 +366,6 @@ function byPos(saldo: SaldoAkun[], ...positions: string[]) {
 
 function sumSaldo(items: SaldoAkun[]) {
   return items.reduce((s, a) => s + a.saldo, 0);
-}
-
-function isAkunKas(kode: string, nama: string): boolean {
-  const n = (nama || "").toUpperCase().trim();
-  return n.startsWith("KAS ") || n === "KAS" || n.startsWith("BANK ") || n === "BANK";
 }
 
 /** Ambil seluruh baris hasil RPC dengan paginasi — PostgREST membatasi
