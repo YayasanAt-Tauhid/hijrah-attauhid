@@ -31,6 +31,27 @@ describe("checkout expired blockers",()=>{
     await expect(findReusablePaymentForBills("parent",items)).rejects.toThrow("sedang dibukukan");
     expect(mocks.close).not.toHaveBeenCalled();
   });
+  it("never treats a public session without owner (PMB) as owned by a payment link",async()=>{
+    rows([{...expired,user_id:null,payment_link_id:null,expired_at:new Date(Date.now()+3600000).toISOString()}]);
+    await expect(findReusablePaymentForBills({paymentLinkId:"link-1"},items)).rejects.toThrow("online lain");
+  });
+  it("keeps sessions of one payment link away from another link and from parents",async()=>{
+    const active={...expired,user_id:null,payment_link_id:"link-1",expired_at:new Date(Date.now()+3600000).toISOString()};
+    rows([active]);
+    await expect(findReusablePaymentForBills({paymentLinkId:"link-2"},items)).rejects.toThrow("online lain");
+    rows([active]);
+    await expect(findReusablePaymentForBills("parent",items)).rejects.toThrow("online lain");
+  });
+  it("recognizes an active session created through the same payment link",async()=>{
+    const active={...expired,user_id:null,payment_link_id:"link-1",expired_at:new Date(Date.now()+3600000).toISOString()};
+    const blockersQuery={select:()=>blockersQuery,in:()=>blockersQuery,
+      then:(resolve:any)=>resolve({data:[{transaksi:active}],error:null})};
+    const itemsQuery={select:()=>itemsQuery,eq:()=>itemsQuery,
+      then:(resolve:any)=>resolve({data:[{tagihan_id:"other-bill",jumlah:100}],error:null})};
+    mocks.from.mockImplementationOnce(()=>blockersQuery).mockImplementationOnce(()=>itemsQuery);
+    // Owned by this link → reaches the "same items" comparison instead of "online lain".
+    await expect(findReusablePaymentForBills({paymentLinkId:"link-1"},items)).rejects.toThrow("sebagian tagihan");
+  });
   it("closes each expired blocker once even if it has multiple bill items",async()=>{
     rows([expired,expired]);
     await expect(findReusablePaymentForBills("parent",items)).resolves.toBeNull();

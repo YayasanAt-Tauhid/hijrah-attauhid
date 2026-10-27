@@ -1,3 +1,23 @@
+## Link pembayaran orang tua tanpa portal (27 Oktober 2026)
+Admin/keuangan/kasir membuat link Midtrans dari Input Pembayaran untuk orang tua
+yang tidak memakai aplikasi portal. Kasir menentukan daftar tagihan; orang tua
+boleh membayar sebagian dari daftar itu dengan urutan bulan terlama lebih dulu.
+Link berlaku 7 hari dan dapat dibatalkan di menu Link Pembayaran (kasir hanya
+link buatan sendiri). Biaya layanan tetap ditangani Midtrans; tidak ada logika fee.
+
+Keamanan: token 256-bit hanya disimpan sebagai SHA-256, berada di fragment URL
+(/bayar#token) sehingga tidak masuk log server/Referer, dan tidak disertakan di
+URL callback Midtrans (halaman memakai sessionStorage saat kembali). Sesi Midtrans
+link dimiliki payment_link_id (user_id NULL) dan RPC
+create_midtrans_link_checkout_atomik memvalidasi ulang link aktif + cakupan
+tagihan di database. Token mentah hanya ditampilkan sekali; bila hilang, buat link
+baru lalu batalkan yang lama. Rate limit belum ada di aplikasi; bila diinginkan,
+pasang aturan Cloudflare untuk /bayar dan server function publiknya.
+
+Migrasi 20261027010000_payment_link_orang_tua.sql BELUM diterapkan ke database
+mana pun; sudah diuji pada Postgres 16 sementara (idempoten, 10 skenario
+penolakan/izin). Penerapan ke produksi menunggu konfirmasi pengguna.
+
 ## NIS asal kembali terlihat di SPMB (22 Oktober 2026)
 PR161 menampilkan hanya NIS tujuan pada daftar SPMB sehingga NIS asal 52
 pendaftar internal tidak terlihat, padahal nomor di database tetap ada.

@@ -4,6 +4,7 @@ import { PrintKuitansi } from "@/components/shared/PrintKuitansi";
 import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan";
 import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/components/shared/ReceiptOrientationSelect";
 import { PrintTagihan, type PrintTagihanItem } from "@/components/shared/PrintTagihan";
+import { DialogLinkPembayaran, type LinkPembayaranBill } from "@/components/keuangan/DialogLinkPembayaran";
 import { RupiahInput } from "@/components/shared/RupiahInput";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import Unauthorized from "@/pages/Unauthorized";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search, Printer, Plus, Check, X, ShoppingCart, Trash2, WalletCards, History, Info, Lock } from "lucide-react";
+import { Search, Printer, Plus, Check, X, ShoppingCart, Trash2, WalletCards, History, Info, Lock, Link2 } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -191,6 +192,7 @@ function InputPembayaranContent() {
   const [showTagihanPrint, setShowTagihanPrint] = useState(false);
   const [showTambahTagihan, setShowTambahTagihan] = useState(false);
   const [tagihanPrintItems, setTagihanPrintItems] = useState<PrintTagihanItem[]>([]);
+  const [linkPembayaranBills, setLinkPembayaranBills] = useState<LinkPembayaranBill[]>([]);
   const [riwayatPrintTarget, setRiwayatPrintTarget] = useState<PembayaranRiwayat | null>(null);
   const [riwayatSearch, setRiwayatSearch] = useState("");
   const [cartItems, setCartItems] = useState<PaymentCartItem[]>([]);
@@ -821,6 +823,7 @@ function InputPembayaranContent() {
 
   const handleSelectSiswa = useCallback((s: SiswaWithKelas) => {
     setSelectedSiswa(s);
+    setLinkPembayaranBills([]);
     setShowTambahTagihan(false);
     setSearchTerm("");
     setCartItems([]);
@@ -1046,6 +1049,22 @@ function InputPembayaranContent() {
     if (items.length === 0) return;
     setTagihanPrintItems(items);
     setShowTagihanPrint(true);
+  };
+
+  // Link Midtrans untuk orang tua tanpa aplikasi portal: tagihan yang dicentang,
+  // atau semua tagihan terbuka bila belum ada yang dicentang.
+  const handleOpenLinkPembayaran = () => {
+    const picked = openBills.filter(bill => cartItems.some(item => item.key === bill.id));
+    const source = picked.length > 0 ? picked : openBills;
+    const bills = source
+      .filter(bill => Number(bill.sisa) > 0)
+      .map(bill => ({
+        id: bill.id,
+        label: [bill.jenis_pembayaran?.nama ?? "Tagihan", billPeriodLabel(bill)].filter(Boolean).join(" · "),
+        sisa: Number(bill.sisa),
+      }));
+    if (bills.length === 0) return;
+    setLinkPembayaranBills(bills);
   };
 
   const handleAddToCart = () => {
@@ -1493,6 +1512,17 @@ function InputPembayaranContent() {
               >
                 <Printer className="mr-2 h-4 w-4" />
                 Cetak Tagihan
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                disabled={openBills.length === 0}
+                title="Buat link pembayaran Midtrans untuk orang tua dari tagihan yang dicentang, atau semua tagihan jika belum ada yang dicentang"
+                onClick={handleOpenLinkPembayaran}
+              >
+                <Link2 className="mr-2 h-4 w-4" />
+                Link Pembayaran
               </Button>
               </div>
             </div>
@@ -2110,6 +2140,16 @@ function InputPembayaranContent() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {selectedSiswa && (
+        <DialogLinkPembayaran
+          open={linkPembayaranBills.length > 0}
+          onOpenChange={(open) => { if (!open) setLinkPembayaranBills([]); }}
+          siswaId={selectedSiswa.id}
+          siswaNama={selectedSiswa.nama}
+          bills={linkPembayaranBills}
+        />
       )}
 
       {/* ── Cetak tagihan terpilih (bisa gabungan jatuh tempo / belum jatuh tempo) ── */}
