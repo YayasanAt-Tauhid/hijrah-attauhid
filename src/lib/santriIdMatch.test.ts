@@ -52,16 +52,36 @@ const rec = (over: Partial<SipaksaRecord>): SipaksaRecord => ({
 });
 
 describe("isOwnNis", () => {
-  it.each(["21-01-001", "26-03-120"])("mengenali NIS mandiri format YY-KK-NNN: %s", (nis) => {
-    expect(isOwnNis(nis)).toBe(true);
-  });
-
-  it.each([null, undefined, "", "2538027221", "21.01.001", "21-01-1", "ab-01-001"])(
-    "bukan NIS mandiri: %s",
+  // Database menyimpan NIS tanpa tanda hubung (trigger normalisasi_nis_tanpa_hubung),
+  // jadi bentuk yang berlaku di data nyata adalah 7 digit polos: YY + KK + NNN.
+  it.each(["2601001", "2701003", " 2601001 "])(
+    "mengenali NIS mandiri 7 digit tanpa hubung: %s",
     (nis) => {
-      expect(isOwnNis(nis)).toBe(false);
+      expect(isOwnNis(nis)).toBe(true);
     },
   );
+
+  it.each(["21-01-001", "26-03-120"])(
+    "tetap mengenali bentuk berhubung YY-KK-NNN: %s",
+    (nis) => {
+      expect(isOwnNis(nis)).toBe(true);
+    },
+  );
+
+  it.each([
+    null,
+    undefined,
+    "",
+    "2538027221", // 10 digit: bukan NIS mandiri
+    "260100", // 6 digit
+    "26010011", // 8 digit
+    "21.01.001",
+    "21-01-1",
+    "ab-01-001",
+    "2601-001", // setengah berhubung
+  ])("bukan NIS mandiri: %s", (nis) => {
+    expect(isOwnNis(nis)).toBe(false);
+  });
 });
 
 describe("matchSantriIds", () => {
@@ -122,14 +142,17 @@ describe("matchSantriIds", () => {
     expect(hasil.ambiguous[0]?.siswa_ids.sort()).toEqual(["a", "b"]);
   });
 
-  it("aturan mandiri: siswa ber-NIS YY-KK-NNN tidak ditimpa ID pihak ketiga", () => {
-    const hasil = matchSantriIds(
-      [rec({ santriId: "21.01.001", nisn: "111" })],
-      [siswa({ id: "s1", nisn: "111", nis: "21-01-001" })],
-    );
-    expect(hasil.updates).toHaveLength(0);
-    expect(hasil.summary.skippedOwnNis).toBe(1);
-  });
+  it.each(["21-01-001", "2101001"])(
+    "aturan mandiri: siswa ber-NIS mandiri (%s) tidak ditimpa ID pihak ketiga",
+    (nisMandiri) => {
+      const hasil = matchSantriIds(
+        [rec({ santriId: "21.01.001", nisn: "111" })],
+        [siswa({ id: "s1", nisn: "111", nis: nisMandiri })],
+      );
+      expect(hasil.updates).toHaveLength(0);
+      expect(hasil.summary.skippedOwnNis).toBe(1);
+    },
+  );
 
   it("tidak menimpa ID pihak ketiga berbeda yang sudah tersimpan", () => {
     const hasil = matchSantriIds(

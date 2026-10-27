@@ -3,7 +3,7 @@
  *
  * Mengisi `siswa.id_santri_pihak3` dari API pihak ketiga (SiPaksa). Pencocokan
  * ada di `src/lib/santriIdMatch.ts` (NISN lalu NIS; nama hanya daftar tinjau;
- * siswa ber-NIS mandiri YY-KK-NNN tidak pernah ditimpa).
+ * siswa ber-NIS mandiri 7 digit polos / YY-KK-NNN tidak pernah ditimpa).
  *
  * Default DRY-RUN: hanya mengembalikan laporan, tidak menulis apa pun. Penulisan
  * hanya terjadi bila pemanggil mengirim `dry_run: false` secara eksplisit, dan
