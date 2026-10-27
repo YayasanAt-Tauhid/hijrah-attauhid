@@ -3606,6 +3606,7 @@ export type Database = {
           email: string | null
           foto_url: string | null
           id: string
+          id_santri_pihak3: string | null
           jenis_kelamin: string | null
           keluarga_id: string | null
           nama: string
@@ -3625,6 +3626,7 @@ export type Database = {
           email?: string | null
           foto_url?: string | null
           id?: string
+          id_santri_pihak3?: string | null
           jenis_kelamin?: string | null
           keluarga_id?: string | null
           nama: string
@@ -3644,6 +3646,7 @@ export type Database = {
           email?: string | null
           foto_url?: string | null
           id?: string
+          id_santri_pihak3?: string | null
           jenis_kelamin?: string | null
           keluarga_id?: string | null
           nama?: string
@@ -5341,6 +5344,10 @@ export type Database = {
           skor: number
           sumber: string
         }[]
+      }
+      sync_id_santri_pihak3: {
+        Args: { p_updates: Json }
+        Returns: Json
       }
       terapkan_diskon_siswa: {
         Args: { p_siswa_diskon_id: string; p_user_id?: string }

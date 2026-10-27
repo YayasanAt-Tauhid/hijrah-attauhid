@@ -6,6 +6,15 @@
 
 ## Info Penting
 
+## Pembaruan 28 Oktober 2026 — ID Santri pihak ketiga (SiPaksa)
+
+- Disetujui user: simpan `santriId` dari API SiPaksa (`/api/setoran?jenjang=all&limit=2000`) di kolom baru `siswa.id_santri_pihak3`, sebagai penghubung **sementara**. Kalau siswa sudah punya NIS mandiri aplikasi (format `YY-KK-NNN`, `akademik_generate_nis_current`), ID pihak ketiga tidak dipakai dan tidak pernah menimpanya; kolom bisa dihapus setelah semua siswa ber-NIS mandiri.
+- Kunci pencocokan: NISN dulu, lalu NIS (dibandingkan sebagai teks, nol di depan dipertahankan). Kecocokan nama TIDAK pernah jadi update, hanya daftar tinjau (di DB ada 9 nama ganda). Logika di `src/lib/santriIdMatch.ts`, server function dry-run di `src/server/santriId.ts` (default dry-run, tulis hanya bila `dry_run: false`, lewat RPC atomik `sync_id_santri_pihak3`).
+- Kondisi DB `cmvzcpeiuompqgdvflky` saat diperiksa (read-only, 28 Okt): 1.219 siswa; NISN terisi 1.011 (unik, semuanya 10 digit); NIS terisi 875 dan belum ada satu pun berformat `YY-KK-NNN`. API SiPaksa: 1.146 santri aktif.
+- **BELUM diterapkan ke produksi:** migrasi `20261028052500_siswa_id_santri_pihak3.sql` belum dijalankan, dry-run live belum dijalankan, backfill belum dilakukan (semuanya menunggu konfirmasi user). Perubahan juga belum di-commit/push dari sesi ini.
+- Belum dijawab user: apakah siswa tanpa ID pihak ketiga ikut dibuatkan NIS mandiri baru.
+- `types.ts` ketinggalan dari DB live: kolom `siswa.nisn` ada di DB tetapi belum ada di tipe (hanya `id_santri_pihak3` yang ditambahkan di sini).
+
 ## Pembaruan 17 September 2026 — Target Main & Promo SPMB
 
 - Instruksi user terbaru: branch `main` memakai Supabase **`cmvzcpeiuompqgdvflky` saja** untuk pekerjaan aktif; pemetaan lama di arsip tidak boleh dipakai untuk memilih target remote.
