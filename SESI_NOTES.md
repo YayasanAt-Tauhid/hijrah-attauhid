@@ -1,4 +1,4 @@
-# Catatan Sesi — terakhir diperbarui 28 Juli 2026
+# Catatan Sesi — terakhir diperbarui 28 Oktober 2026
 
 > File ini dibaca otomatis oleh Claude Code di awal sesi (lihat CLAUDE.md → Kontinuitas Antar Sesi).
 > Update file ini di akhir setiap pengerjaan yang berarti: apa yang selesai, keputusan + alasannya, langkah berikutnya.
@@ -8,12 +8,15 @@
 
 ## Pembaruan 28 Oktober 2026 — ID Santri pihak ketiga (SiPaksa)
 
-- Disetujui user: simpan `santriId` dari API SiPaksa (`/api/setoran?jenjang=all&limit=2000`) di kolom baru `siswa.id_santri_pihak3`, sebagai penghubung **sementara**. Kalau siswa sudah punya NIS mandiri aplikasi (format `YY-KK-NNN`, `akademik_generate_nis_current`), ID pihak ketiga tidak dipakai dan tidak pernah menimpanya; kolom bisa dihapus setelah semua siswa ber-NIS mandiri.
-- Kunci pencocokan: NISN dulu, lalu NIS (dibandingkan sebagai teks, nol di depan dipertahankan). Kecocokan nama TIDAK pernah jadi update, hanya daftar tinjau (di DB ada 9 nama ganda). Logika di `src/lib/santriIdMatch.ts`, server function dry-run di `src/server/santriId.ts` (default dry-run, tulis hanya bila `dry_run: false`, lewat RPC atomik `sync_id_santri_pihak3`).
-- Kondisi DB `cmvzcpeiuompqgdvflky` saat diperiksa (read-only, 28 Okt): 1.219 siswa; NISN terisi 1.011 (unik, semuanya 10 digit); NIS terisi 875 dan belum ada satu pun berformat `YY-KK-NNN`. API SiPaksa: 1.146 santri aktif.
-- **BELUM diterapkan ke produksi:** migrasi `20261028052500_siswa_id_santri_pihak3.sql` belum dijalankan, dry-run live belum dijalankan, backfill belum dilakukan (semuanya menunggu konfirmasi user). Perubahan juga belum di-commit/push dari sesi ini.
-- Belum dijawab user: apakah siswa tanpa ID pihak ketiga ikut dibuatkan NIS mandiri baru.
-- `types.ts` ketinggalan dari DB live: kolom `siswa.nisn` ada di DB tetapi belum ada di tipe (hanya `id_santri_pihak3` yang ditambahkan di sini).
+- Disetujui user: simpan `santriId` dari API SiPaksa (`/api/setoran?jenjang=all&limit=2000`) di kolom baru `siswa.id_santri_pihak3`, sebagai penghubung **sementara**. Rencana jangka panjang (kata user): ID Santri nanti dibuat **mandiri oleh aplikasi Hijrah At-Tauhid**, dan pihak ketiga (SiPaksa) yang akan memakai ID dari Hijrah. Setelah itu kolom `id_santri_pihak3` bisa dihapus. Siswa yang sudah ber-NIS mandiri tidak pernah ditimpa ID pihak ketiga.
+- **NIS tidak dibuat massal** (keputusan user): NIS baru dibuat saat siswa SPMB diterima, jadi siswa yang tidak punya pasangan di API dibiarkan apa adanya.
+- **Format NIS mandiri di DB = 7 digit polos (`YYKKNNN`, mis. `2601001`), BUKAN `YY-KK-NNN`.** Trigger `normalisasi_nis_siswa_tanpa_hubung` membuang tanda hubung sebelum tersimpan. Guard pertama hanya mengenali bentuk berhubung sehingga tidak pernah menangkap NIS mandiri nyata (78 baris); ketahuan lewat uji rollback live. Diperbaiki di `isOwnNis` (TS) dan lewat migrasi korektif `20261028053500_fix_sync_id_santri_pihak3_nis_mandiri.sql`. NIS 10 digit (542 baris) dan format lain BUKAN NIS mandiri.
+- Kunci pencocokan: NISN dulu, lalu NIS (dibandingkan sebagai teks, nol di depan dipertahankan). Kecocokan nama TIDAK pernah jadi update, hanya daftar tinjau (di DB ada 9 nama ganda). Logika di `src/lib/santriIdMatch.ts`, server function dry-run di `src/server/santriId.ts` (admin saja; default dry-run, tulis hanya bila `dry_run: false`, lewat RPC atomik `sync_id_santri_pihak3`).
+- Kondisi DB `cmvzcpeiuompqgdvflky` saat diperiksa (read-only, 28 Okt): 1.219 siswa; NISN terisi 1.011 (unik, semuanya 10 digit); NIS terisi 875 (unik). API SiPaksa: 1.146 santri aktif. Tingkat kecocokan sebenarnya BELUM diketahui sampai dry-run live.
+- **Status produksi (`cmvzcpeiuompqgdvflky`):** kedua migrasi (kolom + indeks unik parsial + RPC, lalu perbaikan guard) SUDAH diterapkan manual lewat MCP pada 28 Okt; struktur, grant (hanya `service_role`), dan perilaku RPC diverifikasi dengan uji rollback (isi baru = 1, timpa = 0, NIS mandiri polos/berhubung = 0, ID ganda ditolak). Kolom masih kosong semua (0 baris terisi). Kode ada di branch `claude/id-santri-pihak3`, **belum di-merge ke `main`**, jadi server function belum ter-deploy.
+- **Belum dilakukan:** merge ke `main` (auto-deploy Cloudflare), dry-run live, tinjauan laporan oleh user, lalu backfill (`dry_run: false`) hanya setelah user konfirmasi eksplisit.
+- `types.ts` ketinggalan dari DB live: kolom `siswa.nisn` ada di DB tetapi belum ada di tipe (hanya `id_santri_pihak3` dan RPC yang ditambahkan di sini).
+- `npm run lint` penuh gagal (±1.890 masalah bawaan di file lain, mis. `no-explicit-any`); file yang disentuh pekerjaan ini bersih. Tes penuh 245/245 lulus.
 
 ## Pembaruan 17 September 2026 — Target Main & Promo SPMB
 

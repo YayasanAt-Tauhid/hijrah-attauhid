@@ -9,7 +9,7 @@
  * - Kunci pencocokan otomatis: NISN dulu, lalu NIS. Dibandingkan sebagai teks
  *   (angka nol di depan dipertahankan).
  * - Kecocokan nama TIDAK pernah menjadi update; hanya masuk daftar tinjau.
- * - Aturan mandiri: siswa yang sudah ber-NIS format resmi YY-KK-NNN dari
+ * - Aturan mandiri: siswa yang sudah ber-NIS mandiri (7 digit polos, atau YY-KK-NNN) dari
  *   aplikasi tidak ditimpa ID pihak ketiga.
  * - ID pihak ketiga yang sudah tersimpan dan berbeda tidak ditimpa (konflik).
  */
@@ -113,9 +113,13 @@ export function parseSipaksaPayload(payload: unknown): SipaksaRecord[] {
   return body.data as SipaksaRecord[];
 }
 
-const OWN_NIS_PATTERN = /^\d{2}-\d{2}-\d{3}$/;
+// NIS resmi buatan aplikasi = YY + KK + NNN (lihat `nis_get_or_create_for_department`).
+// Database menyimpannya TANPA tanda hubung (trigger `normalisasi_nis_tanpa_hubung`),
+// sehingga bentuk di data nyata adalah 7 digit polos (mis. 2601001). Bentuk
+// berhubung YY-KK-NNN tetap dikenali karena itulah format tampilan resminya.
+const OWN_NIS_PATTERN = /^(\d{2}-\d{2}-\d{3}|\d{7})$/;
 
-/** NIS resmi buatan aplikasi: YY-KK-NNN (lihat `akademik_generate_nis_current`). */
+/** Apakah NIS ini NIS mandiri buatan aplikasi (7 digit polos, atau YY-KK-NNN). */
 export function isOwnNis(nis: string | null | undefined): boolean {
   return typeof nis === "string" && OWN_NIS_PATTERN.test(nis.trim());
 }
