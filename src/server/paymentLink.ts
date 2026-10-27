@@ -16,6 +16,7 @@ import {
   buildWhatsappShareUrl,
   generatePaymentLinkToken,
   hashPaymentLinkToken,
+  isLinkInstallmentAllowed,
   isPaymentLinkTokenFormat,
   normalizeWhatsappPhone,
   paymentLinkExpiry,
@@ -57,6 +58,7 @@ interface LinkListDbRow {
   id: string;
   siswa_id: string;
   tagihan_ids: string[];
+  cicilan: CicilanMap | null;
   created_by: string;
   created_at: string;
   expires_at: string;
@@ -84,13 +86,30 @@ export interface PaymentLinkBill {
   periode: string;
   tahun_ajaran_id: string | null;
   jatuh_tempo: string | null;
+  status: string;
+  /** Sisa tagihan di database. */
   sisa: number;
+  /** Boleh dibayar sebagian (uang pangkal dan tagihan sekali bayar sejenis). */
+  boleh_cicil: boolean;
 }
+
+/** Tagihan sebagaimana dibayar lewat link: nominal jatuh tempo untuk link ini. */
+export interface PaymentLinkDueBill extends PaymentLinkBill {
+  siswa_id: string;
+  /** Sisa tagihan di database (bisa lebih besar dari `due` bila dicicil). */
+  sisa_tagihan: number;
+  /** Nominal yang dibayar lewat link ini. */
+  due: number;
+  cicilan: boolean;
+}
+
+type CicilanMap = Record<string, number>;
 
 interface LinkRow {
   id: string;
   siswa_id: string;
   tagihan_ids: string[];
+  cicilan: CicilanMap | null;
   expires_at: string;
   canceled_at: string | null;
 }
@@ -133,8 +152,69 @@ async function loadOpenBills(admin: LooseAdmin, ids: string[], siswaId?: string)
     periode: row.bulan ? billingPeriodLabel(row) : (row.tahun_ajaran?.nama ?? ""),
     tahun_ajaran_id: row.tahun_ajaran_id ?? null,
     jatuh_tempo: row.jatuh_tempo ?? null,
+    status: row.status,
     sisa: row.sisa,
+    boleh_cicil: isLinkInstallmentAllowed({ bulan: row.bulan ?? null, status: row.status, jenis_nama: row.jenis?.nama ?? "" }),
   }));
+}
+
+/** Total yang sudah dibayar lewat setiap link, per tagihan (hanya transaksi lunas). */
+async function loadPaidViaLinks(admin: LooseAdmin, linkIds: string[]): Promise<Map<string, Map<string, number>>> {
+  const result = new Map<string, Map<string, number>>();
+  if (!linkIds.length) return result;
+  const { data: txs, error } = await admin
+    .from("transaksi_midtrans")
+    .select("id, payment_link_id")
+    .in("payment_link_id", linkIds)
+    .eq("status", "paid");
+  if (error) throw new Error("Gagal memuat transaksi link: " + error.message);
+  const txLink = new Map<string, string>(((txs ?? []) as Array<{ id: string; payment_link_id: string }>).map((t) => [t.id, t.payment_link_id]));
+  if (!txLink.size) return result;
+  const { data: items, error: itemError } = await admin
+    .from("transaksi_midtrans_item")
+    .select("transaksi_id, tagihan_id, jumlah")
+    .in("transaksi_id", [...txLink.keys()]);
+  if (itemError) throw new Error("Gagal memuat rincian transaksi link: " + itemError.message);
+  for (const item of (items ?? []) as Array<{ transaksi_id: string; tagihan_id: string | null; jumlah: number | string }>) {
+    const linkId = txLink.get(item.transaksi_id);
+    if (!linkId || !item.tagihan_id) continue;
+    const perBill = result.get(linkId) ?? new Map<string, number>();
+    perBill.set(item.tagihan_id, (perBill.get(item.tagihan_id) ?? 0) + Number(item.jumlah || 0));
+    result.set(linkId, perBill);
+  }
+  return result;
+}
+
+/**
+ * Nominal yang masih bisa dibayar lewat link. Tagihan biasa: sisa tagihan.
+ * Tagihan dengan cicilan: nominal cicilan dikurangi yang sudah dibayar lewat
+ * link ini, dibatasi sisa tagihan. Cicilan yang sudah terbayar tidak muncul lagi.
+ */
+function dueBillsForLink(
+  link: Pick<LinkRow, "siswa_id" | "tagihan_ids" | "cicilan">,
+  bills: Array<PaymentLinkBill & { siswa_id: string }>,
+  paidViaLink: Map<string, number> | undefined,
+): PaymentLinkDueBill[] {
+  const cicilan = link.cicilan ?? {};
+  return bills
+    .filter((bill) => bill.siswa_id === link.siswa_id && link.tagihan_ids.includes(bill.id))
+    .map((bill) => {
+      const installment = Number(cicilan[bill.id]);
+      const isCicilan = Number.isFinite(installment) && installment > 0;
+      const due = isCicilan
+        ? Math.min(installment - (paidViaLink?.get(bill.id) ?? 0), bill.sisa)
+        : bill.sisa;
+      return { ...bill, sisa_tagihan: bill.sisa, due, cicilan: isCicilan };
+    })
+    .filter((bill) => bill.due > 0);
+}
+
+async function loadDueBills(admin: LooseAdmin, link: LinkRow): Promise<PaymentLinkDueBill[]> {
+  const [bills, paid] = await Promise.all([
+    loadOpenBills(admin, link.tagihan_ids, link.siswa_id),
+    loadPaidViaLinks(admin, [link.id]),
+  ]);
+  return dueBillsForLink(link, bills, paid.get(link.id));
 }
 
 // ---------------------------------------------------------------------------
@@ -144,6 +224,8 @@ async function loadOpenBills(admin: LooseAdmin, ids: string[], siswaId?: string)
 export interface CreatePaymentLinkInput {
   siswa_id: string;
   tagihan_ids: string[];
+  /** Nominal cicilan per tagihan (rupiah). Tagihan tanpa entri dilunasi penuh. */
+  cicilan?: Record<string, number>;
 }
 
 export interface CreatePaymentLinkResult {
@@ -156,6 +238,26 @@ export interface CreatePaymentLinkResult {
   telepon: string | null;
   message: string;
   whatsapp_url: string;
+}
+
+function validateCicilan(raw: unknown, bills: PaymentLinkBill[]): CicilanMap {
+  if (raw == null) return {};
+  if (typeof raw !== "object" || Array.isArray(raw)) throw new Error("Nominal cicilan tidak valid");
+  const byId = new Map(bills.map((b) => [b.id, b]));
+  const result: CicilanMap = {};
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    const bill = byId.get(id);
+    if (!bill) throw new Error("Nominal cicilan untuk tagihan yang tidak termasuk dalam link");
+    if (!bill.boleh_cicil) throw new Error(`${bill.jenis_nama} tidak dapat dicicil dan harus dibayar penuh`);
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+      throw new Error(`Nominal cicilan ${bill.jenis_nama} harus berupa angka rupiah lebih dari 0`);
+    }
+    if (value >= bill.sisa) {
+      throw new Error(`Nominal cicilan ${bill.jenis_nama} harus lebih kecil dari sisa tagihan; kosongkan untuk melunasi`);
+    }
+    result[id] = value;
+  }
+  return result;
 }
 
 export async function createPaymentLinkForStaff(
@@ -174,6 +276,7 @@ export async function createPaymentLinkForStaff(
   if (bills.length !== ids.length || bills.some((b) => b.siswa_id !== siswaId)) {
     throw new Error("Ada tagihan yang sudah lunas, berubah, atau bukan milik siswa ini. Muat ulang tagihan lalu coba lagi.");
   }
+  const cicilan = validateCicilan(input?.cicilan, bills);
 
   const { data: siswa, error: siswaError } = await admin
     .from("siswa").select("nama, telepon").eq("id", siswaId).single();
@@ -186,6 +289,7 @@ export async function createPaymentLinkForStaff(
       token_hash: await hashPaymentLinkToken(token),
       siswa_id: siswaId,
       tagihan_ids: ids,
+      cicilan,
       created_by: userId,
       expires_at: paymentLinkExpiry(new Date()).toISOString(),
     })
@@ -194,7 +298,7 @@ export async function createPaymentLinkForStaff(
   if (insertError || !link) throw new Error("Gagal membuat link pembayaran: " + (insertError?.message ?? ""));
 
   const url = buildPaymentLinkUrl(origin, token);
-  const total = bills.reduce((sum, b) => sum + b.sisa, 0);
+  const total = bills.reduce((sum, b) => sum + (cicilan[b.id] ?? b.sisa), 0);
   const telepon = normalizeWhatsappPhone(siswa.telepon);
   const message = paymentLinkMessage({ namaSiswa: siswa.nama, total, url, expiresAt: link.expires_at });
   return {
@@ -231,7 +335,7 @@ export async function listPaymentLinksForStaff(userId: string): Promise<PaymentL
   let query = admin
     .from("payment_link")
     .select(
-      "id, siswa_id, tagihan_ids, created_by, created_at, expires_at, canceled_at, " +
+      "id, siswa_id, tagihan_ids, cicilan, created_by, created_at, expires_at, canceled_at, " +
       "siswa:siswa_id(nama, nis), pembuat:created_by(email, pegawai:pegawai_id(nama))",
     );
   // Kasir hanya melihat link buatannya sendiri.
@@ -240,10 +344,13 @@ export async function listPaymentLinksForStaff(userId: string): Promise<PaymentL
   if (error) throw new Error("Gagal memuat link pembayaran: " + error.message);
 
   const links = (data ?? []) as LinkListDbRow[];
-  const bills = await loadOpenBills(admin, links.flatMap((l) => l.tagihan_ids ?? []));
+  const [bills, paid] = await Promise.all([
+    loadOpenBills(admin, links.flatMap((l) => l.tagihan_ids ?? [])),
+    loadPaidViaLinks(admin, links.map((l) => l.id)),
+  ]);
   const now = new Date();
   return links.map((link) => {
-    const open = bills.filter((b) => b.siswa_id === link.siswa_id && link.tagihan_ids.includes(b.id));
+    const open = dueBillsForLink(link, bills, paid.get(link.id));
     return {
       id: link.id,
       nama_siswa: link.siswa?.nama ?? "-",
@@ -256,7 +363,7 @@ export async function listPaymentLinksForStaff(userId: string): Promise<PaymentL
       state: paymentLinkState(link, open.length, now),
       jumlah_tagihan: link.tagihan_ids.length,
       sisa_tagihan: open.length,
-      total_sisa: open.reduce((sum, b) => sum + b.sisa, 0),
+      total_sisa: open.reduce((sum, b) => sum + b.due, 0),
     };
   });
 }
@@ -314,7 +421,7 @@ async function loadLinkByToken(admin: LooseAdmin, token: unknown): Promise<LinkR
   if (!isPaymentLinkTokenFormat(token)) throw new Error(INVALID_LINK);
   const { data, error } = await admin
     .from("payment_link")
-    .select("id, siswa_id, tagihan_ids, expires_at, canceled_at")
+    .select("id, siswa_id, tagihan_ids, cicilan, expires_at, canceled_at")
     .eq("token_hash", await hashPaymentLinkToken(token))
     .maybeSingle();
   if (error || !data) throw new Error(INVALID_LINK);
@@ -325,7 +432,11 @@ export interface PublicPaymentLinkView {
   state: PaymentLinkState;
   nama_siswa: string;
   expires_at: string;
-  bills: Array<Pick<PaymentLinkBill, "id" | "jenis_nama" | "periode" | "bulan" | "jatuh_tempo" | "sisa">>;
+  /** `sisa` = nominal yang dibayar lewat link; `sisa_tagihan` = sisa tagihan keseluruhan. */
+  bills: Array<Pick<PaymentLinkBill, "id" | "jenis_nama" | "periode" | "bulan" | "jatuh_tempo" | "sisa"> & {
+    sisa_tagihan: number;
+    cicilan: boolean;
+  }>;
   total: number;
   pending: { order_id: string; total_amount: number; expired_at: string } | null;
 }
@@ -333,7 +444,7 @@ export interface PublicPaymentLinkView {
 export async function resolvePaymentLinkByToken(token: unknown): Promise<PublicPaymentLinkView> {
   const admin = adminClient();
   const link = await loadLinkByToken(admin, token);
-  const bills = await loadOpenBills(admin, link.tagihan_ids, link.siswa_id);
+  const bills = await loadDueBills(admin, link);
   const state = paymentLinkState(link, bills.length);
 
   const { data: siswa } = await admin.from("siswa").select("nama").eq("id", link.siswa_id).single();
@@ -356,14 +467,16 @@ export async function resolvePaymentLinkByToken(token: unknown): Promise<PublicP
     state,
     nama_siswa: siswa?.nama ?? "Siswa",
     expires_at: link.expires_at,
-    bills: visible.map(({ id, jenis_nama, periode, bulan, jatuh_tempo, sisa }) => ({ id, jenis_nama, periode, bulan, jatuh_tempo, sisa })),
-    total: visible.reduce((sum, b) => sum + b.sisa, 0),
+    bills: visible.map(({ id, jenis_nama, periode, bulan, jatuh_tempo, due, sisa_tagihan, cicilan }) => ({
+      id, jenis_nama, periode, bulan, jatuh_tempo, sisa: due, sisa_tagihan, cicilan,
+    })),
+    total: visible.reduce((sum, b) => sum + b.due, 0),
     pending,
   };
 }
 
 const STATE_MESSAGE: Record<Exclude<PaymentLinkState, "aktif">, string> = {
-  lunas: "Semua tagihan pada link ini sudah lunas.",
+  lunas: "Semua tagihan pada link ini sudah dibayar.",
   dibatalkan: "Link pembayaran ini sudah dibatalkan sekolah. Silakan minta link baru.",
   kedaluwarsa: "Link pembayaran ini sudah kedaluwarsa. Silakan minta link baru ke sekolah.",
 };
@@ -373,7 +486,7 @@ export async function checkoutPaymentLinkByToken(token: unknown, tagihanIds: str
   const link = await loadLinkByToken(admin, token);
   const selected = validateLinkSelection(link.tagihan_ids, tagihanIds);
 
-  const bills = await loadOpenBills(admin, link.tagihan_ids, link.siswa_id);
+  const bills = await loadDueBills(admin, link);
   const state = paymentLinkState(link, bills.length);
   if (state !== "aktif") throw new Error(STATE_MESSAGE[state]);
 
@@ -394,8 +507,9 @@ export async function checkoutPaymentLinkByToken(token: unknown, tagihanIds: str
       jenis_id: bill.jenis_id,
       jenis_nama: bill.jenis_nama,
       bulan: bill.bulan ?? 0,
-      // Link selalu melunasi sisa tagihan; nominal divalidasi ulang dari DB.
-      jumlah: bill.sisa,
+      // Sisa tagihan, atau nominal cicilan yang ditetapkan kasir. Divalidasi
+      // ulang oleh buatTransaksiSnap dan RPC link di database.
+      jumlah: bill.due,
       tahun_ajaran_id: bill.tahun_ajaran_id ?? undefined,
     };
   });
@@ -416,7 +530,7 @@ export async function resumePaymentLinkSessionByToken(token: unknown, orderId: s
   const admin = adminClient();
   const link = await loadLinkByToken(admin, token);
   if (!ORDER_PATTERN.test(String(orderId || ""))) throw new Error("Order ID tidak valid");
-  const bills = await loadOpenBills(admin, link.tagihan_ids, link.siswa_id);
+  const bills = await loadDueBills(admin, link);
   const state = paymentLinkState(link, bills.length);
   if (state !== "aktif") throw new Error(STATE_MESSAGE[state]);
   return resumeOwnedMidtransPayment({ paymentLinkId: link.id }, orderId);

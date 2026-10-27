@@ -182,7 +182,13 @@ export default function BayarLink() {
                           />
                           <span className="flex-1 text-sm">
                             <span className="font-medium">{bill.jenis_nama}</span>
+                            {bill.cicilan && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">Cicilan</span>}
                             {bill.periode && <span className="block text-xs text-muted-foreground">{bill.periode}</span>}
+                            {bill.cicilan && (
+                              <span className="block text-xs text-muted-foreground">
+                                Sisa tagihan keseluruhan {formatRupiah(bill.sisa_tagihan)}
+                              </span>
+                            )}
                           </span>
                           <span className="text-sm tabular-nums">{formatRupiah(bill.sisa)}</span>
                         </label>
@@ -236,7 +242,7 @@ function ReturnBanner({ status }: { status: string }) {
 
 function StateCard({ state, nama }: { state: "lunas" | "dibatalkan" | "kedaluwarsa"; nama: string }) {
   const content = {
-    lunas: { icon: CheckCircle2, title: "Tagihan sudah lunas", body: `Semua tagihan ananda ${nama} pada link ini sudah lunas. Jazakumullahu khairan.` },
+    lunas: { icon: CheckCircle2, title: "Pembayaran sudah diterima", body: `Semua tagihan ananda ${nama} pada link ini sudah dibayar. Jazakumullahu khairan.` },
     dibatalkan: { icon: XCircle, title: "Link sudah dibatalkan", body: "Link ini dibatalkan oleh sekolah. Silakan minta link pembayaran baru ke kasir." },
     kedaluwarsa: { icon: Clock, title: "Link sudah kedaluwarsa", body: "Masa berlaku link ini sudah habis. Silakan minta link pembayaran baru ke kasir." },
   }[state];

@@ -9,6 +9,8 @@
  *    terkirim ke server, log akses, maupun header Referer.
  */
 
+import { isUangPangkalPaymentName } from "./installment";
+
 export const PAYMENT_LINK_TTL_DAYS = 7;
 export const PAYMENT_LINK_MAX_BILLS = 50;
 const TOKEN_BYTES = 32;
@@ -144,4 +146,13 @@ export function toggleLinkBillSelection(
   if (checked) sequence.slice(0, index + 1).forEach((b) => next.add(b.id));
   else sequence.slice(index).forEach((b) => next.delete(b.id));
   return next;
+}
+
+/**
+ * Tagihan yang boleh dibayar sebagian lewat link — aturan yang sama dengan
+ * checkout portal: tagihan sekali bayar, dan bila belum jatuh tempo (terjadwal)
+ * hanya uang pangkal. Tagihan bulanan selalu wajib penuh.
+ */
+export function isLinkInstallmentAllowed(bill: { bulan: number | null; status: string; jenis_nama: string }): boolean {
+  return !bill.bulan && (bill.status !== "terjadwal" || isUangPangkalPaymentName(bill.jenis_nama));
 }

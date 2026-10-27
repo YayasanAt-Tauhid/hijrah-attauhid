@@ -1,3 +1,12 @@
+## Cicilan pada link pembayaran (27 Oktober 2026)
+Kasir/admin dapat mengisi "cicilan kali ini" untuk tagihan sekali bayar yang
+boleh dicicil (aturan sama dengan portal: uang pangkal, atau tagihan sekali
+bayar yang sudah jatuh tempo). Tagihan bulanan tetap wajib penuh. Orang tua
+membayar tepat nominal cicilan (dibatasi sisa tagihan). Setelah cicilan
+terbayar lewat link, link yang sama tidak menampilkan tagihan itu lagi; kasir
+membuat link baru untuk cicilan berikutnya. RPC link memvalidasi nominal
+tiap item di database. Link lama otomatis cicilan = {} (lunasi penuh).
+
 ## Link pembayaran orang tua tanpa portal (27 Oktober 2026)
 Admin/keuangan/kasir membuat link Midtrans dari Input Pembayaran untuk orang tua
 yang tidak memakai aplikasi portal. Kasir menentukan daftar tagihan; orang tua

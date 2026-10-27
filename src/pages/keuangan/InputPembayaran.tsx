@@ -5,6 +5,7 @@ import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan
 import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/components/shared/ReceiptOrientationSelect";
 import { PrintTagihan, type PrintTagihanItem } from "@/components/shared/PrintTagihan";
 import { DialogLinkPembayaran, type LinkPembayaranBill } from "@/components/keuangan/DialogLinkPembayaran";
+import { isLinkInstallmentAllowed } from "@/lib/paymentLink";
 import { RupiahInput } from "@/components/shared/RupiahInput";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -1062,6 +1063,11 @@ function InputPembayaranContent() {
         id: bill.id,
         label: [bill.jenis_pembayaran?.nama ?? "Tagihan", billPeriodLabel(bill)].filter(Boolean).join(" · "),
         sisa: Number(bill.sisa),
+        bolehCicil: isLinkInstallmentAllowed({
+          bulan: bill.bulan,
+          status: bill.status,
+          jenis_nama: bill.jenis_pembayaran?.nama ?? "",
+        }),
       }));
     if (bills.length === 0) return;
     setLinkPembayaranBills(bills);

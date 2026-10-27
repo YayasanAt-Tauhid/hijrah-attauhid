@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const migration = read("supabase/migrations/20261027010000_payment_link_orang_tua.sql");
+const cicilanMigration = read("supabase/migrations/20261027020000_payment_link_cicilan.sql");
 const server = read("src/server/paymentLink.ts");
 const kasirPage = read("src/pages/keuangan/InputPembayaran.tsx");
 const dialog = read("src/components/keuangan/DialogLinkPembayaran.tsx");
@@ -50,5 +51,16 @@ describe("Payment link contract", () => {
       const block = server.slice(server.indexOf(`export const ${fn}`), server.indexOf(`export const ${fn}`) + 400);
       expect(block).toContain("data?.token");
     }
+  });
+
+  it("lets staff set an installment amount while the database enforces exact amounts", () => {
+    expect(cicilanMigration).toContain("ADD COLUMN IF NOT EXISTS cicilan jsonb NOT NULL DEFAULT '{}'::jsonb");
+    expect(cicilanMigration).toContain("RAISE EXCEPTION 'Nominal pembayaran tidak sesuai link'");
+    expect(cicilanMigration).toContain("m.payment_link_id=p_link_id AND m.status='paid'");
+    expect(cicilanMigration).toContain("REVOKE ALL ON FUNCTION public.create_midtrans_link_checkout_atomik(uuid,text,jsonb,timestamptz) FROM PUBLIC,anon,authenticated;");
+    expect(dialog).toContain("Cicilan kali ini");
+    expect(dialog).toContain("<RupiahInput");
+    expect(kasirPage).toContain("isLinkInstallmentAllowed");
+    expect(publicPage).toContain("Sisa tagihan keseluruhan");
   });
 });

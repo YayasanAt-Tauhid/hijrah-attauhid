@@ -9,11 +9,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { createPaymentLink, type CreatePaymentLinkResult } from "@/server/paymentLink";
 import { buildWhatsappShareUrl, formatLinkDeadline, normalizeWhatsappPhone, PAYMENT_LINK_TTL_DAYS } from "@/lib/paymentLink";
 import { formatRupiah } from "@/hooks/useKeuangan";
+import { RupiahInput } from "@/components/shared/RupiahInput";
 
 export interface LinkPembayaranBill {
   id: string;
   label: string;
   sisa: number;
+  /** Tagihan sekali bayar yang boleh dicicil (mis. uang pangkal). */
+  bolehCicil: boolean;
 }
 
 interface Props {
@@ -32,17 +35,34 @@ export function DialogLinkPembayaran({ open, onOpenChange, siswaId, siswaNama, b
   const [result, setResult] = useState<CreatePaymentLinkResult | null>(null);
   const [phone, setPhone] = useState("");
   const [copied, setCopied] = useState(false);
+  // Nominal cicilan per tagihan (string digit). Kosong = lunasi sisa tagihan.
+  const [cicilanInput, setCicilanInput] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!open) {
       setResult(null);
       setPhone("");
       setCopied(false);
+      setCicilanInput({});
     }
   }, [open]);
 
+  const cicilanFor = (bill: LinkPembayaranBill): number | null => {
+    if (!bill.bolehCicil) return null;
+    const value = Number(cicilanInput[bill.id] || 0);
+    return value > 0 && value < bill.sisa ? value : null;
+  };
+  const cicilanError = bills.find((b) => b.bolehCicil && Number(cicilanInput[b.id] || 0) > b.sisa);
+
   const create = useMutation({
-    mutationFn: () => createPaymentLink({ data: { siswa_id: siswaId, tagihan_ids: bills.map((b) => b.id) } }),
+    mutationFn: () => {
+      const cicilan: Record<string, number> = {};
+      for (const bill of bills) {
+        const value = cicilanFor(bill);
+        if (value != null) cicilan[bill.id] = value;
+      }
+      return createPaymentLink({ data: { siswa_id: siswaId, tagihan_ids: bills.map((b) => b.id), cicilan } });
+    },
     onSuccess: (data) => {
       setResult(data);
       setPhone(data.telepon ?? "");
@@ -50,7 +70,7 @@ export function DialogLinkPembayaran({ open, onOpenChange, siswaId, siswaNama, b
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const total = bills.reduce((sum, b) => sum + b.sisa, 0);
+  const total = bills.reduce((sum, b) => sum + (cicilanFor(b) ?? b.sisa), 0);
   const normalizedPhone = normalizeWhatsappPhone(phone);
 
   const copyLink = async () => {
@@ -80,9 +100,25 @@ export function DialogLinkPembayaran({ open, onOpenChange, siswaId, siswaNama, b
               <p className="font-medium">{siswaNama}</p>
               <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
                 {bills.map((b) => (
-                  <li key={b.id} className="flex justify-between gap-3">
-                    <span>{b.label}</span>
-                    <span className="tabular-nums">{formatRupiah(b.sisa)}</span>
+                  <li key={b.id} className="space-y-1.5">
+                    <div className="flex justify-between gap-3">
+                      <span>{b.label}</span>
+                      <span className="tabular-nums">{formatRupiah(cicilanFor(b) ?? b.sisa)}</span>
+                    </div>
+                    {b.bolehCicil && (
+                      <div className="flex items-center gap-2 pl-3">
+                        <Label htmlFor={`cicilan-${b.id}`} className="shrink-0 text-xs text-muted-foreground">
+                          Cicilan kali ini
+                        </Label>
+                        <RupiahInput
+                          id={`cicilan-${b.id}`}
+                          className="flex-1"
+                          placeholder={`Lunasi ${b.sisa.toLocaleString("id-ID")}`}
+                          value={cicilanInput[b.id] ?? ""}
+                          onChange={(raw) => setCicilanInput((prev) => ({ ...prev, [b.id]: raw }))}
+                        />
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -91,6 +127,17 @@ export function DialogLinkPembayaran({ open, onOpenChange, siswaId, siswaNama, b
                 <span className="tabular-nums">{formatRupiah(total)}</span>
               </div>
             </div>
+            {cicilanError && (
+              <p className="text-xs text-destructive">
+                Nominal cicilan {cicilanError.label} melebihi sisa tagihan {formatRupiah(cicilanError.sisa)}.
+              </p>
+            )}
+            {bills.some((b) => b.bolehCicil) && (
+              <p className="text-xs text-muted-foreground">
+                Isi nominal cicilan untuk tagihan yang boleh dicicil, atau kosongkan untuk melunasi. Setelah cicilan dibayar,
+                buat link baru untuk cicilan berikutnya.
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
               Orang tua boleh membayar sebagian dari daftar ini (bulan terlama lebih dulu). Link berlaku {PAYMENT_LINK_TTL_DAYS} hari
               dan dapat dibatalkan dari menu Link Pembayaran.
@@ -124,7 +171,7 @@ export function DialogLinkPembayaran({ open, onOpenChange, siswaId, siswaNama, b
           {!result ? (
             <>
               <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
-              <Button onClick={() => create.mutate()} disabled={create.isPending || bills.length === 0}>
+              <Button onClick={() => create.mutate()} disabled={create.isPending || bills.length === 0 || !!cicilanError}>
                 {create.isPending ? "Membuat link..." : "Buat Link"}
               </Button>
             </>

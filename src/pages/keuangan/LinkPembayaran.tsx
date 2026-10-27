@@ -21,7 +21,7 @@ import { formatRupiah } from "@/hooks/useKeuangan";
 
 const STATE_BADGE: Record<PaymentLinkState, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   aktif: { label: "Aktif", variant: "default" },
-  lunas: { label: "Lunas", variant: "secondary" },
+  lunas: { label: "Sudah Dibayar", variant: "secondary" },
   kedaluwarsa: { label: "Kedaluwarsa", variant: "outline" },
   dibatalkan: { label: "Dibatalkan", variant: "destructive" },
 };
@@ -122,7 +122,7 @@ function LinkPembayaranContent({ isKasir }: { isKasir: boolean }) {
           <SelectTrigger className="sm:w-44"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="aktif">Aktif</SelectItem>
-            <SelectItem value="lunas">Lunas</SelectItem>
+            <SelectItem value="lunas">Sudah Dibayar</SelectItem>
             <SelectItem value="kedaluwarsa">Kedaluwarsa</SelectItem>
             <SelectItem value="dibatalkan">Dibatalkan</SelectItem>
             <SelectItem value="semua">Semua status</SelectItem>

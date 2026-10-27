@@ -5,6 +5,7 @@ import {
   buildWhatsappShareUrl,
   generatePaymentLinkToken,
   hashPaymentLinkToken,
+  isLinkInstallmentAllowed,
   isPaymentLinkTokenFormat,
   normalizeWhatsappPhone,
   paymentLinkExpiry,
@@ -140,5 +141,15 @@ describe("toggleLinkBillSelection", () => {
 
   it("one-time bills toggle independently", () => {
     expect([...toggleLinkBillSelection(bills, new Set(["spp-jul"]), "gedung", true)].sort()).toEqual(["gedung", "spp-jul"]);
+  });
+});
+
+describe("isLinkInstallmentAllowed", () => {
+  it("allows installments only for one-time bills that may be paid partially", () => {
+    expect(isLinkInstallmentAllowed({ bulan: null, status: "terjadwal", jenis_nama: "UANG PANGKAL SMP" })).toBe(true);
+    expect(isLinkInstallmentAllowed({ bulan: null, status: "sebagian", jenis_nama: "UANG PANGKAL SD" })).toBe(true);
+    expect(isLinkInstallmentAllowed({ bulan: null, status: "belum_bayar", jenis_nama: "INFAQ GEDUNG" })).toBe(true);
+    expect(isLinkInstallmentAllowed({ bulan: null, status: "terjadwal", jenis_nama: "BIAYA PERLENGKAPAN SMP" })).toBe(false);
+    expect(isLinkInstallmentAllowed({ bulan: 8, status: "belum_bayar", jenis_nama: "SPP SMP" })).toBe(false);
   });
 });
