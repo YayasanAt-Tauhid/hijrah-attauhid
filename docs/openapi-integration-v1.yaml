@@ -97,6 +97,7 @@ components:
       properties:
         id: { type: string, format: uuid }
         nis: { type: [string, 'null'] }
+        id_santri_pihak3: { type: [string, 'null'], description: 'Student ID from the third party (SiPaksa) kept by Hijrah as a temporary link; null when not set. Available with siswa:read, including class members and sync. The name id_santri is reserved for the future Hijrah-issued ID.' }
         nisn: { type: [string, 'null'], description: Available with siswa:identity:read on scoped student responses. }
         nik_hijrah: { type: [string, 'null'], description: Legacy Hijrah identity field. Omitted unless siswa:identity:read is granted. }
         nik_dapodik: { type: [string, 'null'], description: Dapodik identity field. Omitted unless siswa:identity:read is granted. }

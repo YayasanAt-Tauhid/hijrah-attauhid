@@ -80,10 +80,13 @@ GET /api/v1/pendaftaran?departemen_id=<UUID_SMP>&tahun_ajaran_id=<UUID_TA>&statu
 
 Dengan `siswa:read`, respons list, detail, anggota kelas, dan incremental sync siswa menyertakan `status_asrama`: `"Asrama"`, `"Non Asrama"`, atau `null` bila tidak berlaku/belum tersedia. Anggota kelas tetap membutuhkan `kelas:read` dan `siswa:read`. Status ini bersumber dari `siswa_detail.status_asrama`, bukan kategori tagihan SPP per bulan. Jika token juga memiliki `siswa:identity:read`, payload siswa pada list, detail, anggota kelas, dan incremental sync ditambah `nisn`, `nik_hijrah`, dan `nik_dapodik`. `nik_hijrah` bersumber dari `siswa_detail.nik` (identitas legacy Hijrah), sedangkan `nik_dapodik` bersumber dari `siswa_detail.nik_dapodik` (NIK resmi yang dicocokkan dengan Dapodik/KK). Scope identitas tidak diberikan otomatis kepada token lama.
 
+Dengan `siswa:read`, payload siswa pada list, detail, anggota kelas, dan incremental sync juga menyertakan `id_santri_pihak3`: ID Santri dari SiPaksa yang disimpan Hijrah sebagai penghubung sementara, atau `null` bila belum ada. Nama field sengaja `id_santri_pihak3`; nama `id_santri` dicadangkan untuk ID Santri mandiri Hijrah yang kelak menggantikannya, sehingga nilai yang sudah disimpan penerima tidak berubah makna. Field ini tidak ada pada payload pendaftaran. Penambahan ini kompatibel mundur (field baru, versi mayor tetap `/api/v1`).
+
 ```json
 {
   "id": "UUID",
   "nis": "26-03-001",
+  "id_santri_pihak3": "21.01.001",
   "nisn": "1234567890",
   "nama": "Fulan",
   "nik_hijrah": "1971066310140001",

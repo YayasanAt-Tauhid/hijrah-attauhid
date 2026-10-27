@@ -178,6 +178,7 @@ export default function DetailSiswa() {
                   value={item.nis} />
               ))}
               <InfoRow label="NISN" value={siswa.nisn || "-"} />
+              <InfoRow label="ID Santri (SiPaksa)" value={siswa.id_santri_pihak3 || "-"} />
               <InfoRow label="NIK Hijrah" value={detail?.nik || "-"} />
               <InfoRow label="NIK Dapodik" value={detail?.nik_dapodik || "-"} />
               <InfoRow label="Jenis Kelamin" value={siswa.jenis_kelamin === "L" ? "Laki-laki" : siswa.jenis_kelamin === "P" ? "Perempuan" : "-"} />

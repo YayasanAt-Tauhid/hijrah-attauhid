@@ -66,6 +66,7 @@ export default function DaftarSiswa() {
   const columns: DataTableColumn<Record<string, unknown>>[] = [
     { key: "nis", label: "NIS", sortable: true },
     { key: "nisn", label: "NISN", sortable: true },
+    { key: "id_santri_pihak3", label: "ID Santri", sortable: true, render: (val) => (val as string) || "-" },
     { key: "_nik_hijrah", label: "NIK Hijrah", sortable: true, render: (_, row) => (row as any)._nik_hijrah || "-" },
     { key: "_nik_dapodik", label: "NIK Dapodik", sortable: true, render: (_, row) => (row as any)._nik_dapodik || "-" },
     {
@@ -125,6 +126,7 @@ export default function DaftarSiswa() {
       return {
         NIS: s.nis || "",
         NISN: s.nisn || "",
+        "ID Santri": s.id_santri_pihak3 || "",
         "NIK Hijrah": detail?.nik || "",
         "NIK Dapodik": detail?.nik_dapodik || "",
         Nama: s.nama,
@@ -197,7 +199,7 @@ export default function DaftarSiswa() {
       <DataTable
         columns={columns}
         data={tableData}
-        searchPlaceholder="Cari NIS, NISN, NIK, atau nama siswa..."
+        searchPlaceholder="Cari NIS, NISN, ID Santri, NIK, atau nama siswa..."
         pageSize={20}
         exportable
         exportFilename="data-siswa"

@@ -9,6 +9,8 @@ export interface SiswaWithRelations {
   id: string;
   nis: string | null;
   nisn: string | null;
+  /** ID Santri dari SiPaksa (penghubung sementara); null bila belum ada. */
+  id_santri_pihak3?: string | null;
   nama: string;
   jenis_kelamin: string | null;
   tempat_lahir: string | null;
