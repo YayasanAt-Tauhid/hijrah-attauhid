@@ -56,8 +56,10 @@ export function posAfterJenisChange(previous: string, newJenis: string): string 
   return valid ? previous : defaultPosIsak35(newJenis);
 }
 
-// Laporan arus kas hanya menghitung akun yang namanya menunjukkan kas atau bank.
+// Laporan arus kas hanya menghitung akun yang namanya menunjukkan kas, bank, atau dompet digital.
 export function isAkunKas(_kode: string, nama: string): boolean {
   const n = (nama || "").toUpperCase().trim();
-  return n === "KAS" || n.startsWith("KAS ") || n === "BANK" || n.startsWith("BANK ");
+  return n === "KAS" || n.startsWith("KAS ")
+    || n === "BANK" || n.startsWith("BANK ")
+    || /^E[\s-]?WALLET(\s|$)/.test(n);
 }

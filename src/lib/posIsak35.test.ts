@@ -47,8 +47,8 @@ describe("pos ISAK 35 untuk akun rekening baru", () => {
 });
 
 describe("pengenalan akun kas untuk laporan arus kas", () => {
-  it("mengenali kas dan bank", () => {
-    for (const nama of ["KAS UMUM", "Kas Kasir", "KAS", "BANK MIDTRANS", "BANK"]) {
+  it("mengenali kas, bank, dan e-wallet", () => {
+    for (const nama of ["KAS UMUM", "Kas Kasir", "KAS", "BANK MIDTRANS", "BANK", "E-WALLET DANA", "e-wallet ovo", "E WALLET GOPAY", "EWALLET LINKAJA", "E-WALLET"]) {
       expect(isAkunKas("x", nama), nama).toBe(true);
     }
   });
