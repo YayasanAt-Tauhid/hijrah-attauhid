@@ -30,7 +30,7 @@ Respons v1.1 mengirim `X-Hijrah-API-Version: 1.1`, `X-Hijrah-API-Major: 1`, dan 
 | `pendaftaran:documents:read` | metadata dokumen dan signed URL 60 detik |
 | `pendaftaran:milestone:update` | Update Status SPMB (Tes, Lulus, dan Tidak Lulus) |
 | `siswa:read` | siswa non-calon dan relasi kelas |
-| `siswa:identity:read` | identitas siswa: NISN, NIK Hijrah/legacy, dan NIK Dapodik; memerlukan `siswa:read` |
+| `siswa:identity:read` | identitas dan data pribadi siswa: NISN, NIK Hijrah/legacy, NIK Dapodik, serta pada detail dan incremental sync juga alamat, telepon, email, tempat dan tanggal lahir, dan agama; memerlukan `siswa:read` |
 | `kelas:read` | kelas; anggota kelas juga membutuhkan `siswa:read` |
 | `pegawai:read` | data operasional pegawai: ID, NIP, nama, jenis kelamin, jabatan, status, unit, tanggal masuk/pensiun, golongan |
 | `pegawai:write` | bulk import dan update data pegawai; tidak memberi akses role/login, presensi, tabungan, atau keuangan |
@@ -80,7 +80,11 @@ GET /api/v1/pendaftaran?departemen_id=<UUID_SMP>&tahun_ajaran_id=<UUID_TA>&statu
 
 Dengan `siswa:read`, respons list, detail, anggota kelas, dan incremental sync siswa menyertakan `status_asrama`: `"Asrama"`, `"Non Asrama"`, atau `null` bila tidak berlaku/belum tersedia. Anggota kelas tetap membutuhkan `kelas:read` dan `siswa:read`. Status ini bersumber dari `siswa_detail.status_asrama`, bukan kategori tagihan SPP per bulan. Jika token juga memiliki `siswa:identity:read`, payload siswa pada list, detail, anggota kelas, dan incremental sync ditambah `nisn`, `nik_hijrah`, dan `nik_dapodik`. `nik_hijrah` bersumber dari `siswa_detail.nik` (identitas legacy Hijrah), sedangkan `nik_dapodik` bersumber dari `siswa_detail.nik_dapodik` (NIK resmi yang dicocokkan dengan Dapodik/KK). Scope identitas tidak diberikan otomatis kepada token lama.
 
+Data pribadi siswa hanya untuk token dengan `siswa:identity:read`. Dengan `siswa:read` saja, detail (`GET /api/v1/siswa/{id}`) dan incremental sync siswa tidak menyertakan `nisn`, `nik_hijrah`, `nik_dapodik`, `alamat`, `telepon`, `email`, `tempat_lahir`, `tanggal_lahir`, maupun `agama`. Dengan `siswa:identity:read`, field-field itu dikirim pada detail dan incremental sync; list dan anggota kelas tidak pernah memuat alamat, telepon, email, tempat/tanggal lahir, maupun agama. Alamat, telepon, email, tempat/tanggal lahir, dan agama tidak pernah dijanjikan untuk `siswa:read`; sebelum perbaikan ini detail dan incremental sync mengirimnya juga kepada token tanpa scope identitas, dan hal itu dikoreksi tanpa mengubah versi (`1.1`, prefix `/api/v1`). Token yang memiliki `siswa:identity:read` tidak mengalami perubahan.
+
 Dengan `siswa:read`, payload siswa pada list, detail, anggota kelas, dan incremental sync juga menyertakan `id_santri_pihak3`: ID Santri dari SiPaksa yang disimpan Hijrah sebagai penghubung sementara, atau `null` bila belum ada. Nama field sengaja `id_santri_pihak3`; nama `id_santri` dicadangkan untuk ID Santri mandiri Hijrah yang kelak menggantikannya, sehingga nilai yang sudah disimpan penerima tidak berubah makna. Field ini tidak ada pada payload pendaftaran. Penambahan ini kompatibel mundur (field baru, versi mayor tetap `/api/v1`).
+
+Contoh berikut memakai token dengan `siswa:identity:read`; tanpa scope itu `nisn`, `nik_hijrah`, dan `nik_dapodik` tidak ada.
 
 ```json
 {

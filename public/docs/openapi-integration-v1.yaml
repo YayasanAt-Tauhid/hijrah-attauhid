@@ -101,6 +101,12 @@ components:
         nisn: { type: [string, 'null'], description: Available with siswa:identity:read on scoped student responses. }
         nik_hijrah: { type: [string, 'null'], description: Legacy Hijrah identity field. Omitted unless siswa:identity:read is granted. }
         nik_dapodik: { type: [string, 'null'], description: Dapodik identity field. Omitted unless siswa:identity:read is granted. }
+        tempat_lahir: { type: [string, 'null'], description: 'Place of birth. Returned on student detail and incremental sync only with siswa:identity:read; omitted otherwise.' }
+        tanggal_lahir: { type: [string, 'null'], format: date, description: 'Date of birth. Returned on student detail and incremental sync only with siswa:identity:read; omitted otherwise.' }
+        agama: { type: [string, 'null'], description: 'Religion. Returned on student detail and incremental sync only with siswa:identity:read; omitted otherwise.' }
+        alamat: { type: [string, 'null'], description: 'Home address. Returned on student detail and incremental sync only with siswa:identity:read; omitted otherwise.' }
+        telepon: { type: [string, 'null'], description: 'Phone number. Returned on student detail and incremental sync only with siswa:identity:read; omitted otherwise.' }
+        email: { type: [string, 'null'], description: 'Email address. Returned on student detail and incremental sync only with siswa:identity:read; omitted otherwise.' }
         nama: { type: string }
         jenis_kelamin: { type: [string, 'null'] }
         status: { type: string }
@@ -229,7 +235,7 @@ paths:
   /api/v1/siswa/{id}:
     get:
       summary: Student detail and visible class relations
-      description: Requires siswa:read. nik_hijrah and nik_dapodik are added only with siswa:identity:read.
+      description: Requires siswa:read. nisn, nik_hijrah, nik_dapodik, and personal data (alamat, telepon, email, tempat_lahir, tanggal_lahir, agama) are added only with siswa:identity:read.
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses: { '200': { description: OK }, '404': { description: Not found or outside scope } }
   /api/v1/kelas:
@@ -313,6 +319,7 @@ paths:
   /api/v1/sync/siswa:
     get:
       summary: Incremental student changes
+      description: Requires siswa:read. Student payloads carry nisn, nik_hijrah, nik_dapodik, and personal data (alamat, telepon, email, tempat_lahir, tanggal_lahir, agama) only with siswa:identity:read.
       parameters: [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' }, { name: checkpoint, in: query, schema: { type: integer, minimum: 0 } }]
       responses: { '200': { description: OK }, '410': { description: Checkpoint expired } }
   /api/v1/sync/kelas:
