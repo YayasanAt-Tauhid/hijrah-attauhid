@@ -308,6 +308,15 @@ alur pengakuan menahannya. Tidak ada koreksi data lama yang dilakukan.
 
 ## Info Penting
 
+## Pembaruan 28 Oktober 2026 (sesi lanjutan) — data pribadi siswa di API integrasi
+
+- Branch `fix/integration-siswa-pii-scope` (dari `main` fe4061c), terpisah dari `feat/santri-id-matcher-sync`. Tanpa migrasi dan tanpa menyentuh data produksi.
+- Akar masalah: `handleDetail` dan sync siswa menyebar `{...s}` dari `BASE`, sehingga `nisn`, `alamat`, `telepon`, `email`, `tempat_lahir`, `tanggal_lahir`, `agama` ikut terkirim ke klien `siswa:read`. Dokumentasi hanya menjanjikan NISN di balik `siswa:identity:read`; keenam field lainnya tidak pernah didokumentasikan untuk siswa.
+- Perbaikan: allowlist eksplisit `studentPublicView` menggantikan spread. Data pribadi hanya dikirim bila token punya `siswa:identity:read`, jadi klien berscope identitas menerima respons yang sama persis seperti sebelumnya (dikunci tes regresi). Daftar siswa dan anggota kelas memang tidak pernah memuatnya dan tidak berubah. Versi API tetap `1.1` karena ini koreksi terhadap kontrak tertulis. `docs/` dan salinan `public/docs/` diperbarui.
+- Data klien (dibaca read-only 28 Okt): tiga klien. "Ustadz Azali" ber-scope identitas dan satu-satunya pemakai nyata (terutama daftar siswa dan siswa per kelas); "Testing" hanya `siswa:read`, aktif, token tanpa kedaluwarsa, terakhir dipakai 5 Okt; satu klien smoke sudah nonaktif. `sync/siswa` tidak pernah dipanggil, detail siswa total 10 panggilan. Praktis hanya "Testing" yang kehilangan field. Belum dilakukan, keputusan user: nonaktifkan "Testing" bila hanya uji coba.
+- Verifikasi: 17 tes baru (`integrationApi.siswaPii.test.ts`) ditulis dulu dan 7 gagal terhadap kode lama; sesudahnya 89 tes integrasi lulus, `src/lib` + `src/server` 647 lulus, eslint `integrationApi.ts` 72 error (sama dengan `main`), `tsc` 215 error baseline identik, build produksi sukses.
+- Berikutnya: merge ke `main` memicu deploy dan perlu persetujuan user.
+
 ## Pembaruan 28 Oktober 2026 — ID Santri pihak ketiga (SiPaksa)
 
 - Disetujui user: simpan `santriId` dari API SiPaksa (`/api/setoran?jenjang=all&limit=2000`) di kolom baru `siswa.id_santri_pihak3`, sebagai penghubung **sementara**. Rencana jangka panjang (kata user): ID Santri nanti dibuat **mandiri oleh aplikasi Hijrah At-Tauhid**, dan pihak ketiga (SiPaksa) yang akan memakai ID dari Hijrah. Setelah itu kolom `id_santri_pihak3` bisa dihapus. Siswa yang sudah ber-NIS mandiri tidak pernah ditimpa ID pihak ketiga.
