@@ -10,6 +10,11 @@ import { formatRupiah, labelBulanTA, NAMA_BULAN } from "@/lib/format";
 import { clearKeranjang, getKeranjang } from "@/lib/keranjang";
 import { supabase } from "@/lib/supabase";
 
+// Di atas nominal ini biaya QRIS cenderung lebih mahal daripada Virtual Account,
+// sehingga orang tua diimbau memilih VA. Hanya imbauan; QRIS tetap bisa dipilih.
+// Nilai sama dengan portal web (src/pages/portal/PortalCheckout.tsx).
+const BATAS_IMBAUAN_VA = 628000;
+
 export default function CheckoutScreen() {
   const theme = useTheme();
   const router = useRouter();
@@ -30,6 +35,7 @@ export default function CheckoutScreen() {
   }, [keranjang]);
 
   const totalAmount = keranjang.reduce((sum, i) => sum + i.jumlah, 0);
+  const sarankanVA = totalAmount > BATAS_IMBAUAN_VA;
 
   const selesaiKeCekStatus = () => {
     clearKeranjang();
@@ -194,6 +200,30 @@ export default function CheckoutScreen() {
           </Text>
         </View>
       </Card>
+
+      {sarankanVA ? (
+        <Card
+          style={{
+            flexDirection: "row",
+            gap: 12,
+            alignItems: "flex-start",
+            backgroundColor: theme.amberSoft,
+            borderColor: theme.amber,
+          }}
+        >
+          <Ionicons name="information-circle-outline" size={22} color={theme.amber} />
+          <View style={{ flex: 1, gap: 3 }}>
+            <Text style={{ color: theme.amber, fontSize: 13, fontWeight: "600" }}>
+              Saran metode pembayaran
+            </Text>
+            <Text style={{ color: theme.text, fontSize: 12 }}>
+              Untuk pembayaran di atas {formatRupiah(BATAS_IMBAUAN_VA)}, sebaiknya pilih
+              Virtual Account (VA) di halaman Midtrans. Biaya layanan QRIS untuk nominal
+              sebesar ini cenderung lebih mahal dibandingkan VA.
+            </Text>
+          </View>
+        </Card>
+      ) : null}
 
       <View style={{ gap: 10 }}>
         <Button
