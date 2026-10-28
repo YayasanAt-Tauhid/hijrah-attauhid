@@ -16,7 +16,11 @@ import {
   TableFooter,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { ArrowLeft, CreditCard, Loader2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, CreditCard, Info, Loader2, ShieldCheck } from "lucide-react";
+
+// Di atas nominal ini biaya QRIS cenderung lebih mahal daripada Virtual Account,
+// sehingga orang tua diimbau memilih VA. Hanya imbauan; QRIS tetap bisa dipilih.
+const BATAS_IMBAUAN_VA = 628000;
 
 const NAMA_BULAN = [
   "",
@@ -102,6 +106,7 @@ export default function PortalCheckout() {
   }, [keranjang]);
 
   const totalAmount = keranjang.reduce((sum, i) => sum + i.jumlah, 0);
+  const sarankanVA = totalAmount > BATAS_IMBAUAN_VA;
 
   const handleBayar = async () => {
     setIsLoading(true);
@@ -276,6 +281,22 @@ export default function PortalCheckout() {
           </div>
         </CardContent>
       </Card>
+
+      {sarankanVA ? (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="flex items-start gap-4 p-5">
+            <Info className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-900 space-y-1">
+              <p className="font-medium">Saran metode pembayaran</p>
+              <p>
+                Untuk pembayaran di atas {formatRupiah(BATAS_IMBAUAN_VA)}, sebaiknya
+                pilih Virtual Account (VA) di halaman Midtrans. Biaya layanan QRIS
+                untuk nominal sebesar ini cenderung lebih mahal dibandingkan VA.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {midtransError ? (
         <p className="text-sm text-destructive text-center">
