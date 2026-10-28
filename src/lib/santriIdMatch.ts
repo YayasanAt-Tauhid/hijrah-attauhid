@@ -5,13 +5,22 @@
  * rencana update beserta laporan. Penulisan ke database dilakukan pemanggil
  * (lihat `src/server/santriId.ts`), dan hanya setelah dry-run ditinjau.
  *
- * Aturan:
- * - Kunci pencocokan otomatis: NISN dulu, lalu NIS. Dibandingkan sebagai teks
- *   (angka nol di depan dipertahankan).
- * - Kecocokan nama TIDAK pernah menjadi update; hanya masuk daftar tinjau.
- * - Aturan mandiri: siswa yang sudah ber-NIS mandiri (7 digit polos, atau YY-KK-NNN) dari
- *   aplikasi tidak ditimpa ID pihak ketiga.
- * - ID pihak ketiga yang sudah tersimpan dan berbeda tidak ditimpa (konflik).
+ * Aturan (sama dengan backfill produksi 28 Oktober 2026):
+ * 1. NIS adalah kunci utama. NIS dibandingkan sebagai teks tanpa tanda hubung
+ *    dan spasi di kedua sisi (SiPaksa `742-26` = Hijrah `74226`). Titik dan
+ *    angka nol di depan dipertahankan (NIS MTA `2223.03.0012`).
+ * 2. NISN hanya cadangan: dipakai bila NIS record kosong atau tidak ditemukan
+ *    di Hijrah. Bila NIS record terisi tetapi tidak ketemu, dan NISN cocok ke
+ *    siswa yang ber-NIS lain, kasus ditahan (`nis_nisn_bentrok`).
+ * 3. Nama wajib mirip (Levenshtein ternormalisasi >= 0,85) sebagai pengaman,
+ *    karena NIS lama yang pendek pernah dipakai orang berbeda (`nama_beda`).
+ * 4. Ditahan (`held`), tidak pernah ditulis: dua record ber-ID berbeda dengan
+ *    NIS sama (`nis_dobel_sipaksa`), dua record ber-ID berbeda menunjuk siswa
+ *    yang sama (`target_ganda`), `nama_beda`, dan `nis_nisn_bentrok`.
+ * 5. Siswa yang sudah ber-NIS mandiri (7 digit polos, atau YY-KK-NNN) tidak
+ *    ditimpa ID pihak ketiga.
+ * 6. Kecocokan nama saja TIDAK pernah menjadi update; hanya daftar tinjau.
+ * 7. ID pihak ketiga yang sudah tersimpan dan berbeda tidak ditimpa (konflik).
  */
 
 export interface SipaksaRecord {
@@ -31,6 +40,8 @@ export interface SiswaRow {
 }
 
 export type MatchVia = "nisn" | "nis";
+
+export type HeldReason = "nis_dobel_sipaksa" | "target_ganda" | "nama_beda" | "nis_nisn_bentrok";
 
 export interface SantriIdUpdate {
   siswa_id: string;
@@ -60,16 +71,27 @@ export interface SantriIdUnmatched {
   nama: string | null;
 }
 
+export interface SantriIdHeld {
+  id_santri_pihak3: string;
+  alasan: HeldReason;
+  /** Siswa yang dituju; null untuk `nis_dobel_sipaksa` (belum ditetapkan). */
+  siswa_id: string | null;
+  nama: string | null;
+}
+
 export interface SantriIdMatchSummary {
   totalRecords: number;
   matched: number;
   unchanged: number;
   skippedNoId: number;
   skippedOwnNis: number;
+  /** Record kembar (ID sama, siswa sama) yang digabung menjadi satu. */
+  skippedDuplicateRecord: number;
   ambiguous: number;
   conflicts: number;
-  duplicateTarget: number;
   duplicateSantriId: number;
+  held: number;
+  heldPerAlasan: Record<HeldReason, number>;
   review: number;
   unmatched: number;
   siswaTanpaPasangan: number;
@@ -81,6 +103,7 @@ export interface SantriIdMatchResult {
   ambiguous: SantriIdAmbiguous[];
   conflicts: SantriIdConflict[];
   unmatched: SantriIdUnmatched[];
+  held: SantriIdHeld[];
   summary: SantriIdMatchSummary;
 }
 
@@ -130,9 +153,66 @@ function clean(value: string | null | undefined): string | null {
   return text === "" ? null : text;
 }
 
-function normalizeName(value: string | null | undefined): string | null {
+/**
+ * Kunci NIS untuk pembandingan: tanpa spasi dan tanda hubung (termasuk
+ * tanda pisah Unicode). Titik dan nol di depan dipertahankan. Kosong -> null.
+ */
+export function normalizeNis(value: string | null | undefined): string | null {
   const text = clean(value);
-  return text === null ? null : text.toLowerCase().replace(/\s+/g, " ");
+  if (text === null) return null;
+  const key = text.replace(/[\s\-‐-―]/g, "");
+  return key === "" ? null : key;
+}
+
+/** Ambang kemiripan nama minimal agar kecocokan kunci diterima. */
+export const NAME_SIMILARITY_MIN = 0.85;
+
+function foldName(value: string | null | undefined): string {
+  const text = clean(value);
+  if (text === null) return "";
+  return text
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i += 1) {
+    const curr = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+    }
+    prev = curr;
+  }
+  return prev[b.length];
+}
+
+/**
+ * Kemiripan nama 0..1 (1 - jarak Levenshtein / panjang terpanjang) setelah
+ * huruf kecil, tanpa diakritik, dan tanda baca/spasi ganda diratakan.
+ * Salah satu sisi kosong = 0.
+ */
+export function nameSimilarity(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): number {
+  const x = foldName(a);
+  const y = foldName(b);
+  if (x === "" || y === "") return 0;
+  if (x === y) return 1;
+  return 1 - levenshtein(x, y) / Math.max(x.length, y.length);
+}
+
+function nameMatches(a: string | null | undefined, b: string | null | undefined): boolean {
+  // Toleransi 1e-9 agar batas tepat 0,85 tidak bergantung pembulatan float.
+  return nameSimilarity(a, b) >= NAME_SIMILARITY_MIN - 1e-9;
 }
 
 function indexBy(
@@ -150,8 +230,20 @@ function indexBy(
   return index;
 }
 
+function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const k = key(item);
+    const list = groups.get(k);
+    if (list) list.push(item);
+    else groups.set(k, [item]);
+  }
+  return groups;
+}
+
 interface Resolved {
   idPihak3: string;
+  nama: string | null;
   siswa: SiswaRow;
   via: MatchVia;
 }
@@ -160,9 +252,12 @@ export function matchSantriIds(
   records: SipaksaRecord[],
   siswaRows: SiswaRow[],
 ): SantriIdMatchResult {
+  const byNis = indexBy(siswaRows, (r) => normalizeNis(r.nis));
   const byNisn = indexBy(siswaRows, (r) => clean(r.nisn));
-  const byNis = indexBy(siswaRows, (r) => clean(r.nis));
-  const byName = indexBy(siswaRows, (r) => normalizeName(r.nama));
+  const byName = indexBy(siswaRows, (r) => {
+    const folded = foldName(r.nama);
+    return folded === "" ? null : folded;
+  });
 
   const result: SantriIdMatchResult = {
     updates: [],
@@ -170,41 +265,75 @@ export function matchSantriIds(
     ambiguous: [],
     conflicts: [],
     unmatched: [],
+    held: [],
     summary: {
       totalRecords: records.length,
       matched: 0,
       unchanged: 0,
       skippedNoId: 0,
       skippedOwnNis: 0,
+      skippedDuplicateRecord: 0,
       ambiguous: 0,
       conflicts: 0,
-      duplicateTarget: 0,
       duplicateSantriId: 0,
+      held: 0,
+      heldPerAlasan: {
+        nis_dobel_sipaksa: 0,
+        target_ganda: 0,
+        nama_beda: 0,
+        nis_nisn_bentrok: 0,
+      },
       review: 0,
       unmatched: 0,
       siswaTanpaPasangan: 0,
     },
   };
 
-  // Pass 1: resolusi tiap record ke tepat satu siswa (atau gugur dengan alasan).
-  const resolved: Resolved[] = [];
-  for (const record of records) {
+  const hold = (
+    idPihak3: string,
+    alasan: HeldReason,
+    siswaId: string | null,
+    nama: string | null,
+  ) => {
+    result.held.push({ id_santri_pihak3: idPihak3, alasan, siswa_id: siswaId, nama });
+    result.summary.held += 1;
+    result.summary.heldPerAlasan[alasan] += 1;
+  };
+
+  // Record ber-ID, dan NIS-nya: dua ID berbeda dengan NIS sama = NIS dobel di SiPaksa.
+  const withId = records.flatMap((record) => {
     const idPihak3 = clean(record.santriId) ?? clean(record.id_santri);
     if (idPihak3 === null) {
       result.summary.skippedNoId += 1;
+      return [];
+    }
+    return [{ record, idPihak3, nisKey: normalizeNis(record.nis) }];
+  });
+  const idPerNis = new Map<string, Set<string>>();
+  for (const { idPihak3, nisKey } of withId) {
+    if (nisKey === null) continue;
+    const ids = idPerNis.get(nisKey);
+    if (ids) ids.add(idPihak3);
+    else idPerNis.set(nisKey, new Set([idPihak3]));
+  }
+
+  // Pass 1: resolusi tiap record ke tepat satu siswa (atau gugur dengan alasan).
+  const resolved: Resolved[] = [];
+  for (const { record, idPihak3, nisKey } of withId) {
+    const namaRecord = clean(record.nama);
+
+    if (nisKey !== null && (idPerNis.get(nisKey)?.size ?? 0) > 1) {
+      hold(idPihak3, "nis_dobel_sipaksa", null, namaRecord);
       continue;
     }
 
-    let candidates: SiswaRow[] | undefined;
-    let via: MatchVia = "nisn";
-
-    const nisn = clean(record.nisn);
-    if (nisn !== null) candidates = byNisn.get(nisn);
-
+    // NIS dulu; NISN hanya bila NIS kosong atau tidak ketemu di Hijrah.
+    let candidates: SiswaRow[] | undefined = nisKey !== null ? byNis.get(nisKey) : undefined;
+    let via: MatchVia = "nis";
     if (!candidates || candidates.length === 0) {
-      const nis = clean(record.nis);
-      candidates = nis !== null ? byNis.get(nis) : undefined;
-      via = "nis";
+      const nisn = clean(record.nisn);
+      candidates = nisn !== null ? byNisn.get(nisn) : undefined;
+      via = "nisn";
     }
 
     if (candidates && candidates.length > 1) {
@@ -217,13 +346,22 @@ export function matchSantriIds(
     }
 
     if (candidates && candidates.length === 1) {
-      resolved.push({ idPihak3, siswa: candidates[0], via });
+      const target = candidates[0];
+      if (via === "nisn" && nisKey !== null) {
+        // NIS record terisi tetapi tidak ketemu; NISN menunjuk siswa ber-NIS lain.
+        const nisTarget = normalizeNis(target.nis);
+        if (nisTarget !== null && nisTarget !== nisKey) {
+          hold(idPihak3, "nis_nisn_bentrok", target.id, namaRecord);
+          continue;
+        }
+      }
+      resolved.push({ idPihak3, nama: namaRecord, siswa: target, via });
       continue;
     }
 
     // Tidak ada kunci yang cocok: nama hanya untuk daftar tinjau.
-    const nameKey = normalizeName(record.nama);
-    const byNameCandidates = nameKey !== null ? byName.get(nameKey) : undefined;
+    const nameKey = foldName(record.nama);
+    const byNameCandidates = nameKey !== "" ? byName.get(nameKey) : undefined;
     if (byNameCandidates && byNameCandidates.length === 1) {
       const target = byNameCandidates[0];
       if (!isOwnNis(target.nis) && clean(target.id_santri_pihak3) === null) {
@@ -237,7 +375,7 @@ export function matchSantriIds(
       }
     }
 
-    result.unmatched.push({ id_santri_pihak3: idPihak3, nama: clean(record.nama) });
+    result.unmatched.push({ id_santri_pihak3: idPihak3, nama: namaRecord });
     result.summary.unmatched += 1;
   }
 
@@ -254,34 +392,35 @@ export function matchSantriIds(
     return true;
   });
 
-  // Pass 2b: dua record ke siswa yang sama dibatalkan semuanya.
-  const perSiswa = new Map<string, Resolved[]>();
-  for (const r of kandidat) {
-    const list = perSiswa.get(r.siswa.id);
-    if (list) list.push(r);
-    else perSiswa.set(r.siswa.id, [r]);
-  }
+  // Pass 2b: dua record ber-ID berbeda ke siswa yang sama ditahan semuanya.
+  // Record kembar (ID sama) cukup digabung menjadi satu.
   const tanpaTargetGanda: Resolved[] = [];
-  for (const list of perSiswa.values()) {
-    if (list.length > 1) result.summary.duplicateTarget += list.length;
-    else tanpaTargetGanda.push(list[0]);
+  for (const list of groupBy(kandidat, (r) => r.siswa.id).values()) {
+    if (new Set(list.map((r) => r.idPihak3)).size > 1) {
+      for (const r of list) hold(r.idPihak3, "target_ganda", r.siswa.id, r.nama);
+      continue;
+    }
+    result.summary.skippedDuplicateRecord += list.length - 1;
+    tanpaTargetGanda.push(list[0]);
   }
 
-  // Pass 2c: satu ID pihak ketiga tidak boleh dipakai dua siswa
+  // Pass 2c: pengaman nama. Kunci cocok tetapi nama berbeda jauh = bisa orang lain.
+  const lolosNama = tanpaTargetGanda.filter((r) => {
+    if (nameMatches(r.nama, r.siswa.nama)) return true;
+    hold(r.idPihak3, "nama_beda", r.siswa.id, r.nama);
+    return false;
+  });
+
+  // Pass 2d: satu ID pihak ketiga tidak boleh dipakai dua siswa
   // (termasuk siswa lain yang sudah menyimpannya di database).
-  const perId = new Map<string, Resolved[]>();
-  for (const r of tanpaTargetGanda) {
-    const list = perId.get(r.idPihak3);
-    if (list) list.push(r);
-    else perId.set(r.idPihak3, [r]);
-  }
+  const perId = groupBy(lolosNama, (r) => r.idPihak3);
   const dipakaiSiswaLain = new Map<string, string>();
   for (const row of siswaRows) {
     const tersimpan = clean(row.id_santri_pihak3);
     if (tersimpan !== null) dipakaiSiswaLain.set(tersimpan, row.id);
   }
 
-  for (const r of tanpaTargetGanda) {
+  for (const r of lolosNama) {
     const sama = perId.get(r.idPihak3) ?? [];
     const pemilikLain = dipakaiSiswaLain.get(r.idPihak3);
     if (sama.length > 1 || (pemilikLain !== undefined && pemilikLain !== r.siswa.id)) {

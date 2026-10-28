@@ -2,7 +2,8 @@
  * Server function: syncIdSantriPihak3
  *
  * Mengisi `siswa.id_santri_pihak3` dari API pihak ketiga (SiPaksa). Pencocokan
- * ada di `src/lib/santriIdMatch.ts` (NISN lalu NIS; nama hanya daftar tinjau;
+ * ada di `src/lib/santriIdMatch.ts` (NIS kunci utama tanpa tanda hubung/spasi;
+ * NISN cadangan; nama harus mirip >= 0,85; kasus meragukan ditahan di `held`;
  * siswa ber-NIS mandiri 7 digit polos / YY-KK-NNN tidak pernah ditimpa).
  *
  * Default DRY-RUN: hanya mengembalikan laporan, tidak menulis apa pun. Penulisan
@@ -16,6 +17,7 @@ import {
   parseSipaksaPayload,
   type SantriIdAmbiguous,
   type SantriIdConflict,
+  type SantriIdHeld,
   type SantriIdMatchSummary,
   type SantriIdReview,
   type SantriIdUnmatched,
@@ -48,6 +50,8 @@ export interface SyncIdSantriOutput {
     ambiguous: SantriIdAmbiguous[];
     conflicts: SantriIdConflict[];
     unmatched: SantriIdUnmatched[];
+    /** Ditahan, tidak pernah ditulis: perbaiki di SiPaksa atau putuskan manual. */
+    held: SantriIdHeld[];
   };
   diterapkan: { requested: number; updated: number; skipped: number } | null;
 }
@@ -171,6 +175,7 @@ export const syncIdSantriPihak3 = createServerFn({ method: "POST" })
         ambiguous: hasil.ambiguous.slice(0, SAMPLE_LIMIT),
         conflicts: hasil.conflicts.slice(0, SAMPLE_LIMIT),
         unmatched: hasil.unmatched.slice(0, SAMPLE_LIMIT),
+        held: hasil.held.slice(0, SAMPLE_LIMIT),
       },
       diterapkan,
     };
