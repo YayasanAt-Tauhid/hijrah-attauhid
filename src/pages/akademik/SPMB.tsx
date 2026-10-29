@@ -1,6 +1,7 @@
 import { SpmbNisDisplay } from "@/components/akademik/SpmbNisDisplay";
 import { needsNisSyncForExternalAcceptance } from "@/lib/spmbAcceptance";
 import { resolveSpmbTargetNis } from "@/lib/spmbTargetNis";
+import { resolveSpmbOriginDepartmentId } from "@/lib/spmbRegistrationOrigin";
 import { nisHistoryClient } from "@/lib/nisHistory";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "@/lib/router-compat";
@@ -425,21 +426,24 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         siswaRows.push(...(data || []));
       }
       const siswaById = new Map<string, any>(siswaRows.map((row: any) => [row.id, row]));
-      const nisHistoryByStudent = new Map<string, Array<{ departemen_id: string; nis: string }>>();
+      const nisHistoryByStudent = new Map<string, Array<{ departemen_id: string; nis: string; created_at?: string | null }>>();
       for (let i = 0; i < siswaIds.length; i += 150) {
         const chunk = siswaIds.slice(i, i + 150);
         const rows = await fetchAllPages((from, to) => nisHistoryClient.from("siswa_tahun_masuk_departemen")
-          .select("siswa_id,departemen_id,nis").in("siswa_id", chunk).order("id").range(from, to));
+          .select("siswa_id,departemen_id,nis,created_at").in("siswa_id", chunk).order("created_at").range(from, to));
         for (const item of rows) {
           const nis = String(item.nis || "").trim();
-          if (!item.siswa_id || !item.departemen_id || !nis) continue;
+          if (!item.siswa_id || !item.departemen_id) continue;
           const history = nisHistoryByStudent.get(item.siswa_id) || [];
-          history.push({ departemen_id: item.departemen_id, nis });
+          history.push({ departemen_id: item.departemen_id, nis, created_at: item.created_at || null });
           nisHistoryByStudent.set(item.siswa_id, history);
         }
       }
 
-      const targetDeptIds = [...new Set(details.map((d: any) => d.spmb_departemen_tujuan_id).filter(Boolean))];
+      const targetDeptIds = [...new Set([
+        ...details.map((d: any) => d.spmb_departemen_tujuan_id).filter(Boolean),
+        ...Array.from(nisHistoryByStudent.values()).flatMap((history) => history.map((item) => item.departemen_id)),
+      ])];
       const targetCohortIds = [...new Set(details.map((d: any) => d.spmb_angkatan_tujuan_id).filter(Boolean))];
       const targetDeptById = new Map<string, any>();
       const targetCohortById = new Map<string, any>();
@@ -463,7 +467,18 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         const targetDept = targetDeptById.get(targetDeptId) || s.departemen;
         const targetCohort = targetCohortById.get(targetCohortId) || s.angkatan;
         const internalStudent = detail.spmb_siswa_internal === true;
-        const academicDeptCode = String(s.departemen?.kode || s.departemen?.nama || "").trim().toUpperCase();
+        const departmentHistory = nisHistoryByStudent.get(s.id) || [];
+        const originDepartmentId = internalStudent
+          ? resolveSpmbOriginDepartmentId({
+            currentDepartmentId: s.departemen_id,
+            targetDepartmentId: targetDeptId,
+            history: departmentHistory,
+          })
+          : s.departemen_id;
+        const originDepartment = originDepartmentId
+          ? targetDeptById.get(originDepartmentId) || (originDepartmentId === s.departemen_id ? s.departemen : null)
+          : null;
+        const academicDeptCode = String(originDepartment?.kode || originDepartment?.nama || "").trim().toUpperCase();
         const targetDeptCode = String(targetDept?.kode || targetDept?.nama || "").trim().toUpperCase();
         const registrationTypeLabel = internalStudent
           ? `Internal${academicDeptCode && targetDeptCode ? ` · ${academicDeptCode} → ${targetDeptCode}` : ""}`
@@ -494,7 +509,9 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           _academicStatus: s.status,
           _academicDepartemenId: s.departemen_id,
           _academicLembagaNama: s.departemen?.nama || "",
-          _academicLembagaKode: academicDeptCode,
+          _academicLembagaKode: String(s.departemen?.kode || s.departemen?.nama || "").trim().toUpperCase(),
+          _spmbOriginLembagaNama: originDepartment?.nama || "",
+          _spmbOriginLembagaKode: academicDeptCode,
           _lembagaKode: targetDeptCode,
           _spmbInternal: internalStudent,
           _spmbJenisPendaftar: internalStudent ? "internal" : "eksternal",
@@ -1344,7 +1361,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           <div className="space-y-1">
             <span className="inline-flex rounded-full border border-info/30 bg-info/10 px-2 py-0.5 text-xs font-medium text-info">Internal</span>
             <p className="text-xs text-muted-foreground">
-              {String(row._academicLembagaKode || row._academicLembagaNama || "-")} → {String(row._lembagaKode || row._lembagaNama || "-")}
+              {String(row._spmbOriginLembagaKode || row._spmbOriginLembagaNama || "-")} → {String(row._lembagaKode || row._lembagaNama || "-")}
             </p>
           </div>
         )
