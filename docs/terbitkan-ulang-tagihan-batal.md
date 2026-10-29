@@ -69,4 +69,8 @@ Keduanya belum pernah dijurnal, tanpa pembayaran, tanpa baris verifikasi.
   riwayat kosong, data Nadhif tidak berubah.
 - Pratinjau (`p_apply=false`, dalam transaksi yang di-rollback) untuk dua tagihan Nadhif: SPP Juli 2027 asrama Rp1.350.000 -> non asrama
   Rp500.000 (akun 4102 -> 4103); uang pangkal Rp13.100.000 -> Rp10.100.000 (program non_asrama, tanpa verifikasi lama).
-- Eksekusi untuk Nadhif belum dilakukan; menunggu persetujuan pengguna. Aplikasi (tombol) belum di-deploy.
+- 29 Okt 2026 16:5x WIB: dua tagihan Nadhif diterbitkan ulang lewat RPC (satu transaksi dengan pemeriksaan internal) atas persetujuan pengguna.
+  Pelaksana yang dicatat: admin Muhammad Yusuf (`insyaallahrajin@gmail.com`), alasan memuat "dieksekusi lewat Claude atas permintaan pengguna".
+  Hasil terverifikasi: SPP Juli 2027 Rp500.000 non asrama (akun 4103) dan uang pangkal Rp10.100.000 non asrama, keduanya `terjadwal`
+  tanpa jurnal; tarif lama dinonaktifkan dan tarif baru aktif; riwayat 2 baris; audit_keuangan 2 baris; tidak ada jurnal baru; jumlah tagihan siswa tetap 12.
+- Aplikasi (tombol) belum di-deploy.
