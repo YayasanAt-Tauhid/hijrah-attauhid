@@ -1,7 +1,7 @@
 import { SpmbNisDisplay } from "@/components/akademik/SpmbNisDisplay";
 import { needsNisSyncForExternalAcceptance } from "@/lib/spmbAcceptance";
 import { resolveSpmbTargetNis } from "@/lib/spmbTargetNis";
-import { resolveSpmbOriginDepartmentId } from "@/lib/spmbRegistrationOrigin";
+import { resolveSpmbOriginDepartmentId, resolveSpmbOriginNis } from "@/lib/spmbRegistrationOrigin";
 import { nisHistoryClient } from "@/lib/nisHistory";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "@/lib/router-compat";
@@ -478,6 +478,14 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         const originDepartment = originDepartmentId
           ? targetDeptById.get(originDepartmentId) || (originDepartmentId === s.departemen_id ? s.departemen : null)
           : null;
+        const originNis = internalStudent
+          ? resolveSpmbOriginNis({
+            originDepartmentId,
+            currentDepartmentId: s.departemen_id,
+            currentNis: s.nis,
+            history: departmentHistory,
+          })
+          : (s.nis || null);
         const academicDeptCode = String(originDepartment?.kode || originDepartment?.nama || "").trim().toUpperCase();
         const targetDeptCode = String(targetDept?.kode || targetDept?.nama || "").trim().toUpperCase();
         const registrationTypeLabel = internalStudent
@@ -505,11 +513,15 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           angkatan_id: targetCohortId,
           departemen: targetDept,
           angkatan: targetCohort,
-          _academicNis: s.nis || null,
+          _academicNis: originNis,
           _academicStatus: s.status,
           _academicDepartemenId: s.departemen_id,
-          _academicLembagaNama: s.departemen?.nama || "",
-          _academicLembagaKode: String(s.departemen?.kode || s.departemen?.nama || "").trim().toUpperCase(),
+          _academicLembagaNama: internalStudent ? (originDepartment?.nama || s.departemen?.nama || "") : (s.departemen?.nama || ""),
+          _academicLembagaKode: internalStudent
+            ? String(originDepartment?.kode || originDepartment?.nama || "").trim().toUpperCase()
+            : String(s.departemen?.kode || s.departemen?.nama || "").trim().toUpperCase(),
+          _spmbOriginDepartmentId: originDepartmentId,
+          _spmbOriginNis: originNis,
           _spmbOriginLembagaNama: originDepartment?.nama || "",
           _spmbOriginLembagaKode: academicDeptCode,
           _lembagaKode: targetDeptCode,
