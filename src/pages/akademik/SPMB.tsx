@@ -1,5 +1,6 @@
 import { SpmbNisDisplay } from "@/components/akademik/SpmbNisDisplay";
 import { needsNisSyncForExternalAcceptance } from "@/lib/spmbAcceptance";
+import { resolveSpmbTargetNis } from "@/lib/spmbTargetNis";
 import { nisHistoryClient } from "@/lib/nisHistory";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "@/lib/router-compat";
@@ -424,13 +425,17 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         siswaRows.push(...(data || []));
       }
       const siswaById = new Map<string, any>(siswaRows.map((row: any) => [row.id, row]));
-      const nisByDepartment = new Map<string, string>();
+      const nisHistoryByStudent = new Map<string, Array<{ departemen_id: string; nis: string }>>();
       for (let i = 0; i < siswaIds.length; i += 150) {
         const chunk = siswaIds.slice(i, i + 150);
         const rows = await fetchAllPages((from, to) => nisHistoryClient.from("siswa_tahun_masuk_departemen")
           .select("siswa_id,departemen_id,nis").in("siswa_id", chunk).order("id").range(from, to));
         for (const item of rows) {
-          if (item.nis) nisByDepartment.set(item.siswa_id + ":" + item.departemen_id, item.nis);
+          const nis = String(item.nis || "").trim();
+          if (!item.siswa_id || !item.departemen_id || !nis) continue;
+          const history = nisHistoryByStudent.get(item.siswa_id) || [];
+          history.push({ departemen_id: item.departemen_id, nis });
+          nisHistoryByStudent.set(item.siswa_id, history);
         }
       }
 
@@ -474,7 +479,12 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
               : "belum_bayar";
         return [{
           ...s,
-          nis: targetDeptId === s.departemen_id ? s.nis : (nisByDepartment.get(s.id + ":" + targetDeptId) || null),
+          nis: resolveSpmbTargetNis({
+            currentNis: s.nis,
+            currentDepartmentId: s.departemen_id,
+            targetDepartmentId: targetDeptId,
+            history: nisHistoryByStudent.get(s.id) || [],
+          }),
           status: registrationStatus,
           departemen_id: targetDeptId,
           angkatan_id: targetCohortId,
