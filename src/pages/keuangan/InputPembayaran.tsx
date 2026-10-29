@@ -39,7 +39,7 @@ import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { orderWithinSlots } from "@/lib/monthlyPrerequisiteGate";
-import { calculateRemainingBill, isSppPaymentName, isUangPangkalPaymentName } from "@/lib/installment";
+import { calculateRemainingBill, isInstallmentAllowed, isSppPaymentName } from "@/lib/installment";
 import {
   billingPeriodLabel,
   billingSequenceKey,
@@ -692,16 +692,16 @@ function InputPembayaranContent() {
     ["belum_bayar", "sebagian", "terjadwal"].includes(String(existingTagihan.status));
   const tarifTidakAda  = !!(form.jenisId && selectedSiswa && !loadingTarif && tarifNominal == null && !adaTagihanDipilih);
   const isSpp = !isSekali && isSppPaymentName(selectedJenis?.nama);
-  const cicilanSekaliDiizinkan =
-    isSekali &&
+  const cicilanDiizinkan =
     !!existingTagihan &&
-    (existingTagihan.status !== "terjadwal" ||
-      isUangPangkalPaymentName(selectedJenis?.nama));
-  const cicilanSppDiizinkan =
-    isSpp && !!existingTagihan &&
-    (existingTagihan.status !== "terjadwal" ||
-      (!!existingTagihan.jatuh_tempo && existingTagihan.jatuh_tempo.slice(0, 7) + "-01" <= form.tanggalBayar));
-  const cicilanDiizinkan = cicilanSekaliDiizinkan || cicilanSppDiizinkan;
+    (isSekali || isSpp) &&
+    isInstallmentAllowed({
+      isSekali,
+      jenisNama: selectedJenis?.nama,
+      status: existingTagihan.status,
+    });
+  const cicilanSekaliDiizinkan = isSekali && cicilanDiizinkan;
+  const cicilanSppDiizinkan = isSpp && cicilanDiizinkan;
   const sisaTagihanDipilih =
     selectedOpenBill?.sisa ??
     (isSekali && ringkasanTagihanSekali
@@ -974,14 +974,15 @@ function InputPembayaranContent() {
     };
   };
 
-  // SPP tetap dapat dicicil sejak jatuh tempo meski pengakuannya menunggu akhir bulan.
-  // Aturan yang sama dipaksa oleh server (prosesPembayaran), jadi ini hanya
-  // menentukan apakah kolom jumlah boleh diubah kasir.
+  // SPP dapat dicicil kapan saja, juga sebelum jatuh tempo (status terjadwal);
+  // pembayarannya masuk Pendapatan Diterima di Muka. Aturan yang sama dipaksa
+  // oleh server dan database, jadi ini hanya menentukan apakah kolom jumlah
+  // boleh diubah kasir.
   const canPartialBill = (bill: OpenBillRow) =>
     !!bill.jenis_pembayaran &&
-    (bill.status !== "terjadwal" ||
-      (isSppPaymentName(bill.jenis_pembayaran.nama) && !!bill.jatuh_tempo && bill.jatuh_tempo.slice(0, 7) + "-01" <= form.tanggalBayar)) &&
-    (bill.jenis_pembayaran.tipe === "sekali" || isSppPaymentName(bill.jenis_pembayaran.nama));
+    ((bill.status !== "terjadwal" &&
+      (bill.jenis_pembayaran.tipe === "sekali" || isSppPaymentName(bill.jenis_pembayaran.nama))) ||
+      isSppPaymentName(bill.jenis_pembayaran.nama));
 
   const handleToggleBillPay = (bill: OpenBillRow, checked: boolean) => {
     if (!selectedSiswa) return;

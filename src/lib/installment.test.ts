@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateRemainingBill, isSppPaymentName, isUangPangkalPaymentName, resolveInstallmentAmount } from "./installment";
+import { calculateRemainingBill, isInstallmentAllowed, isSppPaymentName, isUangPangkalPaymentName, resolveInstallmentAmount } from "./installment";
 
 describe("resolveInstallmentAmount", () => {
   it("membolehkan cicilan bebas selama tidak melebihi sisa", () => {
@@ -64,5 +64,33 @@ describe("isUangPangkalPaymentName", () => {
     expect(isUangPangkalPaymentName("DAFTAR ULANG TK")).toBe(false);
     expect(isUangPangkalPaymentName("BIAYA PENDAFTARAN")).toBe(false);
     expect(isUangPangkalPaymentName("UANG PANGKAL DAYCARE")).toBe(false);
+  });
+});
+
+describe("isInstallmentAllowed", () => {
+  it("SPP boleh dicicil dalam semua status, termasuk sebelum jatuh tempo (terjadwal)", () => {
+    for (const status of ["terjadwal", "belum_bayar", "sebagian"]) {
+      expect(isInstallmentAllowed({ isSekali: false, jenisNama: "SPP SD", status })).toBe(true);
+    }
+  });
+
+  it("jenis bulanan selain SPP tetap wajib dibayar penuh", () => {
+    for (const status of ["terjadwal", "belum_bayar", "sebagian"]) {
+      expect(isInstallmentAllowed({ isSekali: false, jenisNama: "SUBSIDI SILANG", status })).toBe(false);
+    }
+  });
+
+  it("sekali bayar boleh dicicil kecuali masih terjadwal", () => {
+    expect(isInstallmentAllowed({ isSekali: true, jenisNama: "Seragam", status: "belum_bayar" })).toBe(true);
+    expect(isInstallmentAllowed({ isSekali: true, jenisNama: "Seragam", status: "sebagian" })).toBe(true);
+    expect(isInstallmentAllowed({ isSekali: true, jenisNama: "Seragam", status: "terjadwal" })).toBe(false);
+  });
+
+  it("Uang Pangkal boleh dicicil walau masih terjadwal", () => {
+    expect(isInstallmentAllowed({ isSekali: true, jenisNama: "UANG PANGKAL SD", status: "terjadwal" })).toBe(true);
+  });
+
+  it("nama SPP pada jenis sekali bayar tidak membuka cicilan terjadwal", () => {
+    expect(isInstallmentAllowed({ isSekali: true, jenisNama: "SPP Tambahan", status: "terjadwal" })).toBe(false);
   });
 });

@@ -10,7 +10,7 @@ import { isMonthlySppRevenue } from "@/lib/recognitionDate";
 import { createServerFn } from "@tanstack/react-start";
 import { resolvePaymentBookYear } from "@/lib/paymentBookYear";
 import { resolvePaymentAmount } from "@/lib/paymentTariff";
-import { calculateRemainingBill, isSppPaymentName, isUangPangkalPaymentName, resolveInstallmentAmount } from "@/lib/installment";
+import { calculateRemainingBill, isInstallmentAllowed, isSppPaymentName, resolveInstallmentAmount } from "@/lib/installment";
 import {
   billingPeriodLabel,
   findBillingPrerequisite,
@@ -775,14 +775,11 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         0
       );
       const { remaining } = calculateRemainingBill(tagihanTerpilih.nominal, totalSudahBayar);
-      const allowPartial =
-        (isSekali &&
-          (tagihanTerpilih.status !== "terjadwal" ||
-            isUangPangkalPaymentName(jenis.nama))) ||
-        (isSpp &&
-          (tagihanTerpilih.status !== "terjadwal" ||
-            (!!tagihanTerpilih.jatuh_tempo &&
-              tagihanTerpilih.jatuh_tempo.slice(0, 7) + "-01" <= tanggal_bayar)));
+      const allowPartial = isInstallmentAllowed({
+        isSekali,
+        jenisNama: jenis.nama,
+        status: tagihanTerpilih.status,
+      });
       jumlahValid = resolveInstallmentAmount({
         requestedAmount: data.jumlah,
         remainingAmount: remaining,
@@ -839,10 +836,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       // SPP yang sudah jatuh tempo boleh memiliki beberapa pembayaran yang
       // semuanya menempel ke tagihan bulanan exact. Jenis bulanan lain tetap
       // mengikuti aturan satu pembayaran penuh per periode.
-      const allowMonthlyInstallment =
-        isSpp &&
-        !!tagihanTerpilih &&
-        tagihanTerpilih.status !== "terjadwal";
+      const allowMonthlyInstallment = isSpp && !!tagihanTerpilih;
 
       if (!allowMonthlyInstallment) {
         const { data: dupCheck } = await admin

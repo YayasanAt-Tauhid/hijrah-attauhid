@@ -25,10 +25,15 @@ perlu mock DB. Tanpa migrasi database.
   tidak dibatasi (jalur lama). `TunggakanPembayaran` tidak punya kolom alasan,
   jadi bulan yang melompat di sana gagal dengan pesan yang mengarah ke Input
   Pembayaran.
-- BELUM dikerjakan: cicilan SPP sebelum jatuh tempo (status `terjadwal`). Aturan
-  ini ada juga di database: `proses_pembayaran_atomik` menolak dengan "Tagihan
-  yang belum jatuh tempo harus dibayar penuh" untuk SPP sebelum tanggal pengakuan,
-  jadi butuh migrasi produksi (konfirmasi pemilik) selain perubahan aplikasi.
+- Cicilan SPP sebelum jatuh tempo (status `terjadwal`) kini boleh (keputusan 29
+  Oktober). Aturannya di `isInstallmentAllowed` (`src/lib/installment.ts`) dan
+  dipaksa juga di database: migrasi `20261029045015_spp_cicilan_sebelum_jatuh_tempo`
+  menambal guard "Tagihan yang belum jatuh tempo harus dibayar penuh" di
+  `proses_pembayaran_atomik` (hanya guard itu; sudah diterapkan ke produksi,
+  diuji dulu dalam transaksi yang di-rollback). Cicilan masuk Pendapatan Diterima
+  di Muka; status tagihan menjadi `sebagian`; pengakuan SPP menghitung sisa dari
+  total terbayar. Jenis bulanan non-SPP tetap wajib bayar penuh. Link Midtrans
+  dan portal orang tua tidak berubah (bulanan tetap penuh).
 - Belum dicakup: portal orang tua dan link pembayaran Midtrans
   (`proses_pembayaran_midtrans_atomik`) tidak memeriksa syarat ini.
   `TunggakanPembayaran` memanggil `prosesPembayaran` tanpa alasan, jadi sekali
