@@ -645,3 +645,10 @@ Pada rencana siswa baru, SPP awal sudah tersedia di RPC, tetapi aksesnya tersemb
 - Per 29 Okt 2026 ada 33 tagihan SPP Oktober 2026 yang tidak pernah dijurnal oleh job itu (SD 27, TK 3, SMA 1, SMP 1, MTA 1; total sekitar Rp13,9 juta; semuanya `lunas`, dibuat 27 Sep 2026). Semuanya punya `pembayaran` dengan `jurnal_id` NULL dan baris `pendapatan_dimuka` berstatus pending, sehingga guard di `posting_spp_tagihan_atomik` ("Penerimaan SPP belum memiliki jurnal kewajiban yang valid") menolaknya. Teks galat per tagihan belum dibaca langsung (menjalankan job menulis jurnal); sebabnya disimpulkan dari kondisi data.
 - Belum diputuskan: apakah jurnal penerimaan 33 pembayaran itu memang ada di jurnal hasil migrasi (tidak tertaut lewat `pembayaran.jurnal_id`) atau belum pernah dibuat. Perlu keputusan akuntansi tim keuangan sebelum ada yang menulis jurnal.
 
+
+### Log akrual harian (29 Oktober 2026)
+
+- Tujuan: galat job pg_cron akrual harian tidak lagi senyap. Rancangan dan batasan ada di `docs/log-akrual-harian.md`.
+- Keputusan: fungsi `jalankan_akrual_jatuh_tempo` tidak diubah; dibungkus `jalankan_akrual_harian_berlog` + tabel log immutable; satu-satunya perubahan objek lama adalah perintah job cron (dijaga kondisional dan dapat dikembalikan). UI: kartu di Pengakuan Pendapatan dan butir ke-4 di checklist Tutup Buku.
+- Status: migration + tes SQL lulus di Clone; UI + tes selesai di branch `feat/log-akrual-harian-20261029` (worktree `~/projects/worktrees/hijrah-log-akrual-20261029`). Produksi belum disentuh pada saat catatan ini ditulis.
+- Langkah berikutnya: persetujuan eksplisit pengguna -> migration ke V5 -> cek `cron.job` -> push/deploy UI -> setelah cron 07:05 WIB berikutnya baca log pertama (akan memuat pesan galat asli 33 SPP Okt 2026).

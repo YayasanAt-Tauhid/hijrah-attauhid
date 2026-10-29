@@ -11,6 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTahunBuku, formatRupiah } from "@/hooks/useKeuangan";
 import { useRekonRekeningAntar, type PeriodeFilter } from "@/hooks/useISAK35";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAkrualLog } from "@/hooks/useAkrualLog";
+import { akrualChecklistStatus } from "@/lib/akrualLog";
 import { toast } from "sonner";
 import { Lock, AlertTriangle, TrendingUp, TrendingDown, DollarSign, History, GraduationCap, Briefcase, ClipboardCheck, CheckCircle2 } from "lucide-react";
 import { StatsCard } from "@/components/shared/StatsCard";
@@ -36,14 +38,15 @@ type UnitKey = keyof typeof UNIT_CONFIG;
 
 // ============================================================
 // Checklist Pra-Tutup-Buku — reminder (bukan blocker) yang menampilkan
-// 3 pengecekan sebelum tombol tutup buku ditekan:
+// 4 pengecekan sebelum tombol tutup buku ditekan:
 //  1. Tagihan/piutang yang masih belum lunas di tahun ini
 //  2. Kelengkapan mapping akun ke pos ISAK 35
 //  3. Saldo rekening antar unit (1900/1901/1902) yang belum nol
+//  4. Eksekusi akrual harian otomatis (pg_cron) tanpa galat dan masih berjalan
 // Tidak memblokir proses tutup buku — murni informasi supaya hal-hal
 // yang biasa terlewat (seperti kasus tahun 2025->2026) bisa dicek dulu.
 // ============================================================
-function ChecklistPraTutupBuku({ tahunId, tahun }: { tahunId: string; tahun: { nama: string; tanggal_selesai: string } }) {
+export function ChecklistPraTutupBuku({ tahunId, tahun }: { tahunId: string; tahun: { nama: string; tanggal_selesai: string } }) {
   const { data: piutang, isLoading: loadingPiutang } = useQuery({
     queryKey: ["checklist_piutang_belum_lunas", tahunId],
     enabled: !!tahunId,
@@ -77,6 +80,10 @@ function ChecklistPraTutupBuku({ tahunId, tahun }: { tahunId: string; tahun: { n
     [tahun.tanggal_selesai]
   );
   const { data: rekonAntar, isLoading: loadingRekon } = useRekonRekeningAntar(periodeFilter);
+  const { data: akrualLog, isLoading: loadingAkrual, error: akrualError } = useAkrualLog(14);
+  const akrualStatus = akrualError
+    ? { ok: false, detail: "Riwayat akrual harian belum dapat dimuat; periksa manual di Pengakuan Pendapatan." }
+    : akrualChecklistStatus(akrualLog ?? []);
 
   const items = [
     {
@@ -102,6 +109,12 @@ function ChecklistPraTutupBuku({ tahunId, tahun }: { tahunId: string; tahun: { n
       detail: rekonAntar && rekonAntar.rows.length > 0
         ? `${rekonAntar.rows.length} baris belum nol (selisih total ${formatRupiah(rekonAntar.total)}) — kemungkinan ada transfer antar unit yang baru dicatat sebelah pihak. Cek di Laporan ISAK 35 → Rekonsiliasi sebelum tutup buku.`
         : "Semua rekening antar unit sudah seimbang (nol).",
+    },
+    {
+      label: "Akrual harian otomatis tanpa galat",
+      loading: loadingAkrual,
+      ok: akrualStatus.ok,
+      detail: akrualStatus.detail,
     },
   ];
 
