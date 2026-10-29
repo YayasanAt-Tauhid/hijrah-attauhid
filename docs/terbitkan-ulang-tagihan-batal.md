@@ -60,3 +60,13 @@ menyetujui hasil → eksekusi lewat dialog.
 Nadhif Alvarez (V5): uang pangkal SMP Rp13.100.000 dan SPP SMP Juli 2027 Rp1.350.000 dibatalkan 29 Okt 2026
 (alasan "pindah ke non asrama"); target non asrama: uang pangkal Rp10.100.000 (acuan SK) dan SPP Rp500.000.
 Keduanya belum pernah dijurnal, tanpa pembayaran, tanpa baris verifikasi.
+
+## Status rollout
+
+- 29 Okt 2026: migration diterapkan ke V5 (`cmvzcpeiuompqgdvflky`) atas persetujuan pengguna. Ledger remote mencatat
+  `20261029094702 terbitkan_ulang_tagihan_batal` (nama file repo `20261029093000`; ledger memang dapat berbeda dari nama file).
+  Verifikasi pasca-migrasi: RLS aktif, `anon` tidak dapat memanggil RPC, `authenticated` tidak dapat menulis langsung ke riwayat,
+  riwayat kosong, data Nadhif tidak berubah.
+- Pratinjau (`p_apply=false`, dalam transaksi yang di-rollback) untuk dua tagihan Nadhif: SPP Juli 2027 asrama Rp1.350.000 -> non asrama
+  Rp500.000 (akun 4102 -> 4103); uang pangkal Rp13.100.000 -> Rp10.100.000 (program non_asrama, tanpa verifikasi lama).
+- Eksekusi untuk Nadhif belum dilakukan; menunggu persetujuan pengguna. Aplikasi (tombol) belum di-deploy.
