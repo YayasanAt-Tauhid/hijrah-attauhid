@@ -5,12 +5,14 @@ interface Props {
 // Keep destination NIS separate from the current-school NIS. Displaying the
 // current number must never satisfy the destination-school activation checks.
 export function SpmbNisDisplay({ row }: Props) {
-  const sourceNis = String(row._academicNis || "");
+  const sourceNis = String(row._spmbOriginNis || row._academicNis || "");
   const targetNis = String(row.nis || "");
-  const sourceSchool = String(row._academicLembagaKode || row._academicLembagaNama || "asal");
+  const sourceSchool = String(row._spmbOriginLembagaKode || row._academicLembagaKode || row._spmbOriginLembagaNama || row._academicLembagaNama || "asal");
   const targetSchool = String(row._lembagaKode || row._lembagaNama || "tujuan");
-  const differentSchools = Boolean(row._academicDepartemenId && row.departemen_id
-    && row._academicDepartemenId !== row.departemen_id);
+  const sourceDepartmentId = String(row._spmbOriginDepartmentId || row._academicDepartemenId || "");
+  const targetDepartmentId = String(row.departemen_id || "");
+  const differentSchools = Boolean(sourceDepartmentId && targetDepartmentId
+    && sourceDepartmentId !== targetDepartmentId);
   // Lembaga yang berbeda tidak otomatis berarti siswa internal. Pendaftar
   // eksternal tidak memiliki NIS asal At-Tauhid dan tidak boleh ditampilkan
   // seolah-olah sedang menjalani mutasi jenjang.
