@@ -19,6 +19,20 @@ describe("status input biaya SPMB",()=>{
   expect(result.spp_awal).toMatchObject({status:"perlu_diperiksa",nominal:0,dibatalkan:1,tagihan:[]});
   expect(result.uang_pangkal.status).toBe("perlu_diperiksa");
  });
+ it("menyertakan daftar tagihan dibatalkan (id, periode, status) agar dapat diterbitkan ulang",()=>{
+  const result=summarizeSpmbBillingInputs(target,[bill({id:"s1",status:"dibatalkan",nominal:1350000}),bill({id:"s2",bulan:8,status:"dihapusbuku"}),pangkal({id:"p1",status:"dibatalkan",nominal:13100000})]);
+  expect(result.spp_awal.dibatalkan_tagihan).toEqual([
+   {id:"s1",jenis_id:"spp",nama:"SPP SMP",nominal:1350000,status:"dibatalkan",periode:"2027-07-01"},
+   {id:"s2",jenis_id:"spp",nama:"SPP SMP",nominal:500000,status:"dihapusbuku",periode:"2027-08-01"},
+  ]);
+  expect(result.uang_pangkal.dibatalkan_tagihan).toMatchObject([{id:"p1",status:"dibatalkan",nominal:13100000,periode:null}]);
+ });
+ it("daftar dibatalkan kosong bila ada tagihan aktif atau tidak ada tagihan",()=>{
+  expect(summarizeSpmbBillingInputs(target,[]).spp_awal.dibatalkan_tagihan).toEqual([]);
+  const result=summarizeSpmbBillingInputs(target,[bill({id:"aktif"}),bill({id:"lama",bulan:8,status:"dibatalkan"})]);
+  expect(result.spp_awal.status).toBe("sudah_diinput");
+  expect(result.spp_awal.dibatalkan_tagihan.map(x=>x.id)).toEqual(["lama"]);
+ });
  it("tidak mencampur siswa, lembaga asal, tahun ajaran lama, atau SPP di luar periode",()=>{
   const result=summarizeSpmbBillingInputs(target,[
    bill({siswa_id:"other"}),bill({tahun_akademik_id:"academic-old"}),

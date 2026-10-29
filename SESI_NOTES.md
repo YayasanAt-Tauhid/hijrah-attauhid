@@ -630,3 +630,11 @@ Batas dokumen pindahan harus konsisten pada formulir publik, pendaftaran admin, 
 Pengguna meminta ukuran seragam vertikal dengan kepala kolom lembaga → jenis kelamin → jenis seragam. Rekap gabungan dan rincian masing-masing mempunyai total per ukuran di kanan, total per jenis di bawah, serta baris belum diisi terpisah. Pencarian menyaring kolom rincian saja; rekap gabungan mengikuti filter pendaftar.
 
 Pada rencana siswa baru, SPP awal sudah tersedia di RPC, tetapi aksesnya tersembunyi di dialog biaya awal. Tombol langsung sekarang mengaktifkan pilihan SPP tanpa menyimpan otomatis. Status input dibaca dari tagihan aktual, termasuk input manual, berdasarkan jenjang tujuan dan tahun akademik/tahun buku yang sesuai. Rencana SPP bukan bukti tagihan sudah terbit; pembatalan/dihapusbuku ditandai perlu diperiksa. Tidak diperlukan migrasi atau penerbitan tagihan produksi untuk perubahan ini.
+
+## Terbitkan ulang tagihan SPMB yang dibatalkan (29 Oktober 2026)
+
+- Akar masalah: `tagihan_unique` tidak mengecualikan status batal, sehingga tagihan dibatalkan (pindah asrama ↔ non asrama) menutup slot dan semua alur SPMB menolaknya. Detail dan batasan v1 ada di `docs/terbitkan-ulang-tagihan-batal.md`.
+- Keputusan: tidak mengubah `tagihan_unique` (12 definisi generate memakai `ON CONFLICT` padanya) dan tidak menghapus baris lama. Baris yang sama dikembalikan ke `terjadwal` lewat RPC ber-guard + riwayat immutable. Tarif per siswa (`tarif_tagihan`) ikut diganti karena masih menyimpan nilai asrama. SPP lewat protokol audit `guard_snapshot_spp_tagihan`, bukan menerobos guard.
+- Status: migration + tes SQL sudah diterapkan dan lulus di Clone `flxbrbnyzclcthjwynsh` (Clone juga diberi stub `payment_link`). **Produksi V5 belum disentuh.** UI (tombol "Terbitkan ulang" di status Perlu diperiksa) + tes + build selesai di branch `feat/terbitkan-ulang-tagihan-batal-20261029` (worktree `~/projects/worktrees/hijrah-terbitkan-ulang-20261029`, commit lokal, belum di-push).
+- Langkah berikutnya: tinjau SQL → persetujuan eksplisit pengguna → terapkan migration ke V5 → deploy → dry-run (`p_apply=false`) untuk dua tagihan Nadhif → persetujuan → eksekusi.
+- Belum diketahui: siapa yang memanggil `posting_piutang_jatuh_tempo` di produksi (tidak ada pg_cron/pemanggil di `src`); tagihan `terjadwal` baru dijurnal bila ada proses itu.

@@ -1,4 +1,6 @@
 import { SpmbBillingInputStatus } from "@/components/keuangan/SpmbBillingInputStatus";
+import { DialogTerbitkanUlangTagihan } from "@/components/keuangan/DialogTerbitkanUlangTagihan";
+import type { CancelledBill, ReissueKind } from "@/lib/reissueCancelledBill";
 import { DialogAjukan } from "@/components/keuangan/DialogAjukanKeringanan";
 import { DialogUangPangkalSpmb } from "@/components/keuangan/DialogUangPangkalSpmb";
 import { DialogInputMassalSpmb } from "@/components/keuangan/DialogInputMassalSpmb";
@@ -104,6 +106,7 @@ export default function RencanaTagihanSiswaBaru() {
 
   const [keringananSiswa, setKeringananSiswa] = useState<SpmbBillingCandidate | null>(null);
   const [pangkalSiswa, setPangkalSiswa] = useState<SpmbBillingCandidate | null>(null);
+  const [reissue, setReissue] = useState<{ siswa: SpmbBillingCandidate; bill: CancelledBill; kind: ReissueKind } | null>(null);
   const [filterSppAwal, setFilterSppAwal] = useState("__all__");
   const [filterPangkal, setFilterPangkal] = useState("__all__");
   const [filterAsrama, setFilterAsrama] = useState("__all__");
@@ -620,13 +623,13 @@ export default function RencanaTagihanSiswaBaru() {
       key: "spp_awal",
       label: "SPP Awal",
       className: "min-w-[190px]",
-      render: (_, row) => <SpmbBillingInputStatus value={row.spp_awal} showPeriod />,
+      render: (_, row) => <SpmbBillingInputStatus value={row.spp_awal} showPeriod onReissue={(bill) => setReissue({ siswa: row, bill, kind: "spp" })} />,
     },
     {
       key: "uang_pangkal",
       label: "Uang Pangkal",
       className: "min-w-[170px]",
-      render: (_, row) => <SpmbBillingInputStatus value={row.uang_pangkal} />,
+      render: (_, row) => <SpmbBillingInputStatus value={row.uang_pangkal} onReissue={(bill) => setReissue({ siswa: row, bill, kind: "uang_pangkal" })} />,
     },
     {
       key: "rencana_spp",
@@ -1073,6 +1076,7 @@ export default function RencanaTagihanSiswaBaru() {
       {bulkStudents && <DialogInputMassalSpmb siswa={bulkStudents} jenis={jenisList} tahunBuku={tahunBukuList}
         onClose={() => { setBulkStudents(null); setBulkIds(new Set()); }} onKeringanan={setKeringananSiswa} />}
       {pangkalSiswa && <DialogUangPangkalSpmb key={pangkalSiswa.id} siswa={pangkalSiswa} onClose={() => setPangkalSiswa(null)} />}
+      {reissue && <DialogTerbitkanUlangTagihan key={reissue.bill.id} siswa={reissue.siswa} bill={reissue.bill} kind={reissue.kind} onClose={() => setReissue(null)} />}
       {keringananSiswa && (
         <DialogAjukan
           key={keringananSiswa.id}

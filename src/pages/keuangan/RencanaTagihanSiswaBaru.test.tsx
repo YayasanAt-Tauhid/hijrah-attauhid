@@ -7,7 +7,7 @@ const fixtures = [
  { id: "b", spmb_internal: false, nama: "Non Asrama Siswa", status_asrama: "non_asrama" },
  { id: "c", spmb_internal: false, nama: "Belum Status Siswa", status_asrama: null },
 ].map((r) => ({ ...r, target_departemen_id: "tujuan", target_departemen_kode: "SMP", tahun_ajaran_nama: "2027/2028", rencana_spp: null,
- spp_awal: {status: r.id==="b" ? "sudah_diinput" : "belum_diinput",nominal:r.id==="b"?500000:0,dibatalkan:0,tagihan:r.id==="b"?[{id:"spp",periode:"2027-07-01"}]:[]},
+ spp_awal: {status: r.id==="b" ? "sudah_diinput" : "belum_diinput",nominal:r.id==="b"?500000:0,dibatalkan:0,dibatalkan_tagihan:[],tagihan:r.id==="b"?[{id:"spp",periode:"2027-07-01"}]:[]},
  uang_pangkal: {status:r.id==="a"?"sudah_diinput":r.id==="c"?"perlu_diperiksa":"belum_diinput",nominal:r.id==="a"?10000000:0,dibatalkan:r.id==="c"?1:0,tagihan:[]},
  ready_for_billing: true, ready_for_spp: false }));
 vi.mock("@/server/spmbBilling", () => ({

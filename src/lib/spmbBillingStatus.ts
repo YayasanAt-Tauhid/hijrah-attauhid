@@ -7,11 +7,14 @@ export type SpmbInputBill = {
   jenis: { nama: string; tipe: string; departemen_id: string | null } | null;
   tahun_buku: { tanggal_mulai: string; tanggal_selesai: string } | null;
 };
+export type SpmbInputTagihan = { id: string; jenis_id: string; nama: string; nominal: number; status: string; periode: string | null };
 export type SpmbInputStatus = {
   status: "sudah_diinput" | "belum_diinput" | "perlu_diperiksa";
   nominal: number;
   dibatalkan: number;
-  tagihan: { id: string; jenis_id: string; nama: string; nominal: number; status: string; periode: string | null }[];
+  tagihan: SpmbInputTagihan[];
+  /** Tagihan berstatus dibatalkan/dihapusbuku pada slot ini; dipakai untuk aksi "Terbitkan ulang". */
+  dibatalkan_tagihan: SpmbInputTagihan[];
 };
 type Target = { id: string; target_departemen_id: string | null; tahun_ajaran_id: string | null; tahun_ajaran_mulai: string | null; tahun_ajaran_selesai: string | null };
 
@@ -46,6 +49,12 @@ export function summarizeSpmbBillingInputs(target: Target, bills: SpmbInputBill[
       pangkal.push(bill);
     }
   }
+  const toRow = (bill: SpmbInputBill): SpmbInputTagihan => ({
+    id: bill.id, jenis_id: bill.jenis_id, nama: bill.jenis!.nama,
+    nominal: Number(bill.nominal || 0), status: bill.status, periode: billPeriod(bill),
+  });
+  const byPeriod = (a: SpmbInputTagihan, b: SpmbInputTagihan) =>
+    String(a.periode || "").localeCompare(String(b.periode || "")) || a.id.localeCompare(b.id);
   const summarize = (matching: SpmbInputBill[]): SpmbInputStatus => {
     const cancelled = matching.filter((bill) => ["dibatalkan", "dihapusbuku"].includes(bill.status));
     const active = matching.filter((bill) => !["dibatalkan", "dihapusbuku"].includes(bill.status));
@@ -53,10 +62,8 @@ export function summarizeSpmbBillingInputs(target: Target, bills: SpmbInputBill[
       status: active.length ? "sudah_diinput" : cancelled.length ? "perlu_diperiksa" : "belum_diinput",
       nominal: active.reduce((sum, bill) => sum + Number(bill.nominal || 0), 0),
       dibatalkan: cancelled.length,
-      tagihan: active.map((bill) => ({
-        id: bill.id, jenis_id: bill.jenis_id, nama: bill.jenis!.nama,
-        nominal: Number(bill.nominal || 0), status: bill.status, periode: billPeriod(bill),
-      })).sort((a, b) => String(a.periode || "").localeCompare(String(b.periode || "")) || a.id.localeCompare(b.id)),
+      tagihan: active.map(toRow).sort(byPeriod),
+      dibatalkan_tagihan: cancelled.map(toRow).sort(byPeriod),
     };
   };
   return { spp_awal: summarize(spp), uang_pangkal: summarize(pangkal) };

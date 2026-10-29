@@ -6,8 +6,8 @@ const student = (id = "a", extra: Partial<SpmbBillingCandidate> = {}): SpmbBilli
   id, nama: id, target_departemen_id: "smp", target_departemen_kode: "SMP", status_asrama: "asrama",
   tahun_ajaran_id: "academic", tahun_ajaran_mulai: "2027-07-01", tahun_ajaran_selesai: "2028-06-30",
   ready_for_billing: true, ready_for_spp: false, rencana_spp: null,
-  spp_awal: { status: "belum_diinput", nominal: 0, dibatalkan: 0, tagihan: [] },
-  uang_pangkal: { status: "belum_diinput", nominal: 0, dibatalkan: 0, tagihan: [] },
+  spp_awal: { status: "belum_diinput", nominal: 0, dibatalkan: 0, tagihan: [], dibatalkan_tagihan: [] },
+  uang_pangkal: { status: "belum_diinput", nominal: 0, dibatalkan: 0, tagihan: [], dibatalkan_tagihan: [] },
   ...extra,
 } as SpmbBillingCandidate);
 const jenis: BulkPaymentType[] = [
@@ -82,7 +82,7 @@ describe("SPMB input massal", () => {
   });
   it("melewati SPP bulan yang sudah ada meskipun jenisnya berbeda dan melewati rencana aktif", async () => {
     const call = rpc(); const row = await prepareBulkRow(draft(), jenis, books, call);
-    const s = student("a", { spp_awal: { status: "sudah_diinput", nominal: 300000, dibatalkan: 0,
+    const s = student("a", { spp_awal: { status: "sudah_diinput", nominal: 300000, dibatalkan: 0, dibatalkan_tagihan: [],
       tagihan: [{ id: "paid", jenis_id: "day", nama: "SPP", nominal: 300000, status: "lunas", periode: "2027-07-01" }] } });
     expect((await runBulkBilling([row], [s], call, vi.fn()))[0].spp?.status).toBe("skipped");
     const d = draft({ siswa: student("a", { ready_for_spp: true, kelas_id: "7a" }), sppMode: "rencana" });
