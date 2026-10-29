@@ -32,9 +32,10 @@ serta fungsi lain tidak diubah.
 - SPP: hanya SMP/SMA/MTA, hanya bulan mendatang, belum pernah dijurnal.
 - Uang pangkal: hanya jatuh tempo di masa depan. Jatuh tempo yang sudah lewat butuh posting jurnal per tagihan yang
   belum tersedia (posting piutang hanya batch global) → gunakan koreksi keuangan.
-- Tagihan baru `terjadwal` tanpa jurnal; jurnal piutang diposting oleh proses pengakuan yang sudah ada.
-  Catatan: tidak ditemukan pemanggil otomatis `posting_piutang_jatuh_tempo` (tidak ada pg_cron, tidak ada di `src`);
-  ini perilaku sistem yang sudah ada, bukan akibat fitur ini, tetapi perlu dipastikan siapa yang menjalankannya.
+- Tagihan baru `terjadwal` tanpa jurnal; jurnal piutang diposting oleh pg_cron `akrual-jatuh-tempo-harian`
+  (00:05 UTC = 07:05 WIB) -> `jalankan_akrual_jatuh_tempo()` -> `posting_piutang_jatuh_tempo()`.
+  Koreksi 29 Okt 2026: catatan awal dokumen ini ("tidak ada pemanggil otomatis") salah; pencarian `pg_cron` saat itu
+  hanya mencocokkan nama fungsi dan melewatkan pembungkusnya. Lihat temuan akrual di `SESI_NOTES.md`.
 
 ## Migration dan rollout
 
