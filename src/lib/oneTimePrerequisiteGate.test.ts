@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BillingSequenceBill } from "./billingSequence";
-import { evaluateOneTimeGate } from "./oneTimePrerequisiteGate";
+import { evaluateOneTimeGate, evaluateSelfServiceOneTimeGate } from "./oneTimePrerequisiteGate";
 
 const bill = (
   id: string,
@@ -114,5 +114,58 @@ describe("gerbang prasyarat sekali bayar", () => {
 
   it("tidak memblokir tagihan tahun ajaran lama oleh yang lebih baru", () => {
     expect(gate("kasir", undefined, [lama, baru], lama)).toEqual({ status: "clear" });
+  });
+});
+
+describe("gerbang sekali bayar untuk orang tua (portal & link pembayaran)", () => {
+  const selfService = (
+    target: BillingSequenceBill = baru,
+    openBills: BillingSequenceBill[] = [lama, baru],
+    fullyPaidBillIds?: Set<string>,
+  ) =>
+    evaluateSelfServiceOneTimeGate({
+      jenisNama: "Uang Pangkal",
+      target,
+      openBills,
+      fullyPaidBillIds,
+    });
+
+  it("lolos bila tidak ada tagihan tahun sebelumnya yang terbuka", () => {
+    expect(selfService(baru, [baru])).toEqual({ status: "clear" });
+  });
+
+  it("lolos untuk tagihan tahun ajaran tertua", () => {
+    expect(selfService(lama)).toEqual({ status: "clear" });
+  });
+
+  it("memblokir tagihan baru dan mengarahkan ke pihak keuangan sekolah, tanpa jalur dispensasi", () => {
+    const result = selfService();
+    expect(result.status).toBe("blocked");
+    if (result.status === "blocked") {
+      expect(result.message).toContain(
+        "Selesaikan Uang Pangkal tahun ajaran 2025/2026 terlebih dahulu sebelum membayar tahun ajaran 2026/2027.",
+      );
+      expect(result.message).toMatch(/hubungi.*keuangan/i);
+      expect(result.message).not.toMatch(/alasan dispensasi/i);
+    }
+  });
+
+  it("lolos bila tagihan tahun lama ikut dibayar penuh dalam transaksi yang sama", () => {
+    expect(selfService(baru, [lama, baru], new Set(["lama"]))).toEqual({ status: "clear" });
+  });
+
+  it("tetap memblokir bila tagihan tahun lama hanya dicicil (tidak dibayar penuh)", () => {
+    expect(selfService(baru, [lama, baru], new Set()).status).toBe("blocked");
+  });
+
+  it("tidak memblokir jenis atau siswa lain", () => {
+    const lain = bill("lain", "2025/2026", "2025-07-01", { jenis_id: "seragam" });
+    const siswaLain = bill("siswa-lain", "2025/2026", "2025-07-01", { siswa_id: "siswa-2" });
+    expect(selfService(baru, [lain, siswaLain, baru])).toEqual({ status: "clear" });
+  });
+
+  it("tidak memblokir tagihan bulanan", () => {
+    const bulanan = bill("spp", "2026/2027", "2026-07-01", { bulan: 8, jenis_id: "spp" });
+    expect(selfService(bulanan, [lama, bulanan])).toEqual({ status: "clear" });
   });
 });

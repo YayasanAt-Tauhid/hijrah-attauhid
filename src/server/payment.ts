@@ -14,6 +14,7 @@ import {
   type BillingSequenceBill,
 } from "@/lib/billingSequence";
 import { isUangPangkalPaymentName } from "@/lib/installment";
+import { evaluateSelfServiceOneTimeGate } from "@/lib/oneTimePrerequisiteGate";
 import { authMiddleware, requireContext } from "./auth";
 import { createAdminClient, readEnv } from "./supabase";
 import { paymentExpiry, readGatewayStatus } from "./midtransGateway";
@@ -167,6 +168,8 @@ export async function buatTransaksiSnap(params: {
   // tagihan sekali bayar yang sudah jatuh tempo, jumlah frontend adalah nominal
   // cicilan yang diminta; server tetap menghitung sisa dan membatasi nominalnya.
   const validatedItems: TagihanItem[] = [];
+  // Tagihan yang ikut dibayar penuh pada transaksi ini (dasar syarat urutan).
+  const fullyPaidBillIds = new Set<string>();
   for (const item of items) {
     let tagihanQuery = admin
       .from("tagihan")
@@ -236,6 +239,8 @@ export async function buatTransaksiSnap(params: {
         `Jumlah pembayaran ${item.jenis_nama} melebihi sisa tagihan`
       );
     }
+
+    if (requested === sisa) fullyPaidBillIds.add(tagihan.id);
 
     const cicilanDiizinkan =
       item.bulan === 0 &&
@@ -312,6 +317,55 @@ export async function buatTransaksiSnap(params: {
           `Selesaikan ${item.jenis_nama} ${billingPeriodLabel(prerequisite)} terlebih dahulu sebelum membayar ${billingPeriodLabel(target)}.`
         );
       }
+    }
+  }
+
+  // Tagihan sekali bayar (mis. Uang Pangkal): tagihan jenis yang sama pada
+  // tahun ajaran sebelumnya harus lunas lebih dulu atau ikut dibayar penuh pada
+  // transaksi ini. Orang tua tidak punya jalur dispensasi; itu keputusan staf
+  // di Input Pembayaran.
+  const oneTimeGroups = new Map<string, TagihanItem[]>();
+  for (const item of validatedItems) {
+    if (item.bulan !== 0 || !item.tagihan_id) continue;
+    const key = `${item.siswa_id}:${item.jenis_id}`;
+    const group = oneTimeGroups.get(key) ?? [];
+    group.push(item);
+    oneTimeGroups.set(key, group);
+  }
+
+  for (const groupItems of oneTimeGroups.values()) {
+    const first = groupItems[0];
+    const { data: onceRows, error: onceError } = await admin
+      .from("tagihan")
+      .select(
+        "id, siswa_id, jenis_id, bulan, jatuh_tempo, tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai)"
+      )
+      .eq("siswa_id", first.siswa_id)
+      .eq("jenis_id", first.jenis_id)
+      .is("bulan", null)
+      .in("status", ["belum_bayar", "sebagian", "terjadwal"]);
+
+    if (onceError) {
+      throw new Error(
+        "Gagal memeriksa tagihan tahun ajaran sebelumnya: " + onceError.message
+      );
+    }
+
+    const onceBills = (onceRows ?? []) as unknown as BillingSequenceBill[];
+    for (const item of groupItems) {
+      const target = onceBills.find((bill) => bill.id === item.tagihan_id);
+      if (!target) {
+        throw new Error(
+          `Tagihan ${item.jenis_nama} untuk ${item.nama_siswa} sudah berubah. Silakan pilih ulang tagihan.`
+        );
+      }
+      const gate = evaluateSelfServiceOneTimeGate({
+        jenisNama: item.jenis_nama,
+        target,
+        openBills: onceBills,
+        fullyPaidBillIds,
+      });
+      if (gate.status === "blocked") throw new Error(gate.message);
     }
   }
 

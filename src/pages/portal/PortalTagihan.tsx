@@ -16,6 +16,8 @@ import { isSppPaymentName, isUangPangkalPaymentName } from "@/lib/installment";
 import {
   billingPeriodLabel,
   findBillingPrerequisite,
+  findOneTimePrerequisite,
+  oneTimePeriodLabel,
   sortBillingSequence,
   type BillingSequenceBill,
 } from "@/lib/billingSequence";
@@ -201,16 +203,43 @@ export default function PortalTagihan() {
     [selectedItems],
   );
 
+  // Tagihan sekali bayar (mis. Uang Pangkal) lintas tahun ajaran: tahun
+  // sebelumnya harus lunas dulu atau ikut dibayar penuh pada keranjang ini.
+  // Server (buatTransaksiSnap) memeriksa ulang; ini hanya penjelasan dini.
+  const oneTimeBills = useMemo<BillingSequenceBill[]>(
+    () =>
+      tagihan
+        .filter((t) => t.bulan <= 0)
+        .map((t) => ({
+          id: t.tagihan_id,
+          siswa_id: t.siswa_id,
+          jenis_id: t.jenis_id,
+          bulan: null,
+          tahun_ajaran: {
+            nama: t.tahun_ajaran_nama,
+            tanggal_mulai: t.tahun_ajaran_mulai,
+          },
+        })),
+    [tagihan],
+  );
+
   const getPrerequisite = (
     t: TagihanItem,
-    selectedIds: ReadonlySet<string> = selectedTagihanIds,
+    selectedIds?: ReadonlySet<string>,
   ) => {
-    if (t.bulan <= 0) return null;
+    if (t.bulan <= 0) {
+      const target = oneTimeBills.find((bill) => bill.id === t.tagihan_id);
+      return target
+        ? findOneTimePrerequisite(target, oneTimeBills, selectedIds ?? fullySelectedOneTimeIds)
+        : null;
+    }
     const target = sequenceBills.find((bill) => bill.id === t.tagihan_id);
     return target
-      ? findBillingPrerequisite(target, sequenceBills, selectedIds)
+      ? findBillingPrerequisite(target, sequenceBills, selectedIds ?? selectedTagihanIds)
       : null;
   };
+  const prerequisiteLabel = (t: TagihanItem, prerequisite: BillingSequenceBill) =>
+    t.bulan <= 0 ? oneTimePeriodLabel(prerequisite) : billingPeriodLabel(prerequisite);
 
   const toggleItem = (t: TagihanItem) => {
     const key = getKey(t);
@@ -220,7 +249,7 @@ export default function PortalTagihan() {
       const prerequisite = getPrerequisite(t);
       if (prerequisite) {
         toast.warning(
-          `Selesaikan ${t.jenis_nama} ${billingPeriodLabel(prerequisite)} terlebih dahulu`,
+          `Selesaikan ${t.jenis_nama} ${prerequisiteLabel(t, prerequisite)} terlebih dahulu`,
         );
         return;
       }
@@ -340,6 +369,19 @@ export default function PortalTagihan() {
     (sum, t) => sum + amountFor(t),
     0
   );
+  // Sekali bayar yang dibayar penuh pada keranjang ini; cicilan sebagian belum
+  // memenuhi syarat tahun berikutnya.
+  const fullySelectedOneTimeIds = useMemo(
+    () =>
+      new Set(
+        selectedItems
+          .filter((t) => t.bulan <= 0 && amountFor(t) >= Number(t.nominal || 0))
+          .map((t) => t.tagihan_id),
+      ),
+    // amountFor bergantung pada partialAmounts dan daftar tagihan.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedItems, partialAmounts],
+  );
 
   const handleCheckout = () => {
     if (selectedItems.length === 0) {
@@ -356,12 +398,11 @@ export default function PortalTagihan() {
     }
 
     const skipped = selectedItems
-      .filter((t) => t.bulan > 0)
-      .map((t) => ({ item: t, prerequisite: getPrerequisite(t, selectedTagihanIds) }))
+      .map((t) => ({ item: t, prerequisite: getPrerequisite(t) }))
       .find((entry) => entry.prerequisite);
     if (skipped?.prerequisite) {
       toast.error(
-        `Selesaikan ${skipped.item.jenis_nama} ${billingPeriodLabel(skipped.prerequisite)} terlebih dahulu`,
+        `Selesaikan ${skipped.item.jenis_nama} ${prerequisiteLabel(skipped.item, skipped.prerequisite)} terlebih dahulu`,
       );
       return;
     }
@@ -594,7 +635,7 @@ export default function PortalTagihan() {
           {isLocked && prerequisite ? (
             <span className="col-span-2 mt-1 flex w-fit items-center gap-1 rounded bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
               <Lock className="h-3 w-3" />
-              Selesaikan {t.jenis_nama} {billingPeriodLabel(prerequisite)} terlebih dahulu
+              Selesaikan {t.jenis_nama} {prerequisiteLabel(t, prerequisite)} terlebih dahulu
             </span>
           ) : t.menunggak ? (
             <span className="col-span-2 mt-1 w-fit whitespace-nowrap rounded bg-destructive/10 px-2 py-1 text-[10px] font-medium text-destructive">

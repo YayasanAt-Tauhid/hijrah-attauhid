@@ -60,3 +60,37 @@ export function evaluateOneTimeGate(input: {
     prerequisiteId: prerequisite.id,
   };
 }
+
+export type SelfServiceOneTimeGateResult =
+  | { status: "clear" }
+  | { status: "blocked"; message: string };
+
+/**
+ * Gerbang sekali bayar untuk jalur mandiri (portal orang tua dan link
+ * pembayaran). Aturannya sama dengan kasir, tetapi tanpa dispensasi: dispensasi
+ * adalah keputusan staf, jadi orang tua diarahkan ke bagian keuangan sekolah.
+ *
+ * `fullyPaidBillIds` berisi tagihan yang ikut dibayar penuh pada transaksi yang
+ * sama; tagihan yang hanya dicicil tidak memenuhi syarat.
+ */
+export function evaluateSelfServiceOneTimeGate(input: {
+  jenisNama: string;
+  target: BillingSequenceBill;
+  openBills: BillingSequenceBill[];
+  fullyPaidBillIds?: ReadonlySet<string>;
+}): SelfServiceOneTimeGateResult {
+  const prerequisite = findOneTimePrerequisite(
+    input.target,
+    input.openBills,
+    input.fullyPaidBillIds,
+  );
+  if (!prerequisite) return { status: "clear" };
+
+  return {
+    status: "blocked",
+    message:
+      `Selesaikan ${input.jenisNama} ${oneTimePeriodLabel(prerequisite)} terlebih dahulu ` +
+      `sebelum membayar ${oneTimePeriodLabel(input.target)}. ` +
+      `Jika ada komitmen kepada sekolah, hubungi bagian keuangan.`,
+  };
+}

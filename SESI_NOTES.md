@@ -34,11 +34,19 @@ perlu mock DB. Tanpa migrasi database.
   di Muka; status tagihan menjadi `sebagian`; pengakuan SPP menghitung sisa dari
   total terbayar. Jenis bulanan non-SPP tetap wajib bayar penuh. Link Midtrans
   dan portal orang tua tidak berubah (bulanan tetap penuh).
-- Belum dicakup: portal orang tua dan link pembayaran Midtrans
-  (`proses_pembayaran_midtrans_atomik`) tidak memeriksa syarat ini.
-  `TunggakanPembayaran` memanggil `prosesPembayaran` tanpa alasan, jadi sekali
-  bayar tahun baru yang tahun lamanya belum lunas gagal dengan pesan di halaman
-  itu (tidak ada jalur dispensasi di sana).
+- Portal orang tua dan link pembayaran (29 Oktober, setelah kasir): syarat sekali
+  bayar yang sama dipaksa di `buatTransaksiSnap` (`src/server/payment.ts`) lewat
+  `evaluateSelfServiceOneTimeGate`: tahun ajaran lama harus lunas atau ikut
+  dibayar PENUH di transaksi yang sama (cicilan sebagian tidak cukup). TANPA
+  dispensasi; pesan mengarahkan ke bagian keuangan, dan dispensasi tetap
+  diputuskan staf di Input Pembayaran. `PortalTagihan.tsx` mengunci tagihan baru
+  dengan penjelasan yang sama. Link yang dibuat staf tidak divalidasi saat
+  pembuatan, hanya saat orang tua checkout. Cicilan SPP sebelum jatuh tempo
+  sengaja tidak dibuka untuk orang tua.
+- Belum dicakup: `TunggakanPembayaran` memanggil `prosesPembayaran` tanpa alasan,
+  jadi bulan/tahun yang melompat gagal dengan pesan di halaman itu (tidak ada jalur
+  dispensasi di sana). `PembayaranPMB` tidak mengirim `tagihan_id`, jadi gerbang
+  tidak berlaku.
 - Catatan operasional: checkout `hijrah-attauhid-main` di VPS tertinggal ratusan
   commit dari origin/main dan punya perubahan lokal yang belum di-commit; jangan
   jadikan sumber kebenaran kode. Kerjakan dari worktree baru berbasis origin/main.
