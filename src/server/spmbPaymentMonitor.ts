@@ -12,8 +12,12 @@ import { isUangPangkalPaymentName } from "@/lib/installment";
 
 interface Detail extends MonitorRegistration {
   spmb_status_kelulusan: string | null; status_asrama: string | null; spmb_siswa_internal: boolean | null;
+  nama_ayah?: string | null; nama_ibu?: string | null; spmb_kelas_tujuan_id?: string | null;
 }
 interface Student { id: string; nama: string; nis: string | null; status: string }
+interface ClassRow { id: string; nama: string; tingkat_id: string | null }
+interface Level { id: string; nama: string }
+interface ActiveClass { siswa_id: string | null; kelas_id: string | null }
 interface Department { id: string; nama: string; kode: string }
 interface AcademicYear { id: string; nama: string }
 export interface PaymentMonitorRow extends Record<string, unknown> {
@@ -23,8 +27,9 @@ export interface PaymentMonitorRow extends Record<string, unknown> {
   tahun_ajaran_nama: string; status_asrama: string | null; internal: boolean;
   tanggal_lulus: string | null; skema: PaymentScheme | null; events: MonitorEvent[];
   progress: PaymentProgress; unmatchedBills: number;
+  nama_ayah: string | null; nama_ibu: string | null; kelas_tujuan: string | null; kelas_asal: string | null;
 }
-const DETAIL_SELECT = "id,siswa_id,tahun_ajaran_id,spmb_departemen_tujuan_id,spmb_gelombang_id,spmb_registered_at,spmb_tanggal_lulus,spmb_status_kelulusan,status_asrama,spmb_siswa_internal";
+const DETAIL_SELECT = "id,siswa_id,tahun_ajaran_id,spmb_departemen_tujuan_id,spmb_gelombang_id,spmb_registered_at,spmb_tanggal_lulus,spmb_status_kelulusan,status_asrama,spmb_siswa_internal,nama_ayah,nama_ibu,spmb_kelas_tujuan_id";
 const ROLES = ["admin", "keuangan", "kasir", "admin_tu"];
 const uuid = z.string().uuid();
 export const monitorEventSchema = z.object({
@@ -62,19 +67,28 @@ async function pages<T>(query: (from: number, to: number) => PromiseLike<{ data:
     if (rows.length < 500) return result;
   }
 }
+const clean = (value: string | null | undefined) => value?.trim() || null;
+function classLabel(classId: string | null | undefined, classes: Map<string, ClassRow>, levels: Map<string, Level>) {
+  const kelas = classId ? classes.get(classId) : undefined;
+  if (!kelas) return null;
+  const level = kelas.tingkat_id ? levels.get(kelas.tingkat_id) : undefined;
+  return (level ? "Tingkat " + level.nama + " · " : "") + kelas.nama;
+}
 async function loadRows(admin: SupabaseClient, details: Detail[]) {
   if (!details.length) return { items: [] as PaymentMonitorRow[], historyAvailable: true };
   const ids = [...new Set(details.map(d => d.siswa_id))];
-  const students: Student[] = [], bills: MonitorBill[] = [], events: MonitorEvent[] = [];
+  const students: Student[] = [], bills: MonitorBill[] = [], events: MonitorEvent[] = [], activeClasses: ActiveClass[] = [];
   let historyAvailable = true;
   for (let offset = 0; offset < ids.length; offset += 100) {
     const chunk = ids.slice(offset, offset + 100);
-    const [s, b] = await Promise.all([
+    const [s, b, k] = await Promise.all([
       pages<Student>((from,to) => admin.from("siswa").select("id,nama,nis,status").in("id", chunk).order("id").range(from,to)),
       pages<MonitorBill>((from,to) => admin.from("tagihan").select("id,siswa_id,jenis_id,tahun_akademik_id,nominal,status")
         .in("siswa_id", chunk).in("status", ["terjadwal","belum_bayar","sebagian","lunas"]).order("id").range(from,to)),
+      pages<ActiveClass>((from,to) => admin.from("kelas_siswa").select("siswa_id,kelas_id,aktif")
+        .in("siswa_id", chunk).eq("aktif", true).order("id").range(from,to)),
     ]);
-    students.push(...s); bills.push(...b);
+    students.push(...s); bills.push(...b); activeClasses.push(...k);
   }
   for (let offset = 0; offset < details.length; offset += 100) {
     const chunk = details.slice(offset, offset + 100).map(d => d.id);
@@ -85,10 +99,12 @@ async function loadRows(admin: SupabaseClient, details: Detail[]) {
     events.push(...await pages<MonitorEvent>((from,to) => admin.from("spmb_payment_monitor_events")
       .select("*").in("siswa_detail_id", chunk).order("id").range(from,to)));
   }
-  const [types, departments, years] = await Promise.all([
+  const [types, departments, years, classes, levels] = await Promise.all([
     pages<MonitorFeeType>((from,to) => admin.from("jenis_pembayaran").select("id,nama,departemen_id").order("id").range(from,to)),
     pages<Department>((from,to) => admin.from("departemen").select("id,nama,kode").order("id").range(from,to)),
     pages<AcademicYear>((from,to) => admin.from("tahun_ajaran").select("id,nama").order("id").range(from,to)),
+    pages<ClassRow>((from,to) => admin.from("kelas").select("id,nama,tingkat_id").order("id").range(from,to)),
+    pages<Level>((from,to) => admin.from("tingkat").select("id,nama").order("id").range(from,to)),
   ]);
   const eligibleBills = details.flatMap(detail => selectRegistrationBills(detail, bills, types));
   const billIds = [...new Set(eligibleBills.map(bill => bill.id))];
@@ -101,6 +117,10 @@ async function loadRows(admin: SupabaseClient, details: Detail[]) {
   const studentMap = new Map(students.map(s => [s.id,s]));
   const deptMap = new Map(departments.map(d => [d.id,d]));
   const yearMap = new Map(years.map(y => [y.id,y]));
+  const classMap = new Map(classes.map(c => [c.id,c]));
+  const levelMap = new Map(levels.map(l => [l.id,l]));
+  const activeClassBySiswa = new Map<string,string>();
+  for (const row of activeClasses) if (row.siswa_id && row.kelas_id && !activeClassBySiswa.has(row.siswa_id)) activeClassBySiswa.set(row.siswa_id, row.kelas_id);
   const today = jakartaDate(new Date().toISOString());
   const items: PaymentMonitorRow[] = [];
   for (const detail of details) {
@@ -122,6 +142,11 @@ async function loadRows(admin: SupabaseClient, details: Detail[]) {
       tahun_ajaran_id: detail.tahun_ajaran_id,
       tahun_ajaran_nama: yearMap.get(detail.tahun_ajaran_id || "")?.nama || "Belum diisi",
       status_asrama: detail.status_asrama, internal: detail.spmb_siswa_internal === true,
+      nama_ayah: clean(detail.nama_ayah), nama_ibu: clean(detail.nama_ibu),
+      kelas_tujuan: classLabel(detail.spmb_kelas_tujuan_id, classMap, levelMap),
+      // Kelas asal only matters for internal students moving up; skip it once it equals the target class.
+      kelas_asal: detail.spmb_siswa_internal === true && activeClassBySiswa.get(detail.siswa_id) !== detail.spmb_kelas_tujuan_id
+        ? classLabel(activeClassBySiswa.get(detail.siswa_id), classMap, levelMap) : null,
       tanggal_lulus: detail.spmb_tanggal_lulus, skema: schemeEvent?.skema || null,
       events: currentEvents,
       progress: calculatePaymentProgress({

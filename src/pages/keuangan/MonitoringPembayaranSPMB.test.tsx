@@ -3,9 +3,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { calculatePaymentProgress } from "@/lib/spmbPaymentMonitor";
 import type { PaymentMonitorRow } from "@/server/spmbPaymentMonitor";
-const mocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn(), navigate: vi.fn(), role: "admin", isLoading: false }));
+const mocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn(), navigate: vi.fn(), role: "admin", isLoading: false, params: new URLSearchParams() }));
 vi.mock("@/server/spmbPaymentMonitor", () => ({ getSpmbPaymentMonitor: mocks.load, saveSpmbMonitorEvent: mocks.save }));
-vi.mock("@/lib/router-compat", () => ({ useNavigate: () => mocks.navigate, useSearchParams: () => [new URLSearchParams()] }));
+vi.mock("@/lib/router-compat", () => ({ useNavigate: () => mocks.navigate, useSearchParams: () => [mocks.params] }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ role: mocks.role, isLoading: mocks.isLoading, user: { id: "test-user" } }) }));
 vi.mock("@/hooks/useKeuangan", () => ({ formatRupiah: (n: number) => `Rp ${n.toLocaleString("id-ID")}` }));
 import MonitoringPembayaranSPMB, { PaymentMonitorContent } from "./MonitoringPembayaranSPMB";
@@ -13,6 +13,7 @@ function row(id: string, total: number, paid: number, billIds = ["bill"], needsV
   return { id, siswa_id: id, nama: id, nis: null, status_siswa: "calon", registration: {} as PaymentMonitorRow["registration"],
     departemen_id: "tk", departemen_nama: "TK", tahun_ajaran_id: "2027", tahun_ajaran_nama: "2027/2028",
     status_asrama: null, internal: false, tanggal_lulus: "2026-10-01", skema: null, events: [], unmatchedBills: needsVerification ? 1 : 0,
+    nama_ayah: null, nama_ibu: null, kelas_tujuan: null, kelas_asal: null,
     progress: calculatePaymentProgress({ total, billIds, payments: paid ? [{ id: "p", tagihan_id: "bill", jumlah: paid, tanggal_bayar: "2026-10-02" }] : [],
       passedAt: "2026-10-01", scheme: null, today: "2026-10-10", needsVerification }) };
 }
@@ -22,7 +23,7 @@ function mount(role = "admin", guard = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}>{guard ? <MonitoringPembayaranSPMB /> : <PaymentMonitorContent role={role} />}</QueryClientProvider>);
 }
-beforeEach(() => { vi.clearAllMocks(); mocks.role = "admin"; mocks.isLoading = false; mocks.load.mockResolvedValue({ items: fixtures, historyAvailable: true }); });
+beforeEach(() => { vi.clearAllMocks(); mocks.role = "admin"; mocks.isLoading = false; mocks.params = new URLSearchParams(); mocks.load.mockResolvedValue({ items: fixtures, historyAvailable: true }); });
 describe("monitoring payment workflow", () => {
   it("counts unpaid and partial payments without a scheme; excludes missing or unverified bills", async () => {
     mount();
@@ -94,8 +95,63 @@ describe("monitoring payment workflow", () => {
     expect(screen.queryByText("Siswa 21")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Halaman berikutnya" }));
     expect(screen.getAllByText("Siswa 21")).toHaveLength(2);
-    fireEvent.change(screen.getByLabelText("Nama / NIS"), { target: { value: "Siswa 1" } });
+    fireEvent.change(screen.getByLabelText("Nama / NIS / orang tua / kelas"), { target: { value: "Siswa 1" } });
     expect(screen.getAllByText("Siswa 1")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Halaman sebelumnya" })).toBeDisabled();
+  });
+});
+describe("identitas pembeda untuk siswa senama", () => {
+  const SEARCH_LABEL = "Nama / NIS / orang tua / kelas";
+  const namesakes = (): PaymentMonitorRow[] => [
+    { ...row("Ahmad Fauzi", 4200000, 0), id: "d1", siswa_id: "s1", nis: "1001", nama_ayah: "Abdullah", nama_ibu: "Aisyah", kelas_tujuan: "Tingkat 7 · 7A" },
+    { ...row("Ahmad Fauzi", 4200000, 0), id: "d2", siswa_id: "s2", nis: null, nama_ayah: "Budi", nama_ibu: null, internal: true, kelas_tujuan: null, kelas_asal: "Tingkat 6 · 6B" },
+    row("Siti Aminah", 4200000, 0), row("Rafi", 4200000, 0), row("Dina", 4200000, 0),
+  ];
+  it("shows parents, NIS and class so students with the same name can be told apart", async () => {
+    mocks.load.mockResolvedValue({ items: namesakes(), historyAvailable: true });
+    mount();
+    await screen.findAllByText("Ayah: Abdullah · Ibu: Aisyah");
+    expect(screen.getAllByText("Ayah: Budi · Ibu: —")).toHaveLength(2);
+    expect(screen.getAllByText("NIS: 1001")).toHaveLength(2);
+    expect(screen.getAllByText("NIS: belum ada").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Kelas: Tingkat 7 · 7A")).toHaveLength(2);
+    expect(screen.getAllByText("Kelas asal: Tingkat 6 · 6B")).toHaveLength(2);
+    expect(screen.getAllByText("Kelas: belum ditempatkan").length).toBeGreaterThan(0);
+  });
+  it("finds students by parent name or class", async () => {
+    mocks.load.mockResolvedValue({ items: namesakes(), historyAvailable: true });
+    mount();
+    await screen.findAllByText("Ahmad Fauzi");
+    const search = screen.getByLabelText(SEARCH_LABEL);
+    fireEvent.change(search, { target: { value: "abdullah" } });
+    expect(screen.getByRole("status")).toHaveTextContent("1 dari 5");
+    expect(screen.getAllByText("Ayah: Abdullah · Ibu: Aisyah")).toHaveLength(2);
+    fireEvent.change(search, { target: { value: "6B" } });
+    expect(screen.getByRole("status")).toHaveTextContent("1 dari 5");
+    expect(screen.getAllByText("Ayah: Budi · Ibu: —")).toHaveLength(2);
+  });
+  it("opens one student from ?siswa= instead of every student with the same name", async () => {
+    mocks.params = new URLSearchParams("siswa=s1");
+    mocks.load.mockResolvedValue({ items: namesakes(), historyAvailable: true });
+    mount();
+    const chip = await screen.findByRole("group", { name: "Siswa terpilih" });
+    expect(chip).toHaveTextContent("Menampilkan 1 pendaftaran: Ahmad Fauzi");
+    expect(screen.getByRole("status")).toHaveTextContent("1 dari 5");
+    expect(screen.getAllByText("Ayah: Abdullah · Ibu: Aisyah")).toHaveLength(2);
+    expect(screen.queryByText("Ayah: Budi · Ibu: —")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(SEARCH_LABEL)).toHaveValue("");
+    fireEvent.click(within(chip).getByRole("button", { name: "Tampilkan semua" }));
+    expect(screen.queryByRole("group", { name: "Siswa terpilih" })).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("5 dari 5");
+  });
+  it("says so when the requested student has no registration here and lets the user show everyone", async () => {
+    mocks.params = new URLSearchParams("siswa=missing");
+    mocks.load.mockResolvedValue({ items: namesakes(), historyAvailable: true });
+    mount();
+    const chip = await screen.findByRole("group", { name: "Siswa terpilih" });
+    expect(chip).toHaveTextContent("Menampilkan 0 pendaftaran");
+    expect(screen.getByText("Tidak ada calon siswa yang sesuai filter.")).toBeInTheDocument();
+    fireEvent.click(within(chip).getByRole("button", { name: "Tampilkan semua" }));
+    expect(screen.getByRole("status")).toHaveTextContent("5 dari 5");
   });
 });

@@ -29,6 +29,10 @@ function MonitorIdentity({ row }: { row: PaymentMonitorRow }) {
   const boardingRelevant = /^(SMP|SMA|MTA)$/i.test(row.departemen_nama.trim());
   return <div className="min-w-0 space-y-1">
     <p className="font-semibold break-words">{row.nama}</p>
+    <p className="text-xs text-muted-foreground break-words">{`Ayah: ${row.nama_ayah || "—"} · Ibu: ${row.nama_ibu || "—"}`}</p>
+    <p className="text-xs text-muted-foreground">{`NIS: ${row.nis || "belum ada"}`}</p>
+    <p className="text-xs text-muted-foreground">{`Kelas: ${row.kelas_tujuan || "belum ditempatkan"}`}</p>
+    {row.kelas_asal && <p className="text-xs text-muted-foreground">{`Kelas asal: ${row.kelas_asal}`}</p>}
     <p className="text-xs text-muted-foreground">{row.departemen_nama} · {row.tahun_ajaran_nama}</p>
     <p className="text-xs text-muted-foreground">{row.internal ? "Internal" : "Eksternal"}
       {boardingRelevant && <> · {row.status_asrama === "asrama" ? "Asrama" : row.status_asrama === "non_asrama" ? "Non asrama" : "Asrama belum diisi"}</>}</p>
@@ -89,7 +93,8 @@ export function PaymentMonitorContent({ role }: { role: string }) {
     refetchOnWindowFocus: true, refetchInterval: 60_000,
   });
   const rows = useMemo(() => query.data?.items || [], [query.data]);
-  const [search, setSearch] = useState(requestedStudent || "");
+  const [search, setSearch] = useState("");
+  const [focusId, setFocusId] = useState<string | null>(requestedStudent);
   const [department, setDepartment] = useState("all");
   const [year, setYear] = useState("all");
   const [status, setStatus] = useState("all");
@@ -110,27 +115,23 @@ export function PaymentMonitorContent({ role }: { role: string }) {
     .map(r => [r.departemen_id as string,r.departemen_nama])).entries()].sort((a,b) => a[1].localeCompare(b[1])), [rows]);
   const years = useMemo(() => [...new Map(rows.filter(r => r.tahun_ajaran_id)
     .map(r => [r.tahun_ajaran_id as string,r.tahun_ajaran_nama])).entries()].sort((a,b) => b[1].localeCompare(a[1])), [rows]);
-  useEffect(() => {
-    if (requestedStudent && rows.length) {
-      const row = rows.find(r => r.siswa_id === requestedStudent);
-      if (row) setSearch(row.nama);
-    }
-  }, [rows, requestedStudent]);
+  useEffect(() => { setFocusId(requestedStudent); }, [requestedStudent]);
   const scoped = rows.filter(row => (department === "all" || row.departemen_id === department)
     && (year === "all" || row.tahun_ajaran_id === year)
-    && [row.nama,row.nis,row.siswa_id].filter(Boolean).join(" ").toLowerCase().includes(search.toLowerCase()));
+    && (!focusId || row.siswa_id === focusId)
+    && [row.nama,row.nis,row.siswa_id,row.nama_ayah,row.nama_ibu,row.kelas_tujuan,row.kelas_asal].filter(Boolean).join(" ").toLowerCase().includes(search.toLowerCase()));
   const filtered = useMemo(() => {
     const result = scoped.filter(row => (status === "all" || monitorPaymentStatus(row.progress) === status)
       && (readiness === "all" || monitorReadiness(row.progress) === readiness)
       && (urgency === "all" || (urgency === "terlambat" ? row.progress.overdueDays > 0 : row.progress.nearDue)));
     return nameOrder ? result.sort((a,b) => (nameOrder === "asc" ? 1 : -1) * a.nama.localeCompare(b.nama, "id")) : result;
   }, [scoped, status, readiness, urgency, nameOrder]);
-  useEffect(() => { setPage(0); }, [search, department, year, status, readiness, urgency, nameOrder]);
+  useEffect(() => { setPage(0); }, [search, focusId, department, year, status, readiness, urgency, nameOrder]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / 20));
   const currentPage = Math.min(page, totalPages - 1);
   const paged = filtered.slice(currentPage * 20, (currentPage + 1) * 20);
-  const filtersActive = Boolean(search || department !== "all" || year !== "all" || status !== "all" || readiness !== "all" || urgency !== "all");
-  const resetFilters = () => { setSearch(""); setDepartment("all"); setYear("all"); setStatus("all"); setReadiness("all"); setUrgency("all"); setPage(0); };
+  const filtersActive = Boolean(search || focusId || department !== "all" || year !== "all" || status !== "all" || readiness !== "all" || urgency !== "all");
+  const resetFilters = () => { setSearch(""); setFocusId(null); setDepartment("all"); setYear("all"); setStatus("all"); setReadiness("all"); setUrgency("all"); setPage(0); };
   const showGroup = (key: string, group: "payment" | "readiness" | "urgency") => {
     setStatus(group === "payment" ? key : "all");
     setReadiness(group === "readiness" ? key : "all");
@@ -215,8 +216,8 @@ export function PaymentMonitorContent({ role }: { role: string }) {
       <div className="flex items-center justify-between gap-2"><h2 className="font-semibold">Filter calon siswa</h2>
         <Button size="sm" variant="ghost" disabled={!filtersActive} onClick={resetFilters}>Reset filter</Button></div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="space-y-1"><Label htmlFor="monitor-search">Nama / NIS</Label>
-          <Input id="monitor-search" placeholder="Cari calon siswa..." value={search} onChange={e => setSearch(e.target.value)} /></div>
+        <div className="space-y-1"><Label htmlFor="monitor-search">Nama / NIS / orang tua / kelas</Label>
+          <Input id="monitor-search" placeholder="Cari nama, NIS, orang tua, atau kelas..." value={search} onChange={e => setSearch(e.target.value)} /></div>
         <div className="space-y-1"><Label htmlFor="monitor-department">Lembaga tujuan</Label>
           <Select value={department} onValueChange={setDepartment}><SelectTrigger id="monitor-department"><SelectValue /></SelectTrigger>
             <SelectContent><SelectItem value="all">Semua lembaga</SelectItem>{departments.map(([id,name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}</SelectContent></Select></div>
@@ -239,6 +240,10 @@ export function PaymentMonitorContent({ role }: { role: string }) {
         </div>
       </details>
     </section>
+    {focusId && !query.isLoading && !query.isError && <div role="group" aria-label="Siswa terpilih" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 p-3 text-sm">
+      <p>Menampilkan {scoped.length} pendaftaran: <strong>{rows.find(r => r.siswa_id === focusId)?.nama || "siswa yang dipilih"}</strong></p>
+      <Button size="sm" variant="outline" onClick={() => setFocusId(null)}>Tampilkan semua</Button>
+    </div>}
     <div className="flex flex-wrap items-center justify-between gap-2">
       <p role="status" className="text-sm text-muted-foreground">{query.isLoading ? "Memuat calon siswa..." : query.isError ? "Data belum tersedia" : `${filtered.length} dari ${rows.length} calon siswa ditampilkan`}</p>
       <Button size="sm" variant="ghost" onClick={() => setNameOrder(nameOrder === "asc" ? "desc" : "asc")}><ArrowUpDown className="mr-2 h-4 w-4" />{nameOrder === "desc" ? "Nama Z–A" : nameOrder === "asc" ? "Nama A–Z" : "Urutkan nama"}</Button>

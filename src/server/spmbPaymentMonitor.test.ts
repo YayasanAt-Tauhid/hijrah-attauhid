@@ -41,22 +41,34 @@ let scopeError = false;
 let details = [detail];
 let detailError: { code: string; message: string } | null = null;
 let eventError: { code: string; message: string } | null = null;
+let kelasRows: unknown[] = [];
+let tingkatRows: unknown[] = [];
+let activeClasses: unknown[] = [];
+const selects: [string, string][] = [];
 const insert = vi.fn();
 beforeEach(() => {
   role = "admin"; active = true; detailError = eventError = null; insert.mockReset();
   db.from.mockReset(); db.rpc.mockReset();
   details = [detail]; allowedDepartments = [id]; scopeError = false;
+  kelasRows = []; tingkatRows = []; activeClasses = []; selects.length = 0;
   db.rpc.mockImplementation(async (_name: string, args: { _departemen_id: string }) => ({
     data: allowedDepartments.includes(args._departemen_id),
     error: scopeError ? { message: "scope unavailable" } : null,
   }));
   db.from.mockImplementation((table: string) => {
-    let records = table === "siswa_detail" ? details
+    let records: unknown[] = table === "siswa_detail" ? details
       : table === "departemen" ? [{ id }, { id: otherId }, { id: thirdId }]
       : table === "siswa" ? [{ id, nama: "Calon siswa", nis: null, status: "diterima" }]
+      : table === "kelas_siswa" ? activeClasses
+      : table === "kelas" ? kelasRows
+      : table === "tingkat" ? tingkatRows
       : [];
     const q = {
-      select: () => q, eq: () => q, not: () => q,
+      select: (columns?: string) => { selects.push([table, String(columns)]); return q; },
+      eq: (column: string, value: unknown) => {
+        if (column === "aktif") records = records.filter(record => (record as { aktif?: boolean }).aktif === value);
+        return q;
+      }, not: () => q,
       in: (column: string, values: string[]) => {
         if (column === "spmb_departemen_tujuan_id") {
           records = records.filter(record => values.includes((record as typeof detail).spmb_departemen_tujuan_id));
@@ -161,5 +173,47 @@ describe("otorisasi dan data monitoring SPMB", () => {
       jenis: "skema", skema: "cicilan", siswa_detail_id: id,
       tahun_ajaran_id: id, departemen_id: id, gelombang_id: id, created_by: id,
     }));
+  });
+});
+describe("identitas pembeda calon siswa", () => {
+  const kelasA = "00000000-0000-4000-8000-0000000000a1";
+  const kelasB = "00000000-0000-4000-8000-0000000000b1";
+  const tingkat7 = "00000000-0000-4000-8000-0000000000c7";
+  const tingkat6 = "00000000-0000-4000-8000-0000000000c6";
+  type Item = { nama_ayah: string | null; nama_ibu: string | null; kelas_tujuan: string | null; kelas_asal: string | null };
+  const first = async () => ((await get({ context: { userId: id } })) as { items: Item[] }).items[0];
+  beforeEach(() => {
+    kelasRows = [{ id: kelasA, nama: "7A", tingkat_id: tingkat7 }, { id: kelasB, nama: "6B", tingkat_id: tingkat6 }];
+    tingkatRows = [{ id: tingkat7, nama: "7" }, { id: tingkat6, nama: "6" }];
+  });
+  it("meminta nama orang tua dan kelas tujuan dari siswa_detail", async () => {
+    await get({ context: { userId: id } });
+    const columns = selects.find(([table]) => table === "siswa_detail")?.[1] || "";
+    for (const column of ["nama_ayah", "nama_ibu", "spmb_kelas_tujuan_id"]) expect(columns).toContain(column);
+  });
+  it("mengembalikan nama ayah, ibu, dan kelas tujuan lengkap dengan tingkat", async () => {
+    details = [{ ...detail, nama_ayah: "Abdullah", nama_ibu: "Aisyah", spmb_kelas_tujuan_id: kelasA } as typeof detail];
+    expect(await first()).toMatchObject({ nama_ayah: "Abdullah", nama_ibu: "Aisyah", kelas_tujuan: "Tingkat 7 · 7A", kelas_asal: null });
+  });
+  it("memakai null, bukan teks kosong, saat nama orang tua dan kelas belum diisi", async () => {
+    details = [{ ...detail, nama_ayah: "  ", nama_ibu: null, spmb_kelas_tujuan_id: null } as typeof detail];
+    expect(await first()).toMatchObject({ nama_ayah: null, nama_ibu: null, kelas_tujuan: null, kelas_asal: null });
+  });
+  it("menampilkan kelas asal hanya untuk siswa internal", async () => {
+    activeClasses = [{ siswa_id: id, kelas_id: kelasB, aktif: true }];
+    details = [{ ...detail, spmb_siswa_internal: true } as typeof detail];
+    expect(await first()).toMatchObject({ kelas_asal: "Tingkat 6 · 6B" });
+    details = [{ ...detail, spmb_siswa_internal: false } as typeof detail];
+    expect((await first()).kelas_asal).toBeNull();
+  });
+  it("tidak menampilkan kelas asal dari keanggotaan kelas yang tidak aktif", async () => {
+    activeClasses = [{ siswa_id: id, kelas_id: kelasB, aktif: false }];
+    details = [{ ...detail, spmb_siswa_internal: true } as typeof detail];
+    expect((await first()).kelas_asal).toBeNull();
+  });
+  it("tidak mengulang kelas asal bila sama dengan kelas tujuan", async () => {
+    activeClasses = [{ siswa_id: id, kelas_id: kelasA, aktif: true }];
+    details = [{ ...detail, spmb_siswa_internal: true, spmb_kelas_tujuan_id: kelasA } as typeof detail];
+    expect(await first()).toMatchObject({ kelas_tujuan: "Tingkat 7 · 7A", kelas_asal: null });
   });
 });
