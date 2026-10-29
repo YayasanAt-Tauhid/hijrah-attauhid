@@ -46,3 +46,12 @@ Rollback perintah cron: `select cron.alter_job(job_id := <jobid>, command := 'se
 - `supabase/tests/akrual_harian_log.sql`: 13 pemeriksaan lulus di Clone `flxbrbnyzclcthjwynsh` (fungsi akrual lama diganti stub di dalam
   transaksi yang di-rollback; Clone memang tidak punya `pg_cron`, sehingga perintah cron tidak diuji di sana). Jangan menjalankan script ini di produksi.
 - Tes aplikasi: lihat bagian status di `SESI_NOTES.md`.
+
+## Status rollout
+
+- 29 Okt 2026: migration diterapkan ke V5 atas persetujuan pengguna (ledger `20261029111618 log_akrual_harian`). Verifikasi pasca-migrasi:
+  perintah job `akrual-jatuh-tempo-harian` = `select public.jalankan_akrual_harian_berlog();`, jadwal `5 0 * * *` tidak berubah, aktif, 4 job cron utuh;
+  RLS aktif; `anon`/`authenticated` tidak dapat memanggil fungsi; `authenticated` tidak dapat menulis log; fungsi akrual lama utuh (hash sama); tidak ada jurnal baru.
+- UI di-push ke `main` (commit `c0a43ad`), deploy GitHub Actions sukses.
+- Menunggu: eksekusi cron 07:05 WIB berikutnya sebagai bukti terhadap fungsi akrual sungguhan.
+
