@@ -17,9 +17,22 @@ import {
   sortBillingSequence,
   type BillingSequenceBill,
 } from "@/lib/billingSequence";
+import { evaluateMonthlyGate } from "@/lib/monthlyPrerequisiteGate";
+import { evaluateOneTimeGate } from "@/lib/oneTimePrerequisiteGate";
+import { formatSequenceOverrideNote } from "@/lib/sequenceOverride";
 import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
 import { closeOnlineSessionsForBills } from "./midtransSessions";
+
+// audit_keuangan belum ada di tipe Supabase yang dihasilkan; klien dipersempit
+// ke satu operasi yang dipakai di sini daripada memakai `any`.
+type AuditInsertClient = {
+  from: (table: "audit_keuangan") => {
+    insert: (
+      row: Record<string, unknown>,
+    ) => PromiseLike<{ error: { message: string } | null }>;
+  };
+};
 
 export interface ProsesPembayaranInput {
   siswa_id: string;
@@ -34,6 +47,12 @@ export interface ProsesPembayaranInput {
   tagihan_id?: string;
   /** ID kuitansi yang sama untuk beberapa item dalam satu sesi pembayaran. */
   receipt_id?: string;
+  /**
+   * Dispensasi urutan: alasan untuk melewati syarat "tagihan tahun ajaran
+   * sebelumnya harus lunas" pada tagihan sekali bayar. Hanya dipakai bila
+   * syarat itu memang menghalangi, dan hanya sah dari peran berwenang.
+   */
+  dispensasi_urutan_alasan?: string;
 }
 
 export interface ProsesPembayaranResult {
@@ -386,7 +405,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
   .inputValidator((d: ProsesPembayaranInput) => d)
   .handler(async ({ data, context }): Promise<ProsesPembayaranResult> => {
     const admin = createAdminClient();
-    const { userId } = requireContext(context);
+    const { userId, userEmail } = requireContext(context);
     const role = await requireRole(admin, userId, [
       "admin",
       "keuangan",
@@ -404,6 +423,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       is_bayar_dimuka,
       tagihan_id,
       receipt_id,
+      dispensasi_urutan_alasan,
     } = data;
 
     // Kasir tidak boleh mengubah tanggal transaksi. Server menjadi sumber
@@ -575,6 +595,95 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
           throw new Error(
             `Selesaikan ${jenis.nama} ${billingPeriodLabel(oldestOpen)} terlebih dahulu. Pilih tagihan yang sudah tersedia, jangan melompati periode.`
           );
+        }
+      }
+    }
+
+    // Tagihan sekali bayar (mis. Uang Pangkal): tagihan jenis yang sama pada
+    // tahun ajaran sebelumnya harus lunas lebih dulu. Berlaku untuk semua
+    // peran. Pengecualiannya hanya dispensasi dari peran berwenang yang wajib
+    // beralasan (mis. ada komitmen orang tua kepada sekolah) dan dicatat di
+    // audit serta keterangan pembayaran.
+    let dispensasiAlasan: string | null = null;
+    let dispensasiPrasyaratId: string | null = null;
+    if (isSekali && tagihanTerpilih) {
+      const { data: onceRows, error: onceError } = await admin
+        .from("tagihan")
+        .select(
+          "id, siswa_id, jenis_id, bulan, jatuh_tempo, tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai)"
+        )
+        .eq("siswa_id", siswa_id)
+        .eq("jenis_id", jenis_id)
+        .is("bulan", null)
+        .in("status", ["belum_bayar", "sebagian", "terjadwal"]);
+
+      if (onceError) {
+        throw new Error(
+          "Gagal memeriksa tagihan tahun ajaran sebelumnya: " + onceError.message
+        );
+      }
+
+      const onceBills = (onceRows ?? []) as unknown as BillingSequenceBill[];
+      const onceTarget = onceBills.find(
+        (bill) => bill.id === tagihanTerpilih?.id
+      );
+      if (!onceTarget) {
+        throw new Error(
+          "Tagihan sudah berubah. Muat ulang data tagihan sebelum memproses pembayaran."
+        );
+      }
+
+      const gate = evaluateOneTimeGate({
+        role,
+        jenisNama: jenis.nama,
+        target: onceTarget,
+        openBills: onceBills,
+        alasan: dispensasi_urutan_alasan,
+      });
+      if (gate.status === "blocked") throw new Error(gate.message);
+      if (gate.status === "override") {
+        dispensasiAlasan = gate.alasan;
+        dispensasiPrasyaratId = gate.prerequisiteId;
+      }
+    }
+
+    // Tagihan bulanan di luar kasir (admin/keuangan): urutan tidak lagi
+    // dilonggarkan diam-diam. Melewati bulan sebelumnya yang belum lunas
+    // hanya sah dengan alasan dispensasi tertulis, dicatat di keterangan
+    // pembayaran dan audit. Kasir sudah diblokir penuh oleh blok di atas.
+    if (role !== "kasir" && !isSekali && tagihanTerpilih) {
+      const { data: monthlyRows, error: monthlyError } = await admin
+        .from("tagihan")
+        .select(
+          "id, siswa_id, jenis_id, bulan, jatuh_tempo, tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai)"
+        )
+        .eq("siswa_id", siswa_id)
+        .eq("jenis_id", jenis_id)
+        .not("bulan", "is", null)
+        .in("status", ["belum_bayar", "sebagian", "terjadwal"]);
+
+      if (monthlyError) {
+        throw new Error(
+          "Gagal memeriksa urutan tagihan: " + monthlyError.message
+        );
+      }
+
+      const monthlyBills = (monthlyRows ?? []) as unknown as BillingSequenceBill[];
+      const monthlyTarget = monthlyBills.find(
+        (bill) => bill.id === tagihanTerpilih?.id
+      );
+      if (monthlyTarget) {
+        const monthlyGate = evaluateMonthlyGate({
+          role,
+          jenisNama: jenis.nama,
+          target: monthlyTarget,
+          openBills: monthlyBills,
+          alasan: dispensasi_urutan_alasan,
+        });
+        if (monthlyGate.status === "blocked") throw new Error(monthlyGate.message);
+        if (monthlyGate.status === "override") {
+          dispensasiAlasan = monthlyGate.alasan;
+          dispensasiPrasyaratId = monthlyGate.prerequisiteId;
         }
       }
     }
@@ -875,9 +984,12 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       : tagihanSudahDiakuiPiutang && piutangAkunId
         ? `Pembayaran Piutang ${identitasTagihan}`
         : `Pembayaran ${identitasTagihan}`;
-    const keteranganFinal = keterangan
+    const keteranganDasar = keterangan
       ? `${keterangan} | ${autoKet}`
       : autoKet;
+    const keteranganFinal = dispensasiAlasan
+      ? `${keteranganDasar} | ${formatSequenceOverrideNote(dispensasiAlasan)}`
+      : keteranganDasar;
 
     if (tagihanEfektifId) {
       await closeOnlineSessionsForBills([tagihanEfektifId], "cashier_payment");
@@ -920,6 +1032,34 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       receipt_id: string;
       receipt_number: string;
     };
+
+    // Keterangan pembayaran sudah memuat alasan secara atomik; entri audit ini
+    // melengkapinya agar dispensasi muncul di Audit Perubahan Data. Kegagalan
+    // mencatat audit tidak membatalkan pembayaran yang sudah tersimpan.
+    if (dispensasiAlasan) {
+      const { error: auditError } = await (admin as unknown as AuditInsertClient)
+        .from("audit_keuangan")
+        .insert({
+          tabel_sumber: "pembayaran",
+          record_id: r.pembayaran_id,
+          aksi: "CREATE",
+          data_baru: {
+            jenis_id,
+            siswa_id,
+            tagihan_id: tagihanEfektifId,
+            tagihan_prasyarat_id: dispensasiPrasyaratId,
+            jumlah: jumlahValid,
+            alasan: dispensasiAlasan,
+          },
+          keterangan: `Dispensasi urutan pembayaran ${jenis.nama}: ${dispensasiAlasan}`,
+          departemen_id: jenis.departemen_id ?? departemen_id ?? null,
+          dibuat_oleh: userId,
+          nama_pengguna: userEmail ?? role,
+        });
+      if (auditError) {
+        console.error("Audit dispensasi urutan gagal dicatat:", auditError.message);
+      }
+    }
 
     const { data: petugasProfile } = await admin
       .from("users_profile")

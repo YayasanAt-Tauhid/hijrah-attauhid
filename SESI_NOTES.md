@@ -1,3 +1,43 @@
+## Prasyarat sekali bayar + dispensasi urutan (29 Oktober 2026)
+Tagihan sekali bayar (mis. Uang Pangkal) kini menunggu tagihan jenis yang sama
+pada tahun ajaran sebelumnya lunas, atau ikut dibayar penuh di keranjang yang
+sama (keranjang memproses sekali bayar tahun terlama lebih dulu). Berlaku untuk
+semua peran di `prosesPembayaran`; kasir juga diblokir lebih awal di UI.
+Pengecualiannya **dispensasi** (mis. ada komitmen orang tua): alasan wajib
+(10-300 karakter) dan hanya sah dari admin/keuangan. Alasan masuk ke keterangan
+pembayaran (atomik dengan RPC) dan ke `audit_keuangan` (best-effort; gagal audit
+tidak membatalkan pembayaran). Peran `kepala_sekolah` ada di daftar helper tetapi
+`prosesPembayaran` memang tidak mengizinkan peran itu, jadi efektifnya admin+keuangan.
+Logika murni di `src/lib/oneTimePrerequisiteGate.ts` (teruji) agar server tidak
+perlu mock DB. Tanpa migrasi database.
+
+- Istilah "keringanan" di sistem ini sudah berarti potongan nominal (Diskon
+  Siswa). Fitur ini sengaja disebut **dispensasi** di UI/kode agar tidak tertukar:
+  nominal tetap penuh, hanya syarat urutan yang dilewati.
+- Bulanan (keputusan 29 Oktober, menggantikan "admin/keuangan bebas" 1 Oktober):
+  kasir tetap dipaksa berurutan tanpa pengecualian; admin/keuangan yang melewati
+  bulan sebelumnya yang belum lunas (lintas tahun ajaran, kecuali ikut dibayar
+  penuh di keranjang yang sama) wajib mengisi alasan dispensasi, tercatat di
+  keterangan pembayaran dan `audit_keuangan`. Logika murni di
+  `src/lib/monthlyPrerequisiteGate.ts`, urutan item keranjang oleh
+  `orderWithinSlots` (bulan lama diproses lebih dulu). Server hanya memeriksa bila
+  `tagihan_id` dikirim; pembayaran tanpa `tagihan_id` oleh admin/keuangan tetap
+  tidak dibatasi (jalur lama). `TunggakanPembayaran` tidak punya kolom alasan,
+  jadi bulan yang melompat di sana gagal dengan pesan yang mengarah ke Input
+  Pembayaran.
+- BELUM dikerjakan: cicilan SPP sebelum jatuh tempo (status `terjadwal`). Aturan
+  ini ada juga di database: `proses_pembayaran_atomik` menolak dengan "Tagihan
+  yang belum jatuh tempo harus dibayar penuh" untuk SPP sebelum tanggal pengakuan,
+  jadi butuh migrasi produksi (konfirmasi pemilik) selain perubahan aplikasi.
+- Belum dicakup: portal orang tua dan link pembayaran Midtrans
+  (`proses_pembayaran_midtrans_atomik`) tidak memeriksa syarat ini.
+  `TunggakanPembayaran` memanggil `prosesPembayaran` tanpa alasan, jadi sekali
+  bayar tahun baru yang tahun lamanya belum lunas gagal dengan pesan di halaman
+  itu (tidak ada jalur dispensasi di sana).
+- Catatan operasional: checkout `hijrah-attauhid-main` di VPS tertinggal ratusan
+  commit dari origin/main dan punya perubahan lokal yang belum di-commit; jangan
+  jadikan sumber kebenaran kode. Kerjakan dari worktree baru berbasis origin/main.
+
 ## Cicilan pada link pembayaran (27 Oktober 2026)
 Kasir/admin dapat mengisi "cicilan kali ini" untuk tagihan sekali bayar yang
 boleh dicicil (aturan sama dengan portal: uang pangkal, atau tagihan sekali
