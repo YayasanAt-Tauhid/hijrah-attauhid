@@ -53,6 +53,7 @@ export interface ProsesPembayaranInput {
    * syarat itu memang menghalangi, dan hanya sah dari peran berwenang.
    */
   dispensasi_urutan_alasan?: string;
+  metode_bayar?: "tunai" | "transfer";
 }
 
 export interface ProsesPembayaranResult {
@@ -425,6 +426,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       receipt_id,
       dispensasi_urutan_alasan,
     } = data;
+    const metodeBayar = data.metode_bayar === "transfer" ? "transfer" : "tunai";
 
     // Kasir tidak boleh mengubah tanggal transaksi. Server menjadi sumber
     // kebenaran agar pembatasan tidak dapat dilewati dengan request manual.
@@ -877,6 +879,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       .select("kode_setting, akun_id")
       .in("kode_setting", [
         "kas_tunai",
+        "kas_bank_transfer",
         "piutang_siswa",
         "AKUN_PENDAPATAN_DIMUKA",
       ]);
@@ -884,12 +887,17 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     const getAkun = (kode: string) =>
       pengaturanList?.find((p) => p.kode_setting === kode)?.akun_id ?? null;
 
-    const kasAkunId = getAkun("kas_tunai");
+    const kasAkunId =
+      metodeBayar === "transfer" ? getAkun("kas_bank_transfer") : getAkun("kas_tunai");
     const piutangAkunId = getAkun("piutang_siswa");
     const dimukaAkunId = getAkun("AKUN_PENDAPATAN_DIMUKA");
 
     if (!kasAkunId)
-      throw new Error("Akun Kas Tunai belum dikonfigurasi di Pengaturan Akun");
+      throw new Error(
+        metodeBayar === "transfer"
+          ? "Akun Bank Transfer Kasir belum dikonfigurasi di Pengaturan Akun"
+          : "Akun Kas Tunai belum dikonfigurasi di Pengaturan Akun"
+      );
 
     // Tagihan SPP tanpa jurnal piutang menunggu pengakuan akhir bulan. Untuk jenis
     // yang memang perlu pendapatan dimuka, pembayaran sebelum pengakuan masuk

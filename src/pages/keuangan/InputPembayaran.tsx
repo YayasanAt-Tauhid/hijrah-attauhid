@@ -74,6 +74,7 @@ const FORM_DEFAULT: FormPembayaran = {
   jumlah: "",
   tanggalBayar: new Date().toISOString().split("T")[0],
   keterangan: "",
+  metodeBayar: "tunai",
 };
 
 type PembayaranRiwayat = PembayaranWithJenis & {
@@ -1323,6 +1324,7 @@ function InputPembayaranContent() {
             tagihan_id: item.tagihanId,
             receipt_id: receiptId,
             dispensasi_urutan_alasan: dispensasiKeys.has(item.key) ? alasanDispensasi : undefined,
+            metode_bayar: form.metodeBayar,
           },
         });
         berhasilKeys.add(item.key);
@@ -1436,6 +1438,7 @@ function InputPembayaranContent() {
       tahun_ajaran_id: effectiveTahunAjaranId,
       is_bayar_dimuka: isBayarDimuka,
       tagihan_id:      existingTagihan?.id,
+      metode_bayar:    form.metodeBayar,
     });
     if (!result) return;
 
@@ -2079,6 +2082,20 @@ function InputPembayaranContent() {
                     )}
                   </div>
                 )}
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Metode Pembayaran</Label>
+                  <Select
+                    value={form.metodeBayar}
+                    onValueChange={v => setField("metodeBayar", v as "tunai" | "transfer")}
+                  >
+                    <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="tunai">Tunai</SelectItem>
+                      <SelectItem value="transfer">Transfer Bank</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
                 <div className="space-y-1.5">
                   <Label className="text-xs">Keterangan (opsional)</Label>

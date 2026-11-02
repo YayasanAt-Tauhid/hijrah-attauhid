@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import LaporanOnlinePaymentJenis from "@/pages/keuangan/LaporanOnlinePaymentJenis";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { supabase } from "@/integrations/supabase/client";
@@ -160,6 +162,15 @@ export default function OnlinePayment() {
         <p className="text-sm text-muted-foreground">Monitor transaksi pembayaran online via Midtrans</p>
       </div>
 
+      <Tabs defaultValue="transaksi" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="transaksi">Transaksi</TabsTrigger>
+          <TabsTrigger value="laporan">Laporan per Jenis</TabsTrigger>
+        </TabsList>
+        <TabsContent value="laporan">
+          <LaporanOnlinePaymentJenis />
+        </TabsContent>
+        <TabsContent value="transaksi" className="space-y-6">
       {/* Stats Cards */}
       {stats ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -217,6 +228,9 @@ export default function OnlinePayment() {
           />
         </CardContent>
       </Card>
+
+        </TabsContent>
+      </Tabs>
 
       {/* Detail Dialog */}
       <Dialog open={!!detailId} onOpenChange={() => setDetailId(null)}>

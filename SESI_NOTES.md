@@ -401,6 +401,17 @@ alur pengakuan menahannya. Tidak ada koreksi data lama yang dilakukan.
 - Status: sudah di-merge ke `main` dan ter-deploy (commit `3da78bb`, workflow "Deploy to Cloudflare Workers" sukses, 28 Okt). Berikutnya: jalankan `syncIdSantriPihak3` dry-run dulu (butuh sesi admin); hasil benar = 0 update baru, 14 NIS mandiri, 29 ditahan, 65 tidak ketemu/tinjau. JANGAN `dry_run: false` sebelum dry-run itu dicek.
 - Keputusan user soal ID Santri mandiri (item 3): satu ID Santri untuk SEMUA lembaga (bukan per jenjang seperti NIS). Setelah ID Santri mandiri diambil, `id_santri_pihak3` tidak dipakai lagi. Format (A `HS`+8 digit urut / B tahun+urut / C acak) BELUM dipilih. File `DESAIN_ID_SANTRI_MANDIRI.md` hilang bersama scratchpad sesi lama; tulis ulang bila diminta. Item 4 (kebocoran `nisn`/kontak di `handleDetail` dan sync siswa) BELUM diputuskan; tidak disentuh.
 
+## Pembaruan 2 November 2026 — Laporan pembayaran online & non tunai (permintaan bendahara)
+
+- **Tab baru "Laporan per Jenis"** di Keuangan → Online Payment (`LaporanOnlinePaymentJenis.tsx`): transaksi Midtrans berstatus `paid` per jenis/lembaga/metode (`payment_type`) + rincian per siswa. Uang Pangkal lewat jalur SPMB ikut karena memakai tabel `transaksi_midtrans_item` yang sama
+- **Temuan penting:** kasir SELALU mendebit `kas_tunai` (`src/server/pembayaran.ts`), jadi transfer yang diterima kasir sebelumnya tidak bisa dibedakan dari tunai (hanya teks bebas di keterangan). Midtrans mendebit akun terpisah `bank_midtrans`
+- **Tambahan:** parameter `metode_bayar` ("tunai"|"transfer") di `prosesPembayaran` + pilihan di `InputPembayaran.tsx`. Transfer mendebit setting akun baru `kas_bank_transfer`. Tidak ada kolom baru di `pembayaran`: laporan "Transfer via Kasir" dibaca dari jurnal yang mendebit akun itu, supaya tidak bisa berbeda dari pembukuan
+- `batalkan_pembayaran_atomik` membalik jurnal dengan menukar debit/kredit baris `jurnal_detail` asli (dicek di dump skema 19 Sep), jadi pembatalan transfer membalik akun bank dengan benar
+- **Data lama tidak bisa dipisah:** transfer kasir sebelum `kas_bank_transfer` diisi tetap ada di Kas Tunai
+- **BELUM dilakukan (menunggu user):** migrasi `20261102000000_setting_akun_kas_bank_transfer.sql` belum diterapkan ke `cmvzcpeiuompqgdvflky`; akun bank untuk `kas_bank_transfer` belum dipilih (bendahara harus menyebut kode akunnya); belum ada uji manual di browser (bayar transfer lalu batalkan, cek jurnal pembalik, dan cek apakah baris `pembayaran` hilang setelah dibatalkan karena laporan mengandalkan itu); belum commit
+- Terverifikasi: `tsc` bersih untuk file yang diubah (error lama di `InputPembayaran.tsx` & `types/keuangan.ts:20` sudah ada sebelumnya), `eslint` bersih untuk file laporan, `npm run test` 204/204
+- Dugaan bug lama belum dicek: di dump skema 19 Sep, `batalkan_pembayaran_atomik` baris ~277 menulis kolom `debi` (bukan `debit`) pada INSERT `jurnal_detail` di cabang pembalikan pengakuan pendapatan dimuka. Mungkin salah tempel; cek `sed -n 277p` pada file dump
+
 ## Pembaruan 17 September 2026 — Target Main & Promo SPMB
 
 - Instruksi user terbaru: branch `main` memakai Supabase **`cmvzcpeiuompqgdvflky` saja** untuk pekerjaan aktif; pemetaan lama di arsip tidak boleh dipakai untuk memilih target remote.

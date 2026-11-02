@@ -476,10 +476,11 @@ function TabJenisPengeluaran() {
 }
 
 // ─── Konfigurasi filter per setting bawaan ───
-const BUILTIN_SETTINGS = ["kas_tunai", "bank_midtrans", "kas_pengeluaran", "piutang_siswa", "tabungan_siswa", "tabungan_pegawai", "AKUN_PENDAPATAN_DIMUKA"];
+const BUILTIN_SETTINGS = ["kas_tunai", "kas_bank_transfer", "bank_midtrans", "kas_pengeluaran", "piutang_siswa", "tabungan_siswa", "tabungan_pegawai", "AKUN_PENDAPATAN_DIMUKA"];
 
 const SETTING_FILTER: Record<string, { filterFn: (a: any) => boolean; hint: string }> = {
   kas_tunai: { filterFn: (a) => a.jenis === "aset" && a.kode?.startsWith("1-100"), hint: "Akun tempat uang masuk saat siswa bayar di kasir" },
+  kas_bank_transfer: { filterFn: (a) => a.jenis === "aset", hint: "Akun bank yang menerima transfer saat siswa membayar lewat kasir" },
   bank_midtrans: { filterFn: (a) => a.jenis === "aset" && a.kode?.startsWith("1-100"), hint: "Akun bank yang menerima dana pembayaran online" },
   kas_pengeluaran: { filterFn: (a) => a.jenis === "aset" && a.kode?.startsWith("1-100"), hint: "Akun kas yang berkurang saat ada pengeluaran" },
   piutang_siswa: { filterFn: (a) => a.jenis === "aset", hint: "Akun piutang saat tagihan siswa dibuat tapi belum dibayar" },
