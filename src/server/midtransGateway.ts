@@ -105,7 +105,13 @@ export async function closeGatewaySession(
   // An error alone never releases a bill; successful revocation is still needed.
   const needsRecovery = message(cancellation.data).includes("expiry must be greater than the current time") ||
     message(cancellation.data).includes("token not found");
-  if (needsRecovery && persistReplacement && session.metadata?.snap_request) {
+  // Terminal Core statuses are final: an expired/canceled/denied/failed order can
+  // no longer be paid, so its dead Snap token needs neither a replacement nor a
+  // successful cancellation. Recovery would be refused anyway because Core holds
+  // the order, which used to block cashier payments for the bill indefinitely.
+  // The status read below still re-confirms the order and rejects a paid one.
+  const coreAlreadyTerminal = needsRecovery && terminal(state);
+  if (needsRecovery && !coreAlreadyTerminal && persistReplacement && session.metadata?.snap_request) {
     await replaceUnchargedSession();
     cancellation = await cancel();
   }
@@ -114,7 +120,7 @@ export async function closeGatewaySession(
   // fallback for an old missing token; payment codes still need Core expiry.
   const agedMissingToken = message(cancellation.data).includes("token not found") &&
     Date.now() - Date.parse(session.metadata?.snap_recovered_at || session.created_at) > 7 * 24 * 3600 * 1000;
-  if (!(cancellation.response.ok && cancellation.data.canceled_at) && !alreadyCanceled && !agedMissingToken) {
+  if (!(cancellation.response.ok && cancellation.data.canceled_at) && !alreadyCanceled && !agedMissingToken && !coreAlreadyTerminal) {
     throw new Error("Sesi pembayaran lama belum dapat ditutup di Midtrans. Pembayaran baru ditahan; silakan coba lagi.");
   }
   state = await readGatewayStatus(session.order_id, key, fetcher);
