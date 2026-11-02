@@ -25,6 +25,15 @@ npm run test:watch # vitest watch mode
 
 Jalankan `npm run lint` dan `npm run test` sebelum commit.
 
+## Aturan Kerja Sesi (semua sesi, termasuk rc dan cloud)
+
+- Mulai dengan `git fetch origin`, lalu buat cabang baru dari `origin/main` (mis. `fix/...`, `feat/...`).
+- Jika `node_modules` belum ada (salinan kerja baru), jalankan `npm ci` dulu.
+- Jalankan `npm run lint` dan `npm run test` sebelum commit, dan tampilkan hasilnya; jangan hanya menyatakan "berhasil".
+- Push hanya cabang kerja, bukan `main`. Jangan pernah force push. Perubahan masuk `main` lewat PR dengan base `main` (bukan `main-ori`).
+- Minta konfirmasi eksplisit sebelum menghapus data atau menerapkan migrasi ke database produksi.
+- Jangan menaruh token, kunci, atau kata sandi di kode, commit, atau chat.
+
 ## Pemilihan Model Claude
 
 Rekomendasi model saat memakai Claude Code di proyek ini (proyek ini adalah aplikasi CRUD TypeScript/React/Supabase yang konvensional — sebagian besar tugas tidak butuh model paling mahal):
