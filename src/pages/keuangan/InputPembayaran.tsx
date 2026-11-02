@@ -6,6 +6,7 @@ import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/compon
 import { PrintTagihan, type PrintTagihanItem } from "@/components/shared/PrintTagihan";
 import { DialogLinkPembayaran, type LinkPembayaranBill } from "@/components/keuangan/DialogLinkPembayaran";
 import { isLinkInstallmentAllowed } from "@/lib/paymentLink";
+import { describeCartFailures } from "@/lib/cartPaymentFailure";
 import { RupiahInput } from "@/components/shared/RupiahInput";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -1378,7 +1379,8 @@ function InputPembayaranContent() {
       toast.success(berhasilKeys.size + " pembayaran berhasil");
       toast.error(gagal.length + " gagal: " + gagal.slice(0, 2).join(" | "));
     } else {
-      toast.error("Semua item keranjang gagal diproses");
+      const failure = describeCartFailures(gagal);
+      toast.error(failure.title, { description: failure.description, duration: failure.duration });
     }
 
     setCartProgress(null);
