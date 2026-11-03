@@ -173,8 +173,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = useCallback(async (redirectTo: string) => {
     try {
-      const { error } = await withAuthTimeout(supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } }));
-      return { error: error?.message ?? null };
+      const { data, error } = await withAuthTimeout(supabase.auth.signInWithOAuth({
+        provider: "google", options: { redirectTo, skipBrowserRedirect: true },
+      }));
+      if (error) return { error: error.message };
+      if (!data.url) return { error: connectionError };
+      const url = new URL(data.url);
+      // Rustbase mewajibkan apikey di URL authorize (redirect browser tak bisa mengirim header);
+      // Supabase tidak membutuhkannya dan akan meneruskannya ke Google, jadi hanya ditambah untuk non-Supabase.
+      if (!new URL(import.meta.env.VITE_SUPABASE_URL).hostname.endsWith(".supabase.co")) {
+        url.searchParams.set("apikey", import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+      }
+      window.location.assign(url.toString());
+      return { error: null };
     } catch { return { error: connectionError }; }
   }, []);
 

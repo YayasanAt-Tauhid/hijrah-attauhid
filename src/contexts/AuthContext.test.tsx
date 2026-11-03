@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from "./AuthContext";
 import { AUTH_TIMEOUT_MS } from "@/lib/authTimeout";
 
 const mocks = vi.hoisted(() => ({
-  getSession: vi.fn(), profile: vi.fn(), signIn: vi.fn(), unsubscribe: vi.fn(),
+  getSession: vi.fn(), profile: vi.fn(), signIn: vi.fn(), unsubscribe: vi.fn(), oauth: vi.fn(),
   listener: null as null | ((event: string, session: Session | null) => void),
   signal: null as AbortSignal | null,
 }));
@@ -14,6 +14,7 @@ vi.mock("@/integrations/supabase/client", () => ({
     auth: {
       getSession: mocks.getSession,
       signInWithPassword: mocks.signIn,
+      signInWithOAuth: mocks.oauth,
       onAuthStateChange: (callback: typeof mocks.listener) => {
         mocks.listener = callback;
         return { data: { subscription: { unsubscribe: mocks.unsubscribe } } };
@@ -262,5 +263,47 @@ describe("AuthProvider recovery and session ordering", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(mocks.profile).not.toHaveBeenCalled();
     expect(mocks.unsubscribe).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("AuthProvider Google sign-in", () => {
+  const authorizeUrl = (host: string) => "https://" + host + "/auth/v1/authorize?provider=google";
+  const assign = vi.fn();
+  beforeEach(() => {
+    assign.mockReset();
+    vi.stubGlobal("location", { ...window.location, assign });
+    vi.stubEnv("VITE_SUPABASE_PUBLISHABLE_KEY", "sb_publishable_test");
+  });
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+
+  it("adds apikey to the authorize URL for non-Supabase backends (Rustbase)", async () => {
+    vi.stubEnv("VITE_SUPABASE_URL", "https://rustbase.example.org");
+    mocks.oauth.mockResolvedValue({ data: { url: authorizeUrl("rustbase.example.org") }, error: null });
+    await start();
+    let result!: Awaited<ReturnType<typeof auth.signInWithGoogle>>;
+    await act(async () => { result = await auth.signInWithGoogle("https://app.example.org/"); });
+    expect(result).toEqual({ error: null });
+    expect(mocks.oauth).toHaveBeenCalledWith({
+      provider: "google", options: { redirectTo: "https://app.example.org/", skipBrowserRedirect: true },
+    });
+    expect(assign).toHaveBeenCalledWith(authorizeUrl("rustbase.example.org") + "&apikey=sb_publishable_test");
+  });
+
+  it("leaves the authorize URL untouched for Supabase", async () => {
+    vi.stubEnv("VITE_SUPABASE_URL", "https://abcdefgh.supabase.co");
+    mocks.oauth.mockResolvedValue({ data: { url: authorizeUrl("abcdefgh.supabase.co") }, error: null });
+    await start();
+    await act(async () => { await auth.signInWithGoogle("https://app.example.org/"); });
+    expect(assign).toHaveBeenCalledWith(authorizeUrl("abcdefgh.supabase.co"));
+  });
+
+  it("returns the provider error without navigating", async () => {
+    vi.stubEnv("VITE_SUPABASE_URL", "https://rustbase.example.org");
+    mocks.oauth.mockResolvedValue({ data: { url: null }, error: { message: "provider mati" } });
+    await start();
+    let result!: Awaited<ReturnType<typeof auth.signInWithGoogle>>;
+    await act(async () => { result = await auth.signInWithGoogle("https://app.example.org/"); });
+    expect(result).toEqual({ error: "provider mati" });
+    expect(assign).not.toHaveBeenCalled();
   });
 });
