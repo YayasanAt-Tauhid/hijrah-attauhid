@@ -9,7 +9,7 @@ import { getAvailableSpmbMilestones, SPMB_MILESTONE_ACTION_LABELS, SPMB_MILESTON
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { SiswaSpmbDetail } from "@/components/akademik/SiswaSpmbDetail";
-import { spmbAdminGetRecoveryLink } from "@/server/pmb";
+import { copySpmbRecoveryLink } from "@/lib/spmbRecoveryLink";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -76,19 +76,7 @@ export default function DetailSPMB() {
     if (recoveryLoading || !registrationId) return;
     setRecoveryLoading(true);
     try {
-      const { url } = await spmbAdminGetRecoveryLink({ data: { detail_id: registrationId } });
-      try {
-        await navigator.clipboard.writeText(url);
-        toast.success("Tautan pemulihan disalin", {
-          description: "Kirim hanya ke orang tua calon murid yang bersangkutan, lewat pesan pribadi.",
-        });
-      } catch {
-        toast.info("Salin tautan ini secara manual", { description: url, duration: 20000 });
-      }
-    } catch (error: unknown) {
-      toast.error("Gagal membuat tautan pemulihan", {
-        description: error instanceof Error ? error.message : "Terjadi kesalahan teknis",
-      });
+      await copySpmbRecoveryLink(registrationId);
     } finally {
       setRecoveryLoading(false);
     }
