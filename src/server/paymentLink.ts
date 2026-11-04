@@ -26,13 +26,12 @@ import {
   type PaymentLinkState,
 } from "@/lib/paymentLink";
 import { canResumeMidtransSession } from "@/lib/pendingMidtransSession";
-import { authMiddleware, requireContext, requireRole } from "./auth";
+import { authMiddleware, requireContext, requirePermission } from "./auth";
 import { createAdminClient } from "./supabase";
 import { buatTransaksiSnap } from "./payment";
 import { closeStoredSession } from "./midtransSessions";
 import { cancelOwnedMidtransPayment, resumeOwnedMidtransPayment } from "./pendingMidtrans";
 
-const STAFF_ROLES = ["admin", "keuangan", "kasir"];
 const OPEN_STATUSES = ["belum_bayar", "sebagian", "terjadwal"];
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ORDER_PATTERN = /^HAT-[A-Z0-9-]+$/;
@@ -270,7 +269,7 @@ export async function createPaymentLinkForStaff(
   ids.forEach((id) => assertUuid(id, "Tagihan"));
 
   const admin = adminClient();
-  await requireRole(admin, userId, STAFF_ROLES);
+  await requirePermission(admin, userId, "keuangan.pembayaran");
 
   const bills = await loadOpenBills(admin, ids, siswaId);
   if (bills.length !== ids.length || bills.some((b) => b.siswa_id !== siswaId)) {
@@ -330,7 +329,7 @@ export type PaymentLinkListRow = {
 
 export async function listPaymentLinksForStaff(userId: string): Promise<PaymentLinkListRow[]> {
   const admin = adminClient();
-  const role = await requireRole(admin, userId, STAFF_ROLES);
+  const role = await requirePermission(admin, userId, "keuangan.pembayaran");
 
   let query = admin
     .from("payment_link")
@@ -371,7 +370,7 @@ export async function listPaymentLinksForStaff(userId: string): Promise<PaymentL
 export async function cancelPaymentLinkForStaff(userId: string, linkId: string): Promise<{ success: true }> {
   assertUuid(linkId, "Link");
   const admin = adminClient();
-  const role = await requireRole(admin, userId, STAFF_ROLES);
+  const role = await requirePermission(admin, userId, "keuangan.pembayaran");
 
   const { data: link, error } = await admin
     .from("payment_link").select("id, created_by, canceled_at").eq("id", linkId).maybeSingle();

@@ -14,6 +14,7 @@ import { createMiddleware } from "@tanstack/react-start";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
+import { isConfigurableRole, type PermissionKey } from "@/lib/permissions";
 
 /** Error dengan penanda agar pesan otentikasi konsisten. */
 export class UnauthorizedError extends Error {
@@ -95,6 +96,74 @@ export async function requireRole(
     throw new ForbiddenError();
   }
   return profile.role;
+}
+
+interface PermissionLookup {
+  from(table: string): {
+    select(columns: string): {
+      eq(column: string, value: string): {
+        in(column: string, values: readonly string[]): {
+          limit(count: number): PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>;
+        };
+      };
+    };
+  };
+}
+
+export interface PermissionCheck {
+  role: string | null;
+  allowed: boolean;
+}
+
+/**
+ * Versi tanpa lempar galat dari requirePermission, untuk fungsi yang melayani
+ * staf dan non-staf sekaligus. `permission` boleh beberapa kunci (cukup salah satu).
+ */
+export async function checkPermission(
+  admin: SupabaseClient<Database>,
+  userId: string,
+  permission: PermissionKey | readonly PermissionKey[],
+  options: { extraRoles?: string[] } = {},
+): Promise<PermissionCheck> {
+  const { data: profile } = await admin
+    .from("users_profile")
+    .select("role, aktif")
+    .eq("id", userId)
+    .single();
+
+  if (!profile || profile.aktif === false) return { role: profile?.role ?? null, allowed: false };
+  if (profile.role === "admin") return { role: profile.role, allowed: true };
+  if (options.extraRoles?.includes(profile.role)) return { role: profile.role, allowed: true };
+
+  if (isConfigurableRole(profile.role)) {
+    const keys = Array.isArray(permission) ? permission : [permission];
+    const { data: granted, error } = await (admin as unknown as PermissionLookup)
+      .from("role_permissions")
+      .select("permission")
+      .eq("role", profile.role)
+      .in("permission", keys)
+      .limit(1);
+    if (!error && granted && granted.length > 0) return { role: profile.role, allowed: true };
+  }
+  return { role: profile.role, allowed: false };
+}
+
+/**
+ * Otorisasi berbasis izin (diatur admin di Hak Akses Peran) untuk modul Keuangan.
+ * Admin selalu lolos; peran lain (keuangan/kasir/bendahara/sekretaris_yayasan)
+ * hanya bila izinnya ada. `extraRoles` untuk peran di luar sistem izin yang
+ * memang boleh (mis. admin_tu pada monitoring SPMB). Akun nonaktif ditolak.
+ * Mengembalikan role user, seperti requireRole.
+ */
+export async function requirePermission(
+  admin: SupabaseClient<Database>,
+  userId: string,
+  permission: PermissionKey | readonly PermissionKey[],
+  options: { extraRoles?: string[] } = {},
+): Promise<string> {
+  const result = await checkPermission(admin, userId, permission, options);
+  if (!result.allowed || !result.role) throw new ForbiddenError();
+  return result.role;
 }
 
 

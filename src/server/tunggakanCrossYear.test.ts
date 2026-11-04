@@ -5,7 +5,7 @@ vi.mock("./supabase", () => ({ createAdminClient: () => db }));
 vi.mock("./auth", () => ({
   authMiddleware: {},
   requireContext: () => ({ userId: "finance" }),
-  requireRole: async () => {},
+  requirePermission: async () => "keuangan", checkPermission: async () => ({ role: "keuangan", allowed: true }),
 }));
 vi.mock("@tanstack/react-start", () => ({
   createServerFn: () => {

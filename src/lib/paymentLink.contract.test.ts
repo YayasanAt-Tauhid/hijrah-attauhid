@@ -24,10 +24,10 @@ describe("Payment link contract", () => {
   });
 
   it("lets only admin, keuangan and kasir manage links, cashiers only their own", () => {
-    expect(server).toContain('const STAFF_ROLES = ["admin", "keuangan", "kasir"];');
+    expect(server).toContain('requirePermission(admin, userId, "keuangan.pembayaran")');
     expect(server).toContain('if (role === "kasir") query = query.eq("created_by", userId);');
     expect(server).toContain("Kasir hanya dapat membatalkan link buatan sendiri");
-    expect(staffPage).toContain('!["admin", "keuangan", "kasir"].includes(role)');
+    expect(staffPage).toContain('!role || !can("keuangan.pembayaran")');
     expect(sidebar).toContain('{ title: "Link Pembayaran", url: "/keuangan/link-pembayaran", roles: ["admin", "keuangan", "kasir"] }');
   });
 

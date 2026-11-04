@@ -77,9 +77,10 @@ function MonitorTarget({ row }: { row: PaymentMonitorRow }) {
   </div>;
 }
 export default function MonitoringPembayaranSPMB() {
-  const { role, isLoading } = useAuth();
-  if (isLoading) return <Skeleton className="h-64 w-full" />;
-  if (!role || !["admin","keuangan","kasir","admin_tu"].includes(role)) return <Unauthorized />;
+  const { role, isLoading, can, permissionsLoading } = useAuth();
+  if (isLoading || permissionsLoading) return <Skeleton className="h-64 w-full" />;
+  // Admin TU di luar sistem izin: hanya membaca sesuai lembaga tujuannya.
+  if (!role || !(can("keuangan.pembayaran") || role === "admin_tu")) return <Unauthorized />;
   return <PaymentMonitorContent role={role} />;
 }
 export function PaymentMonitorContent({ role }: { role: string }) {
@@ -108,7 +109,7 @@ export function PaymentMonitorContent({ role }: { role: string }) {
   const [deadline, setDeadline] = useState("");
   const [note, setNote] = useState("");
   const selected = rows.find(row => row.id === selectedId);
-  const editable = role === "admin" || role === "keuangan";
+  const editable = role !== "kasir" && role !== "admin_tu";
   const canFollowUp = editable || role === "kasir";
   const historyAvailable = query.data?.historyAvailable !== false;
   const departments = useMemo(() => [...new Map(rows.filter(r => r.departemen_id)

@@ -21,7 +21,11 @@
  * "tagihan mendatang".
  */
 import { createServerFn } from "@tanstack/react-start";
-import { authMiddleware, requireContext, requireRole } from "./auth";
+import { authMiddleware, checkPermission, requireContext, requirePermission } from "./auth";
+import type { PermissionKey } from "@/lib/permissions";
+
+/** Staf yang boleh melihat tunggakan: kasir (rekap), pembayaran, laporan. */
+const STAFF_TUNGGAKAN_PERMISSIONS: PermissionKey[] = ["keuangan.rekap_kasir", "keuangan.pembayaran", "keuangan.laporan"];
 import { createAdminClient } from "./supabase";
 import { hariTerlambat, sudahMenunggak } from "@/lib/jatuhTempo";
 
@@ -92,14 +96,7 @@ export const rekapTunggakan = createServerFn({ method: "POST" })
     const perTanggal =
       data.per_tanggal || new Date().toISOString().split("T")[0];
 
-    const { data: profile } = await admin
-      .from("users_profile")
-      .select("role")
-      .eq("id", userId)
-      .single();
-
-    const staffRoles = ["admin", "keuangan", "kasir"];
-    const isStaff = profile && staffRoles.includes(profile.role);
+    const { allowed: isStaff } = await checkPermission(admin, userId, STAFF_TUNGGAKAN_PERMISSIONS);
 
     if (!isStaff) {
       const { data: isOwn } = await admin.rpc("is_own_siswa", {
@@ -256,11 +253,7 @@ export const rekapTunggakanBatch = createServerFn({ method: "POST" })
   .inputValidator((d: RekapTunggakanBatchInput) => d)
   .handler(async ({ data, context }): Promise<RekapTunggakanBatchResult> => {
     const admin = createAdminClient();
-    await requireRole(admin, requireContext(context).userId, [
-      "admin",
-      "keuangan",
-      "kasir",
-    ]);
+    await requirePermission(admin, requireContext(context).userId, STAFF_TUNGGAKAN_PERMISSIONS);
 
     const { jenis_id, tahun_ajaran_id, kelas_id, bulan_list, tanpa_kelas } = data;
     const perTanggal = data.per_tanggal || new Date().toISOString().split("T")[0];

@@ -29,8 +29,9 @@ const STATE_BADGE: Record<PaymentLinkState, { label: string; variant: "default" 
 const formatTanggal = (iso: string) => format(new Date(iso), "d MMM yyyy HH:mm", { locale: idLocale });
 
 export default function LinkPembayaran() {
-  const { role } = useAuth();
-  if (!role || !["admin", "keuangan", "kasir"].includes(role)) {
+  const { role, can, permissionsLoading } = useAuth();
+  if (permissionsLoading) return null;
+  if (!role || !can("keuangan.pembayaran")) {
     return <Unauthorized />;
   }
   return <LinkPembayaranContent isKasir={role === "kasir"} />;

@@ -18,7 +18,7 @@
  * subrequest dan juga jauh lebih cepat.
  */
 import { createServerFn } from "@tanstack/react-start";
-import { authMiddleware, requireContext, requireRole } from "./auth";
+import { authMiddleware, requireContext, requirePermission } from "./auth";
 import { createAdminClient } from "./supabase";
 
 export interface GenerateTagihanInput {
@@ -68,10 +68,7 @@ export const generateTagihan = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<GenerateTagihanResult> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, [
-      "admin",
-      "keuangan",
-    ]);
+    await requirePermission(admin, userId, "keuangan.transaksi");
 
     const {
       tahun_ajaran_id,
@@ -329,10 +326,7 @@ export const batalkanTagihan = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<KoreksiTagihanResult> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, [
-      "admin",
-      "keuangan",
-    ]);
+    await requirePermission(admin, userId, "keuangan.transaksi");
 
     const { tagihan_id, mode, alasan, nominal_baru } = data;
     const tanggal = data.tanggal || new Date().toISOString().split("T")[0];
@@ -402,10 +396,7 @@ export const batalkanTagihanBatch = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<BatalkanTagihanBatchResult> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, [
-      "admin",
-      "keuangan",
-    ]);
+    await requirePermission(admin, userId, "keuangan.transaksi");
 
     const { tagihan_ids, alasan } = data;
     const tanggal = data.tanggal || new Date().toISOString().split("T")[0];

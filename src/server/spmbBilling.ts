@@ -2,7 +2,7 @@ import { fetchAllPages } from "@/lib/fetchAll";
 import { isSppPaymentName, isUangPangkalPaymentName } from "@/lib/installment";
 import { summarizeSpmbBillingInputs, type SpmbInputBill, type SpmbInputStatus } from "@/lib/spmbBillingStatus";
 import { createServerFn } from "@tanstack/react-start";
-import { authMiddleware, requireContext, requireRole } from "./auth";
+import { authMiddleware, requireContext, requirePermission } from "./auth";
 import { createAdminClient } from "./supabase";
 
 export interface SpmbBillingCandidate {
@@ -46,7 +46,7 @@ export const getSpmbBillingCandidates = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<{ items: SpmbBillingCandidate[] }> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ["admin", "keuangan"]);
+    await requirePermission(admin, userId, "keuangan.transaksi");
 
     const { data: detailRows, error: detailError } = await (admin as any)
       .from("siswa_detail")
@@ -271,7 +271,7 @@ export const updateSpmbBillingPlanEndMonth = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ success: true; mulai: string; selesai: string }> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ["admin", "keuangan"]);
+    await requirePermission(admin, userId, "keuangan.transaksi");
 
     const rencanaId = String(data?.rencana_id || "");
     const bulan = Number(data?.bulan_terakhir);
