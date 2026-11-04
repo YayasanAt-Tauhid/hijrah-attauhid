@@ -9,6 +9,7 @@ import { getAvailableSpmbMilestones, SPMB_MILESTONE_ACTION_LABELS, SPMB_MILESTON
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { SiswaSpmbDetail } from "@/components/akademik/SiswaSpmbDetail";
+import { spmbAdminGetRecoveryLink } from "@/server/pmb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -67,6 +68,31 @@ export default function DetailSPMB() {
   const queryClient = useQueryClient();
   const { role } = useAuth();
   const [milestoneLoading, setMilestoneLoading] = useState<SpmbMilestoneAction | null>(null);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+
+  // Tautan ini adalah kunci akses ke satu pendaftaran: hanya diminta saat staf
+  // mengklik, disalin ke clipboard, dan tidak disimpan di state halaman.
+  const copyRecoveryLink = async () => {
+    if (recoveryLoading || !registrationId) return;
+    setRecoveryLoading(true);
+    try {
+      const { url } = await spmbAdminGetRecoveryLink({ data: { detail_id: registrationId } });
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("Tautan pemulihan disalin", {
+          description: "Kirim hanya ke orang tua calon murid yang bersangkutan, lewat pesan pribadi.",
+        });
+      } catch {
+        toast.info("Salin tautan ini secara manual", { description: url, duration: 20000 });
+      }
+    } catch (error: unknown) {
+      toast.error("Gagal membuat tautan pemulihan", {
+        description: error instanceof Error ? error.message : "Terjadi kesalahan teknis",
+      });
+    } finally {
+      setRecoveryLoading(false);
+    }
+  };
 
   const recordMilestone = async (siswaId: string, siswaNama: string, action: SpmbMilestoneAction) => {
     if (milestoneLoading) return;
@@ -208,6 +234,7 @@ export default function DetailSPMB() {
     && ((!detail.spmb_siswa_internal && ["diterima", "aktif"].includes(status))
       || (detail.spmb_siswa_internal && ["diterima", "aktif", "selesai"].includes(status)));
   const canViewPayment = (role === "admin" || role === "admin_tu") && detail.spmb_status_kelulusan === "lulus";
+  const canCopyRecoveryLink = (role === "admin" || role === "admin_tu") && status === "calon";
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -258,6 +285,12 @@ export default function DetailSPMB() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => navigate(`/keuangan/monitoring-spmb?siswa=${siswa.id}`)}>
                   Monitoring pembayaran
+                </DropdownMenuItem>
+              </>}
+              {canCopyRecoveryLink && <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={recoveryLoading} onSelect={copyRecoveryLink}>
+                  Salin tautan pemulihan pembayaran
                 </DropdownMenuItem>
               </>}
               {canManageBilling && <DropdownMenuItem onSelect={() => navigate(`/keuangan/rencana-siswa-baru?siswa=${siswa.id}`)}>
