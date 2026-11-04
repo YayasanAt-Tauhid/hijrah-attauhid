@@ -1,3 +1,13 @@
+# Catatan Sesi — Link pembayaran SPMB hilang: rekonsiliasi Midtrans (4 November 2026)
+
+- **Gejala:** orang tua pendaftar Gelombang 2 (berbayar) tidak bisa membayar biaya pendaftaran di `/spmb`; link Midtrans tidak bertahan.
+- **Akar masalah:** `reconcileOnlineSessions` (timer `hijrah-midtrans-reconcile`, tiap 5 menit di VM) menandai item tanpa `tagihan_id` sebagai basi lalu menutup sesinya. Item biaya pendaftaran SPMB (`metadata.source = pmb_public`) memang tanpa `tagihan_id`, jadi tiap link dicabut 3-6 menit setelah dibuat (padahal `expired_at` +24 jam). Terlihat baru sejak Gelombang 2 karena Gelombang 1 gratis. PR #182 hanya memperbaiki guard database, bukan jalur ini.
+- **Diperbaiki:** PR #184 (merge 4 Nov, deploy Actions sukses untuk `20c401c`). Transaksi `pmb_public` hanya ditutup bila lewat `expired_at` atau gateway menyatakan expire/cancel/deny/failure.
+- **Belum terbukti di produksi:** per 08:28 WIB belum ada transaksi PMB baru sejak deploy. Cek: transaksi `pmb_public` baru harus tetap `pending` lewat satu siklus rekonsiliasi (>5 menit). Di Rustbase `proj_kqylkreswang`: `transaksi_midtrans` dengan `metadata->>'source'='pmb_public'`; sebelum fix, 3 transaksi semuanya `expired` dengan `metadata->'session_closure'->>'reason'='periodic_reconciliation'`.
+- **Pendaftar Gelombang 2 saat dicek (4 Nov pagi):** 4 `calon` berbayar (SMA, SMP, SD, TK), belum ada yang lunas. SD dan TK punya transaksi `expired` (korban bug); SMA dan SMP belum pernah membuat transaksi, penyebabnya belum diketahui (mungkin token pendaftaran di `sessionStorage` hilang).
+- **Rencana belum jalan (opsional, belum diminta):** (A) tombol salin tautan pemulihan `/spmb#registration=<token>` di detail SPMB admin; (B) form cek status mandiri (NIK + tanggal lahir, perlu rate limit); (C) jangan hapus token pendaftaran saat error sementara di `SPMBDaftarOnlineV2.tsx` (sekarang `.catch` menghapus token pada error apa pun).
+- **Catatan:** link pembayaran admin (`payment_link`) hanya untuk tagihan (`tagihan_ids` wajib), tidak cocok untuk biaya pendaftaran SPMB. `npm run lint` penuh sudah gagal di `main` (2022 masalah) sebelum PR #184.
+
 # Catatan Sesi — CUTOVER Supabase → Rustbase SELESAI (3 November 2026)
 
 - **Status:** `app.hijrah-attauhid.or.id` kini memakai **Rustbase** (`https://rustbase.hijrah-attauhid.or.id`, project `kqylkreswang`, VM IDCloudHost `hijrah-attauhid` 103.54.170.60). Dibuka untuk umum ±14.55 WIB; admin (`pegawai@pegawai.com`) sudah login, bundel produksi hanya memuat host Rustbase (deploy Actions #790), rekonsiliasi Midtrans end-to-end sukses (`checked:1 failed:0`). Data final: 122 tabel / 164.426 baris cocok 100% dgn Supabase; file PMB 655/655.
