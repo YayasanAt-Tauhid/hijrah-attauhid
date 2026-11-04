@@ -725,3 +725,11 @@ Pada rencana siswa baru, SPP awal sudah tersedia di RPC, tetapi aksesnya tersemb
 - Keputusan: fungsi `jalankan_akrual_jatuh_tempo` tidak diubah; dibungkus `jalankan_akrual_harian_berlog` + tabel log immutable; satu-satunya perubahan objek lama adalah perintah job cron (dijaga kondisional dan dapat dikembalikan). UI: kartu di Pengakuan Pendapatan dan butir ke-4 di checklist Tutup Buku.
 - Status: SELESAI dan live. Migration diterapkan ke V5 atas persetujuan pengguna (ledger `20261029111618 log_akrual_harian`); perintah job `akrual-jatuh-tempo-harian` kini `select public.jalankan_akrual_harian_berlog();` (jadwal tetap `5 0 * * *`, aktif; 4 job cron utuh). UI di-push ke `main` (commit `c0a43ad`) dan deploy sukses. Branch `feat/log-akrual-harian-20261029`.
 - Belum terverifikasi: fungsi berlog terhadap fungsi akrual SUNGGUHAN di produksi. Bukti baru ada setelah cron 07:05 WIB berikutnya (30 Okt 2026): baca `akrual_harian_log`; baris pertama akan memuat pesan galat asli 33 SPP Okt 2026. Bila baris tidak muncul, kembalikan perintah job (lihat `docs/log-akrual-harian.md`).
+
+
+### Ganti metode pembayaran SPMB (4 November 2026)
+
+- Pemicu: orang tua yang salah memilih metode (VA/QRIS) tidak punya jalan keluar selain menunggu sesi 24 jam; token Snap terikat pada metode terpilih.
+- Keputusan: ganti metode = tutup sesi lama di Midtrans lalu buat order baru (`pmbChangePaymentMethod`, `src/server/pmbChangeMethod.ts`). Urutan wajib: cek lunas/gateway paid → tutup sesi lama → buat order baru; bila penutupan gagal tidak ada order baru (cegah bayar ganda). Maksimal 3 kali per pendaftaran, dihitung dari `metadata.session_closure.reason = 'pmb_ganti_metode'` (tanpa migrasi). Sesi kedaluwarsa tidak memakai jatah.
+- Teks halaman `/spmb` saat kembali dari Midtrans berstatus pending kini "Menunggu Pembayaran" (sebelumnya "Sedang dikonfirmasi" yang menyesatkan).
+- Belum terverifikasi: perilaku pembatalan Midtrans untuk VA/QRIS pending di lingkungan nyata; uji sandbox/produksi setelah deploy. Bila order baru gagal dibuat setelah sesi lama tertutup, jatah tetap terpakai (orang tua cukup menekan Bayar lagi).

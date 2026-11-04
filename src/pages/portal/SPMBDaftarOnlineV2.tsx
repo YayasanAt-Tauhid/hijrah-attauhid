@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { SpmbChangeMethodButton } from "@/components/portal/SpmbChangeMethodButton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormSection } from "@/components/shared/FormSection";
 import { BrandLogo } from "@/components/shared/BrandLogo";
@@ -802,8 +803,11 @@ export default function SPMBDaftarOnlineV2() {
     const status = registrationStatus?.payment_status || "unpaid";
     const isPaid = status === "paid";
     const returnedFinishPending = paymentReturn === "finish" && status === "pending";
-    const isProcessing = status === "processing" || returnedFinishPending;
-    const isPending = status === "pending" && !returnedFinishPending;
+    // Kembali dari Midtrans dengan status pending (VA/QR sudah terbit, uang belum
+    // masuk) adalah "menunggu pembayaran", bukan "sedang dikonfirmasi".
+    const isProcessing = status === "processing";
+    const isPending = status === "pending";
+    const gatewayToken = registration?.payment_token || statusToken;
     const isFailed = status === "failed" || status === "expired";
     const canPay = paymentVisible && !promoFree && (registrationStatus ? registrationStatus.can_pay : true);
     const totalAmount = registrationStatus?.total_amount || payment?.total_amount || null;
@@ -867,11 +871,15 @@ export default function SPMBDaftarOnlineV2() {
               </div>
             )}
 
+            {returnedFinishPending && (
+              <p className="text-sm text-muted-foreground">Selesaikan pembayaran sesuai nomor Virtual Account atau kode yang diberikan. Status akan berubah otomatis setelah pembayaran diterima.</p>
+            )}
             {canPay && !isPaid && !isProcessing && (
               <Button onClick={mulaiBayar} disabled={checkoutLoading} className="min-h-11 w-full bg-emerald-600 hover:bg-emerald-700">
                 <CreditCard className="mr-2 h-4 w-4" />{checkoutLoading ? "Menyiapkan pembayaran..." : isPending ? "Lanjutkan Pembayaran" : isFailed ? "Coba Bayar Lagi" : "Bayar Biaya Pendaftaran"}
               </Button>
             )}
+            {canPay && isPending && gatewayToken && <SpmbChangeMethodButton paymentToken={gatewayToken} />}
             {paymentVisible && !promoFree && (registrationStatus || statusToken) && <Button variant="outline" className="min-h-11 w-full" onClick={() => refreshStatus()} disabled={statusLoading}><RefreshCw className={`mr-2 h-4 w-4 ${statusLoading ? "animate-spin" : ""}`} />Perbarui Status</Button>}
             {policyStatus?.group_calon_siswa_url && (
               <Button asChild className="min-h-11 w-full bg-emerald-700 hover:bg-emerald-800">
