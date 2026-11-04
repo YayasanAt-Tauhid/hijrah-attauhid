@@ -127,31 +127,24 @@ BEGIN
     WHERE siswa_id = p_siswa_id
       AND aktif = true;
 
+    -- Hanya status: trigger melarang mengubah periode/nilai keringanan yang sudah
+    -- disetujui. Pendaftar belum pernah aktif, jadi seluruh keringanannya batal.
     UPDATE public.siswa_diskon
-    SET status = CASE
-          WHEN periode_mulai >= p_tanggal_efektif THEN 'dibatalkan'
-          ELSE status
-        END,
-        periode_selesai = CASE
-          WHEN periode_mulai < p_tanggal_efektif
-            AND periode_selesai >= p_tanggal_efektif
-          THEN p_tanggal_efektif - 1
-          ELSE periode_selesai
-        END,
+    SET status = 'dibatalkan',
         catatan = concat_ws(
           E'\n',
           NULLIF(catatan,''),
-          'Otomatis diakhiri karena pendaftar mengundurkan diri efektif ' || p_tanggal_efektif::text
+          'Otomatis dibatalkan karena pendaftar mengundurkan diri efektif ' || p_tanggal_efektif::text
         )
     WHERE siswa_id = p_siswa_id
-      AND status IN ('diajukan','disetujui')
-      AND periode_selesai >= p_tanggal_efektif;
+      AND status IN ('diajukan','disetujui');
 
     UPDATE public.kelas_siswa SET aktif = false WHERE siswa_id = p_siswa_id AND aktif;
     -- NIS yang sudah terbit tetap tercatat pada siswa dan riwayat NIS.
     UPDATE public.siswa SET status = 'mengundurkan_diri' WHERE id = p_siswa_id;
   END IF;
 
+  -- Pembatalan pembayaran menghapus barisnya, jadi semua baris pembayaran aktif.
   SELECT COALESCE(SUM(x.jumlah),0),
          COALESCE(jsonb_agg(jsonb_build_object('jenis',x.jenis,'jumlah',x.jumlah) ORDER BY x.jenis), '[]'::jsonb)
     INTO v_total, v_rincian
@@ -160,7 +153,8 @@ BEGIN
     FROM public.pembayaran p
     JOIN public.jenis_pembayaran j ON j.id = p.jenis_id
     WHERE p.siswa_id = p_siswa_id
-      AND p.status = 'aktif'
+      -- Internal: SPP sekolah asal bukan bagian dari pengunduran diri ini.
+      AND (NOT v_internal OR j.departemen_id = d.spmb_departemen_tujuan_id)
     GROUP BY j.nama
     HAVING SUM(p.jumlah) > 0
   ) x;
