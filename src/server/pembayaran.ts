@@ -21,7 +21,7 @@ import {
 import { evaluateMonthlyGate } from "@/lib/monthlyPrerequisiteGate";
 import { evaluateOneTimeGate } from "@/lib/oneTimePrerequisiteGate";
 import { formatSequenceOverrideNote } from "@/lib/sequenceOverride";
-import { authMiddleware, requireContext, requirePermission, requireRole } from "./auth";
+import { authMiddleware, requireContext, requirePermission } from "./auth";
 import { createAdminClient } from "./supabase";
 import { closeOnlineSessionsForBills } from "./midtransSessions";
 
@@ -1248,6 +1248,17 @@ export const getPaymentReceiptGroups = createServerFn({ method: "POST" })
     return result;
   });
 
+// Tabel pengajuan belum ada di tipe Supabase yang dihasilkan; cukup sepotong API yang dipakai.
+interface PengajuanTableClient {
+  from(table: string): {
+    update(values: Record<string, unknown>): {
+      eq(column: string, value: string): {
+        eq(column: string, value: string): PromiseLike<{ error: { message: string } | null }>;
+      };
+    };
+  };
+}
+
 export interface BatalkanPembayaranInput {
   pembayaran_id: string;
   alasan: string;
@@ -1264,11 +1275,9 @@ export const batalkanPembayaran = createServerFn({ method: "POST" })
     }): Promise<{ success: true; jurnal_pembalik_id: string | null }> => {
       const admin = createAdminClient();
       const { userId } = requireContext(context);
-      // BUKAN kasir — hanya admin/keuangan
-      await requireRole(admin, userId, [
-        "admin",
-        "keuangan",
-      ]);
+      // Pembatalan langsung hanya untuk pemegang izin ini (admin selalu). Kasir/keuangan
+      // mengajukan lewat pembatalanPembayaran.ts dan menunggu persetujuan.
+      await requirePermission(admin, userId, "keuangan.pembatalan.langsung");
 
       const { pembayaran_id, alasan } = data;
       const tanggal = data.tanggal || new Date().toISOString().split("T")[0];
@@ -1300,6 +1309,21 @@ export const batalkanPembayaran = createServerFn({ method: "POST" })
       );
       if (rpcErr)
         throw new Error("Gagal membatalkan pembayaran: " + rpcErr.message);
+
+      // Pengajuan yang masih menunggu untuk pembayaran ini tidak lagi berarti: tutup otomatis.
+      // Gagal menutup tidak membatalkan pembatalan yang sudah berhasil (pengajuan yatim
+      // ditolak oleh setujui_pembatalan_pembayaran karena pembayarannya sudah tidak ada).
+      const { error: closeErr } = await (admin as unknown as PengajuanTableClient)
+        .from("pembatalan_pembayaran_pengajuan")
+        .update({
+          status: "dibatalkan",
+          diputuskan_oleh: userId,
+          diputuskan_at: new Date().toISOString(),
+          catatan_keputusan: "Pembayaran dibatalkan langsung oleh admin",
+        })
+        .eq("pembayaran_id", pembayaran_id)
+        .eq("status", "menunggu");
+      if (closeErr) console.error("Gagal menutup pengajuan pembatalan yatim:", closeErr.message);
 
       const r = (result || {}) as { jurnal_pembalik_id?: string | null };
       return { success: true, jurnal_pembalik_id: r.jurnal_pembalik_id ?? null };

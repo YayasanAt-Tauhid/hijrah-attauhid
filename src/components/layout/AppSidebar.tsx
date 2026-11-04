@@ -9,7 +9,9 @@ import {
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "@/lib/router-compat";
+import { countPengajuanPembatalanMenunggu } from "@/server/pembatalanPembayaran";
 import { useAuth, UserRole } from "@/contexts/AuthContext";
 import { isConfigurableRole, permissionForPath } from "@/lib/permissions";
 import {
@@ -25,6 +27,8 @@ interface SubMenuItem {
   title: string;
   url: string;
   roles?: UserRole[];
+  /** Lencana jumlah pengajuan pembatalan yang menunggu keputusan pengguna ini. */
+  badge?: "pengajuan-pembatalan";
 }
 
 interface SubGroup {
@@ -117,6 +121,7 @@ const menuItems: MenuItem[] = [
           { title: "Input Pembayaran", url: "/keuangan/pembayaran", roles: ["admin", "keuangan", "kasir"] },
           { title: "Pembayaran SPMB", url: "/keuangan/pembayaran-spmb", roles: ["admin", "keuangan", "kasir"] },
           { title: "Link Pembayaran", url: "/keuangan/link-pembayaran", roles: ["admin", "keuangan", "kasir"] },
+          { title: "Persetujuan Pembatalan", url: "/keuangan/persetujuan-pembatalan", roles: ["admin", "keuangan", "kasir", "bendahara", "sekretaris_yayasan"], badge: "pengajuan-pembatalan" },
           { title: "Monitoring Pembayaran SPMB", url: "/keuangan/monitoring-spmb", roles: ["admin", "keuangan", "kasir", "admin_tu"] },
           { title: "Rencana Tagihan Siswa Baru", url: "/keuangan/rencana-siswa-baru", roles: ["admin", "keuangan"] },
           { title: "Penerimaan Lain", url: "/keuangan/penerimaan-lain", roles: ["admin", "keuangan"] },
@@ -253,6 +258,27 @@ const menuItems: MenuItem[] = [
 ];
 
 // ── SubGroupCollapsible: nested collapsible untuk grup menu ─────────────────
+function PengajuanPembatalanBadge({ className }: { className?: string }) {
+  const { can } = useAuth();
+  const approver = can("keuangan.pembatalan.setujui");
+  const { data } = useQuery({
+    queryKey: ["pengajuan_pembatalan", "jumlah"],
+    queryFn: () => countPengajuanPembatalanMenunggu(),
+    enabled: approver,
+    refetchInterval: 60_000,
+  });
+  const count = approver ? data?.count ?? 0 : 0;
+  if (count <= 0) return null;
+  return (
+    <span
+      aria-label={`${count} pengajuan menunggu`}
+      className={cn("ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-destructive-foreground", className)}
+    >
+      {count}
+    </span>
+  );
+}
+
 function SubGroupCollapsible({
   title,
   icon: Icon,
@@ -281,6 +307,8 @@ function SubGroupCollapsible({
               <Icon className="h-3.5 w-3.5" />
               {title}
             </span>
+            {/* Hanya saat grup tertutup; saat terbuka lencana ada di item menunya. */}
+            {items.some((sub) => sub.badge === "pengajuan-pembatalan") && <PengajuanPembatalanBadge className="mr-1 group-data-[state=open]/subgroup:hidden" />}
             <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]/subgroup:rotate-90" />
           </button>
         </CollapsibleTrigger>
@@ -302,6 +330,7 @@ function SubGroupCollapsible({
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                     >
                       {sub.title}
+                      {sub.badge === "pengajuan-pembatalan" && <PengajuanPembatalanBadge />}
                     </NavLink>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
@@ -325,7 +354,8 @@ export function AppSidebar() {
   const permissionDriven = isConfigurableRole(role);
   const keuanganItemAllowed = (url: string) => {
     const permission = permissionForPath(url);
-    return permission ? can(permission) : false;
+    if (!permission) return false;
+    return typeof permission === "string" ? can(permission) : permission.some((key) => can(key));
   };
   const itemAllowed = (menuUrl: string, sub: SubMenuItem) =>
     permissionDriven && menuUrl === "/keuangan"
