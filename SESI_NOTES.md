@@ -1,3 +1,12 @@
+# Catatan Sesi — Pengunduran diri pendaftar SPMB (4 November 2026)
+
+- **Latar:** belum ada jalur untuk pendaftar yang sudah lulus/diterima lalu mundur. "Pindah keluar" hanya menerima murid `aktif`, jadi pendaftar yang mundur tetap tampil Calon/Diterima, tautan bayarnya hidup, tagihannya jalan.
+- **Dibangun:** menu "Tandai mengundurkan diri" (daftar SPMB + detail, admin/admin TU, status calon/diterima, belum diaktivasi), dialog alasan + tanggal efektif, filter status "Mengundurkan diri" (disembunyikan dari "Semua status" dan ringkasan). Server fn `spmbWithdrawRegistration` (`src/server/spmbWithdrawal.ts`) = otorisasi lembaga + menutup sesi Midtrans terbuka + memanggil RPC `spmb_withdraw_registration`.
+- **MIGRASI BELUM DITERAPKAN:** `supabase/migrations/20261104040000_spmb_withdrawal.sql` (kolom `spmb_mundur_*`, constraint status ditambah `mengundurkan_diri`, RPC khusus `service_role`). Terapkan manual ke DB Rustbase `proj_kqylkreswang` hanya setelah konfirmasi eksplisit; sintaks sudah diparse tetapi belum dijalankan di DB. Sebelum migrasi diterapkan, tombol akan gagal di RPC.
+- **Keputusan (dari user):** biaya pendaftaran/uang pangkal yang sudah dibayar default TIDAK dikembalikan, refund insidental dicatat manual oleh keuangan (aplikasi hanya menandai `spmb_mundur_perlu_keuangan` + total dibayar); NIS yang terbit tidak boleh dipakai ulang (siswa dan riwayat NIS tidak disentuh); murid yang sudah aktif tetap lewat Mutasi Siswa → Pindah Keluar.
+- **Pendaftar internal** (murid aktif lembaga asal): hanya `siswa_detail` yang ditandai. Status siswa, kelas, rencana tagihan, dan tagihan lembaga asal sengaja tidak disentuh; tagihan lembaga tujuan ditinjau manual (ditandai perlu keuangan).
+- **Belum ada:** tombol untuk menandai tindak lanjut keuangan sudah selesai (kolom hanya diisi, belum bisa di-clear dari UI); pembatalan pengunduran diri; pembayaran yang masuk SETELAH mundur (sesi online ditutup, tetapi webhook terlambat tetap tercatat sebagai pembayaran biasa).
+
 # Catatan Sesi — Link pembayaran SPMB hilang: rekonsiliasi Midtrans (4 November 2026)
 
 - **Gejala:** orang tua pendaftar Gelombang 2 (berbayar) tidak bisa membayar biaya pendaftaran di `/spmb`; link Midtrans tidak bertahan.
