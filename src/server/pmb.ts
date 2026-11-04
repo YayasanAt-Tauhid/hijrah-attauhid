@@ -802,6 +802,58 @@ export const spmbAdminUpdateRegistrationMethod = createServerFn({ method: "POST"
     return { success: true, metode };
   });
 
+/**
+ * Tautan pemulihan pembayaran untuk orang tua yang kehilangan sesi browser.
+ * Token pendaftaran adalah kunci akses ke satu pendaftaran, jadi kewenangan
+ * lembaga dicek lebih dulu dan token hanya dikembalikan saat staf meminta.
+ */
+export const spmbAdminGetRecoveryLink = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((d: { detail_id: string }) => d)
+  .handler(async ({ data, context }): Promise<{ success: true; url: string }> => {
+    const actor = requireContext(context);
+    const admin = createAdminClient();
+    const detailId = cleanText(data.detail_id, 100);
+    if (!detailId) throw new Error("Data pendaftaran tidak valid");
+
+    const { data: detail, error: detailError } = (await admin
+      .from("siswa_detail")
+      .select("id,siswa_id,pmb_payment_token,spmb_departemen_tujuan_id,spmb_status_pendaftaran")
+      .eq("id", detailId)
+      .maybeSingle()) as unknown as {
+        data: {
+          id: string;
+          siswa_id: string;
+          pmb_payment_token: string | null;
+          spmb_departemen_tujuan_id: string | null;
+          spmb_status_pendaftaran: string | null;
+        } | null;
+        error: { message: string } | null;
+      };
+    if (detailError) throw new Error(detailError.message);
+    if (!detail?.id) throw new Error("Pendaftaran SPMB tidak ditemukan");
+
+    const { data: siswa, error: siswaError } = await admin
+      .from("siswa")
+      .select("departemen_id, status")
+      .eq("id", detail.siswa_id)
+      .maybeSingle();
+    if (siswaError) throw new Error(siswaError.message);
+
+    const departemenId = (detail.spmb_departemen_tujuan_id as string | null) || siswa?.departemen_id || null;
+    await requireAcademicDepartment(admin, actor.userId, departemenId, ["admin", "admin_tu"]);
+
+    const registrationStatus = detail.spmb_status_pendaftaran || siswa?.status;
+    if (registrationStatus !== "calon") {
+      throw new Error("Tautan pemulihan hanya untuk pendaftar berstatus calon");
+    }
+    const token = typeof detail.pmb_payment_token === "string" ? detail.pmb_payment_token.trim() : "";
+    if (!token) throw new Error("Pendaftaran ini belum memiliki token pembayaran");
+
+    const origin = new URL((await import("@tanstack/react-start/server")).getRequest().url).origin;
+    return { success: true, url: `${origin}/spmb#registration=${encodeURIComponent(token)}` };
+  });
+
 export interface SpmbLulusAcceptResult {
   success: true;
   nis: string;
