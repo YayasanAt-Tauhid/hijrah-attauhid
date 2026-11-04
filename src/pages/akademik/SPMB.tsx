@@ -56,6 +56,7 @@ import {
 } from "lucide-react";
 import { fetchAllPages } from "@/lib/fetchAll";
 import { fetchSpmbReadinessInBatches } from "@/lib/spmbReadiness";
+import { copySpmbRecoveryLink } from "@/lib/spmbRecoveryLink";
 import { getSpmbRegistrationFeeStatus, type SpmbRegistrationFeeTone } from "@/lib/spmbRegistrationFee";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -259,6 +260,19 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
   const [formErrors, setFormErrors] = useState<RegistrationErrors>({});
   const [registrationSuccess, setRegistrationSuccess] = useState<RegistrationSuccess | null>(null);
   const [nisLoadingId, setNisLoadingId] = useState<string | null>(null);
+  const [recoveryLoadingId, setRecoveryLoadingId] = useState<string | null>(null);
+
+  // Tautan adalah kunci akses ke satu pendaftaran: diminta hanya saat diklik,
+  // langsung disalin, dan tidak disimpan di state.
+  const handleCopyRecoveryLink = async (detailId: string) => {
+    if (recoveryLoadingId) return;
+    setRecoveryLoadingId(detailId);
+    try {
+      await copySpmbRecoveryLink(detailId);
+    } finally {
+      setRecoveryLoadingId(null);
+    }
+  };
   const [milestoneLoadingId, setMilestoneLoadingId] = useState<string | null>(null);
   const [lulusConfirmRow, setLulusConfirmRow] = useState<Record<string, unknown> | null>(null);
   const [activationRow, setActivationRow] = useState<Record<string, unknown> | null>(null);
@@ -1307,6 +1321,15 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
                     <DropdownMenuItem disabled={!activationDateReady} onSelect={() => openInternalActivation(row)}>Aktifkan ke jenjang tujuan</DropdownMenuItem>
                     {!activationDateReady && <DropdownMenuLabel className="whitespace-normal text-xs font-normal text-muted-foreground">Aktivasi mulai {formatTanggal(targetYearForRow?.tanggal_mulai)}</DropdownMenuLabel>}
                   </>}
+                </>}
+                {canRecordMilestones && detail?.id && String(detail.spmb_status_pendaftaran || status) === "calon" && <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={recoveryLoadingId !== null}
+                    onSelect={() => void handleCopyRecoveryLink(detail.id as string)}
+                  >
+                    Salin tautan pemulihan pembayaran
+                  </DropdownMenuItem>
                 </>}
                 {(role === "admin" || role === "admin_tu") && detail?.spmb_status_kelulusan === "lulus" && <DropdownMenuItem onSelect={() => navigate(`/keuangan/monitoring-spmb?siswa=${row.id}`)}>Monitoring pembayaran</DropdownMenuItem>}
                 {role === "admin" && detail?.spmb_status_kelulusan === "lulus" &&
