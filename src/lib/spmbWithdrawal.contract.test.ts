@@ -39,10 +39,25 @@ describe("migrasi pengunduran diri pendaftar SPMB", () => {
     expect(migration).toContain("t.status IN ('terjadwal','belum_bayar')");
   });
 
-  it("menjumlahkan hanya pembayaran aktif sebagai dasar tindak lanjut keuangan, tanpa refund otomatis", () => {
-    expect(migration).toContain("p.status = 'aktif'");
+  it("menjumlahkan pembayaran sebagai dasar tindak lanjut keuangan, tanpa refund otomatis", () => {
+    // Pembatalan pembayaran menghapus barisnya (20260615150000 menghapus kolom
+    // pembayaran.status), jadi setiap baris pembayaran adalah pembayaran aktif.
+    expect(migration).toContain("FROM public.pembayaran p");
+    expect(migration).not.toMatch(/\bp\.status\b/);
     expect(migration).not.toMatch(/INSERT INTO public\.(pembayaran|jurnal)\b/i);
     expect(migration).not.toContain("batalkan_pembayaran_atomik");
+  });
+
+  it("hanya mengubah status diskon: trigger melarang mengubah periode/nilai keringanan yang sudah disetujui", () => {
+    const start = migration.indexOf("UPDATE public.siswa_diskon");
+    const discountUpdate = migration.slice(start, migration.indexOf("UPDATE public.kelas_siswa", start));
+    expect(discountUpdate).toContain("status = 'dibatalkan'");
+    expect(discountUpdate).not.toMatch(/periode_(mulai|selesai)\s*=/);
+    expect(discountUpdate).not.toMatch(/\b(nilai|jenis_id|skema_diskon_id)\s*=/);
+  });
+
+  it("pendaftar internal: total dibayar hanya menghitung jenis milik lembaga tujuan, bukan SPP sekolah asal", () => {
+    expect(migration).toContain("NOT v_internal OR j.departemen_id = d.spmb_departemen_tujuan_id");
   });
 
   it("menonaktifkan rencana tagihan, melepas kelas, dan mengakhiri diskon pendaftar eksternal", () => {
