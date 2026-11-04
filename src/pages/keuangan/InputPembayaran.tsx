@@ -5,6 +5,8 @@ import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan
 import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/components/shared/ReceiptOrientationSelect";
 import { PrintTagihan, type PrintTagihanItem } from "@/components/shared/PrintTagihan";
 import { DialogLinkPembayaran, type LinkPembayaranBill } from "@/components/keuangan/DialogLinkPembayaran";
+import { DialogAjukanPembatalan, type PembatalanTarget } from "@/components/keuangan/DialogAjukanPembatalan";
+import { statusPengajuanPembayaran } from "@/server/pembatalanPembayaran";
 import { isLinkInstallmentAllowed } from "@/lib/paymentLink";
 import { describeCartFailures } from "@/lib/cartPaymentFailure";
 import { RupiahInput } from "@/components/shared/RupiahInput";
@@ -189,7 +191,7 @@ export default function InputPembayaran() {
 }
 
 function InputPembayaranContent() {
-  const { role } = useAuth();
+  const { role, can } = useAuth();
   const isKasir = role === "kasir";
   const queryClient = useQueryClient();
   const [searchTerm,    setSearchTerm]    = useState("");
@@ -931,9 +933,20 @@ function InputPembayaranContent() {
 
   const prosesMutation = useProsesPembayaran();
   const batalMutation  = useBatalkanPembayaran();
-  const canBatal = role === "admin" || role === "keuangan";
+  // Menambah tagihan tetap khusus admin/keuangan (tidak berubah). Pembatalan: admin langsung;
+  // kasir/keuangan mengajukan dan menunggu persetujuan (lihat pembatalanPembayaran.ts).
+  const canKelolaTagihan = role === "admin" || role === "keuangan";
+  const canBatalLangsung = can("keuangan.pembatalan.langsung");
+  const canAjukanBatal = !canBatalLangsung && can("keuangan.pembatalan.ajukan");
+  const [ajukanTarget, setAjukanTarget] = useState<PembatalanTarget | null>(null);
   const [batalTarget, setBatalTarget] = useState<PembayaranWithJenis | null>(null);
   const [batalAlasan, setBatalAlasan] = useState("");
+  const riwayatIds = (riwayat ?? []).map((row) => row.id);
+  const { data: pengajuanMenunggu } = useQuery({
+    queryKey: ["pengajuan_pembatalan", "status", riwayatIds],
+    enabled: canAjukanBatal && riwayatIds.length > 0,
+    queryFn: () => statusPengajuanPembayaran({ data: { pembayaran_ids: riwayatIds } }),
+  });
 
   const handleSelectSiswa = useCallback((s: SiswaWithKelas) => {
     setSelectedSiswa(s);
@@ -1482,7 +1495,7 @@ function InputPembayaranContent() {
           >
             <Printer className="h-4 w-4 mr-1.5" />Cetak Kuitansi
           </Button>
-          {canBatal && (
+          {canBatalLangsung && (
             <Button
               size="sm"
               variant="ghost"
@@ -1491,6 +1504,27 @@ function InputPembayaranContent() {
             >
               <X className="h-3.5 w-3.5 mr-1" />Batalkan
             </Button>
+          )}
+          {canAjukanBatal && (
+            pengajuanMenunggu?.[r.id] ? (
+              <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
+                Menunggu persetujuan
+              </span>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs text-destructive hover:text-destructive"
+                onClick={() => setAjukanTarget({
+                  id: r.id,
+                  label: `${r.jenis_pembayaran?.nama ?? "Pembayaran"}${r.bulan ? ` (${r.periodeTagihanLabel || namaBulanTahun(r.bulan, { tanggalTransaksi: r.tanggal_bayar })})` : ""}`,
+                  jumlah: Number(r.jumlah),
+                  tanggal: r.tanggal_bayar ? format(new Date(r.tanggal_bayar), "dd MMM yyyy", { locale: idLocale }) : null,
+                })}
+              >
+                <X className="h-3.5 w-3.5 mr-1" />Ajukan pembatalan
+              </Button>
+            )
           )}
         </div>
       ),
@@ -1687,7 +1721,7 @@ function InputPembayaranContent() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-              {canBatal && !isSiswaNonaktif && (
+              {canKelolaTagihan && !isSiswaNonaktif && (
                 <Button variant="outline" size="sm" className="h-9" onClick={() => setShowTambahTagihan(true)}>
                   <Plus className="mr-2 h-4 w-4" />Tambah Tagihan
                 </Button>
@@ -2170,13 +2204,18 @@ function InputPembayaranContent() {
           <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
-              {canBatal ? (
+              {canBatalLangsung ? (
                 <>
                   <p className="font-medium">Pembatalan pembayaran hanya untuk koreksi salah input dan tidak dapat dilakukan pada periode yang sudah tutup buku.</p>
                   <p className="mt-0.5 opacity-80">Semua pembatalan dan perubahan terkait tercatat pada Audit Perubahan Data.</p>
                 </>
+              ) : canAjukanBatal ? (
+                <>
+                  <p className="font-medium">Pembatalan pembayaran harus diajukan dan menunggu persetujuan bendahara, sekretaris, atau admin.</p>
+                  <p className="mt-0.5 opacity-80">Pantau statusnya di menu Persetujuan Pembatalan. Pembayaran tidak berubah sampai disetujui.</p>
+                </>
               ) : (
-                <p>Kasir tidak dapat membatalkan pembayaran. Laporkan koreksi kepada admin atau bagian keuangan.</p>
+                <p>Anda tidak dapat membatalkan pembayaran. Laporkan koreksi kepada admin atau bagian keuangan.</p>
               )}
             </div>
           </div>
@@ -2220,6 +2259,8 @@ function InputPembayaranContent() {
           <p className="mt-1 text-xs">Ketik minimal 2 karakter NIS, nama siswa, atau nama + kelas.</p>
         </div>
       )}
+
+      {ajukanTarget && <DialogAjukanPembatalan target={ajukanTarget} onClose={() => setAjukanTarget(null)} />}
 
       {/* ── Dialog Batalkan Pembayaran ──────────────────────────────────────────── */}
       <Dialog open={!!batalTarget} onOpenChange={(o) => { if (!o) { setBatalTarget(null); setBatalAlasan(""); } }}>
@@ -2315,7 +2356,7 @@ function InputPembayaranContent() {
         </Dialog>
       )}
 
-      {showTambahTagihan && selectedSiswa && canBatal && !isSiswaNonaktif && (
+      {showTambahTagihan && selectedSiswa && canKelolaTagihan && !isSiswaNonaktif && (
         <Suspense fallback={<p role="status" className="text-sm text-muted-foreground">Membuka form tagihan...</p>}>
         <TambahTagihanDialog
           key={selectedSiswa.id}

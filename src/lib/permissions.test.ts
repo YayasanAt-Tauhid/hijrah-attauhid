@@ -102,6 +102,10 @@ describe("permissionForPath", () => {
     expect(permissionForPath(path)).toBe(permission);
   });
 
+  it("halaman persetujuan pembatalan terbuka bagi penyetuju maupun pengaju (yang terakhir hanya melihat pengajuannya sendiri)", () => {
+    expect(permissionForPath("/keuangan/persetujuan-pembatalan")).toEqual(["keuangan.pembatalan.setujui", "keuangan.pembatalan.ajukan"]);
+  });
+
   it("tidak cocok parsial di tengah segmen dan tidak menebak rute tak dikenal", () => {
     expect(permissionForPath("/keuangan/pembayaranxyz")).toBeNull();
     expect(permissionForPath("/keuangan")).toBeNull();

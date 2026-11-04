@@ -97,7 +97,8 @@ export function normalizePermissions(role: string, keys: readonly string[]): Per
   return result;
 }
 
-const PATH_PERMISSIONS: ReadonlyArray<readonly [string, PermissionKey]> = [
+type PathPermission = PermissionKey | readonly PermissionKey[];
+const PATH_PERMISSIONS: ReadonlyArray<readonly [string, PathPermission]> = [
   ["/keuangan/pembayaran", "keuangan.pembayaran"],
   ["/keuangan/pembayaran-spmb", "keuangan.pembayaran"],
   ["/keuangan/pembayaran-pmb", "keuangan.pembayaran"],
@@ -131,12 +132,14 @@ const PATH_PERMISSIONS: ReadonlyArray<readonly [string, PermissionKey]> = [
   ["/keuangan/audit-perubahan", "keuangan.pengaturan"],
   ["/keuangan/referensi", "keuangan.pengaturan"],
   ["/keuangan/diskon-siswa", "keuangan.diskon"],
+  // Salah satu cukup: penyetuju memutuskan, pengaju memantau pengajuannya sendiri.
+  ["/keuangan/persetujuan-pembatalan", ["keuangan.pembatalan.setujui", "keuangan.pembatalan.ajukan"]],
 ];
 
-/** Izin untuk sebuah rute Keuangan (cocok per segmen, terpanjang menang); null bila tidak dikenal. */
-export function permissionForPath(pathname: string): PermissionKey | null {
+/** Izin untuk sebuah rute Keuangan (cocok per segmen, terpanjang menang); daftar berarti salah satu cukup; null bila tidak dikenal. */
+export function permissionForPath(pathname: string): PathPermission | null {
   const path = pathname.replace(/\/+$/, "") || "/";
-  let best: readonly [string, PermissionKey] | null = null;
+  let best: readonly [string, PathPermission] | null = null;
   for (const entry of PATH_PERMISSIONS) {
     const [prefix] = entry;
     if ((path === prefix || path.startsWith(prefix + "/")) && (!best || prefix.length > best[0].length)) best = entry;

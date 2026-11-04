@@ -56,11 +56,13 @@ describe("Kasir payment access contract", () => {
     expect(pembayaranServer).toContain("Siswa berstatus keluar/alumni tidak dapat membayar tagihan baru atau yang belum jatuh tempo.");
   });
 
-  it("limits cashier recap to the logged-in employee and preserves cancellation separation", () => {
+  it("limits cashier recap to the logged-in employee and keeps direct cancellation behind its own permission", () => {
     expect(pembayaranServer).toContain('export const getRekapKasirSaya');
     expect(pembayaranServer).toContain('.in("petugas_id", [userId, profile.pegawai_id])');
-    expect(pembayaranServer).toContain('// BUKAN kasir — hanya admin/keuangan');
-    expect(pembayaranServer).toContain('await requireRole(admin, userId, [\n        "admin",\n        "keuangan",\n      ])');
+    // Pembatalan langsung bukan untuk kasir/keuangan: mereka mengajukan lewat pembatalanPembayaran.ts.
+    const direct = pembayaranServer.slice(pembayaranServer.indexOf("export const batalkanPembayaran"));
+    expect(direct).toContain('await requirePermission(admin, userId, "keuangan.pembatalan.langsung")');
+    expect(direct).not.toContain('requireRole(admin, userId, ["admin", "keuangan"');
   });
 
   it("never prints NIK and uses NIS/NISN as the cashier receipt identity", () => {
