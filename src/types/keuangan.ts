@@ -19,6 +19,8 @@ export type Siswa      = Database["public"]["Tables"]["siswa"]["Row"];
 /** Siswa dengan kelas aktif, dipakai di form pencarian */
 export interface SiswaWithKelas extends Pick<Siswa, "id" | "nis" | "nisn" | "nama" | "foto_url" | "status"> {
   departemen_id?: string | null;
+  /** Hanya terisi dari pencarian loket pembayaran (nama ayah/ibu dan satu HP). */
+  orang_tua?: { ayah: string | null; ibu: string | null; telepon: string | null } | null;
   kelas_siswa: Array<{
     kelas_id: string;
     kelas: {
