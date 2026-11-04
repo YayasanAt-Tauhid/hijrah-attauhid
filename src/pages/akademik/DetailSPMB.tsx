@@ -5,6 +5,8 @@ import { ArrowLeft, CheckCircle2, ChevronDown, ClipboardList, Pencil, UserRound 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { isSpmbActivated } from "@/lib/spmbAdmission";
+import { canWithdrawSpmbRegistration } from "@/lib/spmbWithdrawalNotices";
+import { SpmbWithdrawDialog } from "@/components/akademik/SpmbWithdrawDialog";
 import { getAvailableSpmbMilestones, SPMB_MILESTONE_ACTION_LABELS, SPMB_MILESTONE_SUCCESS_LABELS, type SpmbMilestoneAction } from "@/lib/spmbMilestoneActions";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
@@ -69,6 +71,7 @@ export default function DetailSPMB() {
   const { role } = useAuth();
   const [milestoneLoading, setMilestoneLoading] = useState<SpmbMilestoneAction | null>(null);
   const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
 
   // Tautan ini adalah kunci akses ke satu pendaftaran: hanya diminta saat staf
   // mengklik, disalin ke clipboard, dan tidak disimpan di state halaman.
@@ -216,7 +219,9 @@ export default function DetailSPMB() {
     _spmbInternal: detail.spmb_siswa_internal === true,
     _spmbTanggalAktivasi: detail.spmb_tanggal_aktivasi,
   });
-  const canRecordMilestones = role === "admin" || role === "admin_tu";
+  const withdrawn = status === "mengundurkan_diri";
+  const canRecordMilestones = (role === "admin" || role === "admin_tu") && !withdrawn;
+  const canWithdraw = canWithdrawSpmbRegistration({ role, status, activated: activated || Boolean(detail.spmb_tanggal_aktivasi) });
   const milestoneActions = getAvailableSpmbMilestones(detail, activated);
   const canManageBilling = role === "admin" && detail.spmb_status_kelulusan === "lulus"
     && ((!detail.spmb_siswa_internal && ["diterima", "aktif"].includes(status))
@@ -284,6 +289,12 @@ export default function DetailSPMB() {
               {canManageBilling && <DropdownMenuItem onSelect={() => navigate(`/keuangan/rencana-siswa-baru?siswa=${siswa.id}`)}>
                 Atur tagihan
               </DropdownMenuItem>}
+              {canWithdraw && <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setWithdrawOpen(true)}>
+                  Tandai mengundurkan diri
+                </DropdownMenuItem>
+              </>}
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => navigate("/akademik/spmb")}>
                 Lihat tindakan penerimaan dan aktivasi lainnya
@@ -292,6 +303,24 @@ export default function DetailSPMB() {
           </DropdownMenu>
         </div>
       </div>
+
+      {withdrawn && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+          <p className="font-medium text-destructive">Pendaftar ini telah mengundurkan diri</p>
+          <p className="mt-1 text-muted-foreground">
+            Efektif {detail.spmb_mundur_tanggal_efektif || "-"}. Alasan: {detail.spmb_mundur_alasan || "-"}.
+            {" "}Tautan pembayaran tidak aktif dan NIS yang sudah terbit tidak dipakai ulang.
+          </p>
+          {detail.spmb_mundur_perlu_keuangan === true && (
+            <p className="mt-1 font-medium text-warning">
+              Perlu tindak lanjut keuangan
+              {Number(detail.spmb_mundur_total_dibayar) > 0
+                ? `: pembayaran masuk ${new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(Number(detail.spmb_mundur_total_dibayar))} tidak dikembalikan otomatis.`
+                : ": tinjau tagihan lembaga tujuan secara manual."}
+            </p>
+          )}
+        </div>
+      )}
 
       {detail.spmb_siswa_internal === true && (
         <div className="rounded-lg border border-info/30 bg-info/5 px-4 py-3 text-sm">
@@ -345,6 +374,20 @@ export default function DetailSPMB() {
       </Card>
 
       <SiswaSpmbDetail detail={detail} />
+
+      <SpmbWithdrawDialog
+        open={withdrawOpen}
+        onOpenChange={setWithdrawOpen}
+        detailId={String(detail.id)}
+        nama={String(siswa.nama)}
+        internal={detail.spmb_siswa_internal === true}
+        onWithdrawn={() => {
+          void Promise.all([
+            queryClient.invalidateQueries({ queryKey: ["spmb_registration_detail", registrationId] }),
+            queryClient.invalidateQueries({ queryKey: ["siswa"] }),
+          ]);
+        }}
+      />
     </div>
   );
 }

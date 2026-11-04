@@ -12,7 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { SpmbStatistics } from "@/components/akademik/SpmbStatistics";
-import { isSpmbAccepted, isSpmbActivated, matchesSpmbStatus } from "@/lib/spmbAdmission";
+import { isSpmbAccepted, isSpmbActivated, isSpmbWithdrawn, matchesSpmbStatus } from "@/lib/spmbAdmission";
+import { canWithdrawSpmbRegistration } from "@/lib/spmbWithdrawalNotices";
+import { SpmbWithdrawDialog } from "@/components/akademik/SpmbWithdrawDialog";
 import { getAvailableSpmbMilestones, SPMB_MILESTONE_ACTION_LABELS, SPMB_MILESTONE_SUCCESS_LABELS } from "@/lib/spmbMilestoneActions";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -226,6 +228,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [extraColumns, setExtraColumns] = useState<string[]>([]);
   const [readinessRow, setReadinessRow] = useState<Record<string, unknown> | null>(null);
+  const [withdrawRow, setWithdrawRow] = useState<Record<string, unknown> | null>(null);
   const { role, user, departemenId } = useAuth();
   const canChangeSpmbTarget = role === "admin" || role === "admin_tu";
   const angkatanQuery = useAngkatan();
@@ -615,7 +618,9 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
               ? "Diterima"
               : registrationStatus === "selesai"
                 ? "Selesai"
-                : registrationStatus,
+                : registrationStatus === "mengundurkan_diri"
+                  ? "Mengundurkan diri"
+                  : registrationStatus,
           _exportSumber: detail?.spmb_metode_pendaftaran === "offline"
             ? "Offline"
             : detail?.spmb_metode_pendaftaran === "online"
@@ -1280,7 +1285,13 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           && !detail?.spmb_tanggal_aktivasi;
         const activated = isSpmbActivated(row);
         const milestoneActions = getAvailableSpmbMilestones(detail, activated);
-        const canRecordMilestones = role === "admin" || role === "admin_tu";
+        const withdrawn = isSpmbWithdrawn(row);
+        const canRecordMilestones = (role === "admin" || role === "admin_tu") && !withdrawn;
+        const canWithdraw = canWithdrawSpmbRegistration({
+          role,
+          status: String(detail?.spmb_status_pendaftaran || status),
+          activated: activated || Boolean(detail?.spmb_tanggal_aktivasi),
+        });
         return (
           <div onClick={(event) => event.stopPropagation()}>
             <DropdownMenu>
@@ -1288,7 +1299,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
               <DropdownMenuContent align="end" className="w-72">
                 <DropdownMenuItem onSelect={() => openSpmbDetail(row)}><Eye className="mr-2 h-4 w-4" />Detail pendaftaran</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => navigate(`/akademik/siswa/${row.id}/edit`)}><Pencil className="mr-2 h-4 w-4" />Edit / periksa data</DropdownMenuItem>
-                {canChangeSpmbTarget && !activated && !detail?.spmb_tanggal_aktivasi && detail?.spmb_status_pendaftaran !== "selesai" && (internalStudent || row._academicStatus !== "aktif") && (
+                {canChangeSpmbTarget && !withdrawn && !activated && !detail?.spmb_tanggal_aktivasi && detail?.spmb_status_pendaftaran !== "selesai" && (internalStudent || row._academicStatus !== "aktif") && (
                   <DropdownMenuItem title="Ubah lembaga/jenjang tujuan SPMB" disabled={!row._readiness || Boolean(row._pmbLunas && !row._pmbGratis)} onSelect={() => openTargetChange(row)}><ArrowRightLeft className="mr-2 h-4 w-4" />Ubah tujuan SPMB</DropdownMenuItem>
                 )}
                 {canRecordMilestones && milestoneActions.length > 0 && <>
@@ -1332,6 +1343,12 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
                   </DropdownMenuItem>
                 </>}
                 {(role === "admin" || role === "admin_tu") && detail?.spmb_status_kelulusan === "lulus" && <DropdownMenuItem onSelect={() => navigate(`/keuangan/monitoring-spmb?siswa=${row.id}`)}>Monitoring pembayaran</DropdownMenuItem>}
+                {canWithdraw && detail?.id && <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setWithdrawRow(row)}>
+                    Tandai mengundurkan diri
+                  </DropdownMenuItem>
+                </>}
                 {role === "admin" && detail?.spmb_status_kelulusan === "lulus" &&
                   ((!internalStudent && ["diterima", "aktif"].includes(status)) ||
                     (internalStudent && ["diterima", "aktif", "selesai"].includes(String(detail?.spmb_status_pendaftaran || "")))) && <>
@@ -1351,8 +1368,8 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         const fee = getSpmbRegistrationFeeStatus(row);
         return (
           <div className="space-y-1 text-xs">
-            <span className={`inline-flex rounded-full border px-2 py-0.5 ${isSpmbAccepted(row) ? "border-success/30 bg-success/10 text-success" : "border-warning/30 bg-warning/10 text-warning"}`}>
-              {isSpmbActivated(row) ? "Diterima · Aktif" : isSpmbAccepted(row) ? "Diterima · Belum aktif" : "Calon"}
+            <span className={`inline-flex rounded-full border px-2 py-0.5 ${isSpmbWithdrawn(row) ? "border-destructive/30 bg-destructive/10 text-destructive" : isSpmbAccepted(row) ? "border-success/30 bg-success/10 text-success" : "border-warning/30 bg-warning/10 text-warning"}`}>
+              {isSpmbWithdrawn(row) ? "Mengundurkan diri" : isSpmbActivated(row) ? "Diterima · Aktif" : isSpmbAccepted(row) ? "Diterima · Belum aktif" : "Calon"}
             </span>
             <p className={row._spmbStatusKelulusan === "tidak_lulus" ? "text-destructive" : "text-muted-foreground"}>
               {row._spmbStatusKelulusan === "lulus" ? "Lulus tes" : row._spmbStatusKelulusan === "tidak_lulus" ? "Tidak lulus tes" : row._spmbTanggalTes ? "Sudah tes · Hasil belum diisi" : "Belum tes"}
@@ -1835,6 +1852,14 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         </DialogContent>
       </Dialog>
 
+      <SpmbWithdrawDialog
+        open={Boolean(withdrawRow)}
+        onOpenChange={(open) => { if (!open) setWithdrawRow(null); }}
+        detailId={String((withdrawRow?._spmbDetail as Record<string, unknown> | undefined)?.id || "")}
+        nama={String(withdrawRow?.nama || "Pendaftar")}
+        internal={withdrawRow?._spmbInternal === true}
+        onWithdrawn={() => { void refreshStudentData(); }}
+      />
       <AlertDialog open={Boolean(lulusConfirmRow)} onOpenChange={(open) => { if (!open) setLulusConfirmRow(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1893,7 +1918,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1"><Label className="text-xs">Lembaga</Label><Select value={filters.departemen} onValueChange={(value) => setFilter("departemen", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua lembaga</SelectItem>{spmbDepartemenList.map((dept: any) => <SelectItem key={dept.id} value={dept.id}>{labelDepartemenSpmb(dept)}</SelectItem>)}</SelectContent></Select></div>
-          <div className="space-y-1"><Label className="text-xs">Status</Label><Select value={filters.status} onValueChange={(value) => setFilter("status", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua status</SelectItem><SelectItem value="calon">Calon</SelectItem><SelectItem value="diterima">Diterima (semua)</SelectItem><SelectItem value="belum_aktif">Diterima · Belum aktif</SelectItem><SelectItem value="selesai">Sudah diaktifkan</SelectItem></SelectContent></Select></div>
+          <div className="space-y-1"><Label className="text-xs">Status</Label><Select value={filters.status} onValueChange={(value) => setFilter("status", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua status</SelectItem><SelectItem value="calon">Calon</SelectItem><SelectItem value="diterima">Diterima (semua)</SelectItem><SelectItem value="belum_aktif">Diterima · Belum aktif</SelectItem><SelectItem value="selesai">Sudah diaktifkan</SelectItem><SelectItem value="mengundurkan_diri">Mengundurkan diri</SelectItem></SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs">Jenis Pendaftar</Label><Select value={filters.jenisPendaftar} onValueChange={(value) => setFilter("jenisPendaftar", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua pendaftar</SelectItem><SelectItem value="internal">Internal / Naik Jenjang</SelectItem><SelectItem value="eksternal">Eksternal</SelectItem></SelectContent></Select></div>
           <div className="flex items-end"><Button variant="outline" className="w-full" aria-expanded={advancedFiltersOpen} aria-controls="spmb-advanced-filters" onClick={() => setAdvancedFiltersOpen((open) => !open)}><Filter className="mr-2 h-4 w-4" />Filter lainnya{advancedFilterCount ? ` (${advancedFilterCount})` : ""}<ChevronDown className="ml-2 h-4 w-4" /></Button></div>
         </div>

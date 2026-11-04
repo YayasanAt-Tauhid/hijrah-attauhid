@@ -28,6 +28,23 @@ describe("SPMB admission across activation", () => {
   it("recognizes external activation when the registration still stores diterima", () => {
     expect(isSpmbActivated({ status: "diterima", _spmbInternal: false, _academicStatus: "aktif" })).toBe(true);
   });
+  it("menyembunyikan pendaftar yang mengundurkan diri dari 'Semua status' dan ringkasan, tetapi tetap bisa difilter", () => {
+    const withdrawn = { status: "mengundurkan_diri", _spmbInternal: false, _academicStatus: "mengundurkan_diri" };
+    const rows = [
+      { status: "calon", _spmbInternal: false, _academicStatus: "calon" },
+      { status: "diterima", _spmbInternal: false, _academicStatus: "diterima" },
+      withdrawn,
+    ];
+    expect(isSpmbAccepted(withdrawn)).toBe(false);
+    expect(isSpmbActivated(withdrawn)).toBe(false);
+    expect(matchesSpmbStatus(withdrawn, "all")).toBe(false);
+    expect(matchesSpmbStatus(withdrawn, "calon")).toBe(false);
+    expect(matchesSpmbStatus(withdrawn, "diterima")).toBe(false);
+    expect(matchesSpmbStatus(withdrawn, "mengundurkan_diri")).toBe(true);
+    expect(rows.filter((row) => matchesSpmbStatus(row, "all"))).toHaveLength(2);
+    expect(rows.filter((row) => matchesSpmbStatus(row, "mengundurkan_diri"))).toHaveLength(1);
+    expect(summarizeSpmbAdmissions(rows)).toEqual({ total: 2, accepted: 1, activated: 0, awaitingActivation: 1 });
+  });
   it("matches the production states without counting internal applicants as activated", () => {
     const rows = [
       ...Array.from({ length: 13 }, () => ({ status: "aktif", _spmbInternal: false, _academicStatus: "aktif" })),
