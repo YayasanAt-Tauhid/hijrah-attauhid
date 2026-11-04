@@ -78,7 +78,7 @@ interface ReconciliationCandidate {
   created_at: string;
   expired_at: string;
   gateway_closed_at: string | null;
-  metadata?: { bill_balances?: Record<string, number> } | null;
+  metadata?: { bill_balances?: Record<string, number>; source?: string } | null;
 }
 
 /** Periodic fallback: synchronize paid orders, then revoke stale pages/codes.
@@ -114,8 +114,12 @@ export async function reconcileOnlineSessions() {
     }
 
     let stale = Date.now() >= Date.parse(tx.expired_at) || tx.status !== "pending";
+    // Biaya pendaftaran SPMB (`pmb_public`) bukan tagihan, jadi itemnya memang
+    // tanpa tagihan_id. Sesinya hanya basi bila lewat expired_at atau gateway
+    // menyatakan expire/cancel/deny/failure (dicek di bawah), bukan karena itu.
+    const isPublicPmb = tx.metadata?.source === "pmb_public";
     for (const item of links) {
-      if (!item.tagihan_id) { stale = true; continue; }
+      if (!item.tagihan_id) { if (!isPublicPmb) stale = true; continue; }
       const { data: bill, error: billError } = await admin.from("tagihan")
         .select("nominal, status, pembayaran!pembayaran_tagihan_id_fkey(jumlah)")
         .eq("id", item.tagihan_id).single();
