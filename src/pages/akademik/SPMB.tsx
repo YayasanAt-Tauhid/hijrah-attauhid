@@ -56,10 +56,18 @@ import {
 } from "lucide-react";
 import { fetchAllPages } from "@/lib/fetchAll";
 import { fetchSpmbReadinessInBatches } from "@/lib/spmbReadiness";
+import { getSpmbRegistrationFeeStatus, type SpmbRegistrationFeeTone } from "@/lib/spmbRegistrationFee";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { AdminSpmbRegistrationDialog } from "@/components/akademik/AdminSpmbRegistrationDialog";
 import { spmbAdminUpdateRegistrantName, spmbAdminUpdateRegistrationMethod, spmbMarkLulusAndAccept } from "@/server/pmb";
+
+const SPMB_FEE_TONE_CLASS: Record<SpmbRegistrationFeeTone, string> = {
+  muted: "text-muted-foreground",
+  success: "text-success",
+  warning: "text-warning",
+  destructive: "text-destructive",
+};
 
 function departemenPerluAsrama(dept: any): boolean {
   const kode = (dept?.kode || "").trim().toUpperCase();
@@ -1316,17 +1324,21 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       key: "status",
       label: "Seleksi & aktivasi",
       sortable: true,
-      render: (value, row) => (
-        <div className="space-y-1 text-xs">
-          <span className={`inline-flex rounded-full border px-2 py-0.5 ${isSpmbAccepted(row) ? "border-success/30 bg-success/10 text-success" : "border-warning/30 bg-warning/10 text-warning"}`}>
-            {isSpmbActivated(row) ? "Diterima · Aktif" : isSpmbAccepted(row) ? "Diterima · Belum aktif" : "Calon"}
-          </span>
-          <p className={row._spmbStatusKelulusan === "tidak_lulus" ? "text-destructive" : "text-muted-foreground"}>
-            {row._spmbStatusKelulusan === "lulus" ? "Lulus tes" : row._spmbStatusKelulusan === "tidak_lulus" ? "Tidak lulus tes" : row._spmbTanggalTes ? "Sudah tes · Hasil belum diisi" : "Belum tes"}
-          </p>
-          <p className="text-muted-foreground">{row._spmbTanggalDaftarUlang ? "Sudah daftar ulang" : "Belum daftar ulang"}</p>
-        </div>
-      ),
+      render: (value, row) => {
+        const fee = getSpmbRegistrationFeeStatus(row);
+        return (
+          <div className="space-y-1 text-xs">
+            <span className={`inline-flex rounded-full border px-2 py-0.5 ${isSpmbAccepted(row) ? "border-success/30 bg-success/10 text-success" : "border-warning/30 bg-warning/10 text-warning"}`}>
+              {isSpmbActivated(row) ? "Diterima · Aktif" : isSpmbAccepted(row) ? "Diterima · Belum aktif" : "Calon"}
+            </span>
+            <p className={row._spmbStatusKelulusan === "tidak_lulus" ? "text-destructive" : "text-muted-foreground"}>
+              {row._spmbStatusKelulusan === "lulus" ? "Lulus tes" : row._spmbStatusKelulusan === "tidak_lulus" ? "Tidak lulus tes" : row._spmbTanggalTes ? "Sudah tes · Hasil belum diisi" : "Belum tes"}
+            </p>
+            <p className="text-muted-foreground">{row._spmbTanggalDaftarUlang ? "Sudah daftar ulang" : "Belum daftar ulang"}</p>
+            <p className={SPMB_FEE_TONE_CLASS[fee.tone]}>Biaya pendaftaran: {fee.label}</p>
+          </div>
+        );
+      },
     },
     {
       key: "_kesiapanSort",
@@ -1450,11 +1462,13 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       label: "Biaya Pendaftaran",
       sortable: true,
       render: (_, row) => {
-        if (!row._readiness) return <span className="text-xs text-muted-foreground">Belum diperiksa</span>;
-        if (row._pmbGratis) return <span className="inline-flex items-center gap-1 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5" />Gratis</span>;
-        if (!row._pmbConfigured) return <span className="text-xs text-warning">Belum diatur</span>;
-        if (row._pmbLunas) return <span className="inline-flex items-center gap-1 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5" />Lunas</span>;
-        return <span className="text-xs text-destructive">Belum bayar</span>;
+        const fee = getSpmbRegistrationFeeStatus(row);
+        return (
+          <span className={`inline-flex items-center gap-1 text-xs ${SPMB_FEE_TONE_CLASS[fee.tone]}`}>
+            {fee.tone === "success" && <CheckCircle2 className="h-3.5 w-3.5" />}
+            {fee.label}
+          </span>
+        );
       },
     },
 
