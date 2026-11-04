@@ -8,6 +8,7 @@ import { isMonthlySppRevenue } from "@/lib/recognitionDate";
  *   - batalkan_pembayaran_atomik
  */
 import { createServerFn } from "@tanstack/react-start";
+import { ringkasOrangTua, type OrangTuaRingkas } from "@/lib/orangTuaSiswa";
 import { resolvePaymentBookYear } from "@/lib/paymentBookYear";
 import { resolvePaymentAmount } from "@/lib/paymentTariff";
 import { calculateRemainingBill, isInstallmentAllowed, isSppPaymentName, resolveInstallmentAmount } from "@/lib/installment";
@@ -96,6 +97,8 @@ export interface SiswaPembayaranRingkas {
   status: string | null;
   angkatan_id: string | null;
   departemen_id: string | null;
+  /** Nama ayah/ibu dan satu nomor HP, untuk membedakan siswa bernama sama. */
+  orang_tua: OrangTuaRingkas;
   kelas_siswa: Array<{
     kelas_id: string;
     aktif: boolean | null;
@@ -137,7 +140,7 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     ];
     const limit = Math.min(Math.max(Number(data?.limit ?? 10), 1), 20);
     const select =
-      "id, nis, nisn, nama, foto_url, status, angkatan_id, departemen_id, kelas_siswa(kelas_id, aktif, kelas:kelas_id(id, nama, departemen_id))";
+      "id, nis, nisn, nama, telepon, foto_url, status, angkatan_id, departemen_id, kelas_siswa(kelas_id, aktif, kelas:kelas_id(id, nama, departemen_id))";
 
     // Untuk pencarian loket pembayaran, token kelas di akhir pencarian boleh
     // digabung dengan nama/NIS, misalnya "Shofiyya 2C" atau "2538144422 5C".
@@ -173,7 +176,9 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     if (byNis.error) throw new Error("Gagal mencari siswa: " + byNis.error.message);
 
     const unik = new Map<string, SiswaPembayaranRingkas>();
+    const teleponSiswa = new Map<string, string | null>();
     for (const row of [...(byNama.data ?? []), ...(byNis.data ?? [])] as any[]) {
+      teleponSiswa.set(row.id, typeof row.telepon === "string" ? row.telepon : null);
       unik.set(row.id, {
         id: row.id,
         nis: row.nis?.trim() || null,
@@ -183,6 +188,7 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
         status: row.status ?? null,
         angkatan_id: row.angkatan_id ?? null,
         departemen_id: row.departemen_id ?? null,
+        orang_tua: { ayah: null, ibu: null, telepon: null },
         kelas_siswa: Array.isArray(row.kelas_siswa) ? row.kelas_siswa : [],
       });
     }
@@ -225,8 +231,7 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     const normalizeKelas = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "");
     const kelasNeedle = kelasSearch ? normalizeKelas(kelasSearch) : null;
 
-    return {
-      items: Array.from(unik.values())
+    const hasil = Array.from(unik.values())
         .filter((siswa) => {
           if (
             ["calon", "diterima"].includes(String(siswa.status)) && includeCalonLulus &&
@@ -247,8 +252,34 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
           });
         })
         .sort((a, b) => a.nama.localeCompare(b.nama, "id-ID"))
-        .slice(0, limit),
-    };
+        .slice(0, limit);
+
+    // Nama orang tua + HP hanya untuk hasil akhir (maksimal `limit` siswa) supaya
+    // kasir dapat membedakan siswa bernama sama. Kolom pribadi lain tidak diambil.
+    if (hasil.length > 0) {
+      type DetailRow = Record<string, string | null>;
+      const detailClient = admin as unknown as {
+        from(table: string): {
+          select(columns: string): {
+            in(column: string, values: string[]): PromiseLike<{ data: DetailRow[] | null; error: { message: string } | null }>;
+          };
+        };
+      };
+      const { data: detailRows, error: detailError } = await detailClient
+        .from("siswa_detail")
+        .select("siswa_id, nama_ayah, nama_ibu, telepon_ortu, telepon_ayah, telepon_ibu")
+        .in("siswa_id", hasil.map((siswa) => siswa.id));
+      if (detailError) throw new Error("Gagal memuat data orang tua: " + detailError.message);
+      const detailBySiswa = new Map<string, DetailRow>();
+      for (const row of detailRows ?? []) {
+        if (row.siswa_id && !detailBySiswa.has(row.siswa_id)) detailBySiswa.set(row.siswa_id, row);
+      }
+      for (const siswa of hasil) {
+        siswa.orang_tua = ringkasOrangTua(detailBySiswa.get(siswa.id), teleponSiswa.get(siswa.id));
+      }
+    }
+
+    return { items: hasil };
   });
 
 export interface RekapKasirSayaInput {

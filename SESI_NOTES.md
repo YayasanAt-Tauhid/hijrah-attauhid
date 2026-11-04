@@ -726,6 +726,13 @@ Pada rencana siswa baru, SPP awal sudah tersedia di RPC, tetapi aksesnya tersemb
 - Status: SELESAI dan live. Migration diterapkan ke V5 atas persetujuan pengguna (ledger `20261029111618 log_akrual_harian`); perintah job `akrual-jatuh-tempo-harian` kini `select public.jalankan_akrual_harian_berlog();` (jadwal tetap `5 0 * * *`, aktif; 4 job cron utuh). UI di-push ke `main` (commit `c0a43ad`) dan deploy sukses. Branch `feat/log-akrual-harian-20261029`.
 - Belum terverifikasi: fungsi berlog terhadap fungsi akrual SUNGGUHAN di produksi. Bukti baru ada setelah cron 07:05 WIB berikutnya (30 Okt 2026): baca `akrual_harian_log`; baris pertama akan memuat pesan galat asli 33 SPP Okt 2026. Bila baris tidak muncul, kembalikan perintah job (lihat `docs/log-akrual-harian.md`).
 
+### Ganti metode pembayaran SPMB (4 November 2026)
+
+- Pemicu: orang tua yang salah memilih metode (VA/QRIS) tidak punya jalan keluar selain menunggu sesi 24 jam; token Snap terikat pada metode terpilih.
+- Keputusan: ganti metode = tutup sesi lama di Midtrans lalu buat order baru (`pmbChangePaymentMethod`, `src/server/pmbChangeMethod.ts`). Urutan wajib: cek lunas/gateway paid → tutup sesi lama → buat order baru; bila penutupan gagal tidak ada order baru (cegah bayar ganda). Maksimal 3 kali per pendaftaran, dihitung dari `metadata.session_closure.reason = 'pmb_ganti_metode'` (tanpa migrasi). Sesi kedaluwarsa tidak memakai jatah.
+- Teks halaman `/spmb` saat kembali dari Midtrans berstatus pending kini "Menunggu Pembayaran" (sebelumnya "Sedang dikonfirmasi" yang menyesatkan).
+- Belum terverifikasi: perilaku pembatalan Midtrans untuk VA/QRIS pending di lingkungan nyata; uji sandbox/produksi setelah deploy. Bila order baru gagal dibuat setelah sesi lama tertutup, jatah tetap terpakai (orang tua cukup menekan Bayar lagi).
+
 ## Hak akses per peran + peran bendahara (4 November 2026)
 
 - Tujuan: admin mengatur dari UI (`/pengaturan/hak-akses`) fitur Keuangan apa yang boleh dipakai keuangan, kasir, bendahara, dan sekretaris (`sekretaris_yayasan`, label "Sekretaris"). Ini PR 2 dari 3; PR 3 = pengajuan & persetujuan pembatalan pembayaran (belum dikerjakan).
@@ -734,4 +741,4 @@ Pada rencana siswa baru, SPP awal sudah tersedia di RPC, tetapi aksesnya tersemb
 - Keputusan penting: `has_role(uid,'keuangan')` di-override agar bendahara/sekretaris aktif yang punya `keuangan.akses_data` lolos ~40 kebijakan RLS yang menyebut `keuangan` (35 tabel), tanpa menulis ulang semuanya. `akses_data` diisi otomatis oleh server (`normalizePermissions`) selama peran punya izin lain; tidak tampil di matriks.
 - Batas yang harus diketahui: pembatasan per fitur berlaku di UI (menu, rute, halaman) dan server function; RLS hanya mengenal `akses_data` (semua-atau-tidak). Perubahan izin berlaku saat pengguna memuat ulang/login ulang. Alur persetujuan diskon tetap berbasis peran (bendahara hanya ditambah sebagai pengaju/pelihat).
 - `batalkanPembayaran` sengaja masih `requireRole(["admin","keuangan"])` sampai PR 3 mengganti dengan model ajukan/setujui.
-- Status migrasi `supabase/migrations/20261104130000_role_permissions.sql` (sha256 3e26df08e7d0ed17ad416bafa5ac89e475020cfa2f215d02e6322ec8abc2a019): dry-run BEGIN…ROLLBACK lulus dua kali di produksi; BELUM diterapkan (menunggu konfirmasi eksplisit pengguna). Rollback ada di header berkas. Jangan merge-lalu-deploy UI sebelum migrasi diterapkan: UI fail-closed (peran non-admin tanpa tabel izin kehilangan akses menu Keuangan).
+- Status migrasi `supabase/migrations/20261104130000_role_permissions.sql` (sha256 3e26df08e7d0ed17ad416bafa5ac89e475020cfa2f215d02e6322ec8abc2a019): dry-run BEGIN…ROLLBACK lulus dua kali di Postgres Rustbase produksi (bukan Supabase); BELUM diterapkan (menunggu konfirmasi eksplisit pengguna). Rollback ada di header berkas. Jangan merge-lalu-deploy UI sebelum migrasi diterapkan: UI fail-closed (peran non-admin tanpa tabel izin kehilangan akses menu Keuangan).

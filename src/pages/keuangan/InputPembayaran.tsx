@@ -32,6 +32,7 @@ import { useTarifSiswa } from "@/hooks/useTarifTagihan";
 import { useTagihanBySiswa } from "@/hooks/useTagihan";
 import { logAuditKeuangan } from "@/hooks/useJurnal";
 import { useAuth } from "@/contexts/AuthContext";
+import { formatOrangTua } from "@/lib/orangTuaSiswa";
 import Unauthorized from "@/pages/Unauthorized";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -1540,6 +1541,7 @@ function InputPembayaranContent() {
                     <p className="text-xs text-muted-foreground">
                       NIS: {siswa.nis ?? "-"} · {getKelasAktif(siswa)?.kelas?.nama ?? "-"}
                     </p>
+                    <p className="truncate text-xs text-muted-foreground">{formatOrangTua(siswa.orang_tua)}</p>
                   </div>
                 </button>
               ))}
@@ -1624,6 +1626,9 @@ function InputPembayaranContent() {
                 <p className="text-xs text-muted-foreground">
                   NIS: {selectedSiswa.nis ?? "-"} · Kelas {kelasNama} · {lembagaNama}
                 </p>
+                {selectedSiswa.orang_tua && (
+                  <p className="text-xs text-muted-foreground">{formatOrangTua(selectedSiswa.orang_tua)}</p>
+                )}
               </div>
               <Button
                 variant="ghost"
