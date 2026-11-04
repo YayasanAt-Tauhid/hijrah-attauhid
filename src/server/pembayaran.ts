@@ -21,7 +21,7 @@ import {
 import { evaluateMonthlyGate } from "@/lib/monthlyPrerequisiteGate";
 import { evaluateOneTimeGate } from "@/lib/oneTimePrerequisiteGate";
 import { formatSequenceOverrideNote } from "@/lib/sequenceOverride";
-import { authMiddleware, requireContext, requireRole } from "./auth";
+import { authMiddleware, requireContext, requirePermission, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
 import { closeOnlineSessionsForBills } from "./midtransSessions";
 
@@ -124,7 +124,7 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ items: SiswaPembayaranRingkas[] }> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ["admin", "keuangan", "kasir"]);
+    await requirePermission(admin, userId, "keuangan.pembayaran");
 
     const search = String(data?.search ?? "").trim().replace(/\s+/g, " ");
     if (search.length < 2) return { items: [] };
@@ -326,7 +326,7 @@ export const getRekapKasirSaya = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<RekapKasirSayaResult> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ["admin", "keuangan", "kasir"]);
+    await requirePermission(admin, userId, "keuangan.pembayaran");
 
     const tanggal = String(data?.tanggal ?? "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) {
@@ -410,7 +410,7 @@ export const getLegacyOutstandingBreakdown = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<LegacyOutstandingBreakdownRow[]> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ["admin", "keuangan", "kasir"]);
+    await requirePermission(admin, userId, "keuangan.pembayaran");
 
     if (!data.siswa_id) return [];
 
@@ -438,11 +438,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<ProsesPembayaranResult> => {
     const admin = createAdminClient();
     const { userId, userEmail } = requireContext(context);
-    const role = await requireRole(admin, userId, [
-      "admin",
-      "keuangan",
-      "kasir",
-    ]);
+    const role = await requirePermission(admin, userId, "keuangan.pembayaran");
 
     const {
       siswa_id,
@@ -1160,7 +1156,7 @@ export const getPaymentReceiptGroups = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<Record<string, PaymentReceiptHistoryGroup>> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ["admin", "keuangan", "kasir"]);
+    await requirePermission(admin, userId, "keuangan.pembayaran");
 
     const paymentIds = [...new Set((data.payment_ids || []).filter(Boolean))].slice(0, 100);
     if (paymentIds.length === 0) return {};

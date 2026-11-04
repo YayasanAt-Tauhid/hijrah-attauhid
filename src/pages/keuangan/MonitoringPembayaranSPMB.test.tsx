@@ -6,7 +6,7 @@ import type { PaymentMonitorRow } from "@/server/spmbPaymentMonitor";
 const mocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn(), navigate: vi.fn(), role: "admin", isLoading: false, params: new URLSearchParams() }));
 vi.mock("@/server/spmbPaymentMonitor", () => ({ getSpmbPaymentMonitor: mocks.load, saveSpmbMonitorEvent: mocks.save }));
 vi.mock("@/lib/router-compat", () => ({ useNavigate: () => mocks.navigate, useSearchParams: () => [mocks.params] }));
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ role: mocks.role, isLoading: mocks.isLoading, user: { id: "test-user" } }) }));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ role: mocks.role, isLoading: mocks.isLoading, user: { id: "test-user" }, permissionsLoading: false, can: () => ["admin", "keuangan", "kasir"].includes(mocks.role) }) }));
 vi.mock("@/hooks/useKeuangan", () => ({ formatRupiah: (n: number) => `Rp ${n.toLocaleString("id-ID")}` }));
 import MonitoringPembayaranSPMB, { PaymentMonitorContent } from "./MonitoringPembayaranSPMB";
 function row(id: string, total: number, paid: number, billIds = ["bill"], needsVerification = false): PaymentMonitorRow {

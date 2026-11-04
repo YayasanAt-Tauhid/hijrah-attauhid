@@ -13,6 +13,7 @@ const ALLOWED_ROLES = [
   "guru",
   "keuangan",
   "sekretaris_yayasan",
+  "bendahara",
   "kasir",
   "pustakawan",
   "siswa",

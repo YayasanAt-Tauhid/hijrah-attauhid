@@ -13,7 +13,7 @@ vi.mock("@tanstack/react-start", () => ({
 vi.mock("./supabase", () => ({ createAdminClient: () => db }));
 vi.mock("./auth", () => ({
   authMiddleware: {}, requireContext: () => ({ userId: "staff" }),
-  requireRole: async () => {}, ForbiddenError: class extends Error {},
+  requirePermission: async () => "keuangan", checkPermission: async () => ({ role: "keuangan", allowed: true }), ForbiddenError: class extends Error {},
 }));
 
 import { rekapTunggakanBatch } from "./tunggakan";

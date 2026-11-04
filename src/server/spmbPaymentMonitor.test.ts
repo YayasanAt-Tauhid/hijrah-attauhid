@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { defaultAllows } from "@/test/defaultPermissions";
 const { db } = vi.hoisted(() => ({ db: { from: vi.fn(), rpc: vi.fn() } }));
 vi.mock("./supabase", () => ({ createAdminClient: () => db }));
 vi.mock("./auth", () => ({
@@ -7,6 +8,15 @@ vi.mock("./auth", () => ({
     if (!context?.userId) throw new Error("Unauthorized"); return context;
   },
   ForbiddenError: class extends Error { constructor() { super("Forbidden"); } },
+  // Meniru requirePermission dengan isian awal izin (tanpa membuka tabel izin).
+  requirePermission: async (
+    admin: { from: (table: string) => { select: (c: string) => { eq: (c: string, v: string) => { single: () => Promise<{ data: { role: string; aktif?: boolean } | null }> } } } },
+    userId: string, key: string | string[], options: { extraRoles?: string[] } = {},
+  ) => {
+    const { data } = await admin.from("users_profile").select("role,aktif").eq("id", userId).single();
+    if (!data || data.aktif === false || !defaultAllows(data.role, key as never, options.extraRoles)) throw new Error("Forbidden");
+    return data.role;
+  },
 }));
 vi.mock("@tanstack/react-start", () => ({
   createServerFn: () => {

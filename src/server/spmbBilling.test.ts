@@ -17,7 +17,7 @@ vi.mock("@tanstack/react-start",()=>({
  createServerFn:()=>{const q={middleware:()=>q,inputValidator:()=>q,handler:(fn:any)=>(args:any)=>fn(args)};return q;}
 }));
 vi.mock("./supabase",()=>({createAdminClient:()=>db}));
-vi.mock("./auth",()=>({authMiddleware:{},requireContext:()=>({userId:"test"}),requireRole:async()=>{}}));
+vi.mock("./auth",()=>({authMiddleware:{},requireContext:()=>({userId:"test"}),requirePermission:async()=>"keuangan"}));
 import {getSpmbBillingCandidates} from "./spmbBilling";
 const classRow=(dept=targetDept,year=academicYear,klass=classId,aktif=true)=>({
  siswa_id:id,kelas_id:klass,tahun_ajaran_id:year,

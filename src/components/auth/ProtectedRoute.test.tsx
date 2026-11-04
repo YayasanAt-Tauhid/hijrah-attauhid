@@ -119,4 +119,55 @@ describe("ProtectedRoute", () => {
     expect(screen.getByTestId("outlet")).toBeInTheDocument();
     expect(screen.queryByTestId("navigate")).not.toBeInTheDocument();
   });
+
+  describe("berbasis izin", () => {
+    const can = (granted: string[]) => (key: string) => granted.includes(key);
+    const ok = (extra: Record<string, unknown>) => ({ user: { id: "1" }, isLoading: false, authError: null, permissionsLoading: false, ...extra });
+
+    it("meloloskan peran yang punya izin untuk alamat tersebut", () => {
+      mockPathname = "/keuangan/laporan-siswa";
+      mockUseAuth.mockReturnValue(ok({ role: "bendahara", can: can(["keuangan.laporan"]) }));
+      render(<ProtectedRoute resolvePermission={(p) => (p === "/keuangan/laporan-siswa" ? "keuangan.laporan" : null)} />);
+      expect(screen.getByTestId("outlet")).toBeInTheDocument();
+    });
+
+    it("mengalihkan peran tanpa izin ke /unauthorized", () => {
+      mockPathname = "/keuangan/jurnal";
+      mockUseAuth.mockReturnValue(ok({ role: "kasir", can: can(["keuangan.pembayaran"]) }));
+      render(<ProtectedRoute resolvePermission={() => "keuangan.akuntansi"} />);
+      expect(screen.getByTestId("navigate")).toHaveTextContent("/unauthorized");
+      expect(screen.queryByTestId("outlet")).not.toBeInTheDocument();
+    });
+
+    it("alamat tak dikenal hanya untuk admin (gagal tertutup)", () => {
+      mockPathname = "/keuangan/baru";
+      mockUseAuth.mockReturnValue(ok({ role: "bendahara", can: can(["keuangan.laporan"]) }));
+      const { unmount } = render(<ProtectedRoute resolvePermission={() => null} />);
+      expect(screen.getByTestId("navigate")).toHaveTextContent("/unauthorized");
+      unmount();
+      mockUseAuth.mockReturnValue(ok({ role: "admin", can: () => true }));
+      render(<ProtectedRoute resolvePermission={() => null} />);
+      expect(screen.getByTestId("outlet")).toBeInTheDocument();
+    });
+
+    it("menunggu izin selesai dimuat sebelum memutuskan", () => {
+      mockPathname = "/keuangan/laporan";
+      mockUseAuth.mockReturnValue(ok({ role: "kasir", can: () => false, permissionsLoading: true }));
+      render(<ProtectedRoute permission="keuangan.laporan" />);
+      expect(screen.getByText("Memuat...")).toBeInTheDocument();
+      expect(screen.queryByTestId("navigate")).not.toBeInTheDocument();
+    });
+
+    it("daftar izin: cukup salah satu; allowedRoles tetap meloloskan peran di luar sistem izin", () => {
+      mockPathname = "/keuangan";
+      mockUseAuth.mockReturnValue(ok({ role: "kasir", can: can(["keuangan.rekap_kasir"]) }));
+      const first = render(<ProtectedRoute permission={["keuangan.laporan", "keuangan.rekap_kasir"]} />);
+      expect(screen.getByTestId("outlet")).toBeInTheDocument();
+      first.unmount();
+      mockUseAuth.mockReturnValue(ok({ role: "admin_tu", can: () => false }));
+      render(<ProtectedRoute allowedRoles={["admin_tu"]} resolvePermission={() => "keuangan.pembayaran"} />);
+      expect(screen.getByTestId("outlet")).toBeInTheDocument();
+    });
+  });
 });
+

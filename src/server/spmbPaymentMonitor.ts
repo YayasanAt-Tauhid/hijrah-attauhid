@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { authMiddleware, requireContext, ForbiddenError } from "./auth";
+import { authMiddleware, requireContext, requirePermission, ForbiddenError } from "./auth";
 import { createAdminClient } from "./supabase";
 import {
   calculatePaymentProgress, jakartaDate, matchesRegistration, selectRegistrationBills,
@@ -30,7 +30,8 @@ export interface PaymentMonitorRow extends Record<string, unknown> {
   nama_ayah: string | null; nama_ibu: string | null; kelas_tujuan: string | null; kelas_asal: string | null;
 }
 const DETAIL_SELECT = "id,siswa_id,tahun_ajaran_id,spmb_departemen_tujuan_id,spmb_gelombang_id,spmb_registered_at,spmb_tanggal_lulus,spmb_status_kelulusan,status_asrama,spmb_siswa_internal,nama_ayah,nama_ibu,spmb_kelas_tujuan_id";
-const ROLES = ["admin", "keuangan", "kasir", "admin_tu"];
+/** Di luar sistem izin: Admin TU membaca monitoring sesuai lembaga tujuannya. */
+const EXTRA_ROLES = ["admin_tu"];
 const uuid = z.string().uuid();
 export const monitorEventSchema = z.object({
   detail_id: uuid, tahun_ajaran_id: uuid, departemen_id: uuid, gelombang_id: uuid,
@@ -53,9 +54,11 @@ export const monitorEventSchema = z.object({
 });
 export type SaveMonitorEventInput = z.input<typeof monitorEventSchema>;
 async function authorize(admin: SupabaseClient, userId: string): Promise<string> {
-  const { data, error } = await admin.from("users_profile").select("role,aktif").eq("id", userId).single();
-  if (error || !data || data.aktif === false || !ROLES.includes(data.role)) throw new ForbiddenError();
-  return data.role;
+  try {
+    return await requirePermission(admin as never, userId, "keuangan.pembayaran", { extraRoles: EXTRA_ROLES });
+  } catch {
+    throw new ForbiddenError();
+  }
 }
 async function pages<T>(query: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string; code?: string } | null }>): Promise<T[]> {
   const result: T[] = [];

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({ from: vi.fn(), placements: [] as ReturnType<typeof placement>[], paid: 0, legacy: false, future: false }));
 vi.mock("./supabase", () => ({ createAdminClient: () => db }));
-vi.mock("./auth", () => ({ authMiddleware: {}, requireContext: () => ({ userId: "finance" }), requireRole: async () => {} }));
+vi.mock("./auth", () => ({ authMiddleware: {}, requireContext: () => ({ userId: "finance" }), requirePermission: async () => "keuangan", checkPermission: async () => ({ role: "keuangan", allowed: true }) }));
 vi.mock("@tanstack/react-start", () => ({ createServerFn: () => {
   const q = { middleware: () => q, inputValidator: () => q, handler: (fn: (args: unknown) => unknown) => (args: unknown) => fn(args) };
   return q;

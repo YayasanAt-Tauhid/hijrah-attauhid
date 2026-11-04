@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { defaultAllows } from "@/test/defaultPermissions";
 import { generatePaymentLinkToken, hashPaymentLinkToken } from "@/lib/paymentLink";
 
 type Call = { table: string; op: string; filters: Array<[string, string, unknown]>; payload?: any };
@@ -18,8 +19,8 @@ vi.mock("@tanstack/react-start", () => ({
 vi.mock("./auth", () => ({
   authMiddleware: {},
   requireContext: (c: any) => c,
-  requireRole: async (_a: unknown, _u: string, roles: string[]) => {
-    if (!roles.includes(h.role)) throw new Error("Forbidden: akses ditolak");
+  requirePermission: async (_a: unknown, _u: string, key: string | string[]) => {
+    if (!defaultAllows(h.role, key as never)) throw new Error("Forbidden: akses ditolak");
     return h.role;
   },
 }));

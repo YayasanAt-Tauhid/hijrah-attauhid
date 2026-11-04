@@ -11,6 +11,7 @@ import { NavLink } from "@/components/NavLink";
 import { cn } from "@/lib/utils";
 import { useLocation } from "@/lib/router-compat";
 import { useAuth, UserRole } from "@/contexts/AuthContext";
+import { isConfigurableRole, permissionForPath } from "@/lib/permissions";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem,
@@ -45,7 +46,7 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   {
     title: "Dashboard", url: "/", icon: LayoutDashboard,
-    roles: ["admin", "kepala_sekolah", "guru", "keuangan", "siswa", "pustakawan", "kasir"],
+    roles: ["admin", "kepala_sekolah", "guru", "keuangan", "siswa", "pustakawan", "kasir", "bendahara", "sekretaris_yayasan"],
   },
   {
     title: "Akademik", url: "/akademik", icon: GraduationCap,
@@ -96,7 +97,7 @@ const menuItems: MenuItem[] = [
   },
   {
     title: "Keuangan", url: "/keuangan", icon: Wallet,
-    roles: ["admin", "keuangan", "kasir", "sekretaris_yayasan", "admin_tu"],
+    roles: ["admin", "keuangan", "kasir", "sekretaris_yayasan", "bendahara", "admin_tu"],
     subGroups: [
       {
         // Sekretaris yayasan hanya punya akses ke sub-grup ini (untuk
@@ -233,6 +234,7 @@ const menuItems: MenuItem[] = [
         icon: ShieldCheck,
         items: [
           { title: "Manajemen Pengguna", url: "/pengaturan/pengguna" },
+          { title: "Hak Akses Peran", url: "/pengaturan/hak-akses" },
           { title: "Admin TU Akademik", url: "/pengaturan/admin-tu" },
           { title: "Manajemen Ortu", url: "/pengaturan/ortu" },
         ],
@@ -316,7 +318,21 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
-  const { role } = useAuth();
+  const { role, can } = useAuth();
+
+  // Peran yang bisa diatur admin (keuangan, kasir, bendahara, sekretaris) melihat
+  // menu Keuangan menurut izinnya per alamat; peran lain memakai daftar peran lama.
+  const permissionDriven = isConfigurableRole(role);
+  const keuanganItemAllowed = (url: string) => {
+    const permission = permissionForPath(url);
+    return permission ? can(permission) : false;
+  };
+  const itemAllowed = (menuUrl: string, sub: SubMenuItem) =>
+    permissionDriven && menuUrl === "/keuangan"
+      ? keuanganItemAllowed(sub.url)
+      : !sub.roles || !role || sub.roles.includes(role);
+  const groupAllowed = (menuUrl: string, group: SubGroup) =>
+    (permissionDriven && menuUrl === "/keuangan") || !group.roles || !role || group.roles.includes(role);
 
   const visibleItems = menuItems.filter(
     (item) => !role || item.roles.includes(role)
@@ -368,11 +384,9 @@ export function AppSidebar() {
                         <CollapsibleContent>
                           <SidebarMenuSub>
                             {item.subGroups
-                              .filter((sg) => !sg.roles || !role || sg.roles.includes(role))
+                              .filter((sg) => groupAllowed(item.url, sg))
                               .map((sg) => {
-                                const filteredItems = sg.items.filter(
-                                  (s) => !s.roles || !role || s.roles.includes(role)
-                                );
+                                const filteredItems = sg.items.filter((s) => itemAllowed(item.url, s));
                                 if (filteredItems.length === 0) return null;
 
                                 const sgActive = filteredItems.some(

@@ -16,11 +16,12 @@ import { authMiddleware, requireContext, requireRole } from "./auth";
 import { createAdminClient } from "./supabase";
 import { fetchAllFamilySuggestions } from "@/lib/familySuggestions";
 
-const ROLE_PENGAJU = ["admin", "keuangan"];
+const ROLE_PENGAJU = ["admin", "keuangan", "bendahara"];
 const ROLE_PENYETUJU = ["admin", "sekretaris_yayasan"];
 const ROLE_LIHAT_KERINGANAN = [
   "admin",
   "keuangan",
+  "bendahara",
   "sekretaris_yayasan",
 ];
 
