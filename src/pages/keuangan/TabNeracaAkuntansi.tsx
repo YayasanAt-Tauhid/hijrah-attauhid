@@ -15,53 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatRupiah } from "@/hooks/useKeuangan";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
-
-// Sesuai ISAK 35: gunakan pos_isak35 untuk pengelompokan neraca
-const POS_ASET = ["aset_lancar", "aset_tidak_lancar"];
-const POS_KEWAJIBAN = ["kewajiban_jangka_pendek", "kewajiban_jangka_panjang"];
-const POS_ASET_NETO = [
-  "aset_neto_tidak_terikat",
-  "aset_neto_terikat_temporer",
-  "aset_neto_terikat_permanen",
-];
-const POS_PENDAPATAN = [
-  "pendapatan_tidak_terikat",
-  "pendapatan_terikat_temporer",
-  "pendapatan_terikat_permanen",
-  "pendapatan",
-  "pendapatan_terbatas",
-];
-const POS_BEBAN = ["beban_program", "beban_penunjang", "beban", "beban_terbatas"];
-
-// Fallback: jika pos_isak35 tidak diisi, gunakan kolom jenis (ISAK 35)
-function resolveKelompok(akun: any): "aset" | "kewajiban" | "aset_neto" | "pendapatan" | "beban" | null {
-  const pos = akun.pos_isak35 as string | null;
-  if (pos) {
-    if (POS_ASET.includes(pos)) return "aset";
-    if (POS_KEWAJIBAN.includes(pos)) return "kewajiban";
-    if (POS_ASET_NETO.includes(pos)) return "aset_neto";
-    if (POS_PENDAPATAN.includes(pos)) return "pendapatan";
-    if (POS_BEBAN.includes(pos)) return "beban";
-  }
-  // Fallback ke kolom jenis (sudah pakai terminologi ISAK 35)
-  const j = akun.jenis as string | null;
-  if (j === "aset") return "aset";
-  if (j === "kewajiban") return "kewajiban";
-  if (j === "aset_neto") return "aset_neto";
-  if (j === "pendapatan") return "pendapatan";
-  if (j === "beban") return "beban";
-  // Alias lama yang mungkin masih ada di data
-  if (j === "liabilitas") return "kewajiban";
-  if (j === "ekuitas") return "aset_neto";
-  return null;
-}
-
-interface AkunNeraca {
-  kode: string;
-  nama: string;
-  kelompok: "aset" | "kewajiban" | "aset_neto";
-  saldo: number;
-}
+import { susunNeracaAkuntansi, type AkunNeraca } from "@/lib/neracaAkuntansi";
 
 export default function TabNeracaAkuntansi({ departemenId }: { departemenId?: string }) {
   const [tanggal, setTanggal] = useState<Date>(new Date());
@@ -115,35 +69,7 @@ export default function TabNeracaAkuntansi({ departemenId }: { departemenId?: st
         m.kredit += Number(row.kredit || 0);
       });
 
-      const neracaItems: AkunNeraca[] = [];
-      let surplusDefisit = 0; // pendapatan - beban (sesuai ISAK 35)
-
-      akunList?.forEach((akun) => {
-        const mutasi = mutasiMap.get(akun.id) || { debit: 0, kredit: 0 };
-        // saldo_normal ISAK 35: "D" = debit, "K" = kredit (atau "debit"/"kredit")
-        const isDebit =
-          akun.saldo_normal === "D" || akun.saldo_normal === "debit";
-        let saldo = Number(akun.saldo_awal || 0);
-        if (isDebit) {
-          saldo += mutasi.debit - mutasi.kredit;
-        } else {
-          saldo += mutasi.kredit - mutasi.debit;
-        }
-
-        const kelompok = resolveKelompok(akun);
-        if (kelompok === "aset" || kelompok === "kewajiban" || kelompok === "aset_neto") {
-          neracaItems.push({ kode: akun.kode, nama: akun.nama, kelompok, saldo });
-        } else if (kelompok === "pendapatan") {
-          surplusDefisit += saldo;
-        } else if (kelompok === "beban") {
-          surplusDefisit -= saldo;
-        }
-      });
-
-      return {
-        items: neracaItems.sort((a, b) => a.kode.localeCompare(b.kode)),
-        surplusDefisit,
-      };
+      return susunNeracaAkuntansi(akunList ?? [], mutasiMap);
     },
   });
 
