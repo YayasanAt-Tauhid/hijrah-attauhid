@@ -1,0 +1,53 @@
+name: Security scanning (non-deploying)
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: security-scan-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  trivy:
+    name: Trivy filesystem (dependencies, secrets, misconfig)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Scan repository
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          format: table
+          exit-code: '0'
+          severity: CRITICAL,HIGH,MEDIUM
+          skip-dirs: node_modules,.output,.tanstack,.wrangler
+  semgrep:
+    name: Semgrep static application analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: semgrep/semgrep:1.139.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Scan first-party code
+        run: semgrep scan --config p/owasp-top-ten --error --severity ERROR --exclude node_modules --exclude .output --exclude .tanstack --exclude .wrangler .
+  gitleaks:
+    name: Gitleaks secret patterns
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Scan Git history for secrets
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" -w /repo ghcr.io/gitleaks/gitleaks:v8.28.0 git /repo --redact --exit-code 1
