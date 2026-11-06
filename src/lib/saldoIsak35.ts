@@ -36,11 +36,26 @@ export interface InputSaldoPos {
   kredit: number;
 }
 
+export interface InputSaldoSisi {
+  /** Sisi alami kelompok tempat akun dijumlahkan (mis. 'K' untuk pendapatan). */
+  sisi: Sisi;
+  saldoNormal: string | null | undefined;
+  saldoAwal: number;
+  debit: number;
+  kredit: number;
+}
+
+/** Saldo akhir menurut sisi alami KELOMPOK: negatif berarti akun kontra bagi kelompoknya. */
+export function hitungSaldoMenurutSisi({ sisi, saldoNormal, saldoAwal, debit, kredit }: InputSaldoSisi): number {
+  const awalDebit = sisiAkun(saldoNormal) === "D" ? saldoAwal : -saldoAwal;
+  const bersihDebit = awalDebit + debit - kredit;
+  return sisi === "D" ? bersihDebit : -bersihDebit;
+}
+
 /** Saldo akhir menurut sisi alami pos: negatif berarti akun kontra bagi posnya. */
 export function hitungSaldoMenurutPos({ pos, saldoNormal, saldoAwal, debit, kredit }: InputSaldoPos): number {
-  const sisiAk = sisiAkun(saldoNormal);
-  const awalDebit = sisiAk === "D" ? saldoAwal : -saldoAwal;
-  const bersihDebit = awalDebit + debit - kredit;
-  const sisiPos = sisiAlamiPos(pos) ?? sisiAk;
-  return sisiPos === "D" ? bersihDebit : -bersihDebit;
+  return hitungSaldoMenurutSisi({
+    sisi: sisiAlamiPos(pos) ?? sisiAkun(saldoNormal),
+    saldoNormal, saldoAwal, debit, kredit,
+  });
 }
