@@ -18,7 +18,7 @@ function monthLabel(value: string) {
 }
 
 export default function SppCategoryPeriod({ departemenId }: { departemenId?: string }) {
-  const { role } = useAuth();
+  const { can } = useAuth();
   const qc = useQueryClient();
   const minMonth = nextJakartaMonth();
   const [search, setSearch] = useState("");
@@ -32,7 +32,7 @@ export default function SppCategoryPeriod({ departemenId }: { departemenId?: str
   const [alasan, setAlasan] = useState("");
   const [preview, setPreview] = useState<SppPeriodPreview | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const allowed = role === "admin" || role === "keuangan";
+  const allowed = can("keuangan.akuntansi");
 
   useEffect(() => { const timer = setTimeout(() => setSearchQuery(search), 350); return () => clearTimeout(timer); }, [search]);
   useEffect(() => { setSiswaId(""); setJenisId(""); setSearch(""); setSearchQuery(""); }, [departemenId]);

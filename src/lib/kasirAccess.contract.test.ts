@@ -29,14 +29,14 @@ describe("Kasir payment access contract", () => {
   });
 
   it("fails closed for shared finance pages while allowing admin, finance and cashier", () => {
-    expect(pembayaranPage).toContain('!["admin", "keuangan", "kasir"].includes(role)');
-    expect(spmbPage).toContain('!["admin", "keuangan", "kasir"].includes(role)');
-    expect(rekapKasirPage).toContain('!["admin", "keuangan", "kasir"].includes(role)');
+    expect(pembayaranPage).toContain('!role || !can("keuangan.pembayaran")');
+    expect(spmbPage).toContain('!role || !can("keuangan.pembayaran")');
+    expect(rekapKasirPage).toContain('!role || !can("keuangan.rekap_kasir")');
   });
 
   it("searches students through a role-checked server function instead of granting cashier full student-table access", () => {
     expect(pembayaranServer).toContain('export const cariSiswaPembayaran');
-    expect(pembayaranServer).toContain('await requireRole(admin, userId, ["admin", "keuangan", "kasir"])');
+    expect(pembayaranServer).toContain('await requirePermission(admin, userId, "keuangan.pembayaran")');
     expect(pembayaranPage).toContain("cariSiswaPembayaran");
     expect(pembayaranPage).toContain("include_nonaktif_with_open_bills: true");
     expect(pembayaranServer).toContain('.in("status", includeCalonLulus');
@@ -56,11 +56,13 @@ describe("Kasir payment access contract", () => {
     expect(pembayaranServer).toContain("Siswa berstatus keluar/alumni tidak dapat membayar tagihan baru atau yang belum jatuh tempo.");
   });
 
-  it("limits cashier recap to the logged-in employee and preserves cancellation separation", () => {
+  it("limits cashier recap to the logged-in employee and keeps direct cancellation behind its own permission", () => {
     expect(pembayaranServer).toContain('export const getRekapKasirSaya');
     expect(pembayaranServer).toContain('.in("petugas_id", [userId, profile.pegawai_id])');
-    expect(pembayaranServer).toContain('// BUKAN kasir — hanya admin/keuangan');
-    expect(pembayaranServer).toContain('await requireRole(admin, userId, [\n        "admin",\n        "keuangan",\n      ])');
+    // Pembatalan langsung bukan untuk kasir/keuangan: mereka mengajukan lewat pembatalanPembayaran.ts.
+    const direct = pembayaranServer.slice(pembayaranServer.indexOf("export const batalkanPembayaran"));
+    expect(direct).toContain('await requirePermission(admin, userId, "keuangan.pembatalan.langsung")');
+    expect(direct).not.toContain('requireRole(admin, userId, ["admin", "keuangan"');
   });
 
   it("never prints NIK and uses NIS/NISN as the cashier receipt identity", () => {
@@ -70,7 +72,7 @@ describe("Kasir payment access contract", () => {
   });
 
   it("shows a cashier-only finance landing and printable SPMB receipt", () => {
-    expect(keuanganPage).toContain('if (role === "kasir") return <KasirKeuanganLanding />');
+    expect(keuanganPage).toContain('if (role === "kasir" || (!hasReports && can("keuangan.pembayaran"))) return <KasirKeuanganLanding />');
     expect(keuanganPage).toContain("Laporan yayasan dan menu akuntansi tidak ditampilkan untuk kasir.");
     expect(spmbPage).toContain("<DialogTitle>Kuitansi Pembayaran SPMB</DialogTitle>");
     expect(spmbPage).toContain("Cetak Kuitansi");

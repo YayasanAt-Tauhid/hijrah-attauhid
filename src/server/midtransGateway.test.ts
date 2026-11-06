@@ -173,3 +173,47 @@ describe("expired uncharged Snap sessions", () => {
     ]),vi.fn())).rejects.toThrow("ditahan");
   });
 });
+
+describe("Core order already terminal with a dead Snap token", () => {
+  // Regression: an order that Midtrans Core already reports as expired/canceled
+  // can no longer be paid, but its Snap token is dead too, so cancellation is
+  // rejected. Recovery would be refused (Core holds the order), which blocked
+  // cashier payments for the bill forever.
+  it.each(["expire", "cancel", "deny", "failure"])("treats Core status %s as closed when the token can no longer be cancelled", async (status) => {
+    const persist = vi.fn();
+    const fetcher = mockGateway([
+      [200,{transaction_status:status}],[400,expiredCancel],[200,{transaction_status:status}],
+    ]);
+    await closeGatewaySession(expiredSession,"key",vi.fn(),fetcher,persist);
+    expect(persist).not.toHaveBeenCalled();
+    // status read, one cancel attempt, final status confirmation: no replacement token request
+    expect(vi.mocked(fetcher)).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(fetcher).mock.calls.map(c => String(c[0])).some(u => u.endsWith("/snap/v1/transactions"))).toBe(false);
+  });
+  it("accepts a terminal Core order whose token is already gone", async () => {
+    const persist = vi.fn();
+    await closeGatewaySession(expiredSession,"key",vi.fn(),mockGateway([
+      [200,{transaction_status:"expire"}],[404,{error_messages:["token not found"]}],[200,{transaction_status:"expire"}],
+    ]),persist);
+    expect(persist).not.toHaveBeenCalled();
+  });
+  it("still holds when cancellation fails for another reason, even if Core says expire", async () => {
+    await expect(closeGatewaySession(expiredSession,"key",vi.fn(),mockGateway([
+      [200,{transaction_status:"expire"}],[500,{error_messages:["unavailable"]}],
+    ]),vi.fn())).rejects.toThrow("ditahan");
+  });
+  it("still records a payment that settles before the final confirmation", async () => {
+    const process = vi.fn();
+    await expect(closeGatewaySession(expiredSession,"key",process,mockGateway([
+      [200,{transaction_status:"expire"}],[400,expiredCancel],[200,{transaction_status:"settlement"}],
+    ]),vi.fn())).rejects.toThrow("sudah berhasil");
+    expect(process).toHaveBeenCalledOnce();
+  });
+  it("still holds a pending Core order whose token can no longer be cancelled", async () => {
+    const persist = vi.fn();
+    await expect(closeGatewaySession(expiredSession,"key",vi.fn(),mockGateway([
+      [200,{transaction_status:"pending"}],[400,expiredCancel],[200,{transaction_status:"pending"}],
+    ]),persist)).rejects.toThrow("ditahan");
+    expect(persist).not.toHaveBeenCalled();
+  });
+});

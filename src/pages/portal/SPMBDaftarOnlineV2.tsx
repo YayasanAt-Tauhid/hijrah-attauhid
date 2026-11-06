@@ -9,6 +9,7 @@ import {
 } from "@/server/pmbPayment";
 import { spmbGetPolicyStatus, spmbGetPublicWave, type SpmbPolicyStatusResult, type SpmbPublicWaveResult, type SpmbWaveSummary } from "@/server/spmbPolicy";
 import {
+  requiresTransferDocuments,
   SPMB_CATEGORY_LABEL,
   SPMB_CATEGORY_VALUE,
   SPMB_TRANSFER_CATEGORY_LABEL,
@@ -22,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { SpmbChangeMethodButton } from "@/components/portal/SpmbChangeMethodButton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormSection } from "@/components/shared/FormSection";
 import { BrandLogo } from "@/components/shared/BrandLogo";
@@ -501,6 +503,7 @@ export default function SPMBDaftarOnlineV2() {
   );
   const wajibNisn = useMemo(() => perluNisn(selectedDept), [selectedDept]);
   const siswaPindahan = form.kategori === SPMB_TRANSFER_CATEGORY_VALUE;
+  const perluDokumenPindahan = requiresTransferDocuments(form.kategori, deptCode);
   const registrationOpen = publicWave?.registration_open === true;
   const currentWave = publicWave?.current_wave || null;
   const nextWave = publicWave?.next_wave || null;
@@ -684,7 +687,7 @@ export default function SPMBDaftarOnlineV2() {
       toast.error(message);
       return;
     }
-    if (siswaPindahan && (!documents.rapor || !documents.ijazah)) {
+    if (perluDokumenPindahan && (!documents.rapor || !documents.ijazah)) {
       const message = "Rapor dan Ijazah / SKHUN wajib diunggah untuk Siswa Pindahan.";
       setSubmitError(message);
       toast.error(message);
@@ -695,8 +698,8 @@ export default function SPMBDaftarOnlineV2() {
     try {
       const dokumenKk = await uploadDocument("kk", documents.kk);
       const dokumenAkta = await uploadDocument("akta", documents.akta);
-      const dokumenRapor = siswaPindahan ? await uploadDocument("rapor", documents.rapor) : undefined;
-      const dokumenIjazah = siswaPindahan ? await uploadDocument("ijazah", documents.ijazah) : undefined;
+      const dokumenRapor = perluDokumenPindahan ? await uploadDocument("rapor", documents.rapor) : undefined;
+      const dokumenIjazah = perluDokumenPindahan ? await uploadDocument("ijazah", documents.ijazah) : undefined;
       const result = await pmbDaftar({ data: {
         ...form,
         pendaftar_nama: form.pendaftar_nama.trim(),
@@ -800,8 +803,11 @@ export default function SPMBDaftarOnlineV2() {
     const status = registrationStatus?.payment_status || "unpaid";
     const isPaid = status === "paid";
     const returnedFinishPending = paymentReturn === "finish" && status === "pending";
-    const isProcessing = status === "processing" || returnedFinishPending;
-    const isPending = status === "pending" && !returnedFinishPending;
+    // Kembali dari Midtrans dengan status pending (VA/QR sudah terbit, uang belum
+    // masuk) adalah "menunggu pembayaran", bukan "sedang dikonfirmasi".
+    const isProcessing = status === "processing";
+    const isPending = status === "pending";
+    const gatewayToken = registration?.payment_token || statusToken;
     const isFailed = status === "failed" || status === "expired";
     const canPay = paymentVisible && !promoFree && (registrationStatus ? registrationStatus.can_pay : true);
     const totalAmount = registrationStatus?.total_amount || payment?.total_amount || null;
@@ -865,11 +871,15 @@ export default function SPMBDaftarOnlineV2() {
               </div>
             )}
 
+            {returnedFinishPending && (
+              <p className="text-sm text-muted-foreground">Selesaikan pembayaran sesuai nomor Virtual Account atau kode yang diberikan. Status akan berubah otomatis setelah pembayaran diterima.</p>
+            )}
             {canPay && !isPaid && !isProcessing && (
               <Button onClick={mulaiBayar} disabled={checkoutLoading} className="min-h-11 w-full bg-emerald-600 hover:bg-emerald-700">
                 <CreditCard className="mr-2 h-4 w-4" />{checkoutLoading ? "Menyiapkan pembayaran..." : isPending ? "Lanjutkan Pembayaran" : isFailed ? "Coba Bayar Lagi" : "Bayar Biaya Pendaftaran"}
               </Button>
             )}
+            {canPay && isPending && gatewayToken && <SpmbChangeMethodButton paymentToken={gatewayToken} />}
             {paymentVisible && !promoFree && (registrationStatus || statusToken) && <Button variant="outline" className="min-h-11 w-full" onClick={() => refreshStatus()} disabled={statusLoading}><RefreshCw className={`mr-2 h-4 w-4 ${statusLoading ? "animate-spin" : ""}`} />Perbarui Status</Button>}
             {policyStatus?.group_calon_siswa_url && (
               <Button asChild className="min-h-11 w-full bg-emerald-700 hover:bg-emerald-800">
@@ -1081,10 +1091,10 @@ export default function SPMBDaftarOnlineV2() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <DocumentPicker label="Kartu Keluarga" required value={documents.kk} upload={documentUploads.kk} disabled={loading} onChange={(file) => selectDocument("kk", file)} />
                     <DocumentPicker label="Akta Kelahiran" required value={documents.akta} upload={documentUploads.akta} disabled={loading} onChange={(file) => selectDocument("akta", file)} />
-                    {siswaPindahan && <DocumentPicker label="Rapor Siswa Pindahan" required value={documents.rapor} upload={documentUploads.rapor} disabled={loading} onChange={(file) => selectDocument("rapor", file)} />}
-                    {siswaPindahan && <DocumentPicker label="Ijazah / SKHUN Siswa Pindahan" required value={documents.ijazah} upload={documentUploads.ijazah} disabled={loading} onChange={(file) => selectDocument("ijazah", file)} />}
+                    {perluDokumenPindahan && <DocumentPicker label="Rapor Siswa Pindahan" required value={documents.rapor} upload={documentUploads.rapor} disabled={loading} onChange={(file) => selectDocument("rapor", file)} />}
+                    {perluDokumenPindahan && <DocumentPicker label="Ijazah / SKHUN Siswa Pindahan" required value={documents.ijazah} upload={documentUploads.ijazah} disabled={loading} onChange={(file) => selectDocument("ijazah", file)} />}
                   </div>
-                  <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900"><Upload className="mt-0.5 h-4 w-4 shrink-0" />Kartu Keluarga dan Akta Kelahiran wajib untuk semua pendaftar. Rapor dan Ijazah/SKHUN hanya ditampilkan dan wajib untuk kategori Siswa Pindahan.</div>
+                  <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900"><Upload className="mt-0.5 h-4 w-4 shrink-0" />Kartu Keluarga dan Akta Kelahiran wajib untuk semua pendaftar. Rapor dan Ijazah/SKHUN hanya ditampilkan dan wajib untuk Siswa Pindahan jenjang SMP, SMA, dan MTA.</div>
                 </FormSection>
               </fieldset>
 

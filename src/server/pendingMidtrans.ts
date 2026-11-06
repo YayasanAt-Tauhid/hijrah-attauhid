@@ -16,12 +16,30 @@ export interface ExistingMidtransPayment {
 
 const ORDER_PATTERN = /^HAT-[A-Z0-9-]+$/;
 
-export async function resumeOwnedMidtransPayment(userId: string, orderId: string): Promise<ExistingMidtransPayment> {
+/**
+ * Pemilik sesi checkout: akun portal orang tua (string user_id), atau link
+ * pembayaran yang dibuat kasir/admin untuk orang tua tanpa akun portal.
+ * Sesi tanpa pemilik (PMB publik) tidak pernah dianggap milik siapa pun.
+ */
+export type MidtransOwner = string | { paymentLinkId: string };
+
+function ownerFilter(owner: MidtransOwner): ["user_id" | "payment_link_id", string] {
+  if (typeof owner === "string") return ["user_id", owner];
+  return ["payment_link_id", owner.paymentLinkId];
+}
+
+function ownsTransaction(owner: MidtransOwner, tx: { user_id?: string | null; payment_link_id?: string | null }): boolean {
+  const [column, value] = ownerFilter(owner);
+  return !!value && tx[column] === value;
+}
+
+export async function resumeOwnedMidtransPayment(owner: MidtransOwner, orderId: string): Promise<ExistingMidtransPayment> {
   if (!ORDER_PATTERN.test(orderId)) throw new Error("Order ID tidak valid");
   const admin = createAdminClient() as any;
+  const [ownerColumn, ownerValue] = ownerFilter(owner);
   const { data: tx, error } = await admin.from("transaksi_midtrans")
     .select("id, order_id, user_id, status, snap_token, gateway_closed_at, expired_at, created_at, total_amount, metadata, transaksi_midtrans_item(tagihan_id, jumlah)")
-    .eq("order_id", orderId).eq("user_id", userId).maybeSingle();
+    .eq("order_id", orderId).eq(ownerColumn, ownerValue).maybeSingle();
   if (error) throw error;
   if (!tx) throw new Error("Transaksi tidak ditemukan untuk akun Anda");
   if (!canResumeMidtransSession(tx)) {
@@ -71,7 +89,7 @@ export async function resumeOwnedMidtransPayment(userId: string, orderId: string
   // changed the row while the official gateway status was being verified.
   const { data: fresh, error: freshError } = await admin.from("transaksi_midtrans")
     .select("status, snap_token, expired_at, gateway_closed_at")
-    .eq("id", tx.id).eq("user_id", userId).single();
+    .eq("id", tx.id).eq(ownerColumn, ownerValue).single();
   if (freshError) throw freshError;
   if (!canResumeMidtransSession(fresh) || fresh.snap_token !== tx.snap_token) {
     throw new Error("Status sesi pembayaran berubah. Muat ulang halaman.");
@@ -84,12 +102,12 @@ export async function resumeOwnedMidtransPayment(userId: string, orderId: string
   };
 }
 
-export async function findReusablePaymentForBills(userId: string, items: PaymentItemShape[]) {
+export async function findReusablePaymentForBills(owner: MidtransOwner, items: PaymentItemShape[]) {
   const admin = createAdminClient() as any;
   const billIds = items.map(item => item.tagihan_id).filter(Boolean);
   if (!billIds.length) return null;
   const { data: rows, error } = await admin.from("transaksi_midtrans_item")
-    .select("transaksi_id, tagihan_id, jumlah, pembayaran_id, transaksi:transaksi_id(id,order_id,user_id,status,snap_token,gateway_closed_at,expired_at,created_at,metadata)")
+    .select("transaksi_id, tagihan_id, jumlah, pembayaran_id, transaksi:transaksi_id(id,order_id,user_id,payment_link_id,status,snap_token,gateway_closed_at,expired_at,created_at,metadata)")
     .in("tagihan_id", [...new Set(billIds)]);
   if (error) throw error;
   const blockers = new Map<string, any>();
@@ -114,7 +132,7 @@ export async function findReusablePaymentForBills(userId: string, items: Payment
   }
 
   const tx = Array.from(blockers.values())[0];
-  if (tx.user_id !== userId) {
+  if (!ownsTransaction(owner, tx)) {
     throw new Error("Ada pembayaran online lain yang masih diproses pada tagihan ini. Hubungi admin sekolah.");
   }
   if (tx.status === "paid") {
@@ -127,14 +145,15 @@ export async function findReusablePaymentForBills(userId: string, items: Payment
     throw new Error("Masih ada sesi pembayaran untuk sebagian tagihan yang dipilih. Batalkan dari Riwayat sebelum membuat pembayaran baru.");
   }
   // Expired/failed sessions cannot be reused and must first be closed via Midtrans.
-  return resumeOwnedMidtransPayment(userId, tx.order_id);
+  return resumeOwnedMidtransPayment(owner, tx.order_id);
 }
 
-export async function cancelOwnedMidtransPayment(userId: string, orderId: string) {
+export async function cancelOwnedMidtransPayment(owner: MidtransOwner, orderId: string) {
   if (!ORDER_PATTERN.test(orderId)) throw new Error("Order ID tidak valid");
   const admin = createAdminClient() as any;
+  const [ownerColumn, ownerValue] = ownerFilter(owner);
   const { data: tx, error } = await admin.from("transaksi_midtrans")
-    .select("*").eq("order_id", orderId).eq("user_id", userId).maybeSingle();
+    .select("*").eq("order_id", orderId).eq(ownerColumn, ownerValue).maybeSingle();
   if (error) throw error;
   if (!tx) throw new Error("Transaksi tidak ditemukan untuk akun Anda");
   if (tx.status === "paid" || tx.paid_at) {

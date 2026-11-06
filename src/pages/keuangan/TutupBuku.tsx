@@ -11,6 +11,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTahunBuku, formatRupiah } from "@/hooks/useKeuangan";
 import { useRekonRekeningAntar, type PeriodeFilter } from "@/hooks/useISAK35";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAkrualLog } from "@/hooks/useAkrualLog";
+import { akrualChecklistStatus } from "@/lib/akrualLog";
+import { ringkasLabaRugi, susunJurnalPenutup } from "@/lib/jurnalPenutup";
 import { toast } from "sonner";
 import { Lock, AlertTriangle, TrendingUp, TrendingDown, DollarSign, History, GraduationCap, Briefcase, ClipboardCheck, CheckCircle2 } from "lucide-react";
 import { StatsCard } from "@/components/shared/StatsCard";
@@ -36,14 +39,15 @@ type UnitKey = keyof typeof UNIT_CONFIG;
 
 // ============================================================
 // Checklist Pra-Tutup-Buku — reminder (bukan blocker) yang menampilkan
-// 3 pengecekan sebelum tombol tutup buku ditekan:
+// 4 pengecekan sebelum tombol tutup buku ditekan:
 //  1. Tagihan/piutang yang masih belum lunas di tahun ini
 //  2. Kelengkapan mapping akun ke pos ISAK 35
 //  3. Saldo rekening antar unit (1900/1901/1902) yang belum nol
+//  4. Eksekusi akrual harian otomatis (pg_cron) tanpa galat dan masih berjalan
 // Tidak memblokir proses tutup buku — murni informasi supaya hal-hal
 // yang biasa terlewat (seperti kasus tahun 2025->2026) bisa dicek dulu.
 // ============================================================
-function ChecklistPraTutupBuku({ tahunId, tahun }: { tahunId: string; tahun: { nama: string; tanggal_selesai: string } }) {
+export function ChecklistPraTutupBuku({ tahunId, tahun }: { tahunId: string; tahun: { nama: string; tanggal_selesai: string } }) {
   const { data: piutang, isLoading: loadingPiutang } = useQuery({
     queryKey: ["checklist_piutang_belum_lunas", tahunId],
     enabled: !!tahunId,
@@ -77,6 +81,10 @@ function ChecklistPraTutupBuku({ tahunId, tahun }: { tahunId: string; tahun: { n
     [tahun.tanggal_selesai]
   );
   const { data: rekonAntar, isLoading: loadingRekon } = useRekonRekeningAntar(periodeFilter);
+  const { data: akrualLog, isLoading: loadingAkrual, error: akrualError } = useAkrualLog(14);
+  const akrualStatus = akrualError
+    ? { ok: false, detail: "Riwayat akrual harian belum dapat dimuat; periksa manual di Pengakuan Pendapatan." }
+    : akrualChecklistStatus(akrualLog ?? []);
 
   const items = [
     {
@@ -102,6 +110,12 @@ function ChecklistPraTutupBuku({ tahunId, tahun }: { tahunId: string; tahun: { n
       detail: rekonAntar && rekonAntar.rows.length > 0
         ? `${rekonAntar.rows.length} baris belum nol (selisih total ${formatRupiah(rekonAntar.total)}) — kemungkinan ada transfer antar unit yang baru dicatat sebelah pihak. Cek di Laporan ISAK 35 → Rekonsiliasi sebelum tutup buku.`
         : "Semua rekening antar unit sudah seimbang (nol).",
+    },
+    {
+      label: "Akrual harian otomatis tanpa galat",
+      loading: loadingAkrual,
+      ok: akrualStatus.ok,
+      detail: akrualStatus.detail,
     },
   ];
 
@@ -240,9 +254,8 @@ function TutupBukuPanel({ unitKey, tahunId }: { unitKey: UnitKey; tahunId: strin
     },
   });
 
-  const totalPendapatan = saldoAkun?.filter(a => a.jenis?.toLowerCase() === "pendapatan").reduce((s, a) => s + a.saldoAkhir, 0) || 0;
-  const totalBeban = saldoAkun?.filter(a => a.jenis?.toLowerCase() === "beban").reduce((s, a) => s + Math.abs(a.saldoAkhir), 0) || 0;
-  const labaRugi = totalPendapatan - totalBeban;
+  // Saldo menurut sisi alami jenis: akun kontra-pendapatan (potongan 4600-4602) mengurangi pendapatan.
+  const { totalPendapatan, totalBeban, labaRugi } = ringkasLabaRugi(saldoAkun ?? []);
   const hasAkunEkuitas = !!akunAsetNeto?.akun_id;
   // Unit Usaha & Dana bersifat opsional — bisa tutup buku kapan saja
   // meskipun tahun ajaran sudah dikunci oleh proses tutup buku Unit Pendidikan.
@@ -258,14 +271,12 @@ function TutupBukuPanel({ unitKey, tahunId }: { unitKey: UnitKey; tahunId: strin
       const prefix = `TB-${unitKey === "unit_pendidikan" ? "PEND" : "USDA"}`;
       const { data: nomorJurnal } = await supabase.rpc("generate_nomor_jurnal", { p_prefix: prefix, p_tahun: tahun });
 
-      const pendapatan = saldoAkun.filter(a => a.jenis?.toLowerCase() === "pendapatan" && a.saldoAkhir !== 0);
-      const beban = saldoAkun.filter(a => a.jenis?.toLowerCase() === "beban" && a.saldoAkhir !== 0);
+      const penutup = susunJurnalPenutup(saldoAkun, {
+        akunEkuitasId, label: cfg.label, namaTahun: selectedTA.nama,
+      });
       let jurnalId: string | null = null;
 
-      if (pendapatan.length > 0 || beban.length > 0 || labaRugi !== 0) {
-        const totalDebitJurnal = pendapatan.reduce((s, a) => s + a.saldoAkhir, 0) + (labaRugi < 0 ? Math.abs(labaRugi) : 0);
-        const totalKreditJurnal = beban.reduce((s, a) => s + a.saldoAkhir, 0) + (labaRugi > 0 ? labaRugi : 0);
-
+      if (penutup.baris.length > 0) {
         const { data: jurnal, error: jErr } = await supabase
           .from("jurnal")
           .insert({
@@ -276,28 +287,16 @@ function TutupBukuPanel({ unitKey, tahunId }: { unitKey: UnitKey; tahunId: strin
             // Jurnal penutup dikecualikan dari laporan ISAK 35 (hitung_mutasi_akun)
             // agar laporan komprehensif tahun yang ditutup tetap utuh.
             tipe: "penutup",
-            total_debit: totalDebitJurnal,
-            total_kredit: totalKreditJurnal,
+            total_debit: penutup.totalDebit,
+            total_kredit: penutup.totalKredit,
           })
           .select()
           .single();
 
         if (!jErr && jurnal) {
           jurnalId = (jurnal as any).id;
-          const detailRows: any[] = [];
-          let urutan = 1;
-          for (const a of pendapatan) {
-            detailRows.push({ jurnal_id: jurnalId, akun_id: a.id, keterangan: `Penutup ${a.nama}`, debit: a.saldoAkhir, kredit: 0, urutan: urutan++ });
-          }
-          for (const a of beban) {
-            detailRows.push({ jurnal_id: jurnalId, akun_id: a.id, keterangan: `Penutup ${a.nama}`, debit: 0, kredit: a.saldoAkhir, urutan: urutan++ });
-          }
-          if (labaRugi > 0) {
-            detailRows.push({ jurnal_id: jurnalId, akun_id: akunEkuitasId, keterangan: `Surplus ${cfg.label} — ${selectedTA.nama}`, debit: 0, kredit: labaRugi, urutan: urutan++ });
-          } else if (labaRugi < 0) {
-            detailRows.push({ jurnal_id: jurnalId, akun_id: akunEkuitasId, keterangan: `Defisit ${cfg.label} — ${selectedTA.nama}`, debit: Math.abs(labaRugi), kredit: 0, urutan: urutan++ });
-          }
-          if (detailRows.length > 0) await supabase.from("jurnal_detail").insert(detailRows);
+          const detailRows = penutup.baris.map((b, i) => ({ jurnal_id: jurnalId, ...b, urutan: i + 1 }));
+          await supabase.from("jurnal_detail").insert(detailRows);
         }
       }
 

@@ -21,8 +21,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import Unauthorized from "@/pages/Unauthorized";
 
 export default function PembayaranPMB() {
-  const { role } = useAuth();
-  if (!role || !["admin", "keuangan", "kasir"].includes(role)) {
+  const { role, can, permissionsLoading } = useAuth();
+  if (permissionsLoading) return null;
+  if (!role || !can("keuangan.pembayaran")) {
     return <Unauthorized />;
   }
   return <PembayaranPMBContent />;

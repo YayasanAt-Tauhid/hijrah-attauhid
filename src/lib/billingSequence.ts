@@ -104,3 +104,58 @@ export function findBillingPrerequisite<T extends BillingSequenceBill>(
       .find((bill) => !selectedBillIds.has(bill.id)) ?? null
   );
 }
+
+function isOneTimeBill(bill: BillingSequenceBill): boolean {
+  return bill.bulan == null || Number(bill.bulan) <= 0;
+}
+
+/**
+ * Label periode untuk tagihan sekali bayar (tidak punya bulan): tahun ajaran.
+ */
+export function oneTimePeriodLabel(bill: BillingSequenceBill): string {
+  const name = bill.tahun_ajaran?.nama?.trim();
+  if (name) return `tahun ajaran ${name}`;
+
+  const year = academicStartDate(bill)?.slice(0, 4);
+  if (year && /^\d{4}$/.test(year)) return `tahun ajaran ${year}`;
+
+  return "tahun ajaran sebelumnya";
+}
+
+/**
+ * Prasyarat untuk tagihan sekali bayar (mis. Uang Pangkal): tagihan jenis yang
+ * sama milik siswa yang sama pada tahun ajaran sebelumnya harus lunas lebih
+ * dulu, atau ikut dibayar penuh pada transaksi yang sama (`selectedBillIds`).
+ *
+ * Mengembalikan tagihan terlama yang masih menghalangi, atau null bila tidak
+ * ada. Bila tahun ajaran target tidak diketahui, tidak ada yang diblokir agar
+ * data yang tidak lengkap tidak menghentikan kasir secara keliru.
+ */
+export function findOneTimePrerequisite<T extends BillingSequenceBill>(
+  target: T,
+  openBills: T[],
+  selectedBillIds: ReadonlySet<string> = new Set<string>(),
+): T | null {
+  if (!isOneTimeBill(target)) return null;
+
+  const targetStart = academicStartDate(target);
+  if (!targetStart) return null;
+
+  const earlier = openBills
+    .filter((bill) => {
+      if (bill.id === target.id) return false;
+      if (!isOneTimeBill(bill)) return false;
+      if (bill.jenis_id !== target.jenis_id) return false;
+      if (target.siswa_id != null && bill.siswa_id !== target.siswa_id) return false;
+      const start = academicStartDate(bill);
+      return !!start && start < targetStart;
+    })
+    .sort((a, b) => {
+      const byYear = (academicStartDate(a) as string).localeCompare(
+        academicStartDate(b) as string,
+      );
+      return byYear !== 0 ? byYear : a.id.localeCompare(b.id);
+    });
+
+  return earlier.find((bill) => !selectedBillIds.has(bill.id)) ?? null;
+}

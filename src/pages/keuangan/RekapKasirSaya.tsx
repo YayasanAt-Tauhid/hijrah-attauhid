@@ -20,8 +20,9 @@ import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/compon
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function RekapKasirSaya() {
-  const { role } = useAuth();
-  if (!role || !["admin", "keuangan", "kasir"].includes(role)) {
+  const { role, can, permissionsLoading } = useAuth();
+  if (permissionsLoading) return null;
+  if (!role || !can("keuangan.rekap_kasir")) {
     return <Unauthorized />;
   }
   return <RekapKasirSayaContent />;

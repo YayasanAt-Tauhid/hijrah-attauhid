@@ -14,11 +14,17 @@ import {
   type BillingSequenceBill,
 } from "@/lib/billingSequence";
 import { isUangPangkalPaymentName } from "@/lib/installment";
+import { evaluateSelfServiceOneTimeGate } from "@/lib/oneTimePrerequisiteGate";
 import { authMiddleware, requireContext } from "./auth";
 import { createAdminClient, readEnv } from "./supabase";
 import { paymentExpiry, readGatewayStatus } from "./midtransGateway";
 import { processGatewayPayment } from "./midtransSessions";
-import { findReusablePaymentForBills, resumeOwnedMidtransPayment, cancelOwnedMidtransPayment } from "./pendingMidtrans";
+import {
+  findReusablePaymentForBills,
+  resumeOwnedMidtransPayment,
+  cancelOwnedMidtransPayment,
+  type MidtransOwner,
+} from "./pendingMidtrans";
 
 interface TagihanItem {
   tagihan_id?: string;
@@ -105,30 +111,55 @@ export interface SnapCallbacks {
  * Validasi kepemilikan siswa, anti double-payment, dan re-fetch nominal dari DB
  * semuanya terjadi di sini sehingga kedua jalur setara keamanannya.
  */
+export interface PaymentLinkCheckoutScope {
+  /** ID baris payment_link yang sudah diverifikasi aktif oleh pemanggil. */
+  id: string;
+  siswaId: string;
+  /** Tagihan yang dipilih kasir/admin saat membuat link. */
+  tagihanIds: string[];
+}
+
 export async function buatTransaksiSnap(params: {
-  userId: string;
+  /** Akun portal orang tua (jalur portal web & app mobile). */
+  userId?: string;
+  /** Link pembayaran dari kasir/admin (jalur publik /bayar). */
+  paymentLink?: PaymentLinkCheckoutScope;
   input: CreatePaymentInput;
   /** Dipanggil dengan order_id yang baru dibuat agar callback bisa menyematkannya. */
   callbacks: (orderId: string) => SnapCallbacks;
 }): Promise<CreatePaymentResult> {
   const admin = createAdminClient();
-  const { userId, callbacks } = params;
+  const { userId, paymentLink, callbacks } = params;
+  if (!!userId === !!paymentLink) {
+    throw new Error("Pemilik checkout tidak valid");
+  }
+  const owner: MidtransOwner = paymentLink ? { paymentLinkId: paymentLink.id } : userId!;
 
   const { items, customer } = params.input;
   if (!items || items.length === 0) {
     throw new Error("Tidak ada tagihan yang dipilih");
   }
 
-  // Validasi: semua siswa_id memang anak dari user ini
-  const siswaIds = [...new Set(items.map((i) => i.siswa_id))];
-  const { data: ortuData, error: ortuError } = await admin
-    .from("ortu_siswa")
-    .select("siswa_id")
-    .eq("user_id", userId)
-    .in("siswa_id", siswaIds);
-  if (ortuError) throw ortuError;
-  if (!ortuData || ortuData.length !== siswaIds.length) {
-    throw new Error("Akses ditolak: beberapa siswa bukan anak Anda");
+  if (paymentLink) {
+    // Link hanya membuka tagihan exact yang dipilih kasir/admin untuk satu siswa.
+    const scope = new Set(paymentLink.tagihanIds);
+    for (const item of items) {
+      if (item.siswa_id !== paymentLink.siswaId || !item.tagihan_id || !scope.has(item.tagihan_id)) {
+        throw new Error("Ada tagihan yang tidak termasuk dalam link pembayaran ini");
+      }
+    }
+  } else {
+    // Validasi: semua siswa_id memang anak dari user ini
+    const siswaIds = [...new Set(items.map((i) => i.siswa_id))];
+    const { data: ortuData, error: ortuError } = await admin
+      .from("ortu_siswa")
+      .select("siswa_id")
+      .eq("user_id", userId!)
+      .in("siswa_id", siswaIds);
+    if (ortuError) throw ortuError;
+    if (!ortuData || ortuData.length !== siswaIds.length) {
+      throw new Error("Akses ditolak: beberapa siswa bukan anak Anda");
+    }
   }
 
   // Validasi pembayaran dilakukan terhadap tagihan exact di bawah. Untuk
@@ -137,6 +168,8 @@ export async function buatTransaksiSnap(params: {
   // tagihan sekali bayar yang sudah jatuh tempo, jumlah frontend adalah nominal
   // cicilan yang diminta; server tetap menghitung sisa dan membatasi nominalnya.
   const validatedItems: TagihanItem[] = [];
+  // Tagihan yang ikut dibayar penuh pada transaksi ini (dasar syarat urutan).
+  const fullyPaidBillIds = new Set<string>();
   for (const item of items) {
     let tagihanQuery = admin
       .from("tagihan")
@@ -206,6 +239,8 @@ export async function buatTransaksiSnap(params: {
         `Jumlah pembayaran ${item.jenis_nama} melebihi sisa tagihan`
       );
     }
+
+    if (requested === sisa) fullyPaidBillIds.add(tagihan.id);
 
     const cicilanDiizinkan =
       item.bulan === 0 &&
@@ -285,6 +320,55 @@ export async function buatTransaksiSnap(params: {
     }
   }
 
+  // Tagihan sekali bayar (mis. Uang Pangkal): tagihan jenis yang sama pada
+  // tahun ajaran sebelumnya harus lunas lebih dulu atau ikut dibayar penuh pada
+  // transaksi ini. Orang tua tidak punya jalur dispensasi; itu keputusan staf
+  // di Input Pembayaran.
+  const oneTimeGroups = new Map<string, TagihanItem[]>();
+  for (const item of validatedItems) {
+    if (item.bulan !== 0 || !item.tagihan_id) continue;
+    const key = `${item.siswa_id}:${item.jenis_id}`;
+    const group = oneTimeGroups.get(key) ?? [];
+    group.push(item);
+    oneTimeGroups.set(key, group);
+  }
+
+  for (const groupItems of oneTimeGroups.values()) {
+    const first = groupItems[0];
+    const { data: onceRows, error: onceError } = await admin
+      .from("tagihan")
+      .select(
+        "id, siswa_id, jenis_id, bulan, jatuh_tempo, tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai)"
+      )
+      .eq("siswa_id", first.siswa_id)
+      .eq("jenis_id", first.jenis_id)
+      .is("bulan", null)
+      .in("status", ["belum_bayar", "sebagian", "terjadwal"]);
+
+    if (onceError) {
+      throw new Error(
+        "Gagal memeriksa tagihan tahun ajaran sebelumnya: " + onceError.message
+      );
+    }
+
+    const onceBills = (onceRows ?? []) as unknown as BillingSequenceBill[];
+    for (const item of groupItems) {
+      const target = onceBills.find((bill) => bill.id === item.tagihan_id);
+      if (!target) {
+        throw new Error(
+          `Tagihan ${item.jenis_nama} untuk ${item.nama_siswa} sudah berubah. Silakan pilih ulang tagihan.`
+        );
+      }
+      const gate = evaluateSelfServiceOneTimeGate({
+        jenisNama: item.jenis_nama,
+        target,
+        openBills: onceBills,
+        fullyPaidBillIds,
+      });
+      if (gate.status === "blocked") throw new Error(gate.message);
+    }
+  }
+
   const totalAmount = validatedItems.reduce((sum, i) => sum + i.jumlah, 0);
   // Fee customer tidak lagi dihitung aplikasi. Midtrans yang menambahkan dan
   // menampilkan fee sesuai metode berdasarkan konfigurasi dashboard.
@@ -303,7 +387,7 @@ export async function buatTransaksiSnap(params: {
   if (new Set(billIds).size !== billIds.length) throw new Error("Tagihan yang sama tidak boleh dipilih dua kali");
   // Resume an identical active checkout instead of generating a second Midtrans order.
   // If another pending session overlaps, the parent must cancel it explicitly first.
-  const reusablePayment = await findReusablePaymentForBills(userId,
+  const reusablePayment = await findReusablePaymentForBills(owner,
     validatedItems.map(item => ({ tagihan_id: item.tagihan_id!, jumlah: item.jumlah })));
   if (reusablePayment) return reusablePayment;
   const itemsToInsert = validatedItems.map((item) => ({
@@ -316,10 +400,19 @@ export async function buatTransaksiSnap(params: {
     departemen_id: item.departemen_id || null,
     tahun_ajaran_id: item.tahun_ajaran_id || null,
   }));
-  const { data: transaksi, error: txError } = await (admin as any).rpc("create_midtrans_checkout_atomik", {
-    p_user_id: userId, p_order_id: orderId, p_items: itemsToInsert,
-    p_expired_at: new Date(now.getTime() + 24 * 3600 * 1000).toISOString(),
-  });
+  const sessionExpiredAt = new Date(now.getTime() + 24 * 3600 * 1000).toISOString();
+  // Kedua RPC memvalidasi ulang kepemilikan di database (ortu_siswa / payment_link
+  // aktif + cakupan tagihan) dan mengunci baris tagihan sebelum membuat sesi.
+  // RPC ini belum ada di tipe Supabase hasil generate (sama seperti RPC checkout lama).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rpc = (admin as any).rpc.bind(admin);
+  const { data: transaksi, error: txError } = paymentLink
+    ? await rpc("create_midtrans_link_checkout_atomik", {
+      p_link_id: paymentLink.id, p_order_id: orderId, p_items: itemsToInsert, p_expired_at: sessionExpiredAt,
+    })
+    : await rpc("create_midtrans_checkout_atomik", {
+      p_user_id: userId, p_order_id: orderId, p_items: itemsToInsert, p_expired_at: sessionExpiredAt,
+    });
   if (txError) throw new Error(txError.message);
 
   const itemDetails = validatedItems.map((item, idx) => ({
@@ -340,8 +433,8 @@ export async function buatTransaksiSnap(params: {
     },
     customer_details: {
       first_name: customer.nama,
-      email: customer.email,
-      phone: customer.telepon || "",
+      ...(customer.email ? { email: customer.email } : {}),
+      ...(customer.telepon ? { phone: customer.telepon } : {}),
     },
     item_details: itemDetails,
     callbacks: callbacks(orderId),

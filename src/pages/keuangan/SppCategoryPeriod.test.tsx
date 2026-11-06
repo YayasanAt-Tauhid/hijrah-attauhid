@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import SppCategoryPeriod from "./SppCategoryPeriod";
 const mocks = vi.hoisted(() => ({ role: "admin", options: vi.fn(), operation: vi.fn(), history: vi.fn() }));
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ role: mocks.role }) }));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ role: mocks.role, permissionsLoading: false, can: () => mocks.role === "admin" || mocks.role === "keuangan" }) }));
 vi.mock("@/server/sppPeriod", () => ({ getSppPeriodOptions: mocks.options, previewOrApplySppPeriod: mocks.operation, getSppPeriodHistory: mocks.history }));
 vi.mock("@/components/ui/select", () => ({
   Select: ({ children, value, onValueChange, disabled }: { children: ReactNode; value: string; onValueChange: (value: string) => void; disabled?: boolean }) => <select disabled={disabled} value={value} onChange={(e) => onValueChange(e.target.value)}>{children}</select>,

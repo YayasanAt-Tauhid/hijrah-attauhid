@@ -4,6 +4,11 @@ import { PrintKuitansi } from "@/components/shared/PrintKuitansi";
 import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan";
 import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/components/shared/ReceiptOrientationSelect";
 import { PrintTagihan, type PrintTagihanItem } from "@/components/shared/PrintTagihan";
+import { DialogLinkPembayaran, type LinkPembayaranBill } from "@/components/keuangan/DialogLinkPembayaran";
+import { DialogAjukanPembatalan, type PembatalanTarget } from "@/components/keuangan/DialogAjukanPembatalan";
+import { statusPengajuanPembayaran } from "@/server/pembatalanPembayaran";
+import { isLinkInstallmentAllowed } from "@/lib/paymentLink";
+import { describeCartFailures } from "@/lib/cartPaymentFailure";
 import { RupiahInput } from "@/components/shared/RupiahInput";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -29,20 +34,31 @@ import { useTarifSiswa } from "@/hooks/useTarifTagihan";
 import { useTagihanBySiswa } from "@/hooks/useTagihan";
 import { logAuditKeuangan } from "@/hooks/useJurnal";
 import { useAuth } from "@/contexts/AuthContext";
+import { formatOrangTua } from "@/lib/orangTuaSiswa";
 import Unauthorized from "@/pages/Unauthorized";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search, Printer, Plus, Check, X, ShoppingCart, Trash2, WalletCards, History, Info, Lock } from "lucide-react";
+import { Search, Printer, Plus, Check, X, ShoppingCart, Trash2, WalletCards, History, Info, Lock, Link2 } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { calculateRemainingBill, isSppPaymentName, isUangPangkalPaymentName } from "@/lib/installment";
+import { orderWithinSlots } from "@/lib/monthlyPrerequisiteGate";
+import { calculateRemainingBill, isInstallmentAllowed, isSppPaymentName } from "@/lib/installment";
 import {
   billingPeriodLabel,
+  billingSequenceKey,
   findBillingPrerequisite,
+  findOneTimePrerequisite,
+  oneTimePeriodLabel,
   sortBillingSequence,
   type BillingSequenceBill,
 } from "@/lib/billingSequence";
+import {
+  SEQUENCE_OVERRIDE_MAX_REASON,
+  SEQUENCE_OVERRIDE_MIN_REASON,
+  canGrantSequenceOverride,
+  resolveSequenceOverride,
+} from "@/lib/sequenceOverride";
 
 import type {
   SiswaWithKelas,
@@ -61,6 +77,7 @@ const FORM_DEFAULT: FormPembayaran = {
   jumlah: "",
   tanggalBayar: new Date().toISOString().split("T")[0],
   keterangan: "",
+  metodeBayar: "tunai",
 };
 
 type PembayaranRiwayat = PembayaranWithJenis & {
@@ -165,15 +182,16 @@ function useBatalkanPembayaran() {
 }
 
 export default function InputPembayaran() {
-  const { role } = useAuth();
-  if (!role || !["admin", "keuangan", "kasir"].includes(role)) {
+  const { role, can, permissionsLoading } = useAuth();
+  if (permissionsLoading) return null;
+  if (!role || !can("keuangan.pembayaran")) {
     return <Unauthorized />;
   }
   return <InputPembayaranContent />;
 }
 
 function InputPembayaranContent() {
-  const { role } = useAuth();
+  const { role, can } = useAuth();
   const isKasir = role === "kasir";
   const queryClient = useQueryClient();
   const [searchTerm,    setSearchTerm]    = useState("");
@@ -191,10 +209,12 @@ function InputPembayaranContent() {
   const [showTagihanPrint, setShowTagihanPrint] = useState(false);
   const [showTambahTagihan, setShowTambahTagihan] = useState(false);
   const [tagihanPrintItems, setTagihanPrintItems] = useState<PrintTagihanItem[]>([]);
+  const [linkPembayaranBills, setLinkPembayaranBills] = useState<LinkPembayaranBill[]>([]);
   const [riwayatPrintTarget, setRiwayatPrintTarget] = useState<PembayaranRiwayat | null>(null);
   const [riwayatSearch, setRiwayatSearch] = useState("");
   const [cartItems, setCartItems] = useState<PaymentCartItem[]>([]);
   const [isCartPaying, setIsCartPaying] = useState(false);
+  const [dispensasiAlasan, setDispensasiAlasan] = useState("");
   const [cartProgress, setCartProgress] = useState<{ done: number; total: number } | null>(null);
   const [showCartKuitansi, setShowCartKuitansi] = useState(false);
   const [lastCartPayment, setLastCartPayment] = useState<{
@@ -536,13 +556,13 @@ function InputPembayaranContent() {
     },
   });
 
-  // Untuk kasir, urutan pembayaran bulanan diperiksa lintas tahun ajaran.
-  // Jadi SPP lama tetap harus selesai walaupun layar sedang menampilkan tahun
-  // ajaran yang lebih baru. Admin/keuangan tidak dibatasi oleh UI ini karena
-  // mereka dapat membutuhkan koreksi historis.
+  // Urutan pembayaran bulanan diperiksa lintas tahun ajaran, jadi SPP lama
+  // tetap harus selesai walaupun layar sedang menampilkan tahun ajaran yang
+  // lebih baru. Kasir diblokir penuh; admin/keuangan boleh melewatinya hanya
+  // dengan alasan dispensasi (diperiksa ulang oleh server).
   const { data: sequenceOpenBills = [] } = useQuery<BillingSequenceBill[]>({
     queryKey: ["open_bills_sequence", selectedSiswa?.id, isSiswaNonaktif],
-    enabled: !!selectedSiswa && isKasir,
+    enabled: !!selectedSiswa,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tagihan")
@@ -678,16 +698,16 @@ function InputPembayaranContent() {
     ["belum_bayar", "sebagian", "terjadwal"].includes(String(existingTagihan.status));
   const tarifTidakAda  = !!(form.jenisId && selectedSiswa && !loadingTarif && tarifNominal == null && !adaTagihanDipilih);
   const isSpp = !isSekali && isSppPaymentName(selectedJenis?.nama);
-  const cicilanSekaliDiizinkan =
-    isSekali &&
+  const cicilanDiizinkan =
     !!existingTagihan &&
-    (existingTagihan.status !== "terjadwal" ||
-      isUangPangkalPaymentName(selectedJenis?.nama));
-  const cicilanSppDiizinkan =
-    isSpp && !!existingTagihan &&
-    (existingTagihan.status !== "terjadwal" ||
-      (!!existingTagihan.jatuh_tempo && existingTagihan.jatuh_tempo.slice(0, 7) + "-01" <= form.tanggalBayar));
-  const cicilanDiizinkan = cicilanSekaliDiizinkan || cicilanSppDiizinkan;
+    (isSekali || isSpp) &&
+    isInstallmentAllowed({
+      isSekali,
+      jenisNama: selectedJenis?.nama,
+      status: existingTagihan.status,
+    });
+  const cicilanSekaliDiizinkan = isSekali && cicilanDiizinkan;
+  const cicilanSppDiizinkan = isSpp && cicilanDiizinkan;
   const sisaTagihanDipilih =
     selectedOpenBill?.sisa ??
     (isSekali && ringkasanTagihanSekali
@@ -719,6 +739,66 @@ function InputPembayaranContent() {
     ? (existingTagihan?.id ?? [form.jenisId, isSekali ? "sekali" : String(form.bulan), effectiveTahunAjaranId].join(":"))
     : "";
   const currentAlreadyInCart = !!currentCartKey && cartItems.some(item => item.key === currentCartKey);
+  // Syarat tagihan sekali bayar (mis. Uang Pangkal): tagihan jenis yang sama
+  // pada tahun ajaran sebelumnya harus lunas dulu. Berlaku untuk semua peran
+  // dan lintas tahun ajaran, sehingga dibaca terpisah dari openBills yang hanya
+  // memuat satu tahun ajaran. Server memaksa aturan yang sama.
+  const { data: oneTimeSequenceBills = [] } = useQuery<BillingSequenceBill[]>({
+    queryKey: ["open_bills_sekali_sequence", selectedSiswa?.id, isSiswaNonaktif],
+    enabled: !!selectedSiswa,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tagihan")
+        .select("id, siswa_id, jenis_id, bulan, jatuh_tempo, tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai)")
+        .eq("siswa_id", selectedSiswa!.id)
+        .is("bulan", null)
+        .in("status", payableTagihanStatuses);
+      if (error) throw error;
+      return (data ?? []) as unknown as BillingSequenceBill[];
+    },
+  });
+
+  const fullySelectedOneTimeIds = useMemo(
+    () =>
+      new Set(
+        cartItems
+          .filter(
+            (item) =>
+              !!item.tagihanId &&
+              item.bulan === 0 &&
+              item.sisaTagihan > 0 &&
+              item.jumlah >= item.sisaTagihan,
+          )
+          .map((item) => item.tagihanId as string),
+      ),
+    [cartItems],
+  );
+
+  const getOneTimePrerequisite = useCallback(
+    (
+      billId: string | undefined,
+      selectedIds: ReadonlySet<string> = fullySelectedOneTimeIds,
+    ) => {
+      if (!billId) return null;
+      const target = oneTimeSequenceBills.find((bill) => bill.id === billId);
+      return target
+        ? findOneTimePrerequisite(target, oneTimeSequenceBills, selectedIds)
+        : null;
+    },
+    [oneTimeSequenceBills, fullySelectedOneTimeIds],
+  );
+
+  // Item keranjang sekali bayar yang masih terhalang tagihan tahun ajaran
+  // sebelumnya (belum lunas dan belum ikut dibayar penuh di keranjang ini).
+  const blockedOneTimeCartItems = useMemo(
+    () =>
+      cartItems.flatMap((item) => {
+        if (!item.tagihanId || item.bulan !== 0) return [];
+        const prerequisite = getOneTimePrerequisite(item.tagihanId);
+        return prerequisite ? [{ item, prerequisite }] : [];
+      }),
+    [cartItems, getOneTimePrerequisite],
+  );
   const billPeriodLabel = useCallback((bill: OpenBillRow) => {
     const year = bill.tahun_ajaran?.tanggal_mulai?.slice(0, 4) || bill.tahun_ajaran?.nama || "";
     return bill.bulan
@@ -755,6 +835,44 @@ function InputPembayaranContent() {
     },
     [isKasir, sequenceOpenBills, fullySelectedPeriodicIds],
   );
+
+  // Item bulanan di keranjang admin/keuangan yang melewati bulan sebelumnya
+  // (belum lunas dan belum ikut dibayar penuh di keranjang ini). Kasir tidak
+  // masuk di sini karena tidak bisa melewati urutan sama sekali.
+  const blockedMonthlyCartItems = useMemo(
+    () =>
+      isKasir
+        ? []
+        : cartItems.flatMap((item) => {
+            if (!item.tagihanId || item.bulan <= 0) return [];
+            const target = sequenceOpenBills.find((bill) => bill.id === item.tagihanId);
+            const prerequisite = target
+              ? findBillingPrerequisite(target, sequenceOpenBills, fullySelectedPeriodicIds)
+              : null;
+            return prerequisite ? [{ item, prerequisite }] : [];
+          }),
+    [isKasir, cartItems, sequenceOpenBills, fullySelectedPeriodicIds],
+  );
+  const blockedCartItems = useMemo(
+    () => [
+      ...blockedOneTimeCartItems.map((entry) => ({
+        ...entry,
+        prerequisiteLabel: oneTimePeriodLabel(entry.prerequisite),
+      })),
+      ...blockedMonthlyCartItems.map((entry) => ({
+        ...entry,
+        prerequisiteLabel: billingPeriodLabel(entry.prerequisite),
+      })),
+    ],
+    [blockedOneTimeCartItems, blockedMonthlyCartItems],
+  );
+  const canGrantDispensasi = canGrantSequenceOverride(role);
+  const dispensasiCheck =
+    blockedCartItems.length > 0
+      ? resolveSequenceOverride({ role, alasan: dispensasiAlasan })
+      : null;
+  const cartDispensasiTerkunci =
+    blockedCartItems.length > 0 && dispensasiCheck?.status !== "ok";
 
   const directPaymentPrerequisite = useMemo(() => {
     if (!isKasir || isSekali || !form.jenisId) return null;
@@ -815,12 +933,24 @@ function InputPembayaranContent() {
 
   const prosesMutation = useProsesPembayaran();
   const batalMutation  = useBatalkanPembayaran();
-  const canBatal = role === "admin" || role === "keuangan";
+  // Menambah tagihan tetap khusus admin/keuangan (tidak berubah). Pembatalan: admin langsung;
+  // kasir/keuangan mengajukan dan menunggu persetujuan (lihat pembatalanPembayaran.ts).
+  const canKelolaTagihan = role === "admin" || role === "keuangan";
+  const canBatalLangsung = can("keuangan.pembatalan.langsung");
+  const canAjukanBatal = !canBatalLangsung && can("keuangan.pembatalan.ajukan");
+  const [ajukanTarget, setAjukanTarget] = useState<PembatalanTarget | null>(null);
   const [batalTarget, setBatalTarget] = useState<PembayaranWithJenis | null>(null);
   const [batalAlasan, setBatalAlasan] = useState("");
+  const riwayatIds = (riwayat ?? []).map((row) => row.id);
+  const { data: pengajuanMenunggu } = useQuery({
+    queryKey: ["pengajuan_pembatalan", "status", riwayatIds],
+    enabled: canAjukanBatal && riwayatIds.length > 0,
+    queryFn: () => statusPengajuanPembayaran({ data: { pembayaran_ids: riwayatIds } }),
+  });
 
   const handleSelectSiswa = useCallback((s: SiswaWithKelas) => {
     setSelectedSiswa(s);
+    setLinkPembayaranBills([]);
     setShowTambahTagihan(false);
     setSearchTerm("");
     setCartItems([]);
@@ -861,14 +991,15 @@ function InputPembayaranContent() {
     };
   };
 
-  // SPP tetap dapat dicicil sejak jatuh tempo meski pengakuannya menunggu akhir bulan.
-  // Aturan yang sama dipaksa oleh server (prosesPembayaran), jadi ini hanya
-  // menentukan apakah kolom jumlah boleh diubah kasir.
+  // SPP dapat dicicil kapan saja, juga sebelum jatuh tempo (status terjadwal);
+  // pembayarannya masuk Pendapatan Diterima di Muka. Aturan yang sama dipaksa
+  // oleh server dan database, jadi ini hanya menentukan apakah kolom jumlah
+  // boleh diubah kasir.
   const canPartialBill = (bill: OpenBillRow) =>
     !!bill.jenis_pembayaran &&
-    (bill.status !== "terjadwal" ||
-      (isSppPaymentName(bill.jenis_pembayaran.nama) && !!bill.jatuh_tempo && bill.jatuh_tempo.slice(0, 7) + "-01" <= form.tanggalBayar)) &&
-    (bill.jenis_pembayaran.tipe === "sekali" || isSppPaymentName(bill.jenis_pembayaran.nama));
+    ((bill.status !== "terjadwal" &&
+      (bill.jenis_pembayaran.tipe === "sekali" || isSppPaymentName(bill.jenis_pembayaran.nama))) ||
+      isSppPaymentName(bill.jenis_pembayaran.nama));
 
   const handleToggleBillPay = (bill: OpenBillRow, checked: boolean) => {
     if (!selectedSiswa) return;
@@ -908,6 +1039,16 @@ function InputPembayaranContent() {
         `Selesaikan ${bill.jenis_pembayaran?.nama ?? "tagihan"} ${billingPeriodLabel(prerequisite)} terlebih dahulu`,
       );
       return;
+    }
+
+    if (!bill.bulan && isKasir) {
+      const oneTimePrerequisite = getOneTimePrerequisite(bill.id);
+      if (oneTimePrerequisite) {
+        toast.warning(
+          `Selesaikan ${bill.jenis_pembayaran?.nama ?? "tagihan"} ${oneTimePeriodLabel(oneTimePrerequisite)} terlebih dahulu, atau minta admin/keuangan memberi dispensasi`,
+        );
+        return;
+      }
     }
 
     const item = buildCartItemFromBill(bill);
@@ -1048,6 +1189,27 @@ function InputPembayaranContent() {
     setShowTagihanPrint(true);
   };
 
+  // Link Midtrans untuk orang tua tanpa aplikasi portal: tagihan yang dicentang,
+  // atau semua tagihan terbuka bila belum ada yang dicentang.
+  const handleOpenLinkPembayaran = () => {
+    const picked = openBills.filter(bill => cartItems.some(item => item.key === bill.id));
+    const source = picked.length > 0 ? picked : openBills;
+    const bills = source
+      .filter(bill => Number(bill.sisa) > 0)
+      .map(bill => ({
+        id: bill.id,
+        label: [bill.jenis_pembayaran?.nama ?? "Tagihan", billPeriodLabel(bill)].filter(Boolean).join(" · "),
+        sisa: Number(bill.sisa),
+        bolehCicil: isLinkInstallmentAllowed({
+          bulan: bill.bulan,
+          status: bill.status,
+          jenis_nama: bill.jenis_pembayaran?.nama ?? "",
+        }),
+      }));
+    if (bills.length === 0) return;
+    setLinkPembayaranBills(bills);
+  };
+
   const handleAddToCart = () => {
     if (!selectedSiswa || !form.jenisId || !form.jumlah || !selectedJenis || tarifTidakAda) return;
     if (!tahunAktif?.id) { toast.error("Tahun ajaran aktif belum dikonfigurasi"); return; }
@@ -1116,6 +1278,40 @@ function InputPembayaranContent() {
 
   const handlePayCart = async () => {
     if (!selectedSiswa || cartItems.length === 0 || isCartPaying) return;
+
+    // Server memeriksa ulang aturan ini; pengecekan di sini hanya memberi
+    // pesan lebih awal sebelum ada pembayaran yang diproses.
+    let alasanDispensasi: string | undefined;
+    if (blockedCartItems.length > 0) {
+      const check = resolveSequenceOverride({ role, alasan: dispensasiAlasan });
+      if (check.status === "error") {
+        toast.error(check.error);
+        return;
+      }
+      alasanDispensasi = check.alasan;
+    }
+    const dispensasiKeys = new Set(blockedCartItems.map(({ item }) => item.key));
+
+    // Tagihan tahun ajaran / bulan yang lebih lama diproses lebih dulu agar
+    // yang lebih baru lolos syarat urutan pada transaksi yang sama. Posisi
+    // item lain tidak berubah; hanya item sejenis yang saling ditukar di slot
+    // miliknya.
+    const startOf = (tahunAjaranId: string) =>
+      tahunAjaranList?.find((tahun) => tahun.id === tahunAjaranId)?.tanggal_mulai ?? "";
+    const periodKeyOf = (item: (typeof cartItems)[number]) => {
+      const bill = sequenceOpenBills.find((row) => row.id === item.tagihanId);
+      return bill ? billingSequenceKey(bill) : "9999";
+    };
+    const orderedCartItems = orderWithinSlots(
+      orderWithinSlots(
+        cartItems,
+        (item) => item.bulan === 0,
+        (a, b) => startOf(a.tahunAjaranId).localeCompare(startOf(b.tahunAjaranId)),
+      ),
+      (item) => item.bulan > 0,
+      (a, b) => periodKeyOf(a).localeCompare(periodKeyOf(b)),
+    );
+
     setIsCartPaying(true);
     setCartProgress({ done: 0, total: cartItems.length });
 
@@ -1126,8 +1322,8 @@ function InputPembayaranContent() {
     let receiptNumber: string | undefined;
     const gagal: string[] = [];
 
-    for (let i = 0; i < cartItems.length; i++) {
-      const item = cartItems[i];
+    for (let i = 0; i < orderedCartItems.length; i++) {
+      const item = orderedCartItems[i];
       try {
         const result = await prosesPembayaran({
           data: {
@@ -1142,6 +1338,8 @@ function InputPembayaranContent() {
             is_bayar_dimuka: item.isBayarDimuka,
             tagihan_id: item.tagihanId,
             receipt_id: receiptId,
+            dispensasi_urutan_alasan: dispensasiKeys.has(item.key) ? alasanDispensasi : undefined,
+            metode_bayar: form.metodeBayar,
           },
         });
         berhasilKeys.add(item.key);
@@ -1163,6 +1361,7 @@ function InputPembayaranContent() {
     }
 
     setCartItems(prev => prev.filter(item => !berhasilKeys.has(item.key)));
+    if (gagal.length === 0) setDispensasiAlasan("");
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["pembayaran"] }),
       queryClient.invalidateQueries({ queryKey: ["pembayaran_siswa"] }),
@@ -1175,6 +1374,7 @@ function InputPembayaranContent() {
       queryClient.invalidateQueries({ queryKey: ["open_tagihan_jenis"] }),
       queryClient.invalidateQueries({ queryKey: ["open_tagihan_jenis_extras"] }),
       queryClient.invalidateQueries({ queryKey: ["legacy_outstanding_breakdown"] }),
+      queryClient.invalidateQueries({ queryKey: ["open_bills_sekali_sequence"] }),
     ]);
 
     if (berhasilItems.length > 0) {
@@ -1196,7 +1396,8 @@ function InputPembayaranContent() {
       toast.success(berhasilKeys.size + " pembayaran berhasil");
       toast.error(gagal.length + " gagal: " + gagal.slice(0, 2).join(" | "));
     } else {
-      toast.error("Semua item keranjang gagal diproses");
+      const failure = describeCartFailures(gagal);
+      toast.error(failure.title, { description: failure.description, duration: failure.duration });
     }
 
     setCartProgress(null);
@@ -1207,11 +1408,27 @@ function InputPembayaranContent() {
     if (!selectedSiswa || !form.jenisId || !form.jumlah || tarifTidakAda) return;
     if (!tahunAktif?.id) { toast.error("Tahun ajaran aktif belum dikonfigurasi"); return; }
     if (isSekali && pembayaranSekali?.lunas) { toast.error("Pembayaran ini sudah lunas"); return; }
+    if (isSekali && existingTagihan?.id && getOneTimePrerequisite(existingTagihan.id)) {
+      toast.error(
+        "Tagihan tahun ajaran sebelumnya belum lunas. Tambahkan ke keranjang untuk melunasinya bersama atau memberi dispensasi.",
+      );
+      return;
+    }
     if (isKasir && !isSekali && directPaymentPrerequisite) {
       toast.error(
         `Selesaikan ${selectedJenis?.nama ?? "tagihan"} ${billingPeriodLabel(directPaymentPrerequisite)} terlebih dahulu`,
       );
       return;
+    }
+    if (!isKasir && !isSekali && existingTagihan?.id) {
+      const target = sequenceOpenBills.find((bill) => bill.id === existingTagihan.id);
+      const prerequisite = target ? findBillingPrerequisite(target, sequenceOpenBills) : null;
+      if (prerequisite) {
+        toast.error(
+          `${selectedJenis?.nama ?? "Tagihan"} ${billingPeriodLabel(prerequisite)} belum lunas. Tambahkan ke keranjang untuk melunasinya bersama atau memberi dispensasi.`,
+        );
+        return;
+      }
     }
     const jumlahInput = Number(form.jumlah);
     if (!Number.isFinite(jumlahInput) || jumlahInput <= 0) {
@@ -1236,6 +1453,7 @@ function InputPembayaranContent() {
       tahun_ajaran_id: effectiveTahunAjaranId,
       is_bayar_dimuka: isBayarDimuka,
       tagihan_id:      existingTagihan?.id,
+      metode_bayar:    form.metodeBayar,
     });
     if (!result) return;
 
@@ -1277,7 +1495,7 @@ function InputPembayaranContent() {
           >
             <Printer className="h-4 w-4 mr-1.5" />Cetak Kuitansi
           </Button>
-          {canBatal && (
+          {canBatalLangsung && (
             <Button
               size="sm"
               variant="ghost"
@@ -1286,6 +1504,27 @@ function InputPembayaranContent() {
             >
               <X className="h-3.5 w-3.5 mr-1" />Batalkan
             </Button>
+          )}
+          {canAjukanBatal && (
+            pengajuanMenunggu?.[r.id] ? (
+              <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
+                Menunggu persetujuan
+              </span>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs text-destructive hover:text-destructive"
+                onClick={() => setAjukanTarget({
+                  id: r.id,
+                  label: `${r.jenis_pembayaran?.nama ?? "Pembayaran"}${r.bulan ? ` (${r.periodeTagihanLabel || namaBulanTahun(r.bulan, { tanggalTransaksi: r.tanggal_bayar })})` : ""}`,
+                  jumlah: Number(r.jumlah),
+                  tanggal: r.tanggal_bayar ? format(new Date(r.tanggal_bayar), "dd MMM yyyy", { locale: idLocale }) : null,
+                })}
+              >
+                <X className="h-3.5 w-3.5 mr-1" />Ajukan pembatalan
+              </Button>
+            )
           )}
         </div>
       ),
@@ -1336,6 +1575,7 @@ function InputPembayaranContent() {
                     <p className="text-xs text-muted-foreground">
                       NIS: {siswa.nis ?? "-"} · {getKelasAktif(siswa)?.kelas?.nama ?? "-"}
                     </p>
+                    <p className="truncate text-xs text-muted-foreground">{formatOrangTua(siswa.orang_tua)}</p>
                   </div>
                 </button>
               ))}
@@ -1420,6 +1660,9 @@ function InputPembayaranContent() {
                 <p className="text-xs text-muted-foreground">
                   NIS: {selectedSiswa.nis ?? "-"} · Kelas {kelasNama} · {lembagaNama}
                 </p>
+                {selectedSiswa.orang_tua && (
+                  <p className="text-xs text-muted-foreground">{formatOrangTua(selectedSiswa.orang_tua)}</p>
+                )}
               </div>
               <Button
                 variant="ghost"
@@ -1478,7 +1721,7 @@ function InputPembayaranContent() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-              {canBatal && !isSiswaNonaktif && (
+              {canKelolaTagihan && !isSiswaNonaktif && (
                 <Button variant="outline" size="sm" className="h-9" onClick={() => setShowTambahTagihan(true)}>
                   <Plus className="mr-2 h-4 w-4" />Tambah Tagihan
                 </Button>
@@ -1493,6 +1736,17 @@ function InputPembayaranContent() {
               >
                 <Printer className="mr-2 h-4 w-4" />
                 Cetak Tagihan
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                disabled={openBills.length === 0}
+                title="Buat link pembayaran Midtrans untuk orang tua dari tagihan yang dicentang, atau semua tagihan jika belum ada yang dicentang"
+                onClick={handleOpenLinkPembayaran}
+              >
+                <Link2 className="mr-2 h-4 w-4" />
+                Link Pembayaran
               </Button>
               </div>
             </div>
@@ -1651,12 +1905,57 @@ function InputPembayaranContent() {
                   ))}
                 </div>
               </details>
+              {blockedCartItems.length > 0 && (
+                <div
+                  className={cn(
+                    "mb-2 rounded-lg border p-3 text-xs",
+                    canGrantDispensasi
+                      ? "border-amber-300 bg-amber-50 text-amber-900"
+                      : "border-destructive/40 bg-destructive/5 text-destructive",
+                  )}
+                >
+                  <p className="font-medium">Ada tagihan sebelumnya yang belum lunas</p>
+                  <ul className="mt-1 list-disc pl-4">
+                    {blockedCartItems.map(({ item, prerequisiteLabel }) => (
+                      <li key={item.key}>
+                        {item.jenisNama} {item.bulan > 0 ? `${namaBulan(item.bulan)} ${item.tahunLabel}`.trim() : item.tahunLabel}: selesaikan {prerequisiteLabel} lebih dulu
+                      </li>
+                    ))}
+                  </ul>
+                  {canGrantDispensasi ? (
+                    <div className="mt-2 space-y-1">
+                      <Label htmlFor="dispensasi-alasan" className="text-xs">
+                        Alasan dispensasi (mis. komitmen orang tua kepada sekolah)
+                      </Label>
+                      <Textarea
+                        id="dispensasi-alasan"
+                        value={dispensasiAlasan}
+                        onChange={(event) => setDispensasiAlasan(event.target.value)}
+                        maxLength={SEQUENCE_OVERRIDE_MAX_REASON}
+                        disabled={isCartPaying}
+                        placeholder="Misal: Orang tua berkomitmen melunasi sebelum Januari"
+                        className="h-16 resize-none bg-background text-sm"
+                      />
+                      <p>
+                        Tagihan tetap dibayar sesuai nominalnya; hanya syarat urutan yang dilewati.
+                        Alasan (minimal {SEQUENCE_OVERRIDE_MIN_REASON} karakter) tercatat pada keterangan
+                        pembayaran dan di Audit Perubahan Data.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-1">
+                      Lunasi tagihan sebelumnya lebih dulu, atau minta admin/keuangan memberi dispensasi
+                      bila ada komitmen orang tua.
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs text-muted-foreground">{cartItems.length} tagihan dipilih</p>
                   <p className="text-xl font-bold">{formatRupiah(cartTotal)}</p>
                 </div>
-                <Button className="h-11 px-6" onClick={handlePayCart} disabled={isCartPaying || cartInvalid}>
+                <Button className="h-11 px-6" onClick={handlePayCart} disabled={isCartPaying || cartInvalid || cartDispensasiTerkunci}>
                   {isCartPaying ? (
                     <span className="flex items-center gap-2">
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -1825,6 +2124,20 @@ function InputPembayaranContent() {
                 )}
 
                 <div className="space-y-1.5">
+                  <Label className="text-xs">Metode Pembayaran</Label>
+                  <Select
+                    value={form.metodeBayar}
+                    onValueChange={v => setField("metodeBayar", v as "tunai" | "transfer")}
+                  >
+                    <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="tunai">Tunai</SelectItem>
+                      <SelectItem value="transfer">Transfer Bank</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
                   <Label className="text-xs">Keterangan (opsional)</Label>
                   <Textarea
                     value={form.keterangan}
@@ -1891,13 +2204,18 @@ function InputPembayaranContent() {
           <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
-              {canBatal ? (
+              {canBatalLangsung ? (
                 <>
                   <p className="font-medium">Pembatalan pembayaran hanya untuk koreksi salah input dan tidak dapat dilakukan pada periode yang sudah tutup buku.</p>
                   <p className="mt-0.5 opacity-80">Semua pembatalan dan perubahan terkait tercatat pada Audit Perubahan Data.</p>
                 </>
+              ) : canAjukanBatal ? (
+                <>
+                  <p className="font-medium">Pembatalan pembayaran harus diajukan dan menunggu persetujuan bendahara, sekretaris, atau admin.</p>
+                  <p className="mt-0.5 opacity-80">Pantau statusnya di menu Persetujuan Pembatalan. Pembayaran tidak berubah sampai disetujui.</p>
+                </>
               ) : (
-                <p>Kasir tidak dapat membatalkan pembayaran. Laporkan koreksi kepada admin atau bagian keuangan.</p>
+                <p>Anda tidak dapat membatalkan pembayaran. Laporkan koreksi kepada admin atau bagian keuangan.</p>
               )}
             </div>
           </div>
@@ -1941,6 +2259,8 @@ function InputPembayaranContent() {
           <p className="mt-1 text-xs">Ketik minimal 2 karakter NIS, nama siswa, atau nama + kelas.</p>
         </div>
       )}
+
+      {ajukanTarget && <DialogAjukanPembatalan target={ajukanTarget} onClose={() => setAjukanTarget(null)} />}
 
       {/* ── Dialog Batalkan Pembayaran ──────────────────────────────────────────── */}
       <Dialog open={!!batalTarget} onOpenChange={(o) => { if (!o) { setBatalTarget(null); setBatalAlasan(""); } }}>
@@ -2036,7 +2356,7 @@ function InputPembayaranContent() {
         </Dialog>
       )}
 
-      {showTambahTagihan && selectedSiswa && canBatal && !isSiswaNonaktif && (
+      {showTambahTagihan && selectedSiswa && canKelolaTagihan && !isSiswaNonaktif && (
         <Suspense fallback={<p role="status" className="text-sm text-muted-foreground">Membuka form tagihan...</p>}>
         <TambahTagihanDialog
           key={selectedSiswa.id}
@@ -2110,6 +2430,16 @@ function InputPembayaranContent() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {selectedSiswa && (
+        <DialogLinkPembayaran
+          open={linkPembayaranBills.length > 0}
+          onOpenChange={(open) => { if (!open) setLinkPembayaranBills([]); }}
+          siswaId={selectedSiswa.id}
+          siswaNama={selectedSiswa.nama}
+          bills={linkPembayaranBills}
+        />
       )}
 
       {/* ── Cetak tagihan terpilih (bisa gabungan jatuh tempo / belum jatuh tempo) ── */}

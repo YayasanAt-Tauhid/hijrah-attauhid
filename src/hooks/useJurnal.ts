@@ -35,7 +35,7 @@ export function useAllAkunRekening() {
 export function useCreateAkunRekening() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (values: { kode: string; nama: string; jenis: string; saldo_normal: string; saldo_awal?: number; keterangan?: string; aktif?: boolean; departemen_id?: string }) => {
+    mutationFn: async (values: { kode: string; nama: string; jenis: string; pos_isak35?: string | null; saldo_normal: string; saldo_awal?: number; keterangan?: string; aktif?: boolean; departemen_id?: string }) => {
       const { error } = await supabase.from("akun_rekening").insert(values);
       if (error) throw error;
     },
@@ -50,7 +50,7 @@ export function useCreateAkunRekening() {
 export function useUpdateAkunRekening() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...values }: { id: string; kode?: string; nama?: string; jenis?: string; saldo_normal?: string; saldo_awal?: number; keterangan?: string; aktif?: boolean; departemen_id?: string | null }) => {
+    mutationFn: async ({ id, ...values }: { id: string; kode?: string; nama?: string; jenis?: string; pos_isak35?: string | null; saldo_normal?: string; saldo_awal?: number; keterangan?: string; aktif?: boolean; departemen_id?: string | null }) => {
       const { error } = await supabase.from("akun_rekening").update(values).eq("id", id);
       if (error) throw error;
     },

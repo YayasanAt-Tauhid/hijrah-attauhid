@@ -9,8 +9,11 @@ import {
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "@/lib/router-compat";
+import { countPengajuanPembatalanMenunggu } from "@/server/pembatalanPembayaran";
 import { useAuth, UserRole } from "@/contexts/AuthContext";
+import { isConfigurableRole, permissionForPath } from "@/lib/permissions";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem,
@@ -24,6 +27,8 @@ interface SubMenuItem {
   title: string;
   url: string;
   roles?: UserRole[];
+  /** Lencana jumlah pengajuan pembatalan yang menunggu keputusan pengguna ini. */
+  badge?: "pengajuan-pembatalan";
 }
 
 interface SubGroup {
@@ -45,7 +50,7 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   {
     title: "Dashboard", url: "/", icon: LayoutDashboard,
-    roles: ["admin", "kepala_sekolah", "guru", "keuangan", "siswa", "pustakawan", "kasir"],
+    roles: ["admin", "kepala_sekolah", "guru", "keuangan", "siswa", "pustakawan", "kasir", "bendahara", "sekretaris_yayasan"],
   },
   {
     title: "Akademik", url: "/akademik", icon: GraduationCap,
@@ -96,7 +101,7 @@ const menuItems: MenuItem[] = [
   },
   {
     title: "Keuangan", url: "/keuangan", icon: Wallet,
-    roles: ["admin", "keuangan", "kasir", "sekretaris_yayasan", "admin_tu"],
+    roles: ["admin", "keuangan", "kasir", "sekretaris_yayasan", "bendahara", "admin_tu"],
     subGroups: [
       {
         // Sekretaris yayasan hanya punya akses ke sub-grup ini (untuk
@@ -115,6 +120,8 @@ const menuItems: MenuItem[] = [
         items: [
           { title: "Input Pembayaran", url: "/keuangan/pembayaran", roles: ["admin", "keuangan", "kasir"] },
           { title: "Pembayaran SPMB", url: "/keuangan/pembayaran-spmb", roles: ["admin", "keuangan", "kasir"] },
+          { title: "Link Pembayaran", url: "/keuangan/link-pembayaran", roles: ["admin", "keuangan", "kasir"] },
+          { title: "Persetujuan Pembatalan", url: "/keuangan/persetujuan-pembatalan", roles: ["admin", "keuangan", "kasir", "bendahara", "sekretaris_yayasan"], badge: "pengajuan-pembatalan" },
           { title: "Monitoring Pembayaran SPMB", url: "/keuangan/monitoring-spmb", roles: ["admin", "keuangan", "kasir", "admin_tu"] },
           { title: "Rencana Tagihan Siswa Baru", url: "/keuangan/rencana-siswa-baru", roles: ["admin", "keuangan"] },
           { title: "Penerimaan Lain", url: "/keuangan/penerimaan-lain", roles: ["admin", "keuangan"] },
@@ -232,6 +239,7 @@ const menuItems: MenuItem[] = [
         icon: ShieldCheck,
         items: [
           { title: "Manajemen Pengguna", url: "/pengaturan/pengguna" },
+          { title: "Hak Akses Peran", url: "/pengaturan/hak-akses" },
           { title: "Admin TU Akademik", url: "/pengaturan/admin-tu" },
           { title: "Manajemen Ortu", url: "/pengaturan/ortu" },
         ],
@@ -250,6 +258,27 @@ const menuItems: MenuItem[] = [
 ];
 
 // ── SubGroupCollapsible: nested collapsible untuk grup menu ─────────────────
+function PengajuanPembatalanBadge({ className }: { className?: string }) {
+  const { can } = useAuth();
+  const approver = can("keuangan.pembatalan.setujui");
+  const { data } = useQuery({
+    queryKey: ["pengajuan_pembatalan", "jumlah"],
+    queryFn: () => countPengajuanPembatalanMenunggu(),
+    enabled: approver,
+    refetchInterval: 60_000,
+  });
+  const count = approver ? data?.count ?? 0 : 0;
+  if (count <= 0) return null;
+  return (
+    <span
+      aria-label={`${count} pengajuan menunggu`}
+      className={cn("ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-destructive-foreground", className)}
+    >
+      {count}
+    </span>
+  );
+}
+
 function SubGroupCollapsible({
   title,
   icon: Icon,
@@ -278,6 +307,8 @@ function SubGroupCollapsible({
               <Icon className="h-3.5 w-3.5" />
               {title}
             </span>
+            {/* Hanya saat grup tertutup; saat terbuka lencana ada di item menunya. */}
+            {items.some((sub) => sub.badge === "pengajuan-pembatalan") && <PengajuanPembatalanBadge className="mr-1 group-data-[state=open]/subgroup:hidden" />}
             <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]/subgroup:rotate-90" />
           </button>
         </CollapsibleTrigger>
@@ -299,6 +330,7 @@ function SubGroupCollapsible({
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                     >
                       {sub.title}
+                      {sub.badge === "pengajuan-pembatalan" && <PengajuanPembatalanBadge />}
                     </NavLink>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
@@ -315,7 +347,22 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
-  const { role } = useAuth();
+  const { role, can } = useAuth();
+
+  // Peran yang bisa diatur admin (keuangan, kasir, bendahara, sekretaris) melihat
+  // menu Keuangan menurut izinnya per alamat; peran lain memakai daftar peran lama.
+  const permissionDriven = isConfigurableRole(role);
+  const keuanganItemAllowed = (url: string) => {
+    const permission = permissionForPath(url);
+    if (!permission) return false;
+    return typeof permission === "string" ? can(permission) : permission.some((key) => can(key));
+  };
+  const itemAllowed = (menuUrl: string, sub: SubMenuItem) =>
+    permissionDriven && menuUrl === "/keuangan"
+      ? keuanganItemAllowed(sub.url)
+      : !sub.roles || !role || sub.roles.includes(role);
+  const groupAllowed = (menuUrl: string, group: SubGroup) =>
+    (permissionDriven && menuUrl === "/keuangan") || !group.roles || !role || group.roles.includes(role);
 
   const visibleItems = menuItems.filter(
     (item) => !role || item.roles.includes(role)
@@ -367,11 +414,9 @@ export function AppSidebar() {
                         <CollapsibleContent>
                           <SidebarMenuSub>
                             {item.subGroups
-                              .filter((sg) => !sg.roles || !role || sg.roles.includes(role))
+                              .filter((sg) => groupAllowed(item.url, sg))
                               .map((sg) => {
-                                const filteredItems = sg.items.filter(
-                                  (s) => !s.roles || !role || s.roles.includes(role)
-                                );
+                                const filteredItems = sg.items.filter((s) => itemAllowed(item.url, s));
                                 if (filteredItems.length === 0) return null;
 
                                 const sgActive = filteredItems.some(

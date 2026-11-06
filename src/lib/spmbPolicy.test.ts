@@ -4,6 +4,7 @@ import {
   SPMB_FIRST_WAVE_START_AT,
   SPMB_TARGET_ACADEMIC_YEAR,
   SPMB_TARGET_COHORT,
+  requiresTransferDocuments,
   isSpmbFirstWaveFree,
   isSpmbPaymentVisible,
   isSpmbRegistrationOpen,
@@ -34,5 +35,15 @@ describe("kebijakan SPMB Gelombang Pertama", () => {
     expect(isSpmbPaymentVisible(SPMB_FIRST_WAVE_START_AT)).toBe(false);
     expect(isSpmbPaymentVisible(SPMB_FIRST_WAVE_END_AT - 1)).toBe(false);
     expect(isSpmbPaymentVisible(SPMB_FIRST_WAVE_END_AT)).toBe(true);
+  });
+});
+
+describe("dokumen Siswa Pindahan menurut jenjang tujuan", () => {
+  it.each(["SMP", "SMA", "MTA"])("mewajibkan rapor dan ijazah untuk pindahan %s", (code) => {
+    expect(requiresTransferDocuments("MURID PINDAHAN", code)).toBe(true);
+    expect(requiresTransferDocuments("MURID BARU", code)).toBe(false);
+  });
+  it.each(["TK", "SD", "", "LAINNYA"])("tidak meminta dokumen pindahan %s", (code) => {
+    expect(requiresTransferDocuments("MURID PINDAHAN", code)).toBe(false);
   });
 });

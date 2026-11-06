@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { RiwayatAkrualHarian } from "@/components/keuangan/RiwayatAkrualHarian";
 import { useTahunBuku, formatRupiah, namaBulanTahun } from "@/hooks/useKeuangan";
 import { akuiPendapatanDimuka } from "@/server/akrual";
 import { recognitionDueDate, canRecognizeRevenue } from "@/lib/recognitionDate";
@@ -277,6 +278,8 @@ export default function PengakuanPendapatan() {
           <DataTable columns={columns} data={dimukaList || []} loading={isLoading} pageSize={20} />
         </CardContent>
       </Card>
+
+      <RiwayatAkrualHarian />
 
       <ConfirmDialog
         open={!!confirmRecognize}

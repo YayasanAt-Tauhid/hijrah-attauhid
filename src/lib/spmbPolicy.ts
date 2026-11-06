@@ -37,3 +37,9 @@ export function isSpmbPaymentVisible(now: Date | number | string = Date.now()): 
 
 export const SPMB_FIRST_WAVE_MESSAGE =
   "Selamat! Anda mendapatkan gratis biaya pendaftaran sebagai apresiasi bagi pendaftar Gelombang Pertama, 23 September–30 Oktober 2026. Tim kami akan menghubungi orang tua/wali untuk menginformasikan jadwal dan tahapan seleksi.";
+
+// Rapor dan ijazah pindahan hanya berlaku untuk lembaga tujuan menengah.
+export function requiresTransferDocuments(category: string, departmentCode: string): boolean {
+  return category === SPMB_TRANSFER_CATEGORY_VALUE
+    && ["SMP", "SMA", "MTA"].includes(departmentCode.trim().toUpperCase());
+}

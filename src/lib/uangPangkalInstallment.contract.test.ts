@@ -17,7 +17,13 @@ describe("Uang Pangkal installment-before-due contract", () => {
     expect(portal).toContain("isUangPangkalPaymentName");
     expect(checkout).toContain("isUangPangkalPaymentName");
     expect(webhook).toContain("isUangPangkalPaymentName");
-    expect(cashier).toContain("isUangPangkalPaymentName");
+    // Kasir dan server memakai aturan bersama isInstallmentAllowed, yang sendiri
+    // membatasi pengecualian terjadwal pada nama resmi Uang Pangkal.
+    expect(cashier).toContain("isInstallmentAllowed");
+    expect(read("src/server/pembayaran.ts")).toContain("isInstallmentAllowed");
+    expect(read("src/lib/installment.ts")).toMatch(
+      /isInstallmentAllowed[\s\S]*isUangPangkalPaymentName\(input\.jenisNama\)/,
+    );
   });
 
   it("keeps a partial advance Uang Pangkal bill scheduled until maturity", () => {

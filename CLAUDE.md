@@ -25,6 +25,15 @@ npm run test:watch # vitest watch mode
 
 Jalankan `npm run lint` dan `npm run test` sebelum commit.
 
+## Aturan Kerja Sesi (semua sesi, termasuk rc dan cloud)
+
+- Mulai dengan `git fetch origin`, lalu buat cabang baru dari `origin/main` (mis. `fix/...`, `feat/...`).
+- Jika `node_modules` belum ada (salinan kerja baru), jalankan `npm ci` dulu.
+- Jalankan `npm run lint` dan `npm run test` sebelum commit, dan tampilkan hasilnya; jangan hanya menyatakan "berhasil".
+- Push hanya cabang kerja, bukan `main`. Jangan pernah force push. Perubahan masuk `main` lewat PR dengan base `main` (bukan `main-ori`).
+- Minta konfirmasi eksplisit sebelum menghapus data atau menerapkan migrasi ke database produksi.
+- Jangan menaruh token, kunci, atau kata sandi di kode, commit, atau chat.
+
 ## Pemilihan Model Claude
 
 Rekomendasi model saat memakai Claude Code di proyek ini (proyek ini adalah aplikasi CRUD TypeScript/React/Supabase yang konvensional — sebagian besar tugas tidak butuh model paling mahal):
@@ -46,28 +55,33 @@ Cara mengatur model:
 }
 ```
 
-## Project Supabase: target aktif
+## Database produksi: target aktif (Rustbase)
 
-> **Pembaruan 17 September 2026 (instruksi user terbaru):** pekerjaan pada branch `main`
-> menggunakan Supabase **`cmvzcpeiuompqgdvflky`**. Instruksi ini menggantikan
-> pemetaan lama V4/V5 di catatan historis.
+> **Pembaruan 4 November 2026 (konfirmasi user):** backend produksi aplikasi ini adalah
+> **Rustbase** (Postgres self-hosted), bukan lagi Supabase. Bagian "Project Supabase" versi
+> 17 September 2026 (`cmvzcpeiuompqgdvflky`) sudah tidak berlaku sebagai target perubahan.
 
-- Branch yang sedang dikerjakan: `main`.
-- Supabase yang boleh diubah untuk pekerjaan `main` saat ini: **`cmvzcpeiuompqgdvflky` saja**.
-- `supabase/config.toml`, `.env.example`, dan catatan lama dapat tertinggal; jangan menjadikannya
-  sumber kebenaran untuk memilih project remote.
-- Jangan menjalankan `supabase db push` secara buta. Banyak migrasi historis diterapkan manual
-  dan ledger remote dapat berbeda dari nama file repo.
-- Deployment Cloudflare mengambil URL/key dari GitHub Environment; sebelum tindakan DB manual,
-  gunakan project ref yang dikonfirmasi di atas secara eksplisit.
-- Target branch/project lain (termasuk `staging`) harus diverifikasi lagi sebelum diubah; jangan
-  menebak dari pemetaan lama.
+- Postgres produksi: container `rustbase-deploy-postgres-1` di VM `hijrah-attauhid` (akses lewat
+  koneksi SSH MCP `hijrah-attauhid`), database **`proj_kqylkreswang`**, peran `rustbase`.
+  Contoh: `docker exec -i rustbase-deploy-postgres-1 psql -U rustbase -d proj_kqylkreswang -X`.
+  Database lain di instance yang sama (`postgres`, `rustbase_control`) bukan target aplikasi.
+- Migrasi diterapkan MANUAL, tanpa ledger, dan tidak ada `supabase db push`. Urutan wajib:
+  1. cocokkan checksum berkas di VM dengan repo, cadangkan definisi objek yang akan diganti;
+  2. dry-run `BEGIN … ROLLBACK` terhadap database produksi (verifikasi objek kembali seperti semula);
+  3. minta konfirmasi eksplisit user, lalu apply dengan `psql --single-transaction -v ON_ERROR_STOP=1`;
+  4. verifikasi hasil (objek, jumlah baris isian awal, hak akses, perilaku pengguna lama) dan catat di `SESI_NOTES.md`.
+- Jangan menerapkan migrasi ke Supabase mana pun kecuali user menyebutkan project refnya secara
+  eksplisit di sesi itu. `supabase/config.toml`, `.env.example`, dan catatan lama dapat tertinggal;
+  jangan menjadikannya sumber kebenaran untuk memilih target.
+- Jangan menaruh URL koneksi, kata sandi, atau key di kode, commit, atau chat.
+- Deployment Cloudflare mengambil URL/key dari GitHub Environment; target lain (termasuk `staging`)
+  harus diverifikasi lagi sebelum diubah, jangan menebak dari pemetaan lama.
 
 ## Kontinuitas Antar Sesi
 
 - **Di awal sesi:** baca `SESI_NOTES.md` sebelum mulai bekerja — berisi status pekerjaan terakhir, keputusan desain penting, dan rencana yang sedang berjalan
 - **Di akhir pengerjaan yang berarti:** update `SESI_NOTES.md` — catat apa yang selesai, keputusan yang diambil beserta alasannya, dan langkah berikutnya yang belum dikerjakan
-- Jangan mencatat hal yang sudah terekam di git history (daftar file yang diubah, isi diff) — cukup konteks yang TIDAK terlihat dari kode: alasan keputusan, status data eksternal (VPS/Supabase), rencana yang belum jalan
+- Jangan mencatat hal yang sudah terekam di git history (daftar file yang diubah, isi diff) — cukup konteks yang TIDAK terlihat dari kode: alasan keputusan, status data eksternal (VPS/Rustbase), rencana yang belum jalan
 - Commit dengan pesan yang jelas dan deskriptif — git history adalah catatan permanen utama
 
 ## Konvensi Kode

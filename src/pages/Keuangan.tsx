@@ -39,10 +39,12 @@ const links = [
 ];
 
 export default function Keuangan() {
-  const { role } = useAuth();
+  const { role, can } = useAuth();
+  // Beranda menyesuaikan izin: tanpa laporan/akuntansi, tampilkan beranda ringkas.
+  const hasReports = can("keuangan.laporan") || can("keuangan.akuntansi");
 
-  if (role === "kasir") return <KasirKeuanganLanding />;
-  if (role === "sekretaris_yayasan") return <SekretarisKeuanganLanding />;
+  if (role === "kasir" || (!hasReports && can("keuangan.pembayaran"))) return <KasirKeuanganLanding />;
+  if (role === "sekretaris_yayasan" && !hasReports) return <SekretarisKeuanganLanding />;
 
   return <DashboardKeuangan />;
 }

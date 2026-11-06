@@ -8,18 +8,32 @@ import { isMonthlySppRevenue } from "@/lib/recognitionDate";
  *   - batalkan_pembayaran_atomik
  */
 import { createServerFn } from "@tanstack/react-start";
+import { ringkasOrangTua, type OrangTuaRingkas } from "@/lib/orangTuaSiswa";
 import { resolvePaymentBookYear } from "@/lib/paymentBookYear";
 import { resolvePaymentAmount } from "@/lib/paymentTariff";
-import { calculateRemainingBill, isSppPaymentName, isUangPangkalPaymentName, resolveInstallmentAmount } from "@/lib/installment";
+import { calculateRemainingBill, isInstallmentAllowed, isSppPaymentName, resolveInstallmentAmount } from "@/lib/installment";
 import {
   billingPeriodLabel,
   findBillingPrerequisite,
   sortBillingSequence,
   type BillingSequenceBill,
 } from "@/lib/billingSequence";
-import { authMiddleware, requireContext, requireRole } from "./auth";
+import { evaluateMonthlyGate } from "@/lib/monthlyPrerequisiteGate";
+import { evaluateOneTimeGate } from "@/lib/oneTimePrerequisiteGate";
+import { formatSequenceOverrideNote } from "@/lib/sequenceOverride";
+import { authMiddleware, requireContext, requirePermission } from "./auth";
 import { createAdminClient } from "./supabase";
 import { closeOnlineSessionsForBills } from "./midtransSessions";
+
+// audit_keuangan belum ada di tipe Supabase yang dihasilkan; klien dipersempit
+// ke satu operasi yang dipakai di sini daripada memakai `any`.
+type AuditInsertClient = {
+  from: (table: "audit_keuangan") => {
+    insert: (
+      row: Record<string, unknown>,
+    ) => PromiseLike<{ error: { message: string } | null }>;
+  };
+};
 
 export interface ProsesPembayaranInput {
   siswa_id: string;
@@ -34,6 +48,13 @@ export interface ProsesPembayaranInput {
   tagihan_id?: string;
   /** ID kuitansi yang sama untuk beberapa item dalam satu sesi pembayaran. */
   receipt_id?: string;
+  /**
+   * Dispensasi urutan: alasan untuk melewati syarat "tagihan tahun ajaran
+   * sebelumnya harus lunas" pada tagihan sekali bayar. Hanya dipakai bila
+   * syarat itu memang menghalangi, dan hanya sah dari peran berwenang.
+   */
+  dispensasi_urutan_alasan?: string;
+  metode_bayar?: "tunai" | "transfer";
 }
 
 export interface ProsesPembayaranResult {
@@ -76,6 +97,8 @@ export interface SiswaPembayaranRingkas {
   status: string | null;
   angkatan_id: string | null;
   departemen_id: string | null;
+  /** Nama ayah/ibu dan satu nomor HP, untuk membedakan siswa bernama sama. */
+  orang_tua: OrangTuaRingkas;
   kelas_siswa: Array<{
     kelas_id: string;
     aktif: boolean | null;
@@ -101,7 +124,7 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ items: SiswaPembayaranRingkas[] }> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ["admin", "keuangan", "kasir"]);
+    await requirePermission(admin, userId, "keuangan.pembayaran");
 
     const search = String(data?.search ?? "").trim().replace(/\s+/g, " ");
     if (search.length < 2) return { items: [] };
@@ -117,7 +140,7 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     ];
     const limit = Math.min(Math.max(Number(data?.limit ?? 10), 1), 20);
     const select =
-      "id, nis, nisn, nama, foto_url, status, angkatan_id, departemen_id, kelas_siswa(kelas_id, aktif, kelas:kelas_id(id, nama, departemen_id))";
+      "id, nis, nisn, nama, telepon, foto_url, status, angkatan_id, departemen_id, kelas_siswa(kelas_id, aktif, kelas:kelas_id(id, nama, departemen_id))";
 
     // Untuk pencarian loket pembayaran, token kelas di akhir pencarian boleh
     // digabung dengan nama/NIS, misalnya "Shofiyya 2C" atau "2538144422 5C".
@@ -153,7 +176,9 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     if (byNis.error) throw new Error("Gagal mencari siswa: " + byNis.error.message);
 
     const unik = new Map<string, SiswaPembayaranRingkas>();
+    const teleponSiswa = new Map<string, string | null>();
     for (const row of [...(byNama.data ?? []), ...(byNis.data ?? [])] as any[]) {
+      teleponSiswa.set(row.id, typeof row.telepon === "string" ? row.telepon : null);
       unik.set(row.id, {
         id: row.id,
         nis: row.nis?.trim() || null,
@@ -163,6 +188,7 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
         status: row.status ?? null,
         angkatan_id: row.angkatan_id ?? null,
         departemen_id: row.departemen_id ?? null,
+        orang_tua: { ayah: null, ibu: null, telepon: null },
         kelas_siswa: Array.isArray(row.kelas_siswa) ? row.kelas_siswa : [],
       });
     }
@@ -205,8 +231,7 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     const normalizeKelas = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "");
     const kelasNeedle = kelasSearch ? normalizeKelas(kelasSearch) : null;
 
-    return {
-      items: Array.from(unik.values())
+    const hasil = Array.from(unik.values())
         .filter((siswa) => {
           if (
             ["calon", "diterima"].includes(String(siswa.status)) && includeCalonLulus &&
@@ -227,8 +252,34 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
           });
         })
         .sort((a, b) => a.nama.localeCompare(b.nama, "id-ID"))
-        .slice(0, limit),
-    };
+        .slice(0, limit);
+
+    // Nama orang tua + HP hanya untuk hasil akhir (maksimal `limit` siswa) supaya
+    // kasir dapat membedakan siswa bernama sama. Kolom pribadi lain tidak diambil.
+    if (hasil.length > 0) {
+      type DetailRow = Record<string, string | null>;
+      const detailClient = admin as unknown as {
+        from(table: string): {
+          select(columns: string): {
+            in(column: string, values: string[]): PromiseLike<{ data: DetailRow[] | null; error: { message: string } | null }>;
+          };
+        };
+      };
+      const { data: detailRows, error: detailError } = await detailClient
+        .from("siswa_detail")
+        .select("siswa_id, nama_ayah, nama_ibu, telepon_ortu, telepon_ayah, telepon_ibu")
+        .in("siswa_id", hasil.map((siswa) => siswa.id));
+      if (detailError) throw new Error("Gagal memuat data orang tua: " + detailError.message);
+      const detailBySiswa = new Map<string, DetailRow>();
+      for (const row of detailRows ?? []) {
+        if (row.siswa_id && !detailBySiswa.has(row.siswa_id)) detailBySiswa.set(row.siswa_id, row);
+      }
+      for (const siswa of hasil) {
+        siswa.orang_tua = ringkasOrangTua(detailBySiswa.get(siswa.id), teleponSiswa.get(siswa.id));
+      }
+    }
+
+    return { items: hasil };
   });
 
 export interface RekapKasirSayaInput {
@@ -275,7 +326,7 @@ export const getRekapKasirSaya = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<RekapKasirSayaResult> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ["admin", "keuangan", "kasir"]);
+    await requirePermission(admin, userId, "keuangan.pembayaran");
 
     const tanggal = String(data?.tanggal ?? "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) {
@@ -359,7 +410,7 @@ export const getLegacyOutstandingBreakdown = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<LegacyOutstandingBreakdownRow[]> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ["admin", "keuangan", "kasir"]);
+    await requirePermission(admin, userId, "keuangan.pembayaran");
 
     if (!data.siswa_id) return [];
 
@@ -386,12 +437,8 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
   .inputValidator((d: ProsesPembayaranInput) => d)
   .handler(async ({ data, context }): Promise<ProsesPembayaranResult> => {
     const admin = createAdminClient();
-    const { userId } = requireContext(context);
-    const role = await requireRole(admin, userId, [
-      "admin",
-      "keuangan",
-      "kasir",
-    ]);
+    const { userId, userEmail } = requireContext(context);
+    const role = await requirePermission(admin, userId, "keuangan.pembayaran");
 
     const {
       siswa_id,
@@ -404,7 +451,9 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       is_bayar_dimuka,
       tagihan_id,
       receipt_id,
+      dispensasi_urutan_alasan,
     } = data;
+    const metodeBayar = data.metode_bayar === "transfer" ? "transfer" : "tunai";
 
     // Kasir tidak boleh mengubah tanggal transaksi. Server menjadi sumber
     // kebenaran agar pembatasan tidak dapat dilewati dengan request manual.
@@ -579,6 +628,95 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       }
     }
 
+    // Tagihan sekali bayar (mis. Uang Pangkal): tagihan jenis yang sama pada
+    // tahun ajaran sebelumnya harus lunas lebih dulu. Berlaku untuk semua
+    // peran. Pengecualiannya hanya dispensasi dari peran berwenang yang wajib
+    // beralasan (mis. ada komitmen orang tua kepada sekolah) dan dicatat di
+    // audit serta keterangan pembayaran.
+    let dispensasiAlasan: string | null = null;
+    let dispensasiPrasyaratId: string | null = null;
+    if (isSekali && tagihanTerpilih) {
+      const { data: onceRows, error: onceError } = await admin
+        .from("tagihan")
+        .select(
+          "id, siswa_id, jenis_id, bulan, jatuh_tempo, tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai)"
+        )
+        .eq("siswa_id", siswa_id)
+        .eq("jenis_id", jenis_id)
+        .is("bulan", null)
+        .in("status", ["belum_bayar", "sebagian", "terjadwal"]);
+
+      if (onceError) {
+        throw new Error(
+          "Gagal memeriksa tagihan tahun ajaran sebelumnya: " + onceError.message
+        );
+      }
+
+      const onceBills = (onceRows ?? []) as unknown as BillingSequenceBill[];
+      const onceTarget = onceBills.find(
+        (bill) => bill.id === tagihanTerpilih?.id
+      );
+      if (!onceTarget) {
+        throw new Error(
+          "Tagihan sudah berubah. Muat ulang data tagihan sebelum memproses pembayaran."
+        );
+      }
+
+      const gate = evaluateOneTimeGate({
+        role,
+        jenisNama: jenis.nama,
+        target: onceTarget,
+        openBills: onceBills,
+        alasan: dispensasi_urutan_alasan,
+      });
+      if (gate.status === "blocked") throw new Error(gate.message);
+      if (gate.status === "override") {
+        dispensasiAlasan = gate.alasan;
+        dispensasiPrasyaratId = gate.prerequisiteId;
+      }
+    }
+
+    // Tagihan bulanan di luar kasir (admin/keuangan): urutan tidak lagi
+    // dilonggarkan diam-diam. Melewati bulan sebelumnya yang belum lunas
+    // hanya sah dengan alasan dispensasi tertulis, dicatat di keterangan
+    // pembayaran dan audit. Kasir sudah diblokir penuh oleh blok di atas.
+    if (role !== "kasir" && !isSekali && tagihanTerpilih) {
+      const { data: monthlyRows, error: monthlyError } = await admin
+        .from("tagihan")
+        .select(
+          "id, siswa_id, jenis_id, bulan, jatuh_tempo, tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai)"
+        )
+        .eq("siswa_id", siswa_id)
+        .eq("jenis_id", jenis_id)
+        .not("bulan", "is", null)
+        .in("status", ["belum_bayar", "sebagian", "terjadwal"]);
+
+      if (monthlyError) {
+        throw new Error(
+          "Gagal memeriksa urutan tagihan: " + monthlyError.message
+        );
+      }
+
+      const monthlyBills = (monthlyRows ?? []) as unknown as BillingSequenceBill[];
+      const monthlyTarget = monthlyBills.find(
+        (bill) => bill.id === tagihanTerpilih?.id
+      );
+      if (monthlyTarget) {
+        const monthlyGate = evaluateMonthlyGate({
+          role,
+          jenisNama: jenis.nama,
+          target: monthlyTarget,
+          openBills: monthlyBills,
+          alasan: dispensasi_urutan_alasan,
+        });
+        if (monthlyGate.status === "blocked") throw new Error(monthlyGate.message);
+        if (monthlyGate.status === "override") {
+          dispensasiAlasan = monthlyGate.alasan;
+          dispensasiPrasyaratId = monthlyGate.prerequisiteId;
+        }
+      }
+    }
+
     const tahunBukuTagihanId =
       tagihanTerpilih?.tahun_ajaran_id || tahunAjaranEfektifId;
 
@@ -666,14 +804,11 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
         0
       );
       const { remaining } = calculateRemainingBill(tagihanTerpilih.nominal, totalSudahBayar);
-      const allowPartial =
-        (isSekali &&
-          (tagihanTerpilih.status !== "terjadwal" ||
-            isUangPangkalPaymentName(jenis.nama))) ||
-        (isSpp &&
-          (tagihanTerpilih.status !== "terjadwal" ||
-            (!!tagihanTerpilih.jatuh_tempo &&
-              tagihanTerpilih.jatuh_tempo.slice(0, 7) + "-01" <= tanggal_bayar)));
+      const allowPartial = isInstallmentAllowed({
+        isSekali,
+        jenisNama: jenis.nama,
+        status: tagihanTerpilih.status,
+      });
       jumlahValid = resolveInstallmentAmount({
         requestedAmount: data.jumlah,
         remainingAmount: remaining,
@@ -730,10 +865,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       // SPP yang sudah jatuh tempo boleh memiliki beberapa pembayaran yang
       // semuanya menempel ke tagihan bulanan exact. Jenis bulanan lain tetap
       // mengikuti aturan satu pembayaran penuh per periode.
-      const allowMonthlyInstallment =
-        isSpp &&
-        !!tagihanTerpilih &&
-        tagihanTerpilih.status !== "terjadwal";
+      const allowMonthlyInstallment = isSpp && !!tagihanTerpilih;
 
       if (!allowMonthlyInstallment) {
         const { data: dupCheck } = await admin
@@ -774,6 +906,7 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       .select("kode_setting, akun_id")
       .in("kode_setting", [
         "kas_tunai",
+        "kas_bank_transfer",
         "piutang_siswa",
         "AKUN_PENDAPATAN_DIMUKA",
       ]);
@@ -781,12 +914,17 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
     const getAkun = (kode: string) =>
       pengaturanList?.find((p) => p.kode_setting === kode)?.akun_id ?? null;
 
-    const kasAkunId = getAkun("kas_tunai");
+    const kasAkunId =
+      metodeBayar === "transfer" ? getAkun("kas_bank_transfer") : getAkun("kas_tunai");
     const piutangAkunId = getAkun("piutang_siswa");
     const dimukaAkunId = getAkun("AKUN_PENDAPATAN_DIMUKA");
 
     if (!kasAkunId)
-      throw new Error("Akun Kas Tunai belum dikonfigurasi di Pengaturan Akun");
+      throw new Error(
+        metodeBayar === "transfer"
+          ? "Akun Bank Transfer Kasir belum dikonfigurasi di Pengaturan Akun"
+          : "Akun Kas Tunai belum dikonfigurasi di Pengaturan Akun"
+      );
 
     // Tagihan SPP tanpa jurnal piutang menunggu pengakuan akhir bulan. Untuk jenis
     // yang memang perlu pendapatan dimuka, pembayaran sebelum pengakuan masuk
@@ -875,9 +1013,12 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       : tagihanSudahDiakuiPiutang && piutangAkunId
         ? `Pembayaran Piutang ${identitasTagihan}`
         : `Pembayaran ${identitasTagihan}`;
-    const keteranganFinal = keterangan
+    const keteranganDasar = keterangan
       ? `${keterangan} | ${autoKet}`
       : autoKet;
+    const keteranganFinal = dispensasiAlasan
+      ? `${keteranganDasar} | ${formatSequenceOverrideNote(dispensasiAlasan)}`
+      : keteranganDasar;
 
     if (tagihanEfektifId) {
       await closeOnlineSessionsForBills([tagihanEfektifId], "cashier_payment");
@@ -920,6 +1061,34 @@ export const prosesPembayaran = createServerFn({ method: "POST" })
       receipt_id: string;
       receipt_number: string;
     };
+
+    // Keterangan pembayaran sudah memuat alasan secara atomik; entri audit ini
+    // melengkapinya agar dispensasi muncul di Audit Perubahan Data. Kegagalan
+    // mencatat audit tidak membatalkan pembayaran yang sudah tersimpan.
+    if (dispensasiAlasan) {
+      const { error: auditError } = await (admin as unknown as AuditInsertClient)
+        .from("audit_keuangan")
+        .insert({
+          tabel_sumber: "pembayaran",
+          record_id: r.pembayaran_id,
+          aksi: "CREATE",
+          data_baru: {
+            jenis_id,
+            siswa_id,
+            tagihan_id: tagihanEfektifId,
+            tagihan_prasyarat_id: dispensasiPrasyaratId,
+            jumlah: jumlahValid,
+            alasan: dispensasiAlasan,
+          },
+          keterangan: `Dispensasi urutan pembayaran ${jenis.nama}: ${dispensasiAlasan}`,
+          departemen_id: jenis.departemen_id ?? departemen_id ?? null,
+          dibuat_oleh: userId,
+          nama_pengguna: userEmail ?? role,
+        });
+      if (auditError) {
+        console.error("Audit dispensasi urutan gagal dicatat:", auditError.message);
+      }
+    }
 
     const { data: petugasProfile } = await admin
       .from("users_profile")
@@ -987,7 +1156,7 @@ export const getPaymentReceiptGroups = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<Record<string, PaymentReceiptHistoryGroup>> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ["admin", "keuangan", "kasir"]);
+    await requirePermission(admin, userId, "keuangan.pembayaran");
 
     const paymentIds = [...new Set((data.payment_ids || []).filter(Boolean))].slice(0, 100);
     if (paymentIds.length === 0) return {};
@@ -1079,6 +1248,17 @@ export const getPaymentReceiptGroups = createServerFn({ method: "POST" })
     return result;
   });
 
+// Tabel pengajuan belum ada di tipe Supabase yang dihasilkan; cukup sepotong API yang dipakai.
+interface PengajuanTableClient {
+  from(table: string): {
+    update(values: Record<string, unknown>): {
+      eq(column: string, value: string): {
+        eq(column: string, value: string): PromiseLike<{ error: { message: string } | null }>;
+      };
+    };
+  };
+}
+
 export interface BatalkanPembayaranInput {
   pembayaran_id: string;
   alasan: string;
@@ -1095,11 +1275,9 @@ export const batalkanPembayaran = createServerFn({ method: "POST" })
     }): Promise<{ success: true; jurnal_pembalik_id: string | null }> => {
       const admin = createAdminClient();
       const { userId } = requireContext(context);
-      // BUKAN kasir — hanya admin/keuangan
-      await requireRole(admin, userId, [
-        "admin",
-        "keuangan",
-      ]);
+      // Pembatalan langsung hanya untuk pemegang izin ini (admin selalu). Kasir/keuangan
+      // mengajukan lewat pembatalanPembayaran.ts dan menunggu persetujuan.
+      await requirePermission(admin, userId, "keuangan.pembatalan.langsung");
 
       const { pembayaran_id, alasan } = data;
       const tanggal = data.tanggal || new Date().toISOString().split("T")[0];
@@ -1131,6 +1309,21 @@ export const batalkanPembayaran = createServerFn({ method: "POST" })
       );
       if (rpcErr)
         throw new Error("Gagal membatalkan pembayaran: " + rpcErr.message);
+
+      // Pengajuan yang masih menunggu untuk pembayaran ini tidak lagi berarti: tutup otomatis.
+      // Gagal menutup tidak membatalkan pembatalan yang sudah berhasil (pengajuan yatim
+      // ditolak oleh setujui_pembatalan_pembayaran karena pembayarannya sudah tidak ada).
+      const { error: closeErr } = await (admin as unknown as PengajuanTableClient)
+        .from("pembatalan_pembayaran_pengajuan")
+        .update({
+          status: "dibatalkan",
+          diputuskan_oleh: userId,
+          diputuskan_at: new Date().toISOString(),
+          catatan_keputusan: "Pembayaran dibatalkan langsung oleh admin",
+        })
+        .eq("pembayaran_id", pembayaran_id)
+        .eq("status", "menunggu");
+      if (closeErr) console.error("Gagal menutup pengajuan pembatalan yatim:", closeErr.message);
 
       const r = (result || {}) as { jurnal_pembalik_id?: string | null };
       return { success: true, jurnal_pembalik_id: r.jurnal_pembalik_id ?? null };

@@ -1,5 +1,10 @@
+import { SpmbBillingInputStatus } from "@/components/keuangan/SpmbBillingInputStatus";
+import { DialogTerbitkanUlangTagihan } from "@/components/keuangan/DialogTerbitkanUlangTagihan";
+import type { CancelledBill, ReissueKind } from "@/lib/reissueCancelledBill";
 import { DialogAjukan } from "@/components/keuangan/DialogAjukanKeringanan";
 import { DialogUangPangkalSpmb } from "@/components/keuangan/DialogUangPangkalSpmb";
+import { DialogInputMassalSpmb } from "@/components/keuangan/DialogInputMassalSpmb";
+import { MAX_BULK_STUDENTS } from "@/lib/spmbBulkBilling";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
@@ -93,7 +98,7 @@ export default function RencanaTagihanSiswaBaru() {
   const { data: jenisList = [] } = useAllJenisPembayaran();
   const { data: tahunBukuList = [] } = useTahunBuku();
 
-  const { data: candidatesData, isLoading } = useQuery({
+  const { data: candidatesData, isLoading, error: candidatesError } = useQuery({
     queryKey: ["spmb_billing_candidates"],
     queryFn: async () => getSpmbBillingCandidates(),
   });
@@ -101,6 +106,9 @@ export default function RencanaTagihanSiswaBaru() {
 
   const [keringananSiswa, setKeringananSiswa] = useState<SpmbBillingCandidate | null>(null);
   const [pangkalSiswa, setPangkalSiswa] = useState<SpmbBillingCandidate | null>(null);
+  const [reissue, setReissue] = useState<{ siswa: SpmbBillingCandidate; bill: CancelledBill; kind: ReissueKind } | null>(null);
+  const [filterSppAwal, setFilterSppAwal] = useState("__all__");
+  const [filterPangkal, setFilterPangkal] = useState("__all__");
   const [filterAsrama, setFilterAsrama] = useState("__all__");
   const [filterPendaftar, setFilterPendaftar] = useState("__all__");
   const [search, setSearch] = useState("");
@@ -116,6 +124,8 @@ export default function RencanaTagihanSiswaBaru() {
   const [manualEndMonth, setManualEndMonth] = useState("");
   const [initialFees, setInitialFees] = useState<InitialFeeState>({});
   const [saving, setSaving] = useState(false);
+  const [bulkIds, setBulkIds] = useState<Set<string>>(() => new Set());
+  const [bulkStudents, setBulkStudents] = useState<SpmbBillingCandidate[] | null>(null);
 
   const departments = useMemo(() => {
     const map = new Map<string, string>();
@@ -133,6 +143,8 @@ export default function RencanaTagihanSiswaBaru() {
   const filteredCandidates = useMemo(() => {
     const q = search.trim().toLowerCase();
     return candidates.filter((row) => {
+      if (filterSppAwal !== "__all__" && row.spp_awal?.status !== filterSppAwal) return false;
+      if (filterPangkal !== "__all__" && row.uang_pangkal?.status !== filterPangkal) return false;
       if (filterAsrama !== "__all__" && (row.status_asrama || "belum") !== filterAsrama) return false;
       if (filterPendaftar === "internal" && !row.spmb_internal) return false;
       if (filterPendaftar === "eksternal" && row.spmb_internal) return false;
@@ -150,7 +162,17 @@ export default function RencanaTagihanSiswaBaru() {
         row.tahun_ajaran_nama,
       ].filter(Boolean).join(" ").toLowerCase().includes(q);
     });
-  }, [candidates, search, filterDept, filterStatus, filterAsrama, filterPendaftar]);
+  }, [candidates, search, filterDept, filterStatus, filterAsrama, filterPendaftar, filterSppAwal, filterPangkal]);
+
+  const selectedBulkStudents = filteredCandidates.filter(row => row.ready_for_billing && bulkIds.has(row.id));
+  const selectableBulkStudents = filteredCandidates.filter(row => row.ready_for_billing);
+  function toggleBulk(row: SpmbBillingCandidate, checked: boolean) {
+    if (checked && bulkIds.size >= MAX_BULK_STUDENTS) {
+      toast.error(`Maksimal ${MAX_BULK_STUDENTS} siswa per proses. Gunakan filter untuk membagi kelompok.`);
+      return;
+    }
+    setBulkIds(current => { const next = new Set(current); if (checked) next.add(row.id); else next.delete(row.id); return next; });
+  }
 
   const availableJenis = useMemo(() => {
     if (!selected) return [];
@@ -212,9 +234,9 @@ export default function RencanaTagihanSiswaBaru() {
   );
   const manualEndDate = useMemo(() => lastDayOfMonth(manualEndMonth), [manualEndMonth]);
 
-  const openPlan = (row: SpmbBillingCandidate) => {
+  const openPlan = (row: SpmbBillingCandidate, initialSpp = false) => {
     setSelected(row);
-    setIncludeInitialSpp(false);
+    setIncludeInitialSpp(initialSpp);
 
     const currentPlan = row.rencana_spp;
     const defaultSpp =
@@ -535,9 +557,17 @@ export default function RencanaTagihanSiswaBaru() {
 
   const columns: DataTableColumn<SpmbBillingCandidate>[] = [
     {
+      key: "pilih_massal",
+      label: "Pilih",
+      className: "w-14",
+      render: (_, row) => <Checkbox aria-label={`Pilih ${row.nama}`} checked={bulkIds.has(row.id)}
+        disabled={!row.ready_for_billing || isLoading || !!candidatesError}
+        onCheckedChange={value => toggleBulk(row, value === true)} />,
+    },
+    {
       key: "nama",
       label: "Siswa",
-      className: "min-w-[220px]",
+      className: "sticky left-0 z-10 min-w-[220px] bg-card",
       render: (_, row) => (
         <div>
           <p className="font-medium">{row.nama}</p>
@@ -590,6 +620,18 @@ export default function RencanaTagihanSiswaBaru() {
       ),
     },
     {
+      key: "spp_awal",
+      label: "SPP Awal",
+      className: "min-w-[190px]",
+      render: (_, row) => <SpmbBillingInputStatus value={row.spp_awal} showPeriod onReissue={(bill) => setReissue({ siswa: row, bill, kind: "spp" })} />,
+    },
+    {
+      key: "uang_pangkal",
+      label: "Uang Pangkal",
+      className: "min-w-[170px]",
+      render: (_, row) => <SpmbBillingInputStatus value={row.uang_pangkal} onReissue={(bill) => setReissue({ siswa: row, bill, kind: "uang_pangkal" })} />,
+    },
+    {
       key: "rencana_spp",
       label: "Rencana SPP",
       className: "min-w-[210px]",
@@ -612,8 +654,11 @@ export default function RencanaTagihanSiswaBaru() {
       render: (_, row) => (
         <div className="flex flex-col items-start gap-2">
           <Button size="sm" variant="outline" disabled={!row.ready_for_billing} onClick={() => setPangkalSiswa(row)}>
-            Uang Pangkal Otomatis
+            {row.uang_pangkal?.status === "sudah_diinput" ? "Lihat Uang Pangkal" : "Uang Pangkal Otomatis"}
           </Button>
+          {!row.ready_for_spp && <Button size="sm" variant="outline" disabled={!row.ready_for_billing} onClick={() => openPlan(row, true)}>
+            SPP awal tanpa kelas
+          </Button>}
           <Button
             size="sm"
             variant={row.rencana_spp ? "outline" : "default"}
@@ -717,10 +762,45 @@ export default function RencanaTagihanSiswaBaru() {
                 <SelectItem value="planned">Rencana Aktif</SelectItem>
               </SelectContent>
             </Select>
+            {([
+              ["Filter SPP awal", filterSppAwal, setFilterSppAwal, "Semua Status SPP Awal"],
+              ["Filter uang pangkal", filterPangkal, setFilterPangkal, "Semua Status Uang Pangkal"],
+            ] as const).map(([label, value, change, allLabel]) => <Select key={label} value={value} onValueChange={change}>
+              <SelectTrigger aria-label={label}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">{allLabel}</SelectItem>
+                <SelectItem value="belum_diinput">Belum diinput</SelectItem>
+                <SelectItem value="sudah_diinput">Sudah diinput</SelectItem>
+                <SelectItem value="perlu_diperiksa">Perlu diperiksa</SelectItem>
+              </SelectContent>
+            </Select>)}
           </div>
 
+          <div className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/20 p-3">
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox aria-label="Pilih semua hasil filter" disabled={isLoading || !!candidatesError || !selectableBulkStudents.length}
+                checked={selectedBulkStudents.length > 0 && selectedBulkStudents.length === selectableBulkStudents.length ? true : selectedBulkStudents.length ? "indeterminate" : false}
+                onCheckedChange={value => {
+                  if (value === true && selectableBulkStudents.length > MAX_BULK_STUDENTS) {
+                    toast.error(`Ada ${selectableBulkStudents.length} siswa siap. Maksimal ${MAX_BULK_STUDENTS} per proses; persempit filter atau centang siswa.`);
+                    return;
+                  }
+                  setBulkIds(value === true ? new Set(selectableBulkStudents.map(row => row.id)) : new Set());
+                }} />
+              Pilih semua hasil filter
+            </label>
+            <span className="text-sm text-muted-foreground">{selectedBulkStudents.length} siswa pada hasil filter ini dipilih</span>
+            <Button disabled={!selectedBulkStudents.length || isLoading || !!candidatesError} onClick={() => setBulkStudents(selectedBulkStudents)}>
+              Input Massal{selectedBulkStudents.length ? ` (${selectedBulkStudents.length})` : ""}
+            </Button>
+            {bulkIds.size > 0 && <Button variant="ghost" size="sm" onClick={() => setBulkIds(new Set())}>Bersihkan pilihan</Button>}
+          </div>
+          <p className="text-xs text-muted-foreground">Centang siswa siap ditagih untuk mengatur SPP dan uang pangkal bersama. Maksimal {MAX_BULK_STUDENTS} siswa per proses. Pilihan di luar hasil filter tidak disertakan.</p>
+          {candidatesError && <p role="alert" className="text-sm text-destructive">Gagal memuat status tagihan. Muat ulang halaman untuk mencoba lagi.</p>}
           <DataTable
             columns={columns}
+            horizontalNavigation
+            searchable={false}
             data={filteredCandidates}
             loading={isLoading}
             pageSize={20}
@@ -731,7 +811,7 @@ export default function RencanaTagihanSiswaBaru() {
       <Dialog open={!!selected} onOpenChange={(open) => { if (!open) closePlan(); }}>
         <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{selected && !selected.ready_for_spp ? "Terbitkan Tagihan Awal Calon Siswa" : selected?.rencana_spp ? "Edit" : "Buat"} Rencana Tagihan Siswa Baru</DialogTitle>
+            <DialogTitle>{includeInitialSpp && selected && !selected.ready_for_spp ? "SPP Awal Tanpa Kelas —" : selected && !selected.ready_for_spp ? "Terbitkan Tagihan Awal Calon Siswa" : selected?.rencana_spp ? "Edit" : "Buat"} Rencana Tagihan Siswa Baru</DialogTitle>
           </DialogHeader>
 
           {selected && (
@@ -993,7 +1073,10 @@ export default function RencanaTagihanSiswaBaru() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {bulkStudents && <DialogInputMassalSpmb siswa={bulkStudents} jenis={jenisList} tahunBuku={tahunBukuList}
+        onClose={() => { setBulkStudents(null); setBulkIds(new Set()); }} onKeringanan={setKeringananSiswa} />}
       {pangkalSiswa && <DialogUangPangkalSpmb key={pangkalSiswa.id} siswa={pangkalSiswa} onClose={() => setPangkalSiswa(null)} />}
+      {reissue && <DialogTerbitkanUlangTagihan key={reissue.bill.id} siswa={reissue.siswa} bill={reissue.bill} kind={reissue.kind} onClose={() => setReissue(null)} />}
       {keringananSiswa && (
         <DialogAjukan
           key={keringananSiswa.id}

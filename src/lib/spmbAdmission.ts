@@ -17,7 +17,16 @@ export function isSpmbActivated(row: SpmbAdmissionRow): boolean {
   return row._spmbInternal !== true && isSpmbAccepted(row) && row._academicStatus === "aktif";
 }
 
+// Pendaftar yang mengundurkan diri tidak lagi bagian dari antrean seleksi:
+// disembunyikan dari "Semua status" dan ringkasan, tetapi tetap bisa dilihat
+// lewat filter "Mengundurkan diri" untuk keperluan audit dan keuangan.
+export function isSpmbWithdrawn(row: SpmbAdmissionRow): boolean {
+  return row.status === "mengundurkan_diri";
+}
+
 export function matchesSpmbStatus(row: SpmbAdmissionRow, filter: string): boolean {
+  if (filter === "mengundurkan_diri") return isSpmbWithdrawn(row);
+  if (isSpmbWithdrawn(row)) return false;
   if (filter === "all") return true;
   if (filter === "diterima") return isSpmbAccepted(row);
   if (filter === "belum_aktif") return isSpmbAccepted(row) && !isSpmbActivated(row);
@@ -25,7 +34,8 @@ export function matchesSpmbStatus(row: SpmbAdmissionRow, filter: string): boolea
   return row.status === filter;
 }
 
-export function summarizeSpmbAdmissions(rows: SpmbAdmissionRow[]) {
+export function summarizeSpmbAdmissions(allRows: SpmbAdmissionRow[]) {
+  const rows = allRows.filter((row) => !isSpmbWithdrawn(row));
   const accepted = rows.filter(isSpmbAccepted);
   const activated = accepted.filter(isSpmbActivated).length;
   return { total: rows.length, accepted: accepted.length, activated, awaitingActivation: accepted.length - activated };

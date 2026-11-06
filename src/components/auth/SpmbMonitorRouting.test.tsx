@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
+import { defaultAllows } from "@/test/defaultPermissions";
 
 const state = vi.hoisted(() => ({
   role: "admin_tu", departemenId: "tk" as string | null,
@@ -16,6 +17,8 @@ vi.mock("@tanstack/react-router", async importOriginal => ({
 }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({
   ...state, isLoading: false, authError: null, retryAuth: vi.fn(),
+  // Izin = isian awal migrasi, sehingga tes ini juga membuktikan perilaku lama terjaga.
+  permissionsLoading: false, can: (key: string) => defaultAllows(state.role, key as never),
 }) }));
 vi.mock("@/components/ui/sidebar", () => ({ SidebarProvider: ({ children }: { children: ReactNode }) => <>{children}</> }));
 vi.mock("@/components/layout/AppSidebar", () => ({ AppSidebar: () => null }));

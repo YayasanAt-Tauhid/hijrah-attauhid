@@ -33,6 +33,79 @@ function tanggalJakarta(now = new Date()): string {
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
+type ItemValidasi = {
+  siswa_id: string;
+  jenis_id: string;
+  bulan: number | null;
+  jumlah: number | string;
+  tahun_ajaran_id: string | null;
+  tagihan_id: string | null;
+};
+
+/**
+ * Validasi ulang item terhadap tagihan exact. Untuk tagihan sekali bayar yang
+ * sudah jatuh tempo, transaksi boleh lebih kecil dari sisa (cicilan).
+ * Mengembalikan pesan galat, atau null bila item valid.
+ */
+async function validasiItemTerhadapTagihan(
+  admin: ReturnType<typeof createAdminClient>,
+  item: ItemValidasi,
+  jenisNama: string | null | undefined,
+): Promise<string | null> {
+  // Tanpa tagihan_id dan tanpa tahun ajaran, tagihan tidak dapat dicocokkan.
+  // Jangan kirim `eq(tahun_ajaran_id, null)` ke database (error uuid "null").
+  if (!item.tagihan_id && !item.tahun_ajaran_id) {
+    return "Item pembayaran tidak terkait tagihan (tagihan_id dan tahun ajaran kosong)";
+  }
+
+  let tagihanQuery = admin
+    .from("tagihan")
+    .select("id, nominal, status, bulan")
+    .eq("siswa_id", item.siswa_id)
+    .eq("jenis_id", item.jenis_id);
+  if (item.tahun_ajaran_id) tagihanQuery = tagihanQuery.eq("tahun_ajaran_id", item.tahun_ajaran_id);
+
+  if (item.tagihan_id) {
+    tagihanQuery = tagihanQuery.eq("id", item.tagihan_id);
+  } else {
+    tagihanQuery =
+      item.bulan === 0 || item.bulan == null
+        ? tagihanQuery.is("bulan", null)
+        : tagihanQuery.eq("bulan", item.bulan);
+  }
+
+  const { data: tagihanAktif, error: tagihanError } = await tagihanQuery.maybeSingle();
+  if (tagihanError) return "Gagal memvalidasi tagihan saat ini: " + tagihanError.message;
+  if (!tagihanAktif || !["belum_bayar", "sebagian", "terjadwal"].includes(tagihanAktif.status)) {
+    return "Tagihan sudah tidak aktif atau sudah diselesaikan";
+  }
+
+  const { data: paidRows, error: paidError } = await admin
+    .from("pembayaran")
+    .select("jumlah")
+    .eq("tagihan_id", tagihanAktif.id);
+  if (paidError) return "Gagal menghitung sisa tagihan: " + paidError.message;
+
+  const totalSudahBayar = (paidRows || []).reduce((sum, row) => sum + Number(row.jumlah || 0), 0);
+  const nominalTagihan = Math.round(Number(tagihanAktif.nominal) || 0);
+  const sisaTagihan = Math.max(nominalTagihan - totalSudahBayar, 0);
+  const nominalTransaksi = Math.round(Number(item.jumlah) || 0);
+  const cicilanDiizinkan =
+    (item.bulan === 0 || item.bulan == null) &&
+    (tagihanAktif.status !== "terjadwal" || isUangPangkalPaymentName(jenisNama));
+
+  if (
+    sisaTagihan <= 0 ||
+    nominalTransaksi <= 0 ||
+    nominalTransaksi > sisaTagihan ||
+    (!cicilanDiizinkan && nominalTransaksi !== sisaTagihan)
+  ) {
+    return "Nominal transaksi Rp " + nominalTransaksi.toLocaleString("id-ID") +
+      " tidak valid terhadap sisa tagihan Rp " + sisaTagihan.toLocaleString("id-ID");
+  }
+  return null;
+}
+
 export async function handleNotification(request: Request): Promise<Response> {
   try {
     const notification = await request.json();
@@ -161,6 +234,7 @@ export async function handleNotification(request: Request): Promise<Response> {
     let itemProcessingFailed = false;
     if (newStatus === "paid") {
       const items = transaksi.transaksi_midtrans_item || [];
+      const isPmbPublic = (transaksi.metadata as Record<string, unknown> | null)?.source === "pmb_public";
       // Tanggal pembukuan mengikuti hari operasional sekolah (WIB), bukan UTC.
       // Tanpa ini, pembayaran antara 00.00–06.59 WIB tercatat sebagai hari sebelumnya.
       const today = tanggalJakarta();
@@ -197,90 +271,22 @@ export async function handleNotification(request: Request): Promise<Response> {
           continue;
         }
 
-        // Validasi ulang terhadap tagihan exact. Untuk tagihan sekali bayar
-        // yang sudah jatuh tempo, transaksi boleh lebih kecil dari sisa (cicilan).
-        let tagihanQuery = admin
-          .from("tagihan")
-          .select("id, nominal, status, bulan")
-          .eq("siswa_id", item.siswa_id)
-          .eq("jenis_id", item.jenis_id)
-          .eq("tahun_ajaran_id", item.tahun_ajaran_id);
-
-        if (item.tagihan_id) {
-          tagihanQuery = tagihanQuery.eq("id", item.tagihan_id);
-        } else {
-          tagihanQuery =
-            item.bulan === 0 || item.bulan == null
-              ? tagihanQuery.is("bulan", null)
-              : tagihanQuery.eq("bulan", item.bulan);
-        }
-
-        const { data: tagihanAktif, error: tagihanError } =
-          await tagihanQuery.maybeSingle();
-
-        if (tagihanError) {
-          hasilItems.push({
-            item_id: item.id,
-            success: false,
-            error: "Gagal memvalidasi tagihan saat ini: " + tagihanError.message,
-          });
-          continue;
-        }
-
-        if (!tagihanAktif || !["belum_bayar", "sebagian", "terjadwal"].includes(tagihanAktif.status)) {
-          hasilItems.push({
-            item_id: item.id,
-            success: false,
-            error: "Tagihan sudah tidak aktif atau sudah diselesaikan",
-          });
-          continue;
-        }
-
-        const { data: paidRows, error: paidError } = await admin
-          .from("pembayaran")
-          .select("jumlah")
-          .eq("tagihan_id", tagihanAktif.id);
-        if (paidError) {
-          hasilItems.push({
-            item_id: item.id,
-            success: false,
-            error: "Gagal menghitung sisa tagihan: " + paidError.message,
-          });
-          continue;
-        }
-
         const { data: jenis } = await admin
           .from("jenis_pembayaran")
           .select("nama, departemen_id, akun_pendapatan_id")
           .eq("id", item.jenis_id)
           .single();
 
-        const totalSudahBayar = (paidRows || []).reduce(
-          (sum, row) => sum + Number(row.jumlah || 0),
-          0
-        );
-        const nominalTagihan = Math.round(Number(tagihanAktif.nominal) || 0);
-        const sisaTagihan = Math.max(nominalTagihan - totalSudahBayar, 0);
-        const nominalTransaksi = Math.round(Number(item.jumlah) || 0);
-        const cicilanDiizinkan =
-          (item.bulan === 0 || item.bulan == null) &&
-          (tagihanAktif.status !== "terjadwal" ||
-            isUangPangkalPaymentName(jenis?.nama));
-
-        if (
-          sisaTagihan <= 0 ||
-          nominalTransaksi <= 0 ||
-          nominalTransaksi > sisaTagihan ||
-          (!cicilanDiizinkan && nominalTransaksi !== sisaTagihan)
-        ) {
-          hasilItems.push({
-            item_id: item.id,
-            success: false,
-            error:
-              "Nominal transaksi Rp " + nominalTransaksi.toLocaleString("id-ID") +
-              " tidak valid terhadap sisa tagihan Rp " + sisaTagihan.toLocaleString("id-ID"),
-          });
-          continue;
+        // Biaya pendaftaran SPMB (`pmb_public`) memang bukan tagihan: itemnya
+        // tanpa tagihan_id/tahun_ajaran_id, jadi tidak ada tagihan yang divalidasi.
+        // Kebenaran nominal dijaga signature Midtrans + pencocokan item di RPC.
+        const lewatiValidasiTagihan = !item.tagihan_id && isPmbPublic;
+        if (!lewatiValidasiTagihan) {
+          const galat = await validasiItemTerhadapTagihan(admin, item, jenis?.nama);
+          if (galat) {
+            hasilItems.push({ item_id: item.id, success: false, error: galat });
+            continue;
+          }
         }
 
         const { data: rpcResult, error: rpcErr } = await (admin as any).rpc(

@@ -51,3 +51,23 @@ export function isUangPangkalPaymentName(value: unknown): boolean {
   const name = String(value ?? "").trim();
   return /^UANG PANGKAL (TK|SD|SMP|SMA|MTA)$/i.test(name);
 }
+
+/**
+ * Apakah tagihan boleh dibayar sebagian (dicicil).
+ * - SPP bulanan: selalu boleh, juga sebelum jatuh tempo (status `terjadwal`);
+ *   pembayarannya tetap masuk Pendapatan Diterima di Muka.
+ * - Jenis bulanan lain: wajib dibayar penuh.
+ * - Sekali bayar: boleh kecuali masih `terjadwal`; Uang Pangkal boleh juga saat
+ *   `terjadwal`.
+ * Aturan yang sama dipaksa database di `proses_pembayaran_atomik`.
+ */
+export function isInstallmentAllowed(input: {
+  isSekali: boolean;
+  jenisNama: unknown;
+  status: string | null | undefined;
+}): boolean {
+  if (input.isSekali) {
+    return input.status !== "terjadwal" || isUangPangkalPaymentName(input.jenisNama);
+  }
+  return isSppPaymentName(input.jenisNama);
+}

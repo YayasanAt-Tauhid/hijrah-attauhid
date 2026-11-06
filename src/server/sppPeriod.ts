@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { authMiddleware, requireContext, requireRole } from "./auth";
+import { authMiddleware, requireContext, requirePermission } from "./auth";
 import { createAdminClient } from "./supabase";
 import { safeStudentSearch, sppPeriodSchema, type SppPeriodInput, type SppPeriodPreview } from "@/lib/sppPeriod";
 
@@ -11,7 +11,7 @@ export const getSppPeriodOptions = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ["admin", "keuangan"]);
+    await requirePermission(admin, userId, "keuangan.akuntansi");
     const { data: profile } = await admin.from("users_profile").select("aktif").eq("id", userId).single();
     if (!profile?.aktif) throw new Error("Akun tidak aktif");
     const search = safeStudentSearch(data.search);
@@ -39,7 +39,7 @@ export const previewOrApplySppPeriod = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<SppPeriodPreview> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ["admin", "keuangan"]);
+    await requirePermission(admin, userId, "keuangan.akuntansi");
     const { data: result, error } = await admin.rpc("sesuaikan_kategori_spp_periode", {
       p_siswa_id: data.siswa_id, p_jenis_id: data.jenis_id,
       p_mulai: data.mulai + "-01", p_selesai: data.selesai + "-01", p_kategori: data.kategori,
@@ -60,7 +60,7 @@ export const getSppPeriodHistory = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ["admin", "keuangan"]);
+    await requirePermission(admin, userId, "keuangan.akuntansi");
     const { data: profile } = await admin.from("users_profile").select("aktif").eq("id", userId).single();
     if (!profile?.aktif) throw new Error("Akun tidak aktif");
     const { data: rows, error } = await admin.from("spp_kategori_periode_audit")

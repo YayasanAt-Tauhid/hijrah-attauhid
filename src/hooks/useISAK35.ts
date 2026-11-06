@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { isAkunKas } from "@/lib/posIsak35";
+import { hitungSaldoMenurutPos } from "@/lib/saldoIsak35";
 
 // ============================================================
 // TIPE FILTER PERIODE — bisa per tahun atau rentang tanggal
@@ -117,9 +119,12 @@ async function hitungSaldoAkun(filter: PeriodeFilter, departemenIds?: string[], 
   return (akunList || []).map((akun: any) => {
     const m = mutasi[akun.id] || { debit: 0, kredit: 0 };
     const saldoAwal = saldoAwalMap[akun.id] ?? 0;
-    const saldo = akun.saldo_normal === "D"
-      ? saldoAwal + m.debit - m.kredit
-      : saldoAwal + m.kredit - m.debit;
+    // Saldo menurut sisi alami POS, bukan sisi normal akun: akun kontra (mis. potongan
+    // pendapatan 4600-4602) harus mengurangi posnya, bukan menambah.
+    const saldo = hitungSaldoMenurutPos({
+      pos: akun.pos_isak35, saldoNormal: akun.saldo_normal,
+      saldoAwal, debit: m.debit, kredit: m.kredit,
+    });
     return {
       akun_id: akun.id, kode: akun.kode, nama: akun.nama,
       pos_isak35: akun.pos_isak35, saldo_normal: akun.saldo_normal,
@@ -365,11 +370,6 @@ function byPos(saldo: SaldoAkun[], ...positions: string[]) {
 
 function sumSaldo(items: SaldoAkun[]) {
   return items.reduce((s, a) => s + a.saldo, 0);
-}
-
-function isAkunKas(kode: string, nama: string): boolean {
-  const n = (nama || "").toUpperCase().trim();
-  return n.startsWith("KAS ") || n === "KAS" || n.startsWith("BANK ") || n === "BANK";
 }
 
 /** Ambil seluruh baris hasil RPC dengan paginasi — PostgREST membatasi

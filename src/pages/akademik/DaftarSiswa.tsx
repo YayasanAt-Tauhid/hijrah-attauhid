@@ -6,6 +6,17 @@ import { useDepartemen, useTingkat, useKelas, useTahunAjaran, useAngkatan } from
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { SiswaPunyaRiwayatError, ringkasRiwayat, type RiwayatSiswaItem } from "@/lib/siswaDeletion";
 import { ImportSiswaDialog } from "@/pages/akademik/ImportSiswaDialog";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -41,6 +52,7 @@ export default function DaftarSiswa() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterAsrama, setFilterAsrama] = useState<string>("all");
   const [deleteTarget, setDeleteTarget] = useState<SiswaWithRelations | null>(null);
+  const [riwayatInfo, setRiwayatInfo] = useState<{ siswa: SiswaWithRelations; riwayat: RiwayatSiswaItem[] } | null>(null);
   const [showImport, setShowImport] = useState(false);
 
   const getActiveKelas = (siswa: SiswaWithRelations) => {
@@ -66,6 +78,7 @@ export default function DaftarSiswa() {
   const columns: DataTableColumn<Record<string, unknown>>[] = [
     { key: "nis", label: "NIS", sortable: true },
     { key: "nisn", label: "NISN", sortable: true },
+    { key: "id_santri_pihak3", label: "ID Santri", sortable: true, render: (val) => (val as string) || "-" },
     { key: "_nik_hijrah", label: "NIK Hijrah", sortable: true, render: (_, row) => (row as any)._nik_hijrah || "-" },
     { key: "_nik_dapodik", label: "NIK Dapodik", sortable: true, render: (_, row) => (row as any)._nik_dapodik || "-" },
     {
@@ -96,7 +109,7 @@ export default function DaftarSiswa() {
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/akademik/siswa/${row.id}/edit`)} title="Edit data lengkap">
             <Pencil className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(row as any)}>
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(row as any)} title="Hapus siswa" aria-label="Hapus siswa">
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -125,6 +138,7 @@ export default function DaftarSiswa() {
       return {
         NIS: s.nis || "",
         NISN: s.nisn || "",
+        "ID Santri": s.id_santri_pihak3 || "",
         "NIK Hijrah": detail?.nik || "",
         "NIK Dapodik": detail?.nik_dapodik || "",
         Nama: s.nama,
@@ -197,7 +211,7 @@ export default function DaftarSiswa() {
       <DataTable
         columns={columns}
         data={tableData}
-        searchPlaceholder="Cari NIS, NISN, NIK, atau nama siswa..."
+        searchPlaceholder="Cari NIS, NISN, ID Santri, NIK, atau nama siswa..."
         pageSize={20}
         exportable
         exportFilename="data-siswa"
@@ -212,13 +226,49 @@ export default function DaftarSiswa() {
         description={`Yakin ingin menghapus data siswa "${deleteTarget?.nama}"? Tindakan ini tidak dapat dibatalkan.`}
         onConfirm={() => {
           if (deleteTarget) {
-            deleteSiswa.mutate(deleteTarget.id);
+            const target = deleteTarget;
+            deleteSiswa.mutate(target.id, {
+              onError: (err: Error) => {
+                if (err instanceof SiswaPunyaRiwayatError) {
+                  setRiwayatInfo({ siswa: target, riwayat: err.riwayat });
+                }
+              },
+            });
             setDeleteTarget(null);
           }
         }}
         confirmLabel="Hapus"
         variant="destructive"
       />
+
+      <AlertDialog open={!!riwayatInfo} onOpenChange={(open) => !open && setRiwayatInfo(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Siswa tidak dapat dihapus</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Data "${riwayatInfo?.siswa.nama}" sudah punya riwayat sehingga tidak bisa dihapus permanen. Menghapusnya akan menghilangkan jejak keuangan dan akademik.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {riwayatInfo && (
+            <div className="space-y-2 text-sm">
+              <p className="rounded-md bg-muted px-3 py-2">{ringkasRiwayat(riwayatInfo.riwayat)}</p>
+              <p className="text-muted-foreground">
+                {["calon", "diterima"].includes(riwayatInfo.siswa.status)
+                  ? "Pendaftar yang batal diproses lewat menu SPMB, tombol Pengunduran diri."
+                  : "Ubah statusnya (keluar, alumni, atau pindah) agar tidak lagi tampil sebagai siswa aktif."}
+              </p>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Tutup</AlertDialogCancel>
+            {riwayatInfo && !["calon", "diterima"].includes(riwayatInfo.siswa.status) && (
+              <AlertDialogAction onClick={() => navigate(`/akademik/siswa/${riwayatInfo.siswa.id}/edit`)}>
+                Ubah status
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ImportSiswaDialog
         open={showImport}

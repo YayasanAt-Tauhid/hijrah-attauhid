@@ -11,6 +11,7 @@ const STAFF_ROLES = [
   "pustakawan",
   "kasir",
   "sekretaris_yayasan",
+  "bendahara",
 ] as const;
 
 export const Route = createFileRoute("/_protected")({

@@ -2,8 +2,10 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, Re
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { withAuthTimeout } from "@/lib/authTimeout";
+import { clearAllSpmbAdminDrafts } from "@/lib/spmbAdminDraft";
+import { canAccess, isConfigurableRole, type PermissionKey } from "@/lib/permissions";
 
-export type UserRole = "admin" | "admin_tu" | "kepala_sekolah" | "guru" | "keuangan" | "siswa" | "pustakawan" | "kasir" | "ortu" | "sekretaris_yayasan";
+export type UserRole = "admin" | "admin_tu" | "kepala_sekolah" | "guru" | "keuangan" | "siswa" | "pustakawan" | "kasir" | "ortu" | "sekretaris_yayasan" | "bendahara";
 type SignInResult = { error: string | null; role?: UserRole | null };
 interface AuthState {
   user: User | null;
@@ -14,6 +16,11 @@ interface AuthState {
   authError: string | null;
 }
 interface AuthContextType extends AuthState {
+  /** Izin modul Keuangan peran ini (null = belum dimuat / tidak berlaku). Gunakan `can`. */
+  permissions: ReadonlySet<string> | null;
+  /** true selama izin peran yang bisa diatur masih dimuat; jangan putuskan akses dulu. */
+  permissionsLoading: boolean;
+  can: (permission: PermissionKey) => boolean;
   retryAuth: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<SignInResult>;
   signInWithGoogle: (redirectTo: string) => Promise<{ error: string | null }>;
@@ -29,6 +36,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ ...emptyState, isLoading: true });
+  const [loadedPermissions, setLoadedPermissions] = useState<{ role: string; userId: string; keys: ReadonlySet<string> } | null>(null);
   const active = useRef(false);
   const revision = useRef(0);
   const profileRequest = useRef<AbortController | null>(null);
@@ -124,6 +132,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Return synchronously and defer profile queries until the auth lock is released.
       // Sign-out invalidates old profile requests immediately.
       if (!nextSession) {
+        // Draf SPMB berisi data pribadi calon murid; jangan tertinggal di komputer bersama setelah logout.
+        if (_event === "SIGNED_OUT") clearAllSpmbAdminDrafts();
         void resolveSession(null);
         return;
       }
@@ -152,6 +162,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [resolveSession, retryAuth]);
 
+  // Izin hanya dimuat untuk peran yang bisa diatur admin (keuangan, kasir, bendahara,
+  // sekretaris). Gagal memuat = tanpa izin (gagal tertutup), bukan galat login.
+  const permissionRole = state.role;
+  const permissionUserId = state.user?.id ?? null;
+  useEffect(() => {
+    if (!permissionRole || !permissionUserId || !isConfigurableRole(permissionRole)) {
+      setLoadedPermissions(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      let keys: ReadonlySet<string> = new Set();
+      try {
+        const loose = supabase as unknown as {
+          from(table: string): { select(columns: string): { eq(column: string, value: string): PromiseLike<{ data: Array<{ permission: string }> | null; error: unknown }> } };
+        };
+        const { data, error } = await loose.from("role_permissions").select("permission").eq("role", permissionRole);
+        if (!error && data) keys = new Set(data.map((row) => row.permission));
+      } catch {
+        keys = new Set();
+      }
+      if (!cancelled) setLoadedPermissions({ role: permissionRole, userId: permissionUserId, keys });
+    })();
+    return () => { cancelled = true; };
+  }, [permissionRole, permissionUserId]);
+
+  const permissions = loadedPermissions && loadedPermissions.role === permissionRole && loadedPermissions.userId === permissionUserId
+    ? loadedPermissions.keys : null;
+  const permissionsLoading = !!permissionRole && isConfigurableRole(permissionRole) && permissions === null;
+  const can = useCallback(
+    (permission: PermissionKey) => canAccess(state.role, permissions, permission),
+    [state.role, permissions],
+  );
+
   const signIn = useCallback(async (email: string, password: string) => {
     try {
       const { data, error } = await withAuthTimeout(supabase.auth.signInWithPassword({ email, password }));
@@ -170,8 +214,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = useCallback(async (redirectTo: string) => {
     try {
-      const { error } = await withAuthTimeout(supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } }));
-      return { error: error?.message ?? null };
+      const { data, error } = await withAuthTimeout(supabase.auth.signInWithOAuth({
+        provider: "google", options: { redirectTo, skipBrowserRedirect: true },
+      }));
+      if (error) return { error: error.message };
+      if (!data.url) return { error: connectionError };
+      const url = new URL(data.url);
+      // Rustbase mewajibkan apikey di URL authorize (redirect browser tak bisa mengirim header);
+      // Supabase tidak membutuhkannya dan akan meneruskannya ke Google, jadi hanya ditambah untuk non-Supabase.
+      if (!new URL(import.meta.env.VITE_SUPABASE_URL).hostname.endsWith(".supabase.co")) {
+        url.searchParams.set("apikey", import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+      }
+      window.location.assign(url.toString());
+      return { error: null };
     } catch { return { error: connectionError }; }
   }, []);
 
@@ -186,7 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ ...state, retryAuth, signIn, signInWithGoogle, signOut, changePassword }}>
+    <AuthContext.Provider value={{ ...state, permissions, permissionsLoading, can, retryAuth, signIn, signInWithGoogle, signOut, changePassword }}>
       {children}
     </AuthContext.Provider>
   );

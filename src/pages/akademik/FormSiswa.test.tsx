@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => {
   const dept = { id: "00000000-0000-4000-8000-000000000001", kode: "SD", nama: "SD" };
   const sizes = [{ jenis: "SETELAN SERAGAM BIRU", ukuran: "S" }, { jenis: "SETELAN SERAGAM (MERAH PUTIH DAN COKLAT)", ukuran: "M" }, { jenis: "SETELAN OLAH RAGA", ukuran: "ALL SIZE" }, { jenis: "", ukuran: "" }];
   return {
+    verification: { can_verify: false, version: "v1", checklist: {}, requirements: [] as { key: string; required: boolean }[] },
     dept, sizes, departments: [dept], empty: [],
     siswa: { id: "student", nama: "Siswa Uji", jenis_kelamin: "L", status: "aktif", angkatan_id: "00000000-0000-4000-8000-000000000002", departemen_id: dept.id },
     detail: { ukuran_seragam: sizes, ukuran_baju: "X3L" },
@@ -32,16 +33,16 @@ vi.mock("@/hooks/useAkademikData", () => ({
 vi.mock("@/components/akademik/SpmbNisField", () => ({ SpmbNisField: () => null }));
 vi.mock("@/server/nis", () => ({ generateNis: vi.fn() }));
 vi.mock("@/hooks/useSpmbVerification", () => ({
-  useSpmbVerificationState: () => ({}),
+  useSpmbVerificationState: () => ({ data: mocks.verification }),
   fetchSpmbVerificationState: vi.fn(),
   saveSpmbVerificationFields: vi.fn(),
   spmbVerificationQueryKey: (id: string) => ["verification", id],
 }));
 vi.mock("@/components/shared/FileUpload", () => ({ FileUpload: () => null }));
 vi.mock("@/components/akademik/SpmbDocumentUpload", () => ({ SpmbDocumentUpload: () => null }));
-vi.mock("@/components/akademik/SpmbFieldVerification", () => ({ SpmbFieldVerification: () => null }));
-beforeEach(() => mocks.update.mockClear());
-afterEach(cleanup);
+
+beforeEach(() => { vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} }); mocks.update.mockClear(); mocks.verification.can_verify = false; mocks.verification.requirements = []; });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 function openUniformTab() {
   fireEvent.mouseDown(screen.getByRole("tab", { name: "Ukuran Seragam" }), { button: 0, ctrlKey: false });
@@ -109,4 +110,18 @@ it("membuat NIS tanpa kelas ketika lembaga dan angkatan sudah tersedia", async (
     }),
   }));
   await waitFor(() => expect(screen.getByLabelText("NIS", { exact: true })).toHaveValue("2602001"));
+});
+
+it("memberi tanda bintang pada label dan ceklis wajib sesuai requirements", async () => {
+  mocks.verification.can_verify = true;
+  mocks.verification.requirements = [
+    { key: "tempat_lahir", required: true },
+    { key: "tanggal_lahir", required: true },
+    { key: "telepon", required: true },
+    { key: "email", required: false },
+  ];
+  render(<FormSiswa />);
+  expect(await screen.findByLabelText("Tempat Lahir *", { exact: true })).toBeInTheDocument();
+  expect(screen.getByLabelText("Tanggal Lahir *", { exact: true })).toBeInTheDocument();
+  expect(screen.getAllByRole("checkbox", { name: "Sudah diperiksa *" })).toHaveLength(3);
 });

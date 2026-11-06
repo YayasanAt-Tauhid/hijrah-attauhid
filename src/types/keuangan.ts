@@ -19,6 +19,8 @@ export type Siswa      = Database["public"]["Tables"]["siswa"]["Row"];
 /** Siswa dengan kelas aktif, dipakai di form pencarian */
 export interface SiswaWithKelas extends Pick<Siswa, "id" | "nis" | "nisn" | "nama" | "foto_url" | "status"> {
   departemen_id?: string | null;
+  /** Hanya terisi dari pencarian loket pembayaran (nama ayah/ibu dan satu HP). */
+  orang_tua?: { ayah: string | null; ibu: string | null; telepon: string | null } | null;
   kelas_siswa: Array<{
     kelas_id: string;
     kelas: {
@@ -59,6 +61,7 @@ export interface ProsesPembayaranRequest {
   tagihan_id?: string;
   /** ID kuitansi yang sama untuk beberapa item dalam satu sesi pembayaran. */
   receipt_id?: string;
+  metode_bayar?: "tunai" | "transfer";
 }
 
 /** Response dari Edge Function `proses-pembayaran` */
@@ -80,6 +83,7 @@ export interface FormPembayaran {
   jumlah: string;
   tanggalBayar: string;
   keterangan: string;
+  metodeBayar: "tunai" | "transfer";
 }
 
 export const FORM_PEMBAYARAN_DEFAULT: FormPembayaran = {
@@ -88,6 +92,7 @@ export const FORM_PEMBAYARAN_DEFAULT: FormPembayaran = {
   jumlah: "",
   tanggalBayar: new Date().toISOString().split("T")[0],
   keterangan: "",
+  metodeBayar: "tunai",
 };
 
 // ─── Status helpers ───────────────────────────────────────────────────────────

@@ -18,7 +18,7 @@
  * berkali-kali — baris yang sudah diproses tidak akan diproses ulang.
  */
 import { createServerFn } from "@tanstack/react-start";
-import { authMiddleware, requireContext, requireRole } from "./auth";
+import { authMiddleware, requireContext, requirePermission } from "./auth";
 import { createAdminClient } from "./supabase";
 
 export interface JalankanAkrualInput {
@@ -51,10 +51,7 @@ export const jalankanAkrualJatuhTempo = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<JalankanAkrualResult> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, [
-      "admin",
-      "keuangan",
-    ]);
+    await requirePermission(admin, userId, "keuangan.akuntansi");
 
     const sampaiTanggal =
       data?.sampai_tanggal || new Date().toISOString().split("T")[0];
@@ -101,7 +98,7 @@ export const akuiPendapatanDimuka = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<void> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ["admin", "keuangan"]);
+    await requirePermission(admin, userId, "keuangan.akuntansi");
     if (!data?.id) throw new Error("Pendapatan diterima di muka wajib dipilih");
     const { error } = await admin.rpc("akui_pendapatan_dimuka_atomik", {
       p_dimuka_id: data.id,

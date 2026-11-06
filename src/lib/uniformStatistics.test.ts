@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeUniforms } from "./uniformStatistics";
+import { summarizeUniforms, buildUniformSizeTable, summarizeUniformSizeTotals, transposeUniformSizeTable } from "./uniformStatistics";
 const departments = [{ id: "sd", nama: "SD", kode: "SD" }, { id: "smp", nama: "SMP", kode: "SMP" }, { id: "tk", nama: "TK", kode: "TK" }];
 const make = (dep: string, gender: string, sizes: unknown) => ({ departemen_id: dep, jenis_kelamin: gender, _spmbDetail: { ukuran_seragam: sizes } });
 describe("rekap seragam SPMB", () => {
@@ -48,5 +48,54 @@ describe("rekap seragam SPMB", () => {
     expect(result.rekap.every((row) => row.lembaga === "SMP")).toBe(true);
     expect(result.rekap.some((row) => row.jenis === "Gamis Ungu")).toBe(true);
     expect(result.rekap.some((row) => row.jenis === "Putih Merah")).toBe(false);
+  });
+});
+
+describe("tabel silang ukuran seragam", () => {
+  it("menggabungkan ukuran per jenis tanpa mencampur lembaga/gender dan mengecualikan ukuran kosong dari total", () => {
+    const rekap = summarizeUniforms([
+      make("sd", "L", [{ jenis: "Olah raga", ukuran: "S" }]),
+      make("sd", "L", [{ jenis: "Olah raga", ukuran: "M" }]),
+      make("sd", "L", [{ jenis: "Olah raga", ukuran: "" }]),
+      make("sd", "P", [{ jenis: "Olah raga", ukuran: "S" }]),
+      make("smp", "L", [{ jenis: "Olah raga", ukuran: "JUMBO" }]),
+    ], departments).rekap;
+    const matrix = buildUniformSizeTable(rekap);
+    const row = matrix.rows.find((row) => row.lembaga === "SD" && row.jenisKelamin === "Ikhwan" && row.jenis === "Olah raga");
+    expect(row).toMatchObject({ size_0: 1, size_1: 1, jumlah: 2, belumDiisi: 1 });
+    expect(matrix.rows.filter((row) => row.jenis === "Olah raga")).toHaveLength(3);
+    const customIndex = matrix.sizes.indexOf("JUMBO");
+    expect(customIndex).toBeGreaterThan(0);
+    expect(matrix.rows.find((row) => row.lembaga === "SMP" && row.jenis === "Olah raga")?.["size_" + customIndex]).toBe(1);
+    expect(matrix.rows.reduce((sum, row) => sum + row.jumlah, 0)).toBe(4);
+    expect(matrix.rows.reduce((sum, row) => sum + row.belumDiisi, 0)).toBe(16);
+  });
+});
+
+describe("total jenis dan ukuran", () => {
+  it("menjumlahkan lintas lembaga/gender, mempertahankan ukuran khusus, dan memisahkan yang kosong", () => {
+    const matrix=buildUniformSizeTable(summarizeUniforms([
+      make("sd","L",[{jenis:"Olah raga",ukuran:"S"}]),
+      make("smp","P",[{jenis:" OLAH   RAGA ",ukuran:"M"}]),
+      make("sd","P",[{jenis:"Olah raga",ukuran:"JUMBO"}]),
+      make("sd","L",[{jenis:"Olah raga",ukuran:""}]),
+    ],departments).rekap);
+    const totals=summarizeUniformSizeTotals(matrix.rows,matrix.sizes);
+    const sport=totals.rows.find(row=>row.jenis.toLowerCase()==="olah raga");
+    expect(sport).toMatchObject({jumlah:3,belumDiisi:1,size_0:1,size_1:1});
+    expect(totals.total).toMatchObject({jumlah:3,belumDiisi:13});
+    const transposed=transposeUniformSizeTable(totals.rows,matrix.sizes);
+    expect(transposed.rows.find(row=>row.ukuran==="S")?.jumlah).toBe(1);
+    expect(transposed.rows.find(row=>row.ukuran==="JUMBO")?.jumlah).toBe(1);
+    expect(transposed.rows.find(row=>row.ukuran==="Belum diisi")?.jumlah).toBe(13);
+    expect(transposed.total.jumlah).toBe(3);
+    const sumSizes=transposed.rows.filter(row=>row.id!=="missing").reduce((sum,row)=>sum+row.jumlah,0);
+    expect(sumSizes).toBe(transposed.total.jumlah);
+  });
+  it("memberi total nol saat filter tidak memiliki data",()=>{
+    const totals=summarizeUniformSizeTotals([],["S","M"]);
+    expect(totals.rows).toEqual([]);
+    expect(totals.total).toMatchObject({jumlah:0,belumDiisi:0,size_0:0,size_1:0});
+    expect(transposeUniformSizeTable([],["S","M"]).total.jumlah).toBe(0);
   });
 });

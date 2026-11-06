@@ -4,11 +4,15 @@ import { fetchAllPages } from "@/lib/fetchAll";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAkademikManagedDepartemenIds } from "@/lib/akademikScope";
+import { hapusSiswa } from "@/server/siswaDeletion";
+import { SiswaPunyaRiwayatError, isForeignKeyViolation } from "@/lib/siswaDeletion";
 
 export interface SiswaWithRelations {
   id: string;
   nis: string | null;
   nisn: string | null;
+  /** ID Santri dari SiPaksa (penghubung sementara); null bila belum ada. */
+  id_santri_pihak3?: string | null;
   nama: string;
   jenis_kelamin: string | null;
   tempat_lahir: string | null;
@@ -166,8 +170,10 @@ export function useDeleteSiswa() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("siswa").delete().eq("id", id);
-      if (error) throw error;
+      // Server function memeriksa riwayat (termasuk tabel CASCADE) sebelum menghapus.
+      const hasil = await hapusSiswa({ data: { siswa_id: id } });
+      // `in` dipakai karena strictNullChecks nonaktif: `!hasil.ok` tidak mempersempit tipe gabungan.
+      if ("riwayat" in hasil) throw new SiswaPunyaRiwayatError(hasil.riwayat);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["siswa"] });
@@ -176,6 +182,12 @@ export function useDeleteSiswa() {
       toast.success("Siswa berhasil dihapus");
     },
     onError: (err: Error) => {
+      // Siswa beriwayat dijelaskan lewat dialog di halaman, bukan toast galat.
+      if (err instanceof SiswaPunyaRiwayatError) return;
+      if (isForeignKeyViolation(err)) {
+        toast.error("Siswa ini punya riwayat data sehingga tidak dapat dihapus. Ubah statusnya sebagai gantinya.");
+        return;
+      }
       toast.error("Gagal menghapus siswa: " + err.message);
     },
   });

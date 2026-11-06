@@ -1,8 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
-import { authMiddleware, requireContext, requireRole } from "./auth";
+import { authMiddleware, requireContext, requirePermission } from "./auth";
 import { createAdminClient } from "./supabase";
 
-const ROLE_CARI_SISWA = ["admin", "keuangan"];
 
 export interface SiswaRingkasServer {
   id: string;
@@ -29,7 +28,7 @@ export const cariSiswaRingkas = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ items: SiswaRingkasServer[] }> => {
     const admin = createAdminClient();
     const { userId } = requireContext(context);
-    await requireRole(admin, userId, ROLE_CARI_SISWA);
+    await requirePermission(admin, userId, ["keuangan.pembayaran", "keuangan.transaksi", "keuangan.laporan", "keuangan.akuntansi"]);
 
     const search = data?.search?.trim() ?? "";
     if (search.length < 2) return { items: [] };
