@@ -172,7 +172,8 @@ export function useDeleteSiswa() {
     mutationFn: async (id: string) => {
       // Server function memeriksa riwayat (termasuk tabel CASCADE) sebelum menghapus.
       const hasil = await hapusSiswa({ data: { siswa_id: id } });
-      if (!hasil.ok) throw new SiswaPunyaRiwayatError(hasil.riwayat);
+      // `in` dipakai karena strictNullChecks nonaktif: `!hasil.ok` tidak mempersempit tipe gabungan.
+      if ("riwayat" in hasil) throw new SiswaPunyaRiwayatError(hasil.riwayat);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["siswa"] });
