@@ -1,0 +1,28 @@
+# Temuan Gitleaks yang sudah dinilai: bukan kebocoran aktif.
+# Format: <commit>:<berkas>:<rule>:<baris>. Nilai rahasia tidak dicatat di sini.
+# Temuan baru di luar daftar ini tetap menggagalkan CI.
+
+# kunci anon Supabase (publik, memang tertanam di klien web)
+20e4e8b2bc2cf03e6bd5454c2e95e54bdd4cb6b2:.env:jwt:2
+# kunci anon Supabase (publik, memang tertanam di klien web)
+3b61f9856aaaacdb71bf9d93e771586aa6195982:.env:jwt:2
+# kunci anon Supabase (publik, memang tertanam di klien web)
+2ce9b7ba03d1bb32f1126efc44de433d6231c234:.env:jwt:2
+# kunci anon Supabase (publik, memang tertanam di klien web)
+80b1800ce1233ad04b30edc9e254c6d241a6cf7c:.env:jwt:2
+# kunci anon Supabase (publik, memang tertanam di klien web)
+2a94e627b7cbba6d99690a9819aa1c71e3f36556:.env:jwt:1
+# service_role proyek Supabase V4 lama (leyfww...), proyek sudah dihapus; berkas sudah dikeluarkan dari git (1208c01)
+b82fa0ede2a3c1c54644d7048013fcce0c8769a1:scripts/.env:jwt:2
+# nilai tiruan pada respons Midtrans palsu di skrip uji (bukan kredensial)
+fd6449e696ead01108cc23cd45666d6da741e110:scripts/qa/spmb139-online.e2e.ts:generic-api-key:25
+# kunci anon Supabase (publik, memang tertanam di klien web)
+20e4e8b2bc2cf03e6bd5454c2e95e54bdd4cb6b2:src/integrations/supabase/client.ts:jwt:6
+# kunci anon Supabase (publik, memang tertanam di klien web)
+5b058a30ff310d3cd890aea7b71e0d614e4c6bd2:src/integrations/supabase/client.ts:jwt:6
+# kunci anon Supabase (publik, memang tertanam di klien web)
+3570e49e6bd322692cd10c13b366158dd627e24a:src/integrations/supabase/client.ts:jwt:6
+# kunci anon Supabase (publik, memang tertanam di klien web)
+2b38b95ff4557190c365c1eac2ed26eaa52fb600:src/integrations/supabase/client.ts:jwt:6
+# kunci anon Supabase (publik, memang tertanam di klien web)
+1b27b1028dc963b2c9a0a732b1d58e008c4f4193:src/server/supabase.ts:jwt:21
