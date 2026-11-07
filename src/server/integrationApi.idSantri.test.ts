@@ -114,11 +114,26 @@ describe('Integration API: id_santri_pihak3 pada data siswa', () => {
     for (const x of data) { expect(x).not.toHaveProperty('nisn'); expect(x).not.toHaveProperty('nik_hijrah'); expect(x).not.toHaveProperty('nik_dapodik') }
   })
 
-  it('tidak muncul pada payload pendaftaran (calon siswa)', async () => {
+  it('muncul pada daftar pendaftaran dengan pendaftaran:read saja; null bila kosong', async () => {
+    state.scopes.splice(0, state.scopes.length, 'pendaftaran:read')
     const r = await handleList(req('pendaftaran'), 'pendaftaran'); expect(r.status).toBe(200)
     const { data } = await r.json()
-    expect(data.length).toBeGreaterThan(0)
-    for (const x of data) { expect(x).not.toHaveProperty('id_santri_pihak3'); expect(JSON.stringify(x)).not.toContain('21.01.001') }
+    expect(data.length).toBe(3)
+    for (const x of data) expect(x).toHaveProperty('id_santri_pihak3')
+    expect(data.map((x: { id_santri_pihak3?: unknown }) => x.id_santri_pihak3)).toEqual(['21.01.001', null, null])
+  })
+
+  it.each([[1, '21.01.001'], [2, null]])('muncul di detail pendaftaran milik siswa %s', async (n, expected) => {
+    const pid = id((n as number) + 20)
+    const r = await handleDetail(req('pendaftaran/' + pid), 'pendaftaran', pid); expect(r.status).toBe(200)
+    const { data } = await r.json()
+    expect(data).toHaveProperty('id_santri_pihak3')
+    expect(data.id_santri_pihak3).toBe(expected)
+  })
+
+  it('tidak membuka identitas tambahan pada payload pendaftaran', async () => {
+    const { data } = await (await handleList(req('pendaftaran'), 'pendaftaran')).json()
+    for (const x of data) { expect(x).not.toHaveProperty('nisn'); expect(x).not.toHaveProperty('nik_dapodik') }
   })
 
   it('tetap 403 tanpa scope siswa:read', async () => {
@@ -136,6 +151,15 @@ describe('Dokumentasi API memuat id_santri_pihak3', () => {
     const openapi = read('docs/openapi-integration-v1.yaml')
     expect(openapi).toMatch(/^\s+id_santri_pihak3: \{/m)
     expect(openapi).not.toMatch(/^\s+id_santri: /m)
+  })
+
+  it('menyatakan bahwa field juga ada pada payload pendaftaran sejak ID dibuat saat mendaftar', () => {
+    const md = read('docs/integration-api.md')
+    expect(md).not.toContain('Field ini tidak ada pada payload pendaftaran')
+    expect(md).toMatch(/payload pendaftaran[^.]*id_santri_pihak3|id_santri_pihak3[^.]*payload pendaftaran/)
+    const openapi = read('docs/openapi-integration-v1.yaml')
+    const reg = openapi.slice(openapi.indexOf('    Registration:'), openapi.indexOf('pembayaran_pendaftaran:'))
+    expect(reg).toContain('id_santri_pihak3')
   })
 
   it.each(files)('salinan public/docs/%s identik dengan docs/', (name) => {

@@ -53,6 +53,7 @@ components:
         id: { type: string, format: uuid, description: Stable registration ID, distinct from siswa.id }
         siswa_id: { type: [string, 'null'], format: uuid }
         status: { type: string }
+        id_santri_pihak3: { type: [string, 'null'], description: 'ID Santri (YY.KK.NNN) dibuat saat mendaftar; null bila belum terbentuk. Sama dengan ID pada payload siswa. Tersedia dengan pendaftaran:read.' }
         tanggal_pendaftaran: { type: [string, 'null'], format: date-time }
         unit: { type: object, properties: { id: { type: [string, 'null'], format: uuid } } }
         tahun_ajaran: { type: object, properties: { id: { type: [string, 'null'], format: uuid } } }
