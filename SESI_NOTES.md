@@ -1,3 +1,10 @@
+# Catatan Sesi — ID Santri dibuat sejak pendaftaran SPMB (8 November 2026)
+
+- **Permintaan (user):** ID Santri harus terbentuk sejak calon mendaftar (bukan saat Lulus) karena akan dipakai pihak ke-3. Disetujui: nomor bolong akibat calon tidak lulus tidak masalah; ID tampil di API pendaftaran; satu ID untuk semua lembaga, format `YY.KK.NNN` tetap (ID dibuat sekali, tidak berubah saat pindah lembaga, tidak pernah ditimpa).
+- **Perubahan (branch `feat/id-santri-sejak-pendaftaran`):** migrasi `20261108050000_id_santri_sejak_pendaftaran.sql` memasang ulang trigger `trg_siswa_assign_id_santri` menjadi `BEFORE INSERT OR UPDATE OF nis, status` dengan syarat `id_santri_pihak3 IS NULL AND (status='calon' OR NIS terisi)`. Generator `id_santri_generate` tidak diubah (tahun dari nama angkatan saat belum ada riwayat NIS). `integrationApi.ts`: `id_santri_pihak3` ditambahkan pada payload pendaftaran (cukup `pendaftaran:read`); docs/ dan public/docs/ + OpenAPI diperbarui identik.
+- **Verifikasi:** tes ditulis dulu dan gagal (7), lalu lulus; `src/server` + kontrak ID Santri 35 file/357 tes hijau. Migrasi baru hanya diuji kontrak (isi berkas), BELUM dijalankan di DB; lint `integrationApi.ts` 72 error `any` sudah ada sebelumnya (jumlah sama).
+- **BELUM diterapkan ke produksi.** Langkah berikut butuh konfirmasi user: (1) terapkan migrasi ke Rustbase `proj_kqylkreswang` (dry-run `BEGIN…ROLLBACK`, checksum, satu transaksi); (2) backfill ID untuk calon yang sudah mendaftar tanpa ID (hitung dulu).
+
 # Catatan Sesi — ID Santri dibuat otomatis, tidak lagi bergantung SiPaksa (6 November 2026)
 
 - **Permintaan (user):** ID Santri (`siswa.id_santri_pihak3`, format `YY.KK.NNN`) dibuat otomatis oleh aplikasi saat siswa terdaftar, tidak lagi dari API pihak ketiga. Aturan waktu tetap: calon SPMB dapat ID saat Lulus (bersamaan NIS), siswa dari form admin saat disimpan. Nama kolom dipertahankan sementara (historis); ganti nama adalah langkah terpisah.
