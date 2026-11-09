@@ -801,7 +801,7 @@ export const saranKelompokKeluarga = createServerFn({ method: "POST" })
         jumlah_siswa: Number(row.jumlah_siswa ?? 0),
         siswa: (row.siswa ?? []) as SaranKeluarga["siswa"],
       }));
-    });
+    }, (row) => `${row.sumber}:${row.kunci}`);
 
     return { success: true, saran };
   });
