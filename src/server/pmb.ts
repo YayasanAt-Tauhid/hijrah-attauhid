@@ -198,6 +198,8 @@ export interface PmbDaftarResult {
   success: true;
   siswa_id: string;
   payment_token: string;
+  /** ID Santri (YY.KK.NNN) yang dibuat trigger database saat pendaftaran; null bila belum terbentuk. */
+  id_santri?: string | null;
   inputer_nama?: string | null;
   inputer_email?: string | null;
 }
@@ -210,6 +212,20 @@ interface PmbRegistrationActor {
 function cleanText(value: unknown, maxLength: number): string | null {
   const text = typeof value === "string" ? value.trim() : "";
   return text ? text.slice(0, maxLength) : null;
+}
+
+/**
+ * Baca ID Santri milik siswa yang sudah ada. ID dibuat oleh trigger database dan tidak
+ * pernah dikarang di sini; gagal membaca tidak boleh menggagalkan pendaftaran yang
+ * sudah tersimpan, sehingga hasilnya null.
+ */
+async function fetchIdSantri(admin: ReturnType<typeof createAdminClient>, siswaId: string): Promise<string | null> {
+  const { data, error } = await admin.from("siswa")
+    .select("id_santri_pihak3")
+    .eq("id", siswaId)
+    .maybeSingle();
+  if (error) return null;
+  return cleanText(data?.id_santri_pihak3, 50);
 }
 
 function cleanOptionalEmail(value: unknown): string | null {
@@ -554,6 +570,7 @@ async function performPmbRegistration(
           success: true,
           siswa_id: existingSiswaId,
           payment_token: existingDetail.pmb_payment_token,
+          id_santri: await fetchIdSantri(admin, existingSiswaId),
           inputer_nama: inputerNama,
           inputer_email: inputerEmail,
         };
@@ -661,7 +678,7 @@ async function performPmbRegistration(
         if (insertResult.error) throw registrationDbError(insertResult.error);
       }
 
-      return { success: true, siswa_id: existingSiswaId, payment_token: paymentToken, inputer_nama: inputerNama, inputer_email: inputerEmail };
+      return { success: true, siswa_id: existingSiswaId, payment_token: paymentToken, id_santri: await fetchIdSantri(admin, existingSiswaId), inputer_nama: inputerNama, inputer_email: inputerEmail };
     }
 
     const { data: siswa, error: siswaError } = await (admin.from("siswa") as any).insert({
@@ -677,7 +694,7 @@ async function performPmbRegistration(
       status: "calon",
       departemen_id,
       angkatan_id,
-    }).select("id").single();
+    }).select("id,id_santri_pihak3").single();
     if (siswaError) throw registrationDbError(siswaError);
 
     const { error: detailError } = await (admin.from("siswa_detail") as any).insert({
@@ -690,7 +707,14 @@ async function performPmbRegistration(
       await admin.from("siswa").delete().eq("id", siswa.id);
       throw registrationDbError(detailError);
     }
-    return { success: true, siswa_id: siswa.id, payment_token: paymentToken, inputer_nama: inputerNama, inputer_email: inputerEmail };
+    return {
+      success: true,
+      siswa_id: siswa.id,
+      payment_token: paymentToken,
+      id_santri: cleanText(siswa.id_santri_pihak3, 50),
+      inputer_nama: inputerNama,
+      inputer_email: inputerEmail,
+    };
 }
 
 export const pmbDaftar = createServerFn({ method: "POST" })

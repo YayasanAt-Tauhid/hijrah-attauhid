@@ -133,7 +133,7 @@ export default function DetailSPMB() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("siswa")
-        .select("id,nama,nis,nisn,jenis_kelamin,telepon,email,status,created_at,departemen_id,angkatan_id,departemen:departemen_id(id,nama,kode),angkatan:angkatan_id(id,nama)")
+        .select("id,nama,nis,nisn,id_santri_pihak3,jenis_kelamin,telepon,email,status,created_at,departemen_id,angkatan_id,departemen:departemen_id(id,nama,kode),angkatan:angkatan_id(id,nama)")
         .eq("id", siswaId)
         .maybeSingle();
       if (error) throw error;
@@ -368,6 +368,7 @@ export default function DetailSPMB() {
               }
             />
             <SummaryItem label="Nama Pendaftar" value={detail.spmb_inputer_nama || "-"} />
+            <SummaryItem label="ID Santri" value={siswa.id_santri_pihak3 || "-"} />
             <SummaryItem label="NIS / NISN" value={(siswa.nis || "-") + " / " + (siswa.nisn || "-")} />
           </div>
         </CardContent>

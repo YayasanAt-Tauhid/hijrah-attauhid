@@ -27,8 +27,17 @@ import { SpmbChangeMethodButton } from "@/components/portal/SpmbChangeMethodButt
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormSection } from "@/components/shared/FormSection";
 import { BrandLogo } from "@/components/shared/BrandLogo";
-import { AlertCircle, CheckCircle2, Clock3, CreditCard, FileCheck2, RefreshCw, Upload, UserPlus } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock3, Copy, CreditCard, FileCheck2, RefreshCw, Upload, UserPlus } from "lucide-react";
 import { toast } from "sonner";
+
+async function salinIdSantri(idSantri: string) {
+  try {
+    await navigator.clipboard.writeText(idSantri);
+    toast.success("ID Santri disalin");
+  } catch {
+    toast.error("ID Santri tidak dapat disalin otomatis. Silakan catat secara manual.");
+  }
+}
 import { PENGHASILAN_OPTIONS, PENGHASILAN_VALUES } from "@/lib/penghasilanOrangtua";
 
 interface Departemen { id: string; nama: string; kode: string | null }
@@ -332,7 +341,7 @@ export default function SPMBDaftarOnlineV2() {
   const [loading, setLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
-  const [registration, setRegistration] = useState<{ siswa_id: string; payment_token: string } | null>(null);
+  const [registration, setRegistration] = useState<{ siswa_id: string; payment_token: string; id_santri?: string | null } | null>(null);
   const [statusToken, setStatusToken] = useState<string | null>(null);
   const [paymentReturn, setPaymentReturn] = useState<string | null>(null);
   const [registrationStatus, setRegistrationStatus] = useState<PmbRegistrationStatusResult | null>(null);
@@ -719,7 +728,7 @@ export default function SPMBDaftarOnlineV2() {
       clearFormDraft();
       setDraftRestored(false);
       storeRegistrationToken(result.payment_token);
-      setRegistration({ siswa_id: result.siswa_id, payment_token: result.payment_token });
+      setRegistration({ siswa_id: result.siswa_id, payment_token: result.payment_token, id_santri: result.id_santri ?? null });
       setStatusToken(result.payment_token);
       try {
         const [status, policy] = await Promise.all([
@@ -812,6 +821,8 @@ export default function SPMBDaftarOnlineV2() {
     const canPay = paymentVisible && !promoFree && (registrationStatus ? registrationStatus.can_pay : true);
     const totalAmount = registrationStatus?.total_amount || payment?.total_amount || null;
     const nama = registrationStatus?.nama || form.nama;
+    // ID Santri dibuat database saat pendaftaran; tampil sejak submit, apa pun status pembayarannya.
+    const idSantri = registrationStatus?.id_santri ?? registration?.id_santri ?? null;
     const lembagaPromo = namaLembagaPromo(selectedDept, registrationStatus?.departemen_nama);
 
     return (
@@ -835,6 +846,21 @@ export default function SPMBDaftarOnlineV2() {
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">Data calon murid <strong>{nama}</strong> sudah tersimpan sebagai calon murid dan belum menyatakan kelulusan.</p>
             </div>
+
+            {idSantri && (
+              <div data-testid="spmb-id-santri" className="space-y-3 rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4 text-center">
+                <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">ID Santri</p>
+                <div className="flex items-center justify-center gap-2">
+                  <p className="select-all font-mono text-2xl font-bold tracking-wider text-emerald-900">{idSantri}</p>
+                  <Button type="button" variant="outline" size="icon" className="h-9 w-9" aria-label="Salin ID Santri" onClick={() => void salinIdSantri(idSantri)}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-sm text-emerald-900">
+                  <strong>Simpan ID Santri ini baik-baik.</strong> ID ini akan dipakai di aplikasi Portal Orang Tua apabila putra/putri Bapak/Ibu dinyatakan lulus.
+                </p>
+              </div>
+            )}
 
             {promoFree ? (
               <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-left text-sm text-emerald-900">

@@ -128,6 +128,7 @@ const DEFAULT_FILTERS: SpmbFilterState = {
 
 const SPMB_EXPORT_COLUMNS = [
   { key: "nama", label: "Nama Siswa" },
+  { key: "id_santri_pihak3", label: "ID Santri" },
   { key: "_academicNis", label: "NIS Lembaga Saat Ini" },
   { key: "_academicLembagaNama", label: "Lembaga Saat Ini" },
   { key: "nis", label: "NIS Tujuan" },
@@ -1415,6 +1416,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         </button>
       ),
     },
+    { key: "id_santri_pihak3", label: "ID Santri", sortable: true, className: "min-w-[7rem] whitespace-nowrap", render: (value) => (value as string) || "-" },
     {
       key: "_spmbJenisPendaftarLabel",
       label: "Jenis pendaftar",
@@ -1516,7 +1518,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
 
   ];
 
-  const primaryColumnKeys = ["nama", "_spmbJenisPendaftarLabel", "_lembagaNama", "status", "_kesiapanSort", "_spmbRegisteredAt", "id"];
+  const primaryColumnKeys = ["nama", "id_santri_pihak3", "_spmbJenisPendaftarLabel", "_lembagaNama", "status", "_kesiapanSort", "_spmbRegisteredAt", "id"];
   const visibleColumns = [
     ...primaryColumnKeys.slice(0, -1).map((key) => columns.find((column) => column.key === key)!),
     ...columns.filter((column) => !primaryColumnKeys.includes(column.key) && extraColumns.includes(column.key)),
@@ -1946,11 +1948,11 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       <DataTable
         key={JSON.stringify(filters)}
         columns={visibleColumns}
-        searchKeys={["nama", "nis", "_academicNis", "_spmbJenisPendaftarLabel", "_lembagaNama", "_angkatanNama", "_spmbInputer"]}
+        searchKeys={["nama", "nis", "id_santri_pihak3", "_academicNis", "_spmbJenisPendaftarLabel", "_lembagaNama", "_angkatanNama", "_spmbInputer"]}
         horizontalNavigation
         actions={columnPicker}
         data={sortedCalonList as Record<string, unknown>[]}
-        searchPlaceholder="Cari nama, NIS, lembaga, atau angkatan..."
+        searchPlaceholder="Cari nama, NIS, ID Santri, lembaga, atau angkatan..."
         exportable
         exportFilename={`spmb-siswa-${new Date().toISOString().slice(0, 10)}`}
         exportSheetName="Data SPMB"
