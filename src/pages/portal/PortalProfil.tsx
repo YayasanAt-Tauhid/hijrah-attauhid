@@ -22,12 +22,13 @@ import {
 import { toast } from "sonner";
 import { Save, Eye, EyeOff, UserPlus } from "lucide-react";
 import { getNamaOrtuDariAnak } from "@/lib/ortu";
+import { JENIS_IDENTITAS_ANAK, metaIdentitasAnak } from "@/lib/identitasAnak";
 import { portalOrtuTambahAnak } from "@/server/portalOrtu";
 
 const tambahAnakSchema = z.object({
   hubungan: z.enum(["ayah", "ibu", "wali"]),
-  jenis_identitas: z.enum(["nis", "nisn"]).default("nis"),
-  nis: z.string().min(1, "NIS/NISN anak wajib diisi"),
+  jenis_identitas: z.enum(JENIS_IDENTITAS_ANAK).default("nis"),
+  nis: z.string().min(1, "NIS/NISN/ID Santri anak wajib diisi"),
   nama_siswa: z.string().min(1, "Nama lengkap anak wajib diisi"),
   tanggal_lahir_siswa: z.string().min(1, "Tanggal lahir anak wajib diisi"),
 });
@@ -302,6 +303,7 @@ export default function PortalProfil() {
                             <SelectContent>
                               <SelectItem value="nis">NIS</SelectItem>
                               <SelectItem value="nisn">NISN</SelectItem>
+                              <SelectItem value="id_santri">ID Santri</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -312,8 +314,8 @@ export default function PortalProfil() {
                     name="nis"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{tambahAnakForm.watch("jenis_identitas") === "nisn" ? "NISN Anak" : "NIS Anak"}</FormLabel>
-                        <FormControl><Input placeholder={tambahAnakForm.watch("jenis_identitas") === "nisn" ? "NISN 10 digit" : "Nomor Induk Siswa"} inputMode="numeric" {...field} /></FormControl>
+                        <FormLabel>{metaIdentitasAnak(tambahAnakForm.watch("jenis_identitas")).label}</FormLabel>
+                        <FormControl><Input placeholder={metaIdentitasAnak(tambahAnakForm.watch("jenis_identitas")).placeholder} inputMode={metaIdentitasAnak(tambahAnakForm.watch("jenis_identitas")).inputMode} {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
