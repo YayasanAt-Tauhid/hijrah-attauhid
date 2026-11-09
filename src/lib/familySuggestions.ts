@@ -1,14 +1,35 @@
-/** Read every RPC page so suggestions beyond the API row cap remain searchable. */
+const PAGE_SIZE = 500;
+// A Cloudflare Worker may only make a limited number of subrequests per invocation,
+// so reading pages must always be bounded.
+const MAX_PAGES = 20;
+
+/**
+ * Read every RPC page so suggestions beyond the API row cap remain searchable.
+ *
+ * Stops when a page is short, when the server returned more rows than requested
+ * (it ignored the range and already sent everything), or when a page adds no new
+ * rows (the server repeated a page). Fails loudly instead of looping forever.
+ */
 export async function fetchAllFamilySuggestions<T>(
   fetchPage: (from: number, to: number) => Promise<T[]>,
+  keyOf: (row: T) => string = (row) => JSON.stringify(row),
 ): Promise<T[]> {
-  const pageSize = 500;
   const rows: T[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const page = await fetchPage(from, from + pageSize - 1);
-    rows.push(...page);
-    if (page.length < pageSize) return rows;
+  const seen = new Set<string>();
+  for (let pageNo = 0; pageNo < MAX_PAGES; pageNo += 1) {
+    const from = pageNo * PAGE_SIZE;
+    const page = await fetchPage(from, from + PAGE_SIZE - 1);
+    let added = 0;
+    for (const row of page) {
+      const key = keyOf(row);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(row);
+      added += 1;
+    }
+    if (page.length !== PAGE_SIZE || added === 0) return rows;
   }
+  throw new Error("Daftar saran keluarga terlalu banyak halaman untuk dimuat");
 }
 
 type SearchableFamily = {

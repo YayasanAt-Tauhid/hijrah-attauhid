@@ -34,4 +34,51 @@ describe("family suggestions", () => {
     const loaded = await fetchAllFamilySuggestions(async (from, to) => rows.slice(from, to + 1));
     expect(loaded).toEqual(rows);
   });
+
+  it("stops when the server ignores the range and returns every row on each call", async () => {
+    const rows = Array.from({ length: 548 }, (_, id) => ({ id }));
+    let calls = 0;
+    const loaded = await fetchAllFamilySuggestions(async () => {
+      calls += 1;
+      if (calls > 5) throw new Error("loop tidak berhenti");
+      return rows;
+    });
+    expect(loaded).toEqual(rows);
+    expect(calls).toBeLessThanOrEqual(2);
+  });
+
+  it("does not duplicate rows when an ignored range returns exactly one full page", async () => {
+    const rows = Array.from({ length: 500 }, (_, id) => ({ id }));
+    let calls = 0;
+    const loaded = await fetchAllFamilySuggestions(async () => {
+      calls += 1;
+      if (calls > 5) throw new Error("loop tidak berhenti");
+      return rows;
+    });
+    expect(loaded).toEqual(rows);
+  });
+
+  it("fails loudly instead of exhausting the Worker subrequest limit", async () => {
+    let calls = 0;
+    await expect(fetchAllFamilySuggestions(async (from) => {
+      calls += 1;
+      if (calls > 25) throw new Error("loop tidak berhenti");
+      return Array.from({ length: 500 }, (_, i) => ({ id: from + i }));
+    })).rejects.toThrow("terlalu banyak");
+    expect(calls).toBeLessThanOrEqual(20);
+  });
+
+  it("deduplicates by the provided key", async () => {
+    const rows = Array.from({ length: 548 }, (_, id) => ({ sumber: "no_kk", kunci: `k${id}`, extra: Math.random() }));
+    let calls = 0;
+    const loaded = await fetchAllFamilySuggestions(
+      async () => {
+        calls += 1;
+        if (calls > 5) throw new Error("loop tidak berhenti");
+        return rows;
+      },
+      (r) => `${r.sumber}:${r.kunci}`,
+    );
+    expect(loaded).toHaveLength(548);
+  });
 });
