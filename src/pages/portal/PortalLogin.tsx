@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { JENIS_IDENTITAS_ANAK, metaIdentitasAnak } from "@/lib/identitasAnak";
 import {
   Form,
   FormControl,
@@ -36,8 +37,8 @@ const signUpSchema = z
     password: z.string().min(8, "Password minimal 8 karakter"),
     konfirmasi: z.string(),
     hubungan: z.enum(["ayah", "ibu", "wali"]),
-    jenis_identitas: z.enum(["nis", "nisn"]).default("nis"),
-  nis: z.string().min(1, "NIS/NISN anak wajib diisi"),
+    jenis_identitas: z.enum(JENIS_IDENTITAS_ANAK).default("nis"),
+  nis: z.string().min(1, "NIS/NISN/ID Santri anak wajib diisi"),
     nama_siswa: z.string().min(1, "Nama lengkap anak wajib diisi"),
     tanggal_lahir_siswa: z.string().min(1, "Tanggal lahir anak wajib diisi"),
   })
@@ -374,6 +375,7 @@ export default function PortalLogin() {
                             <SelectContent>
                               <SelectItem value="nis">NIS</SelectItem>
                               <SelectItem value="nisn">NISN</SelectItem>
+                              <SelectItem value="id_santri">ID Santri</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -384,8 +386,8 @@ export default function PortalLogin() {
                         name="nis"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>{signUpForm.watch("jenis_identitas") === "nisn" ? "NISN Anak" : "NIS Anak"}</FormLabel>
-                            <FormControl><Input placeholder={signUpForm.watch("jenis_identitas") === "nisn" ? "NISN 10 digit" : "Nomor Induk Siswa"} inputMode="numeric" {...field} /></FormControl>
+                            <FormLabel>{metaIdentitasAnak(signUpForm.watch("jenis_identitas")).label}</FormLabel>
+                            <FormControl><Input placeholder={metaIdentitasAnak(signUpForm.watch("jenis_identitas")).placeholder} inputMode={metaIdentitasAnak(signUpForm.watch("jenis_identitas")).inputMode} {...field} /></FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
