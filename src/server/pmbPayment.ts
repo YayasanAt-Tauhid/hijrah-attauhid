@@ -26,6 +26,8 @@ export interface PmbRegistrationStatusResult {
   success: true;
   siswa_id: string;
   nama: string;
+  /** ID Santri (YY.KK.NNN); null bila belum terbentuk. */
+  id_santri: string | null;
   departemen_nama: string | null;
   status_pendaftaran: string;
   terverifikasi: boolean;
@@ -66,7 +68,7 @@ export const pmbGetStatus = createServerFn({ method: "POST" })
 
     const { data: siswa, error: siswaErr } = await admin
       .from("siswa")
-      .select("id, nama, departemen_id, status, terverifikasi")
+      .select("id, nama, departemen_id, status, terverifikasi, id_santri_pihak3")
       .eq("id", detail.siswa_id)
       .maybeSingle();
     if (siswaErr || !siswa) throw new Error("Calon siswa tidak ditemukan");
@@ -88,6 +90,7 @@ export const pmbGetStatus = createServerFn({ method: "POST" })
         success: true,
         siswa_id: siswa.id,
         nama: siswa.nama,
+        id_santri: siswa.id_santri_pihak3 || null,
         departemen_nama: departemenNama,
         status_pendaftaran: registrationStatus,
         terverifikasi: !!siswa.terverifikasi,
@@ -110,6 +113,7 @@ export const pmbGetStatus = createServerFn({ method: "POST" })
         success: true,
         siswa_id: siswa.id,
         nama: siswa.nama,
+        id_santri: siswa.id_santri_pihak3 || null,
         departemen_nama: departemenNama,
         status_pendaftaran: registrationStatus,
         terverifikasi: !!siswa.terverifikasi,
@@ -207,6 +211,7 @@ export const pmbGetStatus = createServerFn({ method: "POST" })
       success: true,
       siswa_id: siswa.id,
       nama: siswa.nama,
+      id_santri: siswa.id_santri_pihak3 || null,
       departemen_nama: departemenNama,
       status_pendaftaran: registrationStatus,
       terverifikasi: !!siswa.terverifikasi,
