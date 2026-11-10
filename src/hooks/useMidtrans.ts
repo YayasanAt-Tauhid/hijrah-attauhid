@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { getMidtransConfig, type MidtransConfig } from "@/server/payment";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 let cachedConfig: MidtransConfig | null = null;
 let scriptLoaded = false;
@@ -52,8 +53,8 @@ export function useMidtrans() {
       });
 
       setIsReady(true);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }

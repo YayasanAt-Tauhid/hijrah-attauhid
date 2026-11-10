@@ -144,7 +144,7 @@ export default function PortalLayout() {
                     Belum ada notifikasi
                   </div>
                 ) : (
-                  notifications.map((n: any) => (
+                  notifications.map((n) => (
                     <DropdownMenuItem
                       key={n.id}
                       className={`flex flex-col items-start gap-1 p-3 cursor-pointer ${

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ProtectedRoute } from "./ProtectedRoute";
+import type { UserRole } from "@/contexts/AuthContext";
 
 const mockUseAuth = vi.fn();
 let mockPathname = "/keuangan";
@@ -20,7 +21,7 @@ vi.mock("@tanstack/react-router", () => ({
   useMatches: ({ select }: { select: (matches: { pathname: string }[]) => unknown }) => select([{ pathname: mockPathname }]),
 }));
 
-function renderWithRouter(allowedRoles?: any[]) {
+function renderWithRouter(allowedRoles?: UserRole[]) {
   return render(<ProtectedRoute allowedRoles={allowedRoles} />);
 }
 

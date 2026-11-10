@@ -9,7 +9,7 @@ vi.mock("@/hooks/useISAK35", () => ({ useRekonRekeningAntar: () => ({ data: { ro
 vi.mock("@/hooks/useKeuangan", () => ({ useTahunBuku: () => ({ data: [], isLoading: false }), formatRupiah: (n: number) => `Rp ${n}` }));
 vi.mock("@/integrations/supabase/client", () => {
   // Rantai query apa pun (select/eq/is/...) yang pada akhirnya menghasilkan data kosong.
-  const chain: any = new Proxy(() => {}, {
+  const chain: unknown = new Proxy(() => {}, {
     get: (_t, prop) => (prop === "then" ? (resolve: (v: unknown) => void) => resolve({ data: [], error: null }) : () => chain),
   });
   return { supabase: { from: () => chain, rpc: () => chain } };

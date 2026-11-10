@@ -57,7 +57,7 @@ describe("Portal receipt eligibility", () => {
     fireEvent.click(screen.getByRole("button", { name: "Lanjutkan Pembayaran" }));
     await waitFor(() => expect(mocks.resume).toHaveBeenCalledWith({ data: { order_id: "ORDER-pending" } }));
     await waitFor(() => expect(pay).toHaveBeenCalledWith("EXISTING-SNAP-TOKEN", expect.any(Object)));
-    delete (window as any).snap;
+    delete (window as Partial<Window>).snap;
   });
 
   it("requires explicit confirmation before calling the server-side cancellation", async () => {

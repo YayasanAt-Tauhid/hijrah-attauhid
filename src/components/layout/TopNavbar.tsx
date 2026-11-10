@@ -24,6 +24,7 @@ import { useTahunAjaran } from "@/hooks/useAkademikData";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { id as localeId } from "date-fns/locale";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const roleLabels: Record<string, string> = {
   admin: "Administrator",
@@ -95,8 +96,8 @@ export function TopNavbar() {
       setPwOpen(false);
       await signOut();
       navigate("/login", { replace: true });
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
       setPwLoading(false);
     }
   };

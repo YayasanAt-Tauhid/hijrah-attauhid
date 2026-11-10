@@ -148,7 +148,7 @@ export default function StrukturOrganisasi() {
             <SelectTrigger className="w-52"><SelectValue placeholder="Semua" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Semua Lembaga</SelectItem>
-              {depts?.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.kode || d.nama}</SelectItem>)}
+              {depts?.map((d) => <SelectItem key={d.id} value={d.id}>{d.kode || d.nama}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>

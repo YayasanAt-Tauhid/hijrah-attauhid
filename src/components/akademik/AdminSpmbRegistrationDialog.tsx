@@ -40,6 +40,7 @@ import { FormSection } from "@/components/shared/FormSection";
 import { CheckCircle2, FileCheck2, RefreshCw, Upload, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { PENGHASILAN_OPTIONS } from "@/lib/penghasilanOrangtua";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 type Department = { id: string; nama?: string | null; kode?: string | null; psb_dibuka?: boolean | null };
 type Cohort = { id: string; nama?: string | null; departemen_id?: string | null; aktif?: boolean | null };
@@ -344,8 +345,8 @@ export function AdminSpmbRegistrationDialog({
       await onRegistered(result.siswa_id);
       setSuccess({ id: result.siswa_id, nama: form.nama.trim(), inputer: result.inputer_nama || inputer });
       toast.success("Pendaftaran SPMB berhasil disimpan", { description: `Nama Pendaftar: ${result.inputer_nama || inputer}` });
-    } catch (error: any) {
-      toast.error("Gagal menyimpan pendaftaran", { description: error?.message || "Terjadi kesalahan teknis" });
+    } catch (error: unknown) {
+      toast.error("Gagal menyimpan pendaftaran", { description: getErrorMessage(error, "Terjadi kesalahan teknis") });
     } finally {
       setSaving(false);
     }

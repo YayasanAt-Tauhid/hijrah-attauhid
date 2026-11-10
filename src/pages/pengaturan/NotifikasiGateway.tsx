@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Send, MessageCircle, Phone } from "lucide-react";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 export default function NotifikasiGateway() {
   const { user } = useAuth();
@@ -34,9 +35,9 @@ export default function NotifikasiGateway() {
       });
       toast.success(`Pesan terkirim! (${result.sent} berhasil)`);
       setTestResult(`✅ Berhasil: ${result.sent} pesan terkirim`);
-    } catch (err: any) {
-      toast.error(err.message);
-      setTestResult(`❌ Error: ${err.message}`);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+      setTestResult(`❌ Error: ${getErrorMessage(err)}`);
     } finally {
       setSending(false);
     }
@@ -57,9 +58,9 @@ export default function NotifikasiGateway() {
       });
       toast.success(`Pesan terkirim! (${result.sent} berhasil)`);
       setTestResult(`✅ Berhasil: ${result.sent} pesan terkirim`);
-    } catch (err: any) {
-      toast.error(err.message);
-      setTestResult(`❌ Error: ${err.message}`);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+      setTestResult(`❌ Error: ${getErrorMessage(err)}`);
     } finally {
       setSending(false);
     }

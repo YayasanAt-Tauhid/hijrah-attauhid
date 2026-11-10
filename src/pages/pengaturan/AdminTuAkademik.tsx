@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 type UserRow = {
   id: string;
@@ -142,8 +143,8 @@ function AdminTuManager() {
         qc.invalidateQueries({ queryKey: ["admin_tu_candidates"] }),
         qc.invalidateQueries({ queryKey: ["admin_tu_scopes"] }),
       ]);
-    } catch (error: any) {
-      toast.error(error?.message || "Gagal menyimpan akses Admin TU");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Gagal menyimpan akses Admin TU"));
     } finally {
       setSaving(false);
     }

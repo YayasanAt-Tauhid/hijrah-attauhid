@@ -19,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 function formatDateTime(value?: string | null) {
   if (!value) return "-";
@@ -65,9 +66,9 @@ export function SpmbVerificationPanel({ siswaId, isDirty = false }: { siswaId: s
       toast.success("Data SPMB berhasil diverifikasi", {
         description: "Verifikasi data tidak mengubah kelulusan, pembayaran, atau keaktifan siswa.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error("Verifikasi Data SPMB gagal", {
-        description: error?.message || "Periksa kembali data, dokumen, dan checklist lalu coba lagi.",
+        description: getErrorMessage(error, "Periksa kembali data, dokumen, dan checklist lalu coba lagi."),
       });
       await refresh();
     } finally {

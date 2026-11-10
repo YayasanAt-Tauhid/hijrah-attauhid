@@ -188,7 +188,7 @@ export default function Dashboard() {
 
       return depts.map((d) => {
         const siswaCount = (kelasSiswa || []).filter(
-          (ks: any) => ks.kelas?.departemen_id === d.id && ks.siswa?.status === "aktif"
+          (ks) => ks.kelas?.departemen_id === d.id && ks.siswa?.status === "aktif"
         ).length;
         const pegawaiCount = (pegawaiData || []).filter(
           (p) => p.departemen_id === d.id
