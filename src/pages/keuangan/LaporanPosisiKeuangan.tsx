@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLaporanPosisiKeuangan, useJumlahDraftJurnal, useDepartemenGroups, useRekonRekeningAntar, useRekonRekeningAntarDetail, RekonAntarRow, PeriodeFilter, posisiLabel } from "@/hooks/useISAK35";
 import { formatRupiah, useTahunBuku } from "@/hooks/useKeuangan";
 import KopLaporan from "@/components/keuangan/KopLaporan";
+import { labelTahunBuku } from "@/lib/labelTahunBuku";
 import TandaTanganLaporan from "@/components/keuangan/TandaTanganLaporan";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -238,7 +239,7 @@ export default function LaporanPosisiKeuangan() {
           <CardTitle className="text-lg">
             LAPORAN POSISI KEUANGAN{includeDraf && <span className="ml-2 text-blue-600 text-base font-semibold">(PERCOBAAN)</span>}
           </CardTitle>
-          <p className="text-sm text-muted-foreground">{labelUnit} — {modePeriode === "tahun" ? namaTampil : posisiLabel(filter)}</p>
+          <p className="text-sm text-muted-foreground">{labelUnit} — {modePeriode === "tahun" ? labelTahunBuku(selectedTA, undefined, namaTampil) : posisiLabel(filter)}</p>
         </CardHeader>
         <CardContent>
           {isError ? <p className="text-destructive text-sm">Gagal memuat data: {(error as any)?.message}</p> : isLoading || !data ? <p className="text-muted-foreground">Memuat...</p> : (
