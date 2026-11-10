@@ -51,7 +51,7 @@ export function SpmbVerificationOverview() {
         .range(from, to));
       if (!students.length) return [] as Row[];
 
-      const { data: summaries, error: summaryError } = await (supabase as any).rpc("spmb_verification_state_list", {
+      const { data: summaries, error: summaryError } = await supabase.rpc("spmb_verification_state_list", {
         p_ids: students.map((student: any) => student.id),
       });
       if (summaryError) throw summaryError;

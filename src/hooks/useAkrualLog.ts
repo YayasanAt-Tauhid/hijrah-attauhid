@@ -8,7 +8,7 @@ export function useAkrualLog(limit = 14) {
     queryKey: ["akrual_harian_log", limit],
     staleTime: 60_000,
     queryFn: async (): Promise<AkrualLogRow[]> => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("akrual_harian_log")
         .select("*")
         .order("dijalankan_at", { ascending: false })

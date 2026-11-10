@@ -66,7 +66,7 @@ export default function DetailSiswa() {
   const { data: identityAudit = [] } = useQuery({
     queryKey: ["siswa_identitas_audit", id],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("siswa_identitas_audit")
         .select("id, field_name, old_value, new_value, changed_at")
         .eq("siswa_id", id!)

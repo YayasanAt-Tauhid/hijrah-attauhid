@@ -776,7 +776,7 @@ export function useBukuBesar(
     queryFn: async (): Promise<BukuBesarData> => {
       const depts = departemenIds && departemenIds.length > 0 ? departemenIds : null;
 
-      const { data: saldoAwalData, error: saErr } = await (supabase as any).rpc("buku_besar_saldo_awal", {
+      const { data: saldoAwalData, error: saErr } = await supabase.rpc("buku_besar_saldo_awal", {
         p_akun_id: akunId,
         p_tgl_awal: tglAwal,
         p_departemen_ids: depts,
@@ -787,7 +787,7 @@ export function useBukuBesar(
       const pageSize = 1000;
       const mutasi: BukuBesarMutasiRow[] = [];
       for (let from = 0; ; from += pageSize) {
-        const { data, error } = await (supabase as any)
+        const { data, error } = await supabase
           .rpc("buku_besar_mutasi", {
             p_akun_id: akunId,
             p_tgl_awal: tglAwal,

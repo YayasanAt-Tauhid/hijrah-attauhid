@@ -57,7 +57,7 @@ export function SpmbVerificationPanel({ siswaId, isDirty = false }: { siswaId: s
     setConfirmOpen(false);
     setVerifying(true);
     try {
-      const { error } = await (supabase as any).rpc("spmb_mark_verified", {
+      const { error } = await supabase.rpc("spmb_mark_verified", {
         p_siswa_id: siswaId,
         p_version: state.version,
       });

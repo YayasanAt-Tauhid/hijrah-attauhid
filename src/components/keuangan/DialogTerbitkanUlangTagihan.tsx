@@ -52,7 +52,7 @@ export function DialogTerbitkanUlangTagihan({ siswa, bill, kind, onClose }: Prop
     enabled: inputsReady,
     retry: false,
     queryFn: async () => {
-      const { data, error } = await (supabase as any).rpc("terbitkan_ulang_tagihan_batal",
+      const { data, error } = await supabase.rpc("terbitkan_ulang_tagihan_batal",
         buildReissueParams({ tagihanId: bill.id, kind, nominal: nominalNum, apply: false, alumni, fase }));
       if (error) throw new Error(error.message);
       return data as ReissuePreview;
@@ -68,7 +68,7 @@ export function DialogTerbitkanUlangTagihan({ siswa, bill, kind, onClose }: Prop
     if (!canSubmit || !preview) return;
     setSaving(true);
     try {
-      const { data, error } = await (supabase as any).rpc("terbitkan_ulang_tagihan_batal", buildReissueParams({
+      const { data, error } = await supabase.rpc("terbitkan_ulang_tagihan_batal", buildReissueParams({
         tagihanId: bill.id, kind, nominal: nominalNum, apply: true, previewHash: preview.preview_hash, reason, alumni, fase, note,
       }));
       if (error) throw new Error(error.message);
