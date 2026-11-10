@@ -1,7 +1,7 @@
 """Compare ESLint results (eslint -f json) while retaining existing baseline failures.
 
 Meniru compare-typecheck.py: masalah dicocokkan menurut (file, aturan, tingkat, pesan)
-tanpa nomor baris, sehingga pergeseran baris tidak dihitung baru. Gagal hanya bila ada
+tanpa nomor baris (termasuk "at line N" di dalam teks pesan), sehingga pergeseran baris tidak dihitung baru. Gagal hanya bila ada
 ERROR baru; peringatan baru dilaporkan tetapi tidak menggagalkan.
 """
 import argparse
@@ -9,6 +9,7 @@ from collections import Counter
 import json
 import os
 from pathlib import Path
+import re
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--base", type=Path, required=True, help="eslint -f json untuk commit dasar")
@@ -19,6 +20,16 @@ parser.add_argument("--label", required=True)
 args = parser.parse_args()
 
 SEVERITY = {1: "warning", 2: "error"}
+
+
+# Beberapa pesan ESLint memuat nomor baris di dalam teksnya (mis. react-hooks/exhaustive-deps:
+# "... useEffect Hook (at line 330) ..."). Nomor itu bergeser bila baris lain berubah, jadi
+# dinormalkan; bagian pesan lainnya tetap dibandingkan apa adanya.
+LINE_REFERENCE = re.compile(r"\bat line \d+")
+
+
+def normalize(message):
+    return LINE_REFERENCE.sub("at line N", message)
 
 
 def relative(file_path, root):
@@ -36,7 +47,7 @@ def problems(path, root):
                 file,
                 message.get("ruleId") or "(parse)",
                 SEVERITY[message["severity"]],
-                message["message"],
+                normalize(message["message"]),
             )
             found[key] += 1
     errors = sum(count for key, count in found.items() if key[2] == "error")
