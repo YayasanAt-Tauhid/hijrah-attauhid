@@ -28,7 +28,7 @@ Jalankan `npm run lint` dan `npm run test` sebelum commit.
 ## Aturan Kerja Sesi (semua sesi, termasuk rc dan cloud)
 
 - Mulai dengan `git fetch origin`, lalu buat cabang baru dari `origin/main` (mis. `fix/...`, `feat/...`).
-- Jika `node_modules` belum ada (salinan kerja baru), jalankan `npm ci` dulu.
+- Jika `node_modules` belum ada (salinan kerja baru), jalankan `bun install --frozen-lockfile` dulu (lockfile: `bun.lock`; jangan commit `package-lock.json`).
 - Jalankan `npm run lint` dan `npm run test` sebelum commit, dan tampilkan hasilnya; jangan hanya menyatakan "berhasil".
 - Push hanya cabang kerja, bukan `main`. Jangan pernah force push. Perubahan masuk `main` lewat PR dengan base `main` (bukan `main-ori`).
 - Minta konfirmasi eksplisit sebelum menghapus data atau menerapkan migrasi ke database produksi.

@@ -62,7 +62,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -70,7 +69,7 @@ jobs:
           bun-version: 1.4.2
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Test
         run: npm test
@@ -85,7 +84,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx --yes wrangler@4 deploy --config .output/server/wrangler.json --name "${{ vars.WORKER_NAME }}"
+        run: bunx wrangler@4 deploy --config .output/server/wrangler.json --name "${{ vars.WORKER_NAME }}"
 
       # Server function (mis. generate tagihan) berjalan di Worker runtime dan
       # membaca env lewat `process.env`, BUKAN lewat bundle client
@@ -103,18 +102,18 @@ jobs:
           MIDTRANS_SERVER_KEY: ${{ secrets.MIDTRANS_SERVER_KEY }}
           MIDTRANS_CLIENT_KEY: ${{ secrets.MIDTRANS_CLIENT_KEY || vars.MIDTRANS_CLIENT_KEY }}
         run: |
-          echo -n "${{ vars.VITE_SUPABASE_URL }}" | npx --yes wrangler@4 secret put SUPABASE_URL --name "$WORKER_NAME"
-          echo -n "${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}" | npx --yes wrangler@4 secret put SUPABASE_ANON_KEY --name "$WORKER_NAME"
-          echo -n "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" | npx --yes wrangler@4 secret put SUPABASE_SERVICE_ROLE_KEY --name "$WORKER_NAME"
+          echo -n "${{ vars.VITE_SUPABASE_URL }}" | bunx wrangler@4 secret put SUPABASE_URL --name "$WORKER_NAME"
+          echo -n "${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}" | bunx wrangler@4 secret put SUPABASE_ANON_KEY --name "$WORKER_NAME"
+          echo -n "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" | bunx wrangler@4 secret put SUPABASE_SERVICE_ROLE_KEY --name "$WORKER_NAME"
           # Jangan overwrite secret Midtrans yang sudah ada di Worker dengan
           # string kosong bila GitHub Environment belum dikonfigurasi.
           if [ -n "$MIDTRANS_SERVER_KEY" ]; then
-            echo -n "$MIDTRANS_SERVER_KEY" | npx --yes wrangler@4 secret put MIDTRANS_SERVER_KEY --name "$WORKER_NAME"
+            echo -n "$MIDTRANS_SERVER_KEY" | bunx wrangler@4 secret put MIDTRANS_SERVER_KEY --name "$WORKER_NAME"
           else
             echo "MIDTRANS_SERVER_KEY belum diset di GitHub Environment — dilewati (nilai yang sudah ada di Worker dipertahankan)."
           fi
           if [ -n "$MIDTRANS_CLIENT_KEY" ]; then
-            echo -n "$MIDTRANS_CLIENT_KEY" | npx --yes wrangler@4 secret put MIDTRANS_CLIENT_KEY --name "$WORKER_NAME"
+            echo -n "$MIDTRANS_CLIENT_KEY" | bunx wrangler@4 secret put MIDTRANS_CLIENT_KEY --name "$WORKER_NAME"
           else
             echo "MIDTRANS_CLIENT_KEY belum diset di GitHub Environment — dilewati (nilai yang sudah ada di Worker dipertahankan)."
           fi

@@ -18,7 +18,7 @@ Changes made via Lovable will be committed automatically to this repo.
 
 If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
 
-Install Node.js 22 (including npm) and [Bun](https://bun.com/docs/installation) 1.4.2. Production builds run Vite with Bun; dependency installation uses the existing npm lockfile.
+Install Node.js 22 (including npm) and [Bun](https://bun.com/docs/installation) 1.4.2. Dependencies are installed with Bun (`bun.lock` is the lockfile; do not commit a `package-lock.json`), and production builds run Vite with Bun. Node.js is still required because Vitest and Wrangler run on it.
 
 Follow these steps:
 
@@ -30,7 +30,7 @@ git clone <YOUR_GIT_URL>
 cd <YOUR_PROJECT_NAME>
 
 # Step 3: Install the necessary dependencies.
-npm i
+bun install
 
 # Step 4: Start the development server with auto-reloading and an instant preview.
 npm run dev

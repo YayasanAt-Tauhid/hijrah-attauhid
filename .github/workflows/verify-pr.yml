@@ -18,12 +18,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
       # Bun versi sama dengan deploy.yml agar build PR identik dengan build produksi.
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
-      - run: npm ci
+      - run: bun install --frozen-lockfile
       - name: Tests
         run: npm test -- --maxWorkers=2
       - name: Build and generate routes
@@ -50,7 +49,13 @@ jobs:
           }
           (
             cd "$baseline_repo"
-            npm ci
+            # Commit dasar yang lebih lama masih memakai package-lock.json (npm);
+            # yang sudah punya bun.lock memakai Bun.
+            if [ -f bun.lock ]; then
+              bun install --frozen-lockfile
+            else
+              npm ci
+            fi
             bun --bun run build >"$typecheck_dir/base-build.log" 2>&1
             record_tsc tsconfig.app.json "$typecheck_dir/base-app.txt"
             record_tsc tsconfig.node.json "$typecheck_dir/base-config.txt"
