@@ -1,22 +1,14 @@
-# Welcome to your Lovable project
+# Hijrah At-Tauhid
 
-## Project info
-
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+School information system (successor of the JIBAS concept) built with TanStack Start and deployed to Cloudflare Workers. See `CLAUDE.md` and `JIBAS_BLUEPRINT.md` for project context.
 
 ## How can I edit this code?
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
+There are several ways of editing the application.
 
 **Use your preferred IDE**
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+Clone this repo and push changes to a working branch; changes reach `main` through a pull request.
 
 Install Node.js 22 (including npm) and [Bun](https://bun.com/docs/installation) 1.4.2. Dependencies are installed with Bun (`bun.lock` is the lockfile; do not commit a `package-lock.json`), and production builds run Vite with Bun. Node.js is still required because Vitest and Wrangler run on it.
 
@@ -105,11 +97,3 @@ Notes:
 
 Other Nitro targets (Node, Vercel, Netlify, Deno, …) work the same way via
 `SERVER_PRESET=<preset> bun --bun run build`.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
