@@ -34,6 +34,10 @@ The verification suite can be rerun against the completed October 9 fixtures. It
 
 The online suite simulates Snap and status responses and generates a test SHA-512 webhook signature. Real Midtrans requests are blocked. It verifies ownership, canonical fee/department data, installment amounts, ledger entries, duplicate webhook handling, and parent invoice balances. It does not verify Midtrans sandbox connectivity, actual QRIS/VA settlement, or a browser checkout interaction.
 
+## ESLint regression check
+
+`npm run lint` masih melaporkan ribuan error lama (hampir semuanya `@typescript-eslint/no-explicit-any`), jadi lint penuh tidak bisa menjadi gerbang PR. Langkah "Compare ESLint with main" menjalankan `eslint -f json` pada commit dasar dan pada PR, lalu `scripts/qa/compare-lint.py` mencocokkan masalah menurut (file, aturan, tingkat, pesan) tanpa nomor baris. PR gagal hanya bila ada **error baru**; peringatan baru dilaporkan tetapi tidak menggagalkan, dan eksekusi ESLint yang tidak lengkap ditolak. Menamai ulang atau memindahkan file membuat error lamanya terhitung baru; bereskan error itu di PR yang sama. Hasil lengkap ada di artifact `eslint-baseline-comparison`. Kontraknya diuji di `src/test/compareLint.test.ts`.
+
 ## Source typechecks
 
 PR CI builds generated routes, runs complete application/config TypeScript checks for both the PR and its base commit, and compares diagnostic counts/messages without source line offsets. It fails on new diagnostics or an incomplete compiler run. Full results are published as the typescript-baseline-comparison artifact; passing this regression check does not mean pre-existing repository type errors are absent.
