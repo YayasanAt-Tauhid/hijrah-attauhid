@@ -342,7 +342,7 @@ export default function PiutangManajemen() {
       const [byNis, byName] = await Promise.all([lookup("nis"), lookup("nama")]);
       const siswaIds = collectCancelStudentIds(byNis, byName);
       if (!siswaIds.length) return [];
-      return fetchAllPages<any>((from, to) => (supabase as any)
+      return fetchAllPages<any>((from, to) => supabase
         .from("tagihan")
         .select("id,nominal,bulan,status,jatuh_tempo,jurnal_piutang_id,siswa:siswa_id(id,nis,nama,departemen_id),jenis:jenis_id(nama),tahun_ajaran:tahun_ajaran_id(nama)")
         .in("siswa_id", siswaIds)

@@ -115,7 +115,7 @@ export default function DetailSPMB() {
   const { data: detail, isLoading: detailLoading, error: detailError } = useQuery({
     queryKey: ["spmb_registration_detail", registrationId],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("siswa_detail")
         .select("*")
         .eq("id", registrationId)
@@ -131,7 +131,7 @@ export default function DetailSPMB() {
   const { data: siswa, isLoading: siswaLoading } = useQuery({
     queryKey: ["siswa", "spmb-registration", siswaId],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("siswa")
         .select("id,nama,nis,nisn,id_santri_pihak3,jenis_kelamin,telepon,email,status,created_at,departemen_id,angkatan_id,departemen:departemen_id(id,nama,kode),angkatan:angkatan_id(id,nama)")
         .eq("id", siswaId)
@@ -150,7 +150,7 @@ export default function DetailSPMB() {
     queryFn: async () => {
       const result: Record<string, any> = {};
       if (targetDeptId) {
-        const { data, error } = await (supabase as any)
+        const { data, error } = await supabase
           .from("departemen")
           .select("id,nama,kode")
           .eq("id", targetDeptId)
@@ -159,7 +159,7 @@ export default function DetailSPMB() {
         result.departemen = data;
       }
       if (targetCohortId) {
-        const { data, error } = await (supabase as any)
+        const { data, error } = await supabase
           .from("angkatan")
           .select("id,nama")
           .eq("id", targetCohortId)
@@ -175,7 +175,7 @@ export default function DetailSPMB() {
   const { data: readiness } = useQuery({
     queryKey: ["spmb_registration_readiness", siswaId],
     queryFn: async () => {
-      const { data, error } = await (supabase as any).rpc("spmb_readiness_list", { p_ids: [siswaId] });
+      const { data, error } = await supabase.rpc("spmb_readiness_list", { p_ids: [siswaId] });
       if (error) throw error;
       const row = (data || []).find((item: any) => String(item.siswa_id) === siswaId);
       return (row?.readiness || null) as Record<string, any> | null;

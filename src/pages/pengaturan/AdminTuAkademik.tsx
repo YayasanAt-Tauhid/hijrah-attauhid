@@ -73,7 +73,7 @@ function AdminTuManager() {
   const { data: scopes = [], isLoading: scopesLoading } = useQuery({
     queryKey: ["admin_tu_scopes"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("admin_tu_departemen_scope")
         .select("user_id,departemen_id");
       if (error) throw error;
@@ -129,7 +129,7 @@ function AdminTuManager() {
     }
     setSaving(true);
     try {
-      const { error } = await (supabase as any).rpc("admin_set_admin_tu_scope", {
+      const { error } = await supabase.rpc("admin_set_admin_tu_scope", {
         p_user_id: userId,
         p_departemen_ids: departemenIds,
       });

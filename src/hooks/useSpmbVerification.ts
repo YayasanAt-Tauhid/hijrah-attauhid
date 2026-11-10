@@ -42,7 +42,7 @@ export type SpmbVerificationState = {
 export const spmbVerificationQueryKey = (siswaId: string) => ["spmb_verification_state", siswaId] as const;
 
 export async function fetchSpmbVerificationState(siswaId: string): Promise<SpmbVerificationState> {
-  const { data, error } = await (supabase as any).rpc("spmb_verification_state", { p_siswa_id: siswaId });
+  const { data, error } = await supabase.rpc("spmb_verification_state", { p_siswa_id: siswaId });
   if (error) throw error;
   return data as SpmbVerificationState;
 }
@@ -52,7 +52,7 @@ export async function saveSpmbVerificationFields(
   changes: Record<string, boolean>,
   version: string,
 ): Promise<SpmbVerificationState> {
-  const { data, error } = await (supabase as any).rpc("spmb_set_field_verifications", {
+  const { data, error } = await supabase.rpc("spmb_set_field_verifications", {
     p_siswa_id: siswaId,
     p_changes: changes,
     p_version: version,

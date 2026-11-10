@@ -217,7 +217,7 @@ function TutupBukuPanel({ unitKey, tahunId }: { unitKey: UnitKey; tahunId: strin
 
       if (!akun?.length) return [];
 
-      const { data: mutasiRows, error: mutasiErr } = await (supabase as any).rpc(
+      const { data: mutasiRows, error: mutasiErr } = await supabase.rpc(
         "hitung_saldo_akun_per_kategori",
         {
           p_tanggal_mulai: tahunMulai,
@@ -320,7 +320,7 @@ function TutupBukuPanel({ unitKey, tahunId }: { unitKey: UnitKey; tahunId: strin
       }
 
       // Otomatis isi saldo_awal_isak35 untuk tahun berikutnya
-      await (supabase as any).rpc("isi_saldo_awal_isak35", {
+      await supabase.rpc("isi_saldo_awal_isak35", {
         p_tahun_ditutup: tahun,
         p_tgl_mulai:     selectedTA.tanggal_mulai,
         p_tgl_selesai:   selectedTA.tanggal_selesai,

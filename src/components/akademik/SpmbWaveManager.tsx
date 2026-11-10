@@ -69,7 +69,7 @@ export function SpmbWaveManager() {
   const { data: waves = [], isLoading } = useQuery({
     queryKey: ["spmb_gelombang"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("spmb_gelombang")
         .select("id,nama,tanggal_mulai,tanggal_selesai,gratis_pendaftaran,aktif,urutan")
         .order("urutan")
@@ -151,8 +151,8 @@ export function SpmbWaveManager() {
         urutan: Math.max(1, Number.parseInt(urutan, 10) || 1),
       };
       const query = editId
-        ? (supabase as any).from("spmb_gelombang").update(payload).eq("id", editId)
-        : (supabase as any).from("spmb_gelombang").insert(payload);
+        ? supabase.from("spmb_gelombang").update(payload).eq("id", editId)
+        : supabase.from("spmb_gelombang").insert(payload);
       const { error } = await query;
       if (error) throw error;
       await qc.invalidateQueries({ queryKey: ["spmb_gelombang"] });
