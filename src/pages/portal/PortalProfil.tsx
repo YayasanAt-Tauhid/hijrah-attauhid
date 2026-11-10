@@ -24,6 +24,7 @@ import { Save, Eye, EyeOff, UserPlus } from "lucide-react";
 import { getNamaOrtuDariAnak } from "@/lib/ortu";
 import { JENIS_IDENTITAS_ANAK, metaIdentitasAnak } from "@/lib/identitasAnak";
 import { portalOrtuTambahAnak } from "@/server/portalOrtu";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const tambahAnakSchema = z.object({
   hubungan: z.enum(["ayah", "ibu", "wali"]),
@@ -162,8 +163,8 @@ export default function PortalProfil() {
       toast.success("Password berhasil diubah. Silakan login ulang.");
       await signOut();
       navigate("/portal/login");
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
       setChangingPassword(false);
     }
   };

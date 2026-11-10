@@ -26,6 +26,7 @@ import {
   targetTahunBukuTarif,
 } from "@/lib/periodeTagihan";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 interface RowSiswa {
   siswa: SiswaRingkas;
@@ -311,8 +312,8 @@ export default function TarifMassalDialog({ open, onOpenChange }: TarifMassalDia
       setRows((prev) => [...prev, ...newRows]);
       if (newRows.length > 0) toast.success(`${newRows.length} siswa dari kelas berhasil ditambahkan.`);
       if (skipped > 0) toast.info(`${skipped} siswa dilewati karena sudah ada di daftar.`);
-    } catch (err: any) {
-      toast.error(`Gagal memuat siswa kelas: ${err.message}`);
+    } catch (err: unknown) {
+      toast.error(`Gagal memuat siswa kelas: ${getErrorMessage(err)}`);
     } finally {
       setLoadingKelas(false);
     }

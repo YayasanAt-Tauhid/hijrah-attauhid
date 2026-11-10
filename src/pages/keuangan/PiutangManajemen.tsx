@@ -30,6 +30,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { Plus, Trash2, AlertTriangle, ShieldAlert, BookOpen, TrendingDown, CalendarClock, PlayCircle } from "lucide-react";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const now = new Date();
 const currentYear = now.getFullYear();
@@ -458,8 +459,8 @@ export default function PiutangManajemen() {
         // Sisakan hanya yang gagal di seleksi, supaya bisa dicoba ulang / ditinjau
         setKrSelectedIds(new Set(gagalDenganNama.map((g) => g.id)));
       }
-    } catch (e: any) {
-      toast.error(e?.message || "Gagal memproses pembatalan massal");
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, "Gagal memproses pembatalan massal"));
     } finally {
       setIsBatalMassal(false);
     }

@@ -23,6 +23,7 @@ import { Plus, Pencil, Trash2, TrendingDown, Calendar, Printer, CheckCircle } fr
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { useNavigate } from "@/lib/router-compat";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const now = new Date();
 
@@ -131,8 +132,8 @@ export default function InputPengeluaran() {
               { jurnal_id: jurnalId, akun_id: kasAkunId, keterangan: `Kas pengeluaran ${selectedJenis?.nama || ""}`, debit: 0, kredit: nominalBaru, urutan: 2 },
             ]);
           }
-        } catch (e: any) {
-          toast.warning("Pengeluaran diperbarui, tapi jurnal gagal disinkronkan: " + e.message);
+        } catch (e: unknown) {
+          toast.warning("Pengeluaran diperbarui, tapi jurnal gagal disinkronkan: " + getErrorMessage(e));
         }
       }
 
@@ -184,7 +185,7 @@ export default function InputPengeluaran() {
           ]);
           await supabase.from("pengeluaran").update({ jurnal_id: jurnal.id }).eq("id", result.id);
         }
-      } catch (jurnalError: any) {
+      } catch (jurnalError: unknown) {
         console.error("Auto-jurnal gagal:", jurnalError);
         toast.warning("Pengeluaran berhasil, tapi jurnal otomatis gagal dibuat.");
       }

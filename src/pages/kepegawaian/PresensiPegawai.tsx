@@ -15,6 +15,7 @@ import { StatsCard } from "@/components/shared/StatsCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserCheck, Clock, AlertTriangle, HeartPulse, Save } from "lucide-react";
 import { format } from "date-fns";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const STATUS_OPTIONS = [
   { value: "H", label: "Hadir", color: "bg-success/15 text-success" },
@@ -144,8 +145,8 @@ export default function PresensiPegawai() {
       if (error) throw error;
       toast.success("Presensi berhasil disimpan");
       qc.invalidateQueries({ queryKey: ["presensi_pegawai"] });
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e));
     } finally {
       setSaving(false);
     }

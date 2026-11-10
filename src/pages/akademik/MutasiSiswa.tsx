@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { ArrowRightLeft, GraduationCap, LogOut, ArrowDown, Building2 } from "lucide-react";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 export default function MutasiSiswa() {
   const qc = useQueryClient();
@@ -91,8 +92,8 @@ export default function MutasiSiswa() {
       qc.invalidateQueries({ queryKey: ["statistik_siswa"] });
       toast.success(`${selected.size} siswa berhasil dipindahkan`);
       setSelected(new Set());
-    } catch (e: any) {
-      toast.error("Gagal: " + e.message);
+    } catch (e: unknown) {
+      toast.error("Gagal: " + getErrorMessage(e));
     }
     setIsProcessing(false);
   };
@@ -109,8 +110,8 @@ export default function MutasiSiswa() {
       qc.invalidateQueries({ queryKey: ["statistik_siswa"] });
       toast.success(`${selected.size} siswa diubah statusnya menjadi "${status}"`);
       setSelected(new Set());
-    } catch (e: any) {
-      toast.error("Gagal: " + e.message);
+    } catch (e: unknown) {
+      toast.error("Gagal: " + getErrorMessage(e));
     }
     setIsProcessing(false);
   };
@@ -150,9 +151,9 @@ export default function MutasiSiswa() {
         duration: 10000,
       });
       setSelected(new Set());
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error("Pindah keluar gagal", {
-        description: e?.message || "Terjadi kesalahan teknis",
+        description: getErrorMessage(e, "Terjadi kesalahan teknis"),
         duration: 10000,
       });
     } finally {
@@ -224,9 +225,9 @@ export default function MutasiSiswa() {
       });
       setSelected(new Set());
       resetInternalTransfer();
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error("Mutasi antar lembaga gagal", {
-        description: e?.message || "Terjadi kesalahan teknis",
+        description: getErrorMessage(e, "Terjadi kesalahan teknis"),
         duration: 10000,
       });
     } finally {
@@ -527,7 +528,7 @@ export default function MutasiSiswa() {
       qc.invalidateQueries({ queryKey: ["statistik_siswa"] });
                     toast.success(`${selected.size} siswa tinggal kelas`);
                     setSelected(new Set());
-                  } catch (e: any) { toast.error(e.message); }
+                  } catch (e: unknown) { toast.error(getErrorMessage(e)); }
                   setIsProcessing(false);
                 }} disabled={isProcessing}>
                   Proses Tinggal Kelas ({selected.size})

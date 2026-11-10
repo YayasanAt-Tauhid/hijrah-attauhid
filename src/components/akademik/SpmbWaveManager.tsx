@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 type Wave = {
   id: string;
@@ -157,8 +158,8 @@ export function SpmbWaveManager() {
       await qc.invalidateQueries({ queryKey: ["spmb_gelombang"] });
       toast.success(editId ? "Gelombang SPMB diperbarui" : "Gelombang SPMB ditambahkan");
       reset();
-    } catch (error: any) {
-      toast.error(error?.message || "Gagal menyimpan gelombang SPMB");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Gagal menyimpan gelombang SPMB"));
     } finally {
       setSaving(false);
     }

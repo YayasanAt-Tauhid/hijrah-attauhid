@@ -15,6 +15,7 @@ import {
   updateIntegration,
 } from '@/server/integrationsAdmin'
 import { toast } from 'sonner'
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const scopes = [
   'pendaftaran:read',
@@ -107,8 +108,8 @@ export default function IntegrasiApi() {
       setRows(r)
       setOpts(o)
       setUsage(u || {})
-    } catch (e: any) {
-      toast.error(e.message)
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e))
     }
   }
 
@@ -136,8 +137,8 @@ export default function IntegrasiApi() {
       setSel(['pendaftaran:read'])
       await load()
       toast.success('Integrasi dibuat. Salin token sekarang; token tidak dapat dilihat lagi.')
-    } catch (e: any) {
-      toast.error(e.message)
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e))
     } finally {
       setBusy(false)
     }
@@ -149,8 +150,8 @@ export default function IntegrasiApi() {
       const r = await rotateIntegrationToken({ data: { id } })
       setToken(r.token)
       await load()
-    } catch (e: any) {
-      toast.error(e.message)
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e))
     }
   }
 
@@ -184,8 +185,8 @@ export default function IntegrasiApi() {
       })
       await load()
       toast.success('Izin integrasi diperbarui')
-    } catch (e: any) {
-      toast.error(e.message)
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e))
     }
   }
 
@@ -209,8 +210,8 @@ export default function IntegrasiApi() {
       await load()
       setWebhookEdit({ ...webhookEdit, exists: true })
       toast.success(rotateSecret ? 'Signing secret webhook dirotasi' : 'Webhook disimpan')
-    } catch (e: any) {
-      toast.error(e.message)
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e))
     }
   }
 
@@ -218,8 +219,8 @@ export default function IntegrasiApi() {
     try {
       const r = await testIntegrationWebhook({ data: { id } })
       toast.success(`Webhook test diantrikan: ${r.event_id}`)
-    } catch (e: any) {
-      toast.error(e.message)
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e))
     }
   }
 

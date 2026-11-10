@@ -18,6 +18,7 @@ import { AlertTriangle, Users, X, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import Unauthorized from "@/pages/Unauthorized";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 export default function TunggakanPembayaran() {
   const { role, can, permissionsLoading } = useAuth();
@@ -172,9 +173,9 @@ function TunggakanPembayaranContent() {
           },
         });
         berhasil++;
-      } catch (e: any) {
+      } catch (e: unknown) {
         const namaRow = selectedRows.find((r) => r.id === tx.rowId)?.nama ?? tx.siswaId;
-        gagalList.push(`${namaRow}: ${e.message}`);
+        gagalList.push(`${namaRow}: ${getErrorMessage(e)}`);
       }
       setBulkProgress({ done: i + 1, total: allTx.length });
     }
