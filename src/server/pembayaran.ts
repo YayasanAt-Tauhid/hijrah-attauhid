@@ -9,6 +9,7 @@ import { isMonthlySppRevenue } from "@/lib/recognitionDate";
  */
 import { createServerFn } from "@tanstack/react-start";
 import { ringkasOrangTua, type OrangTuaRingkas } from "@/lib/orangTuaSiswa";
+import { layakTampilDiPencarianPembayaran } from "@/lib/pencarianSiswaPembayaran";
 import { resolvePaymentBookYear } from "@/lib/paymentBookYear";
 import { resolvePaymentAmount } from "@/lib/paymentTariff";
 import { calculateRemainingBill, isInstallmentAllowed, isSppPaymentName, resolveInstallmentAmount } from "@/lib/installment";
@@ -207,9 +208,11 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
       }
     }
     if (includeNonaktifWithOpenBills || includeCalonLulus) {
+      // Calon/diterima yang lulus SPMB tidak disyaratkan punya tagihan terbuka,
+      // jadi hanya status nonaktif lain yang perlu diperiksa tagihannya.
       const nonaktifIds = Array.from(unik.values())
         .filter((siswa) => siswa.status !== "aktif" &&
-          (!["calon", "diterima"].includes(String(siswa.status)) || calonLulus.has(siswa.id)))
+          !["calon", "diterima"].includes(String(siswa.status)))
         .map((siswa) => siswa.id);
 
       if (nonaktifIds.length > 0) {
@@ -234,17 +237,13 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
 
     const hasil = Array.from(unik.values())
         .filter((siswa) => {
-          if (
-            ["calon", "diterima"].includes(String(siswa.status)) && includeCalonLulus &&
-            !calonLulus.has(siswa.id)
-          ) return false;
-          if (
-            (includeNonaktifWithOpenBills || includeCalonLulus) &&
-            siswa.status !== "aktif" &&
-            !nonaktifDenganTagihanTerbuka.has(siswa.id)
-          ) {
-            return false;
-          }
+          if (!layakTampilDiPencarianPembayaran({
+            status: siswa.status,
+            lulusSpmb: calonLulus.has(siswa.id),
+            punyaTagihanTerbuka: nonaktifDenganTagihanTerbuka.has(siswa.id),
+            includeNonaktifWithOpenBills,
+            includeCalonLulus,
+          })) return false;
           if (!kelasNeedle) return true;
           return siswa.kelas_siswa.some((ks) => {
             if (!ks.kelas?.nama) return false;
