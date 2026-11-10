@@ -19,6 +19,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # Bun versi sama dengan deploy.yml agar build PR identik dengan build produksi.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
       - run: npm ci
       - name: Tests
         run: npm test -- --maxWorkers=2
@@ -26,7 +30,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: https://example.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_build_placeholder
-        run: npm run build
+        run: bun --bun run build
       - name: Compare full TypeScript checks with main
         env:
           VITE_SUPABASE_URL: https://example.supabase.co
@@ -47,7 +51,7 @@ jobs:
           (
             cd "$baseline_repo"
             npm ci
-            npm run build >"$typecheck_dir/base-build.log" 2>&1
+            bun --bun run build >"$typecheck_dir/base-build.log" 2>&1
             record_tsc tsconfig.app.json "$typecheck_dir/base-app.txt"
             record_tsc tsconfig.node.json "$typecheck_dir/base-config.txt"
           )
