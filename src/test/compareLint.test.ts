@@ -86,6 +86,39 @@ describe("compare-lint.py", () => {
     expect(run(base, current).status).toBe(0);
   });
 
+  it("mengabaikan nomor baris yang tertulis di dalam teks pesan (mis. exhaustive-deps)", () => {
+    const withLine = (n: number): Omit<Msg, "line"> => ({
+      ...HOOK,
+      message: `The 'xs' logical expression could make the dependencies of useEffect Hook (at line ${n}) change on every render. To fix this, wrap the initialization of 'xs' in its own useMemo() Hook.`,
+    });
+    const base: FileResult[] = [{ file: "src/a.tsx", messages: [{ ...withLine(330), line: 12 }] }];
+    const current: FileResult[] = [{ file: "src/a.tsx", messages: [{ ...withLine(331), line: 13 }] }];
+    const result = run(base, current);
+    expect(result.status).toBe(0);
+    const json = report(result.stdout);
+    expect(json.new_warnings).toBe(0);
+    expect(json.new).toEqual([]);
+  });
+
+  it("tetap melaporkan peringatan baru yang berbeda pesannya, bukan hanya nomor baris", () => {
+    const hook = (name: string): Omit<Msg, "line"> => ({
+      ...HOOK,
+      message: `The '${name}' conditional could make the dependencies of useMemo Hook (at line 10) change on every render.`,
+    });
+    const base: FileResult[] = [{ file: "src/a.tsx", messages: [{ ...hook("a"), line: 1 }] }];
+    const current: FileResult[] = [{ file: "src/a.tsx", messages: [{ ...hook("a"), line: 1 }, { ...hook("b"), line: 2 }] }];
+    expect(report(run(base, current).stdout).new_warnings).toBe(1);
+  });
+
+  it("gagal bila error baru berbeda hanya pada nomor baris tetapi jumlahnya bertambah", () => {
+    const err = (n: number): Omit<Msg, "line"> => ({ ...CONST, message: `'x' is assigned at line ${n} but never reassigned.` });
+    const base: FileResult[] = [{ file: "src/a.ts", messages: [{ ...err(5), line: 5 }] }];
+    const current: FileResult[] = [{ file: "src/a.ts", messages: [{ ...err(9), line: 9 }, { ...err(20), line: 20 }] }];
+    const result = run(base, current);
+    expect(result.status).toBe(1);
+    expect(report(result.stdout).new_errors).toBe(1);
+  });
+
   it("memperlakukan root worktree yang berbeda sebagai file yang sama", () => {
     const base: FileResult[] = [{ file: "src/pages/B.tsx", messages: [{ ...ANY, line: 1 }] }];
     const result = run(base, base);
