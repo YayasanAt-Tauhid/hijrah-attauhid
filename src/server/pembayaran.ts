@@ -9,6 +9,7 @@ import { isMonthlySppRevenue } from "@/lib/recognitionDate";
  */
 import { createServerFn } from "@tanstack/react-start";
 import { ringkasOrangTua, type OrangTuaRingkas } from "@/lib/orangTuaSiswa";
+import { layakTampilDiPencarianPembayaran } from "@/lib/pencarianSiswaPembayaran";
 import { resolvePaymentBookYear } from "@/lib/paymentBookYear";
 import { resolvePaymentAmount } from "@/lib/paymentTariff";
 import { calculateRemainingBill, isInstallmentAllowed, isSppPaymentName, resolveInstallmentAmount } from "@/lib/installment";
@@ -152,7 +153,11 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     const identitySearch = kelasSearch ? parts.slice(0, -1).join(" ").trim() : search;
     if (identitySearch.length < 2) return { items: [] };
 
-    const buildQuery = (field: "nama" | "nis") => {
+    // Kolom identitas yang dicari: nama, NIS, NISN, dan ID Santri (SiPaksa).
+    // Satu query ilike per kolom (bukan satu string filter gabungan) supaya input
+    // kasir yang mengandung koma/kurung tidak merusak filter PostgREST.
+    const SEARCH_FIELDS = ["nama", "nis", "nisn", "id_santri_pihak3"] as const;
+    const buildQuery = (field: (typeof SEARCH_FIELDS)[number]) => {
       let q = admin
         .from("siswa")
         .select(select)
@@ -167,17 +172,14 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
       return q;
     };
 
-    const [byNama, byNis] = await Promise.all([
-      buildQuery("nama"),
-      buildQuery("nis"),
-    ]);
-
-    if (byNama.error) throw new Error("Gagal mencari siswa: " + byNama.error.message);
-    if (byNis.error) throw new Error("Gagal mencari siswa: " + byNis.error.message);
+    const results = await Promise.all(SEARCH_FIELDS.map((field) => buildQuery(field)));
+    for (const res of results) {
+      if (res.error) throw new Error("Gagal mencari siswa: " + res.error.message);
+    }
 
     const unik = new Map<string, SiswaPembayaranRingkas>();
     const teleponSiswa = new Map<string, string | null>();
-    for (const row of [...(byNama.data ?? []), ...(byNis.data ?? [])] as any[]) {
+    for (const row of results.flatMap((res) => res.data ?? []) as any[]) {
       teleponSiswa.set(row.id, typeof row.telepon === "string" ? row.telepon : null);
       unik.set(row.id, {
         id: row.id,
@@ -206,9 +208,11 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
       }
     }
     if (includeNonaktifWithOpenBills || includeCalonLulus) {
+      // Calon/diterima yang lulus SPMB tidak disyaratkan punya tagihan terbuka,
+      // jadi hanya status nonaktif lain yang perlu diperiksa tagihannya.
       const nonaktifIds = Array.from(unik.values())
         .filter((siswa) => siswa.status !== "aktif" &&
-          (!["calon", "diterima"].includes(String(siswa.status)) || calonLulus.has(siswa.id)))
+          !["calon", "diterima"].includes(String(siswa.status)))
         .map((siswa) => siswa.id);
 
       if (nonaktifIds.length > 0) {
@@ -233,17 +237,13 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
 
     const hasil = Array.from(unik.values())
         .filter((siswa) => {
-          if (
-            ["calon", "diterima"].includes(String(siswa.status)) && includeCalonLulus &&
-            !calonLulus.has(siswa.id)
-          ) return false;
-          if (
-            (includeNonaktifWithOpenBills || includeCalonLulus) &&
-            siswa.status !== "aktif" &&
-            !nonaktifDenganTagihanTerbuka.has(siswa.id)
-          ) {
-            return false;
-          }
+          if (!layakTampilDiPencarianPembayaran({
+            status: siswa.status,
+            lulusSpmb: calonLulus.has(siswa.id),
+            punyaTagihanTerbuka: nonaktifDenganTagihanTerbuka.has(siswa.id),
+            includeNonaktifWithOpenBills,
+            includeCalonLulus,
+          })) return false;
           if (!kelasNeedle) return true;
           return siswa.kelas_siswa.some((ks) => {
             if (!ks.kelas?.nama) return false;

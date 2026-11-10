@@ -1547,7 +1547,7 @@ function InputPembayaranContent() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Cari nama, NIS, atau nama + kelas (contoh: Shofiyya 2C)..."
+            placeholder="Cari nama, NIS, NISN, ID Santri, atau nama + kelas (contoh: Shofiyya 2C)..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             className="h-10 pl-9"
@@ -2256,7 +2256,7 @@ function InputPembayaranContent() {
         <div className="flex min-h-72 flex-col items-center justify-center rounded-xl border border-dashed bg-muted/10 px-4 text-center text-muted-foreground">
           <Search className="mb-3 h-10 w-10 opacity-20" />
           <p className="text-sm font-medium text-foreground">Cari siswa untuk memulai</p>
-          <p className="mt-1 text-xs">Ketik minimal 2 karakter NIS, nama siswa, atau nama + kelas.</p>
+          <p className="mt-1 text-xs">Ketik minimal 2 karakter NIS, NISN, ID Santri, nama siswa, atau nama + kelas.</p>
         </div>
       )}
 
