@@ -17,6 +17,7 @@ import { generateNISViaEdgeFunction } from "@/utils/nisGenerator";
 import { UserPlus, Users, UserCheck, Clock, AlertTriangle, RefreshCw, Pencil, CheckCircle2, Eye, Filter } from "lucide-react";
 import { fetchAllPages } from "@/lib/fetchAll";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 function diagnosaNIS(row: Record<string, unknown>): { alasan?: "no_dept_angkatan" | "no_kelas" } {
   const departemenId = row.departemen_id as string | null;
@@ -217,7 +218,7 @@ const labelDepartemenSpmb = (d: any) => {
       toast.success("Calon murid berhasil didaftarkan", { description: "Lengkapi biodata dan dokumen pada Edit Data sebelum penerimaan." });
       setDialogOpen(false);
       resetForm();
-    } catch (e: any) { toast.error(e.message || "Gagal mendaftarkan"); }
+    } catch (e: unknown) { toast.error(getErrorMessage(e, "Gagal mendaftarkan")); }
     finally { setIsSaving(false); }
   };
 
@@ -226,8 +227,8 @@ const labelDepartemenSpmb = (d: any) => {
       const { nis } = await generateNISViaEdgeFunction({ siswa_id: siswaId, departemen_id: departemenId, angkatan_id: angkatanId });
       toast.success(`NIS berhasil dibuat: ${nis}`, { description: namaSiswa });
       return true;
-    } catch (e: any) {
-      const pesan: string = e.message || "Terjadi kesalahan teknis";
+    } catch (e: unknown) {
+      const pesan: string = getErrorMessage(e, "Terjadi kesalahan teknis");
       toast.error(`NIS gagal dibuat untuk ${namaSiswa}`, { description: pesan.toLowerCase().includes("npsn") ? "NPSN belum diisi pada data lembaga. Hubungi admin." : pesan, duration: 10000 });
       return false;
     }
@@ -253,8 +254,8 @@ const labelDepartemenSpmb = (d: any) => {
       if (updErr) throw updErr;
       await qc.invalidateQueries({ queryKey: ["siswa"] });
       toast.success(`${namaSiswa} berhasil diterima`, { description: "Verifikasi, dokumen, biaya pendaftaran, angkatan, kelas, dan NIS sudah lengkap." });
-    } catch (e: any) {
-      toast.error("Gagal menerima murid", { description: e?.message || "Terjadi kesalahan teknis" });
+    } catch (e: unknown) {
+      toast.error("Gagal menerima murid", { description: getErrorMessage(e, "Terjadi kesalahan teknis") });
     } finally {
       setNisLoadingId(null);
     }
@@ -299,8 +300,8 @@ const labelDepartemenSpmb = (d: any) => {
       if (error) throw error;
       await qc.invalidateQueries({ queryKey: ["siswa", "calon"] });
       toast.success(`${label} berhasil dicatat`, { description: row.nama as string });
-    } catch (error: any) {
-      toast.error(`Gagal mencatat ${label.toLowerCase()}`, { description: error?.message || "Terjadi kesalahan teknis" });
+    } catch (error: unknown) {
+      toast.error(`Gagal mencatat ${label.toLowerCase()}`, { description: getErrorMessage(error, "Terjadi kesalahan teknis") });
     } finally {
       setMilestoneLoadingId(null);
     }

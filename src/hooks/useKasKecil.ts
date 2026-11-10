@@ -340,7 +340,7 @@ export function useCreateReplenishment() {
                 .eq("id", rep.id);
             }
           }
-        } catch (jurnalErr: any) {
+        } catch (jurnalErr: unknown) {
           console.error("Auto-jurnal pengisian gagal:", jurnalErr);
           toast.warning("Pengisian berhasil, tapi jurnal otomatis gagal dibuat.");
         }

@@ -332,7 +332,7 @@ export async function handlePegawaiImport(request:Request){
     const {data:newRow,error}=await (ctx.admin.from('pegawai') as any).insert(payload).select('id').single();if(error)throw error
     results.push({row:rowNo,status:'created',pegawai_id:newRow.id});created++
    }
-  }catch(e:any){results.push(employeeError(rowNo,'save_failed',e?.code==='23505'?'NIP sudah digunakan pegawai lain':'Gagal menyimpan pegawai'));failed++}
+  }catch (e: unknown) {results.push(employeeError(rowNo,'save_failed',(e as {code?:string}|null)?.code==='23505'?'NIP sudah digunakan pegawai lain':'Gagal menyimpan pegawai'));failed++}
  }
  return done(ctx,route,json({data:{summary:{created,updated,failed,total:body.rows.length},rows:results}}))
 }

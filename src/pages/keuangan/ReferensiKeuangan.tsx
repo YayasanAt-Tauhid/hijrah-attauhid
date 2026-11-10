@@ -33,6 +33,7 @@ import TabSkemaDiskon from "./TabSkemaDiskon";
 import TabKebijakanKeringanan from "./TabKebijakanKeringanan";
 import SppCategoryAccounts from "./SppCategoryAccounts";
 import { usesSppCategoryAccounts } from "@/lib/sppCategory";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 export default function ReferensiKeuangan() {
   return (
@@ -824,8 +825,8 @@ function TabTemplateNomor() {
       qc.invalidateQueries({ queryKey: ["pengaturan_template"] });
       toast.success("Template berhasil disimpan");
       setUserEdited(false); // Bug K3 fix: reset flag → next refetch boleh sync
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e));
     } finally {
       setSaving(false);
     }

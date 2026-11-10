@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { SpmbWaveManager } from "@/components/akademik/SpmbWaveManager";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 export default function KonfigurasiPMB() {
   const qc = useQueryClient();
@@ -89,8 +90,8 @@ export default function KonfigurasiPMB() {
       if (error) throw error;
       await qc.invalidateQueries({ queryKey: ["konfigurasi_pmb", departemenId] });
       toast.success("Konfigurasi SPMB berhasil disimpan");
-    } catch (e: any) {
-      toast.error(e.message || "Gagal menyimpan konfigurasi SPMB");
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, "Gagal menyimpan konfigurasi SPMB"));
     } finally {
       setSaving(false);
     }

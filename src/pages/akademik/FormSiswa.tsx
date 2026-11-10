@@ -26,6 +26,7 @@ import { ArrowLeft, Save, Wand2, Pencil, Loader2 } from "lucide-react";
 import { PENGHASILAN_CHOICES } from "@/lib/penghasilanOrangtua";
 import { UniformSizeFields } from "@/components/akademik/UniformSizeFields";
 import { emptyUniformSizes, readUniformSizes, uniformDepartment, defaultUniformSizes, validateUniformSizes } from "@/lib/ukuranSeragam";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const optionalString = z.string().optional();
 const siswaSchema = z.object({
@@ -424,8 +425,8 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
       form.setValue("nis", nis);
       toast.success("NIS berhasil dibuat: " + nis);
       queryClient.invalidateQueries({ queryKey: ["siswa"] });
-    } catch (err: any) {
-      toast.error(err.message || "Gagal generate NIS");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Gagal generate NIS"));
     }
   };
 
@@ -530,17 +531,17 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
         try {
           const nis = await invokeGenerateNis(id!, watchDept!, watchAngkatan!, watchKelas!);
           form.setValue("nis", nis);
-        } catch (err: any) {
-          toast.warning("Data tersimpan, tetapi NIS gagal dibuat: " + (err.message || ""));
+        } catch (err: unknown) {
+          toast.warning("Data tersimpan, tetapi NIS gagal dibuat: " + (getErrorMessage(err, "")));
         }
       }
       try {
         await commitVerificationDraft();
-      } catch (err: any) {
+      } catch (err: unknown) {
         form.reset(values);
         await queryClient.invalidateQueries({ queryKey: spmbVerificationQueryKey(id!) });
         toast.error("Data siswa tersimpan, tetapi checklist belum tersimpan", {
-          description: err?.message || "Periksa kembali checklist lalu tekan Simpan Perubahan lagi.",
+          description: getErrorMessage(err, "Periksa kembali checklist lalu tekan Simpan Perubahan lagi."),
         });
         return;
       }
@@ -563,8 +564,8 @@ export default function FormSiswa({ onSaved }: { onSaved?: () => void }) {
         try {
           const nis = await invokeGenerateNis(newSiswaId, watchDept!, watchAngkatan!, watchKelas!);
           toast.success("Siswa disimpan. NIS: " + nis);
-        } catch (err: any) {
-          toast.warning("Siswa disimpan, tapi NIS gagal dibuat: " + (err.message || ""));
+        } catch (err: unknown) {
+          toast.warning("Siswa disimpan, tapi NIS gagal dibuat: " + (getErrorMessage(err, "")));
         }
       }
       navigate("/akademik/siswa");

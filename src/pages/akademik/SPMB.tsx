@@ -64,6 +64,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { AdminSpmbRegistrationDialog } from "@/components/akademik/AdminSpmbRegistrationDialog";
 import { spmbAdminUpdateRegistrantName, spmbAdminUpdateRegistrationMethod, spmbMarkLulusAndAccept } from "@/server/pmb";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const SPMB_FEE_TONE_CLASS: Record<SpmbRegistrationFeeTone, string> = {
   muted: "text-muted-foreground",
@@ -891,9 +892,9 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       toast.success("Pendaftaran Penerimaan Murid Baru Berhasil", {
         description: "Data disimpan sebagai calon murid dan belum menyatakan kelulusan atau penerimaan.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error("Gagal menyimpan pendaftaran", {
-        description: error?.message || "Periksa data lalu coba kembali. Isian Anda tetap dipertahankan.",
+        description: getErrorMessage(error, "Periksa data lalu coba kembali. Isian Anda tetap dipertahankan."),
       });
     } finally {
       setIsSaving(false);
@@ -910,8 +911,8 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       });
       toast.success(`NIS berhasil dibuat: ${nis}`, { description: namaSiswa });
       return true;
-    } catch (error: any) {
-      const pesan: string = error.message || "Terjadi kesalahan teknis";
+    } catch (error: unknown) {
+      const pesan: string = getErrorMessage(error, "Terjadi kesalahan teknis");
       toast.error(`NIS gagal dibuat untuk ${namaSiswa}`, {
         description: pesan,
         duration: 10000,
@@ -958,8 +959,8 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       toast.success(`${namaSiswa} berhasil diterima`, {
         description: "Calon sudah lulus dan diterima. NIS lembaga berhasil ditetapkan.",
       });
-    } catch (error: any) {
-      toast.error("Gagal menerima murid", { description: error?.message || "Terjadi kesalahan teknis" });
+    } catch (error: unknown) {
+      toast.error("Gagal menerima murid", { description: getErrorMessage(error, "Terjadi kesalahan teknis") });
     } finally {
       setNisLoadingId(null);
     }
@@ -1023,8 +1024,8 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
           ? `${row.nama as string} otomatis diterima · NIS tujuan ${result.nis}`
           : row.nama as string,
       });
-    } catch (error: any) {
-      toast.error(`Gagal mencatat ${label.toLowerCase()}`, { description: error?.message || "Terjadi kesalahan teknis" });
+    } catch (error: unknown) {
+      toast.error(`Gagal mencatat ${label.toLowerCase()}`, { description: getErrorMessage(error, "Terjadi kesalahan teknis") });
     } finally {
       setMilestoneLoadingId(null);
     }
@@ -1076,9 +1077,9 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       });
       setActivationRow(null);
       setActivationClassId("");
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error("Gagal mengaktifkan ke jenjang tujuan", {
-        description: error?.message || "Terjadi kesalahan teknis",
+        description: getErrorMessage(error, "Terjadi kesalahan teknis"),
         duration: 10000,
       });
     } finally {
@@ -1158,9 +1159,9 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         duration: 10000,
       });
       closeTargetChange();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error("Gagal mengubah tujuan SPMB", {
-        description: error?.message || "Terjadi kesalahan teknis",
+        description: getErrorMessage(error, "Terjadi kesalahan teknis"),
         duration: 12000,
       });
     } finally {
@@ -1204,9 +1205,9 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       toast.success("Nama Pendaftar berhasil disimpan");
       setRegistrantEditRow(null);
       setRegistrantEditName("");
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error("Gagal menyimpan Nama Pendaftar", {
-        description: error?.message || "Terjadi kesalahan teknis",
+        description: getErrorMessage(error, "Terjadi kesalahan teknis"),
       });
     } finally {
       setRegistrantEditLoading(false);
@@ -1252,9 +1253,9 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         description: methodEditValue === "offline" ? "Ditandai sebagai pendaftaran Offline." : "Ditandai sebagai pendaftaran Online.",
       });
       setMethodEditRow(null);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error("Gagal mengubah metode pendaftaran", {
-        description: error?.message || "Terjadi kesalahan teknis",
+        description: getErrorMessage(error, "Terjadi kesalahan teknis"),
       });
     } finally {
       setMethodEditLoading(false);

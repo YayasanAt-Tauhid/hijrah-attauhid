@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Download, Database, Loader2 } from "lucide-react";
 import * as XLSX from "xlsx";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const TABLES = [
   { key: "siswa", label: "Data Siswa" },
@@ -64,8 +65,8 @@ export default function BackupExport() {
       const dateStr = new Date().toISOString().slice(0, 10);
       XLSX.writeFile(wb, `backup_hijrah_attauhid_${dateStr}.xlsx`);
       toast.success(`Berhasil export ${selected.size} tabel`);
-    } catch (e: any) {
-      toast.error("Gagal export: " + e.message);
+    } catch (e: unknown) {
+      toast.error("Gagal export: " + getErrorMessage(e));
     } finally {
       setExporting(false);
     }
@@ -167,7 +168,7 @@ function ExportKeuanganButton({ label, onClick }: { label: string; onClick: () =
   const [loading, setLoading] = useState(false);
   const handle = async () => {
     setLoading(true);
-    try { await onClick(); } catch (e: any) { toast.error(e.message); }
+    try { await onClick(); } catch (e: unknown) { toast.error(getErrorMessage(e)); }
     setLoading(false);
   };
   return (
