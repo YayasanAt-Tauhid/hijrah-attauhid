@@ -4887,6 +4887,1072 @@ export type Database = {
           },
         ]
       }
+      admin_tu_departemen_scope: {
+        Row: {
+          user_id: string
+          departemen_id: string
+          created_at: string
+        }
+        Insert: {
+          user_id: string
+          departemen_id: string
+          created_at?: string
+        }
+        Update: {
+          user_id?: string
+          departemen_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_tu_departemen_scope_departemen_id_fkey"
+            columns: ["departemen_id"]
+            isOneToOne: false
+            referencedRelation: "departemen"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_tu_departemen_scope_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users_profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      akrual_harian_log: {
+        Row: {
+          id: string
+          dijalankan_at: string
+          sumber: string
+          sampai_tanggal: string | null
+          piutang_diposting: number
+          piutang_nominal: number
+          pendapatan_diakui: number
+          pendapatan_nominal: number
+          jumlah_galat: number
+          galat: Json
+          galat_terpotong: boolean
+          gagal_total: boolean
+          pesan_gagal: string | null
+        }
+        Insert: {
+          id?: string
+          dijalankan_at?: string
+          sumber?: string
+          sampai_tanggal?: string | null
+          piutang_diposting?: number
+          piutang_nominal?: number
+          pendapatan_diakui?: number
+          pendapatan_nominal?: number
+          jumlah_galat?: number
+          galat?: Json
+          galat_terpotong?: boolean
+          gagal_total?: boolean
+          pesan_gagal?: string | null
+        }
+        Update: {
+          id?: string
+          dijalankan_at?: string
+          sumber?: string
+          sampai_tanggal?: string | null
+          piutang_diposting?: number
+          piutang_nominal?: number
+          pendapatan_diakui?: number
+          pendapatan_nominal?: number
+          jumlah_galat?: number
+          galat?: Json
+          galat_terpotong?: boolean
+          gagal_total?: boolean
+          pesan_gagal?: string | null
+        }
+        Relationships: []
+      }
+      integration_api_usage: {
+        Row: {
+          id: number
+          integration_id: string | null
+          route: string
+          request_id: string
+          status: number
+          duration_ms: number
+          created_at: string
+        }
+        Insert: {
+          id?: never
+          integration_id?: string | null
+          route: string
+          request_id: string
+          status: number
+          duration_ms: number
+          created_at?: string
+        }
+        Update: {
+          id?: never
+          integration_id?: string | null
+          route?: string
+          request_id?: string
+          status?: number
+          duration_ms?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_api_usage_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "integration_apps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      integration_apps: {
+        Row: {
+          id: string
+          name: string
+          active: boolean
+          scopes: string[]
+          department_ids: string[]
+          academic_year_ids: string[]
+          expires_at: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+          last_used_at: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          active?: boolean
+          scopes?: string[]
+          department_ids?: string[]
+          academic_year_ids?: string[]
+          expires_at?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+          last_used_at?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          active?: boolean
+          scopes?: string[]
+          department_ids?: string[]
+          academic_year_ids?: string[]
+          expires_at?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+          last_used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_apps_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      integration_audit_log: {
+        Row: {
+          id: number
+          integration_id: string | null
+          actor_id: string | null
+          action: string
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: never
+          integration_id?: string | null
+          actor_id?: string | null
+          action: string
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: never
+          integration_id?: string | null
+          actor_id?: string | null
+          action?: string
+          metadata?: Json
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_audit_log_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "integration_audit_log_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "integration_apps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      integration_change_log: {
+        Row: {
+          seq: number
+          object_type: string
+          object_id: string
+          change_type: string
+          department_id: string | null
+          academic_year_id: string | null
+          previous_department_id: string | null
+          previous_academic_year_id: string | null
+          changed_at: string
+        }
+        Insert: {
+          seq?: never
+          object_type: string
+          object_id: string
+          change_type: string
+          department_id?: string | null
+          academic_year_id?: string | null
+          previous_department_id?: string | null
+          previous_academic_year_id?: string | null
+          changed_at?: string
+        }
+        Update: {
+          seq?: never
+          object_type?: string
+          object_id?: string
+          change_type?: string
+          department_id?: string | null
+          academic_year_id?: string | null
+          previous_department_id?: string | null
+          previous_academic_year_id?: string | null
+          changed_at?: string
+        }
+        Relationships: []
+      }
+      integration_tokens: {
+        Row: {
+          id: string
+          integration_id: string
+          token_prefix: string
+          token_hash: string
+          expires_at: string | null
+          revoked_at: string | null
+          created_by: string | null
+          created_at: string
+          last_used_at: string | null
+        }
+        Insert: {
+          id?: string
+          integration_id: string
+          token_prefix: string
+          token_hash: string
+          expires_at?: string | null
+          revoked_at?: string | null
+          created_by?: string | null
+          created_at?: string
+          last_used_at?: string | null
+        }
+        Update: {
+          id?: string
+          integration_id?: string
+          token_prefix?: string
+          token_hash?: string
+          expires_at?: string | null
+          revoked_at?: string | null
+          created_by?: string | null
+          created_at?: string
+          last_used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_tokens_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "integration_tokens_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "integration_apps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kebijakan_keringanan: {
+        Row: {
+          id: string
+          kode: string
+          versi: number
+          nama: string
+          skema_diskon_id: string
+          jenis_id: string
+          kelas_regex: string | null
+          tipe: string
+          nilai: number
+          otomatis: boolean
+          perlu_pengajuan: boolean
+          berlaku_mulai: string
+          berlaku_selesai: string | null
+          aktif: boolean
+          keterangan: string | null
+          dibuat_oleh: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          kode: string
+          versi: number
+          nama: string
+          skema_diskon_id: string
+          jenis_id: string
+          kelas_regex?: string | null
+          tipe: string
+          nilai: number
+          otomatis?: boolean
+          perlu_pengajuan?: boolean
+          berlaku_mulai: string
+          berlaku_selesai?: string | null
+          aktif?: boolean
+          keterangan?: string | null
+          dibuat_oleh?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          kode?: string
+          versi?: number
+          nama?: string
+          skema_diskon_id?: string
+          jenis_id?: string
+          kelas_regex?: string | null
+          tipe?: string
+          nilai?: number
+          otomatis?: boolean
+          perlu_pengajuan?: boolean
+          berlaku_mulai?: string
+          berlaku_selesai?: string | null
+          aktif?: boolean
+          keterangan?: string | null
+          dibuat_oleh?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kebijakan_keringanan_dibuat_oleh_fkey"
+            columns: ["dibuat_oleh"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kebijakan_keringanan_jenis_id_fkey"
+            columns: ["jenis_id"]
+            isOneToOne: false
+            referencedRelation: "jenis_pembayaran"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kebijakan_keringanan_skema_diskon_id_fkey"
+            columns: ["skema_diskon_id"]
+            isOneToOne: false
+            referencedRelation: "skema_diskon"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_link: {
+        Row: {
+          id: string
+          token_hash: string
+          siswa_id: string
+          tagihan_ids: string[]
+          created_by: string
+          created_at: string
+          expires_at: string
+          canceled_at: string | null
+          canceled_by: string | null
+          cicilan: Json
+        }
+        Insert: {
+          id?: string
+          token_hash: string
+          siswa_id: string
+          tagihan_ids: string[]
+          created_by: string
+          created_at?: string
+          expires_at: string
+          canceled_at?: string | null
+          canceled_by?: string | null
+          cicilan?: Json
+        }
+        Update: {
+          id?: string
+          token_hash?: string
+          siswa_id?: string
+          tagihan_ids?: string[]
+          created_by?: string
+          created_at?: string
+          expires_at?: string
+          canceled_at?: string | null
+          canceled_by?: string | null
+          cicilan?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_link_canceled_by_fkey"
+            columns: ["canceled_by"]
+            isOneToOne: false
+            referencedRelation: "users_profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_link_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users_profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_link_siswa_id_fkey"
+            columns: ["siswa_id"]
+            isOneToOne: false
+            referencedRelation: "siswa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_receipt_items: {
+        Row: {
+          id: string
+          receipt_id: string
+          line_no: number
+          payment_id: string | null
+          siswa_id: string | null
+          jenis_id: string | null
+          tagihan_id: string | null
+          tahun_ajaran_id: string | null
+          bulan: number | null
+          student_name: string
+          student_nis: string | null
+          student_nisn: string | null
+          payment_type_name: string
+          department_name: string | null
+          period_label: string | null
+          description: string
+          amount: number
+          status: string
+          voided_at: string | null
+          voided_by_user_id: string | null
+          void_reason: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          receipt_id: string
+          line_no: number
+          payment_id?: string | null
+          siswa_id?: string | null
+          jenis_id?: string | null
+          tagihan_id?: string | null
+          tahun_ajaran_id?: string | null
+          bulan?: number | null
+          student_name: string
+          student_nis?: string | null
+          student_nisn?: string | null
+          payment_type_name: string
+          department_name?: string | null
+          period_label?: string | null
+          description: string
+          amount: number
+          status?: string
+          voided_at?: string | null
+          voided_by_user_id?: string | null
+          void_reason?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          receipt_id?: string
+          line_no?: number
+          payment_id?: string | null
+          siswa_id?: string | null
+          jenis_id?: string | null
+          tagihan_id?: string | null
+          tahun_ajaran_id?: string | null
+          bulan?: number | null
+          student_name?: string
+          student_nis?: string | null
+          student_nisn?: string | null
+          payment_type_name?: string
+          department_name?: string | null
+          period_label?: string | null
+          description?: string
+          amount?: number
+          status?: string
+          voided_at?: string | null
+          voided_by_user_id?: string | null
+          void_reason?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_receipt_items_jenis_id_fkey"
+            columns: ["jenis_id"]
+            isOneToOne: false
+            referencedRelation: "jenis_pembayaran"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_receipt_items_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: true
+            referencedRelation: "pembayaran"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_receipt_items_receipt_id_fkey"
+            columns: ["receipt_id"]
+            isOneToOne: false
+            referencedRelation: "payment_receipts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_receipt_items_siswa_id_fkey"
+            columns: ["siswa_id"]
+            isOneToOne: false
+            referencedRelation: "siswa"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_receipt_items_tagihan_id_fkey"
+            columns: ["tagihan_id"]
+            isOneToOne: false
+            referencedRelation: "tagihan"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_receipt_items_tahun_ajaran_id_fkey"
+            columns: ["tahun_ajaran_id"]
+            isOneToOne: false
+            referencedRelation: "tahun_buku"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_receipt_items_voided_by_user_id_fkey"
+            columns: ["voided_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users_profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_receipts: {
+        Row: {
+          id: string
+          receipt_number: string
+          source: string
+          source_reference: string | null
+          payment_date: string
+          payment_method: string | null
+          status: string
+          total_amount: number
+          payer_user_id: string | null
+          created_by_user_id: string | null
+          cashier_employee_id: string | null
+          metadata: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          receipt_number: string
+          source: string
+          source_reference?: string | null
+          payment_date: string
+          payment_method?: string | null
+          status?: string
+          total_amount?: number
+          payer_user_id?: string | null
+          created_by_user_id?: string | null
+          cashier_employee_id?: string | null
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          receipt_number?: string
+          source?: string
+          source_reference?: string | null
+          payment_date?: string
+          payment_method?: string | null
+          status?: string
+          total_amount?: number
+          payer_user_id?: string | null
+          created_by_user_id?: string | null
+          cashier_employee_id?: string | null
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_receipts_cashier_employee_id_fkey"
+            columns: ["cashier_employee_id"]
+            isOneToOne: false
+            referencedRelation: "pegawai"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_receipts_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users_profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_receipts_payer_user_id_fkey"
+            columns: ["payer_user_id"]
+            isOneToOne: false
+            referencedRelation: "users_profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pembatalan_pembayaran_pengajuan: {
+        Row: {
+          id: string
+          pembayaran_id: string
+          snapshot: Json
+          alasan: string
+          status: string
+          diajukan_oleh: string | null
+          diajukan_at: string
+          diputuskan_oleh: string | null
+          diputuskan_at: string | null
+          catatan_keputusan: string | null
+          tanggal_pembatalan: string | null
+          jurnal_pembalik_id: string | null
+        }
+        Insert: {
+          id?: string
+          pembayaran_id: string
+          snapshot: Json
+          alasan: string
+          status?: string
+          diajukan_oleh?: string | null
+          diajukan_at?: string
+          diputuskan_oleh?: string | null
+          diputuskan_at?: string | null
+          catatan_keputusan?: string | null
+          tanggal_pembatalan?: string | null
+          jurnal_pembalik_id?: string | null
+        }
+        Update: {
+          id?: string
+          pembayaran_id?: string
+          snapshot?: Json
+          alasan?: string
+          status?: string
+          diajukan_oleh?: string | null
+          diajukan_at?: string
+          diputuskan_oleh?: string | null
+          diputuskan_at?: string | null
+          catatan_keputusan?: string | null
+          tanggal_pembatalan?: string | null
+          jurnal_pembalik_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pembatalan_pembayaran_pengajuan_diajukan_oleh_fkey"
+            columns: ["diajukan_oleh"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pembatalan_pembayaran_pengajuan_diputuskan_oleh_fkey"
+            columns: ["diputuskan_oleh"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rencana_tagihan_siswa: {
+        Row: {
+          id: string
+          siswa_id: string
+          jenis_id: string
+          nominal: number
+          mulai: string
+          selesai: string
+          sampai_akhir_jenjang: boolean
+          aktif: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+          dinonaktifkan_at: string | null
+          dinonaktifkan_oleh: string | null
+          dinonaktifkan_alasan: string | null
+          bulan_terakhir: number
+        }
+        Insert: {
+          id?: string
+          siswa_id: string
+          jenis_id: string
+          nominal: number
+          mulai: string
+          selesai: string
+          sampai_akhir_jenjang?: boolean
+          aktif?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+          dinonaktifkan_at?: string | null
+          dinonaktifkan_oleh?: string | null
+          dinonaktifkan_alasan?: string | null
+          bulan_terakhir?: number
+        }
+        Update: {
+          id?: string
+          siswa_id?: string
+          jenis_id?: string
+          nominal?: number
+          mulai?: string
+          selesai?: string
+          sampai_akhir_jenjang?: boolean
+          aktif?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+          dinonaktifkan_at?: string | null
+          dinonaktifkan_oleh?: string | null
+          dinonaktifkan_alasan?: string | null
+          bulan_terakhir?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rencana_tagihan_siswa_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rencana_tagihan_siswa_dinonaktifkan_oleh_fkey"
+            columns: ["dinonaktifkan_oleh"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rencana_tagihan_siswa_jenis_id_fkey"
+            columns: ["jenis_id"]
+            isOneToOne: false
+            referencedRelation: "jenis_pembayaran"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rencana_tagihan_siswa_siswa_id_fkey"
+            columns: ["siswa_id"]
+            isOneToOne: false
+            referencedRelation: "siswa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      role_permission_log: {
+        Row: {
+          id: string
+          role: string
+          granted: string[]
+          revoked: string[]
+          changed_by: string | null
+          changed_at: string
+        }
+        Insert: {
+          id?: string
+          role: string
+          granted?: string[]
+          revoked?: string[]
+          changed_by?: string | null
+          changed_at?: string
+        }
+        Update: {
+          id?: string
+          role?: string
+          granted?: string[]
+          revoked?: string[]
+          changed_by?: string | null
+          changed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permission_log_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      role_permissions: {
+        Row: {
+          role: string
+          permission: string
+          updated_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          role: string
+          permission: string
+          updated_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          role?: string
+          permission?: string
+          updated_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      siswa_identitas_audit: {
+        Row: {
+          id: string
+          siswa_id: string
+          field_name: string
+          old_value: string | null
+          new_value: string | null
+          changed_by: string | null
+          changed_at: string
+        }
+        Insert: {
+          id?: string
+          siswa_id: string
+          field_name: string
+          old_value?: string | null
+          new_value?: string | null
+          changed_by?: string | null
+          changed_at?: string
+        }
+        Update: {
+          id?: string
+          siswa_id?: string
+          field_name?: string
+          old_value?: string | null
+          new_value?: string | null
+          changed_by?: string | null
+          changed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "siswa_identitas_audit_siswa_id_fkey"
+            columns: ["siswa_id"]
+            isOneToOne: false
+            referencedRelation: "siswa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      siswa_tahun_masuk_departemen: {
+        Row: {
+          id: string
+          siswa_id: string
+          departemen_id: string
+          tahun_masuk: number
+          sumber: string
+          keterangan: string | null
+          created_at: string
+          updated_at: string
+          nis: string | null
+        }
+        Insert: {
+          id?: string
+          siswa_id: string
+          departemen_id: string
+          tahun_masuk: number
+          sumber?: string
+          keterangan?: string | null
+          created_at?: string
+          updated_at?: string
+          nis?: string | null
+        }
+        Update: {
+          id?: string
+          siswa_id?: string
+          departemen_id?: string
+          tahun_masuk?: number
+          sumber?: string
+          keterangan?: string | null
+          created_at?: string
+          updated_at?: string
+          nis?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "siswa_tahun_masuk_departemen_departemen_id_fkey"
+            columns: ["departemen_id"]
+            isOneToOne: false
+            referencedRelation: "departemen"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "siswa_tahun_masuk_departemen_siswa_id_fkey"
+            columns: ["siswa_id"]
+            isOneToOne: false
+            referencedRelation: "siswa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      spmb_gelombang: {
+        Row: {
+          id: string
+          nama: string
+          tanggal_mulai: string
+          tanggal_selesai: string | null
+          gratis_pendaftaran: boolean
+          aktif: boolean
+          urutan: number
+          created_at: string
+          updated_at: string
+          skema_diskon_id: string | null
+        }
+        Insert: {
+          id?: string
+          nama: string
+          tanggal_mulai: string
+          tanggal_selesai?: string | null
+          gratis_pendaftaran?: boolean
+          aktif?: boolean
+          urutan?: number
+          created_at?: string
+          updated_at?: string
+          skema_diskon_id?: string | null
+        }
+        Update: {
+          id?: string
+          nama?: string
+          tanggal_mulai?: string
+          tanggal_selesai?: string | null
+          gratis_pendaftaran?: boolean
+          aktif?: boolean
+          urutan?: number
+          created_at?: string
+          updated_at?: string
+          skema_diskon_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spmb_gelombang_skema_diskon_id_fkey"
+            columns: ["skema_diskon_id"]
+            isOneToOne: false
+            referencedRelation: "skema_diskon"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      spmb_payment_monitor_events: {
+        Row: {
+          id: number
+          siswa_detail_id: string
+          tahun_ajaran_id: string
+          departemen_id: string
+          gelombang_id: string
+          registered_at: string
+          jenis: string
+          skema: string | null
+          tahap: number | null
+          tenggat: string | null
+          catatan: string
+          created_by: string
+          created_at: string
+        }
+        Insert: {
+          id?: never
+          siswa_detail_id: string
+          tahun_ajaran_id: string
+          departemen_id: string
+          gelombang_id: string
+          registered_at: string
+          jenis: string
+          skema?: string | null
+          tahap?: number | null
+          tenggat?: string | null
+          catatan: string
+          created_by: string
+          created_at?: string
+        }
+        Update: {
+          id?: never
+          siswa_detail_id?: string
+          tahun_ajaran_id?: string
+          departemen_id?: string
+          gelombang_id?: string
+          registered_at?: string
+          jenis?: string
+          skema?: string | null
+          tahap?: number | null
+          tenggat?: string | null
+          catatan?: string
+          created_by?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spmb_payment_monitor_events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users_profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spmb_payment_monitor_events_departemen_id_fkey"
+            columns: ["departemen_id"]
+            isOneToOne: false
+            referencedRelation: "departemen"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spmb_payment_monitor_events_gelombang_id_fkey"
+            columns: ["gelombang_id"]
+            isOneToOne: false
+            referencedRelation: "spmb_gelombang"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spmb_payment_monitor_events_siswa_detail_id_fkey"
+            columns: ["siswa_detail_id"]
+            isOneToOne: false
+            referencedRelation: "siswa_detail"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spmb_payment_monitor_events_tahun_ajaran_id_fkey"
+            columns: ["tahun_ajaran_id"]
+            isOneToOne: false
+            referencedRelation: "tahun_ajaran"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       v_rekap_keuangan_lembaga: {
@@ -5450,6 +6516,402 @@ export type Database = {
       terapkan_diskon_siswa: {
         Args: { p_siswa_diskon_id: string; p_user_id?: string }
         Returns: Json
+      }
+      admin_set_admin_tu_scope: {
+        Args: {
+          p_user_id: string
+          p_departemen_ids: string[]
+        }
+        Returns: string[]
+      }
+      ajukan_pembatalan_pembayaran: {
+        Args: {
+          p_pembayaran_id: string
+          p_alasan: string
+          p_actor_id: string
+        }
+        Returns: string
+      }
+      akademik_adopt_spmb_migration: {
+        Args: {
+          p_siswa_id: string
+          p_current: Json
+          p_kelas: Json
+          p_nik_dapodik?: string
+        }
+        Returns: Json
+      }
+      akademik_find_spmb_migration_candidates: {
+        Args: {
+          p_nisns?: string[]
+          p_niks?: string[]
+        }
+        Returns: {
+          id: string
+          nis: string
+          nisn: string
+          status: string
+          departemen_id: string
+          nik: string
+          nik_dapodik: string
+          spmb_gelombang_id: string
+          spmb_siswa_internal: boolean
+        }[]
+      }
+      akademik_internal_transfer_reference: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      akademik_managed_departemen_ids: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          departemen_id: string
+        }[]
+      }
+      akademik_mutasi: {
+        Args: {
+          p_ids: string[]
+          p_action: string
+          p_kelas_id?: string
+          p_tahun_ajaran_id?: string
+        }
+        Returns: number
+      }
+      akademik_mutasi_antar_lembaga: {
+        Args: {
+          p_siswa_id: string
+          p_departemen_tujuan_id: string
+          p_angkatan_tujuan_id: string
+          p_kelas_tujuan_id: string
+          p_tahun_ajaran_id: string
+          p_alasan: string
+          p_status_asrama?: string
+        }
+        Returns: Json
+      }
+      akademik_pindah_keluar: {
+        Args: {
+          p_ids: string[]
+          p_tanggal_efektif: string
+        }
+        Returns: number
+      }
+      akademik_save_siswa: {
+        Args: {
+          p_siswa: Json
+          p_detail?: Json
+          p_kelas?: Json
+          p_id?: string
+        }
+        Returns: Json
+      }
+      batalkan_pembayaran_dengan_kuitansi_atomik: {
+        Args: {
+          p_pembayaran_id: string
+          p_alasan: string
+          p_tanggal: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      batalkan_pengajuan_pembatalan: {
+        Args: {
+          p_pengajuan_id: string
+          p_actor_id: string
+        }
+        Returns: undefined
+      }
+      buat_versi_kebijakan_keringanan: {
+        Args: {
+          p_kode: string
+          p_nama: string
+          p_skema_diskon_id: string
+          p_jenis_id: string
+          p_kelas_regex: string
+          p_tipe: string
+          p_nilai: number
+          p_otomatis: boolean
+          p_perlu_pengajuan: boolean
+          p_berlaku_mulai: string
+          p_berlaku_selesai: string
+          p_keterangan: string
+          p_user_id: string
+        }
+        Returns: Database["public"]["Tables"]["kebijakan_keringanan"]["Row"]
+      }
+      claim_midtrans_reconciliation: {
+        Args: {
+          p_timestamp: number
+          p_signature: string
+        }
+        Returns: boolean
+      }
+      get_legacy_outstanding_breakdown: {
+        Args: {
+          p_siswa_id: string
+        }
+        Returns: {
+          kode_lama: string
+          nama_lama: string
+          nominal: number
+          breakdown_total: number
+          current_total: number
+          exact_match: boolean
+        }[]
+      }
+      get_midtrans_reconciliation_candidates: {
+        Args: Record<PropertyKey, never>
+        Returns: Database["public"]["Tables"]["transaksi_midtrans"]["Row"][]
+      }
+      hapus_siswa: {
+        Args: {
+          p_siswa_id: string
+          p_actor_id: string
+        }
+        Returns: Json
+      }
+      nonaktifkan_override_tarif: {
+        Args: {
+          p_tarif_id: string
+          p_alasan: string
+        }
+        Returns: Json
+      }
+      proses_pembayaran_dengan_kuitansi_atomik: {
+        Args: {
+          p_siswa_id: string
+          p_jenis_id: string
+          p_bulan: number
+          p_jumlah: number
+          p_tanggal_bayar: string
+          p_keterangan: string
+          p_departemen_id: string
+          p_tahun_ajaran_id: string
+          p_is_bayar_dimuka: boolean
+          p_tagihan_id: string
+          p_kas_akun_id: string
+          p_kredit_akun_id: string
+          p_kredit_label: string
+          p_prefix_jurnal: string
+          p_petugas_id: string
+          p_jenis_nama: string
+          p_receipt_id?: string
+          p_source?: string
+          p_payment_method?: string
+        }
+        Returns: Json
+      }
+      proses_pembayaran_midtrans_dengan_kuitansi_atomik: {
+        Args: {
+          p_transaksi_item_id: string
+          p_siswa_id: string
+          p_jenis_id: string
+          p_bulan: number
+          p_jumlah: number
+          p_tanggal_bayar: string
+          p_departemen_id: string
+          p_tahun_ajaran_id: string
+          p_order_id: string
+          p_payment_type: string
+          p_kas_akun_id: string
+          p_kredit_akun_id: string
+          p_jenis_nama: string
+        }
+        Returns: Json
+      }
+      set_role_permissions: {
+        Args: {
+          p_role: string
+          p_permissions: string[]
+          p_actor_id: string
+        }
+        Returns: Json
+      }
+      setujui_pembatalan_pembayaran: {
+        Args: {
+          p_pengajuan_id: string
+          p_actor_id: string
+          p_tanggal: string
+          p_catatan: string
+        }
+        Returns: Json
+      }
+      simpan_tarif_generate_dan_rencana_atomik: {
+        Args: {
+          p_tarif_rows: Json
+          p_tahun_akademik_id: string
+          p_jenis_id: string
+          p_generate_groups: Json
+          p_departemen_id?: string
+          p_siswa_ids?: string[]
+          p_siswa_id?: string
+          p_kelas_id?: string
+          p_angkatan_id?: string
+          p_sampai_akhir_jenjang?: boolean
+          p_rencana_mulai?: string
+        }
+        Returns: Json
+      }
+      simpan_tarif_generate_dan_rencana_fleksibel_atomik: {
+        Args: {
+          p_tarif_rows: Json
+          p_tahun_akademik_id: string
+          p_jenis_id: string
+          p_generate_groups: Json
+          p_departemen_id?: string
+          p_siswa_ids?: string[]
+          p_siswa_id?: string
+          p_kelas_id?: string
+          p_angkatan_id?: string
+          p_mode_akhir?: string
+          p_rencana_mulai?: string
+          p_rencana_selesai?: string
+        }
+        Returns: Json
+      }
+      simpan_tarif_generate_rencana_massal_atomik: {
+        Args: {
+          p_tarif_rows: Json
+          p_tahun_akademik_id: string
+          p_jenis_id: string
+          p_generate_groups: Json
+          p_rencana_rows: Json
+          p_rencana_mulai: string
+          p_bulan_terakhir?: number
+        }
+        Returns: Json
+      }
+      sinkronkan_diskon_kakak_adik_keluarga: {
+        Args: {
+          p_keluarga_id: string
+          p_tanggal?: string
+        }
+        Returns: Json
+      }
+      spmb_activate_internal_student: {
+        Args: {
+          p_siswa_id: string
+          p_kelas_id: string
+          p_tahun_ajaran_id: string
+        }
+        Returns: Json
+      }
+      spmb_admin_register: {
+        Args: {
+          p_payload: Json
+        }
+        Returns: Json
+      }
+      spmb_change_registration_target: {
+        Args: {
+          p_siswa_id: string
+          p_departemen_tujuan_id: string
+          p_angkatan_tujuan_id: string
+          p_status_asrama: string
+          p_alasan: string
+        }
+        Returns: Json
+      }
+      spmb_mark_lulus_and_accept: {
+        Args: {
+          p_siswa_id: string
+        }
+        Returns: Json
+      }
+      spmb_mark_milestone: {
+        Args: {
+          p_siswa_id: string
+          p_action: string
+        }
+        Returns: string
+      }
+      spmb_mark_verified: {
+        Args: {
+          p_siswa_id: string
+          p_version: string
+        }
+        Returns: Json
+      }
+      spmb_readiness_list: {
+        Args: {
+          p_ids: string[]
+        }
+        Returns: {
+          siswa_id: string
+          readiness: Json
+        }[]
+      }
+      spmb_set_field_verifications: {
+        Args: {
+          p_siswa_id: string
+          p_changes: Json
+          p_version: string
+        }
+        Returns: Json
+      }
+      spmb_set_registration_status: {
+        Args: {
+          p_siswa_id: string
+          p_status: string
+        }
+        Returns: string
+      }
+      spmb_target_change_reference: {
+        Args: {
+          p_siswa_id: string
+        }
+        Returns: Json
+      }
+      spmb_verification_state: {
+        Args: {
+          p_siswa_id: string
+        }
+        Returns: Json
+      }
+      spmb_verification_state_list: {
+        Args: {
+          p_ids: string[]
+        }
+        Returns: {
+          siswa_id: string
+          verification: Json
+        }[]
+      }
+      spmb_visible_siswa_ids: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          siswa_id: string
+        }[]
+      }
+      spmb_withdraw_registration: {
+        Args: {
+          p_siswa_id: string
+          p_alasan: string
+          p_tanggal_efektif: string
+          p_actor_id: string
+        }
+        Returns: Json
+      }
+      terbitkan_ulang_tagihan_batal: {
+        Args: {
+          p_tagihan_id: string
+          p_nominal_bruto: number
+          p_alasan: string
+          p_apply?: boolean
+          p_preview_hash?: string
+          p_alumni_asrama?: string
+          p_fase_mta?: string
+          p_catatan?: string
+        }
+        Returns: Json
+      }
+      tolak_pembatalan_pembayaran: {
+        Args: {
+          p_pengajuan_id: string
+          p_actor_id: string
+          p_catatan: string
+        }
+        Returns: undefined
       }
     }
     Enums: {
