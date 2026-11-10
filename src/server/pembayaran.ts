@@ -152,7 +152,11 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     const identitySearch = kelasSearch ? parts.slice(0, -1).join(" ").trim() : search;
     if (identitySearch.length < 2) return { items: [] };
 
-    const buildQuery = (field: "nama" | "nis") => {
+    // Kolom identitas yang dicari: nama, NIS, NISN, dan ID Santri (SiPaksa).
+    // Satu query ilike per kolom (bukan satu string filter gabungan) supaya input
+    // kasir yang mengandung koma/kurung tidak merusak filter PostgREST.
+    const SEARCH_FIELDS = ["nama", "nis", "nisn", "id_santri_pihak3"] as const;
+    const buildQuery = (field: (typeof SEARCH_FIELDS)[number]) => {
       let q = admin
         .from("siswa")
         .select(select)
@@ -167,17 +171,14 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
       return q;
     };
 
-    const [byNama, byNis] = await Promise.all([
-      buildQuery("nama"),
-      buildQuery("nis"),
-    ]);
-
-    if (byNama.error) throw new Error("Gagal mencari siswa: " + byNama.error.message);
-    if (byNis.error) throw new Error("Gagal mencari siswa: " + byNis.error.message);
+    const results = await Promise.all(SEARCH_FIELDS.map((field) => buildQuery(field)));
+    for (const res of results) {
+      if (res.error) throw new Error("Gagal mencari siswa: " + res.error.message);
+    }
 
     const unik = new Map<string, SiswaPembayaranRingkas>();
     const teleponSiswa = new Map<string, string | null>();
-    for (const row of [...(byNama.data ?? []), ...(byNis.data ?? [])] as any[]) {
+    for (const row of results.flatMap((res) => res.data ?? []) as any[]) {
       teleponSiswa.set(row.id, typeof row.telepon === "string" ? row.telepon : null);
       unik.set(row.id, {
         id: row.id,
