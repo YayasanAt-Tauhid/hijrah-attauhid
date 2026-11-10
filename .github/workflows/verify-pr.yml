@@ -49,13 +49,7 @@ jobs:
           }
           (
             cd "$baseline_repo"
-            # Commit dasar yang lebih lama masih memakai package-lock.json (npm);
-            # yang sudah punya bun.lock memakai Bun.
-            if [ -f bun.lock ]; then
-              bun install --frozen-lockfile
-            else
-              npm ci
-            fi
+            bun install --frozen-lockfile
             bun --bun run build >"$typecheck_dir/base-build.log" 2>&1
             record_tsc tsconfig.app.json "$typecheck_dir/base-app.txt"
             record_tsc tsconfig.node.json "$typecheck_dir/base-config.txt"
