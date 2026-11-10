@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+import { fromJson } from "@/lib/rpcJson";
 // Get nominal for a specific siswa+jenis using DB function get_tarif_siswa
 export function useTarifSiswa(
   jenisId?: string,
@@ -221,12 +222,12 @@ export function useNonaktifkanTarifTagihan() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, alasan }: { id: string; alasan: string }) => {
-      const { data, error } = await (supabase as any).rpc("nonaktifkan_override_tarif", {
+      const { data, error } = await supabase.rpc("nonaktifkan_override_tarif", {
         p_tarif_id: id,
         p_alasan: alasan.trim(),
       });
       if (error) throw error;
-      return data as NonaktifkanTarifResult;
+      return fromJson<NonaktifkanTarifResult>(data);
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["tarif_tagihan"] });

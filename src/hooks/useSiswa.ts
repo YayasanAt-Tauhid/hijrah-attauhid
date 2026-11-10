@@ -7,6 +7,7 @@ import { getAkademikManagedDepartemenIds } from "@/lib/akademikScope";
 import { hapusSiswa } from "@/server/siswaDeletion";
 import { SiswaPunyaRiwayatError, isForeignKeyViolation } from "@/lib/siswaDeletion";
 
+import { toJson } from "@/lib/rpcJson";
 export interface SiswaWithRelations {
   id: string;
   nis: string | null;
@@ -119,9 +120,9 @@ export function useCreateSiswa() {
       detail?: Record<string, unknown>;
       kelas_siswa?: Record<string, unknown>;
     }) => {
-      const { data, error } = await (supabase as any).rpc("akademik_save_siswa", {
-        p_siswa: values.siswa, p_detail: values.detail || null,
-        p_kelas: values.kelas_siswa || null, p_id: null,
+      const { data, error } = await supabase.rpc("akademik_save_siswa", {
+        p_siswa: toJson(values.siswa), p_detail: toJson(values.detail || null),
+        p_kelas: toJson(values.kelas_siswa || null), p_id: null,
       });
       if (error) throw error;
       return data as { id: string };
@@ -147,9 +148,9 @@ export function useUpdateSiswa() {
       detail?: Record<string, unknown>;
       kelas_siswa?: { kelas_id: string; tahun_ajaran_id: string };
     }) => {
-      const { error } = await (supabase as any).rpc("akademik_save_siswa", {
-        p_siswa: values.siswa, p_detail: values.detail || null,
-        p_kelas: values.kelas_siswa || null, p_id: values.id,
+      const { error } = await supabase.rpc("akademik_save_siswa", {
+        p_siswa: toJson(values.siswa), p_detail: toJson(values.detail || null),
+        p_kelas: toJson(values.kelas_siswa || null), p_id: values.id,
       });
       if (error) throw error;
     },

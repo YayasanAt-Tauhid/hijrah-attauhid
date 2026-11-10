@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+import { fromJson, toJson } from "@/lib/rpcJson";
 export interface TarifAtomikRow {
   jenis_id: string;
   siswa_id?: string | null;
@@ -56,22 +57,22 @@ export function useSimpanTarifGenerateAtomik() {
   return useMutation({
     mutationFn: async (input: SimpanTarifGenerateAtomikInput) => {
       const { data, error } = input.rencana_rows
-        ? await (supabase as any).rpc("simpan_tarif_generate_rencana_massal_atomik", {
-            p_tarif_rows: input.tarif_rows,
+        ? await supabase.rpc("simpan_tarif_generate_rencana_massal_atomik", {
+            p_tarif_rows: toJson(input.tarif_rows),
             p_tahun_akademik_id: input.tahun_akademik_id,
             p_jenis_id: input.jenis_id,
-            p_generate_groups: input.generate_groups,
+            p_generate_groups: toJson(input.generate_groups),
             p_rencana_rows: input.rencana_rows,
             p_rencana_mulai: input.rencana_mulai,
             p_bulan_terakhir: input.bulan_terakhir ?? 6,
           })
-        : await (supabase as any).rpc(
+        : await supabase.rpc(
         "simpan_tarif_generate_dan_rencana_atomik",
         {
-          p_tarif_rows: input.tarif_rows,
+          p_tarif_rows: toJson(input.tarif_rows),
           p_tahun_akademik_id: input.tahun_akademik_id,
           p_jenis_id: input.jenis_id,
-          p_generate_groups: input.generate_groups,
+          p_generate_groups: toJson(input.generate_groups),
           p_departemen_id: input.departemen_id || null,
           p_siswa_ids: input.siswa_ids?.length ? input.siswa_ids : null,
           p_siswa_id: input.siswa_id || null,
@@ -82,7 +83,7 @@ export function useSimpanTarifGenerateAtomik() {
         }
       );
       if (error) throw error;
-      return data as SimpanTarifGenerateAtomikResult;
+      return fromJson<SimpanTarifGenerateAtomikResult>(data);
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["tarif_tagihan"] });
