@@ -33,7 +33,7 @@ export default function DataAlumni() {
     queryFn: async () => {
       // If kelasId is selected, we need to join kelas_siswa
       if (kelasId) {
-        let q = supabase.from("kelas_siswa")
+        const q = supabase.from("kelas_siswa")
           .select(`
             siswa:siswa_id(
               id, nis, nama, jenis_kelamin, tempat_lahir, tanggal_lahir,

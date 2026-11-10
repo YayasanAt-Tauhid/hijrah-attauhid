@@ -72,7 +72,7 @@ export function useSiswaDetail(id: string) {
   return useQuery({
     queryKey: ["siswa", id, role === "admin_tu" ? "scoped" : "all"],
     queryFn: async () => {
-      let q = supabase
+      const q = supabase
         .from("siswa")
         .select(`
           *,

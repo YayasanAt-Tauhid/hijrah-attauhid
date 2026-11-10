@@ -62,7 +62,7 @@ export default function LaporanPencapaian() {
       const { data: ksList } = await supabase.from("kelas_siswa").select("siswa:siswa_id(id, nis, nama)").eq("kelas_id", kelasId).eq("aktif", true);
       const siswaList = (ksList || []).map((ks: any) => ks.siswa).filter(Boolean).sort((a: any, b: any) => a.nama.localeCompare(b.nama));
       const kdIds = (kdList || []).map((kd: any) => kd.id);
-      let nilaiMap: Record<string, Record<string, number>> = {};
+      const nilaiMap: Record<string, Record<string, number>> = {};
       if (kdIds.length && siswaList.length) {
         const { data: existing } = await supabase.from("nilai_kd").select("siswa_id, kd_id, nilai").eq("kelas_id", kelasId).eq("tahun_ajaran_id", taId).eq("semester_id", semId).in("kd_id", kdIds);
         siswaList.forEach((s: any) => { nilaiMap[s.id] = {}; });
