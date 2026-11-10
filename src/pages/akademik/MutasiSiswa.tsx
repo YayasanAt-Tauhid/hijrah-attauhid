@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { ArrowRightLeft, GraduationCap, LogOut, ArrowDown, Building2 } from "lucide-react";
 import { getErrorMessage } from "@/lib/errorMessage";
 
+import { fromJson } from "@/lib/rpcJson";
 export default function MutasiSiswa() {
   const qc = useQueryClient();
   const { role } = useAuth();
@@ -44,7 +45,7 @@ export default function MutasiSiswa() {
     queryKey: ["akademik_internal_transfer_reference"],
     enabled: canInternalTransfer,
     queryFn: async () => {
-      const { data, error } = await (supabase as any).rpc("akademik_internal_transfer_reference");
+      const { data, error } = await supabase.rpc("akademik_internal_transfer_reference");
       if (error) throw error;
       return data || { departemen: [], angkatan: [], kelas: [], tahun_ajaran: [] };
     },
@@ -84,7 +85,7 @@ export default function MutasiSiswa() {
     }
     setIsProcessing(true);
     try {
-      const { error } = await (supabase as any).rpc("akademik_mutasi", {
+      const { error } = await supabase.rpc("akademik_mutasi", {
         p_ids: Array.from(selected), p_action: "kelas", p_kelas_id: targetKelas, p_tahun_ajaran_id: targetTA,
       });
       if (error) throw error;
@@ -102,7 +103,7 @@ export default function MutasiSiswa() {
     if (selected.size === 0) { toast.error("Pilih siswa terlebih dahulu"); return; }
     setIsProcessing(true);
     try {
-      const { error } = await (supabase as any).rpc("akademik_mutasi", {
+      const { error } = await supabase.rpc("akademik_mutasi", {
         p_ids: Array.from(selected), p_action: status,
       });
       if (error) throw error;
@@ -129,7 +130,7 @@ export default function MutasiSiswa() {
     setIsProcessing(true);
     try {
       const jumlah = selected.size;
-      const { error } = await (supabase as any).rpc("akademik_pindah_keluar", {
+      const { error } = await supabase.rpc("akademik_pindah_keluar", {
         p_ids: Array.from(selected),
         p_tanggal_efektif: tanggalPindah,
       });
@@ -198,7 +199,7 @@ export default function MutasiSiswa() {
 
     setIsProcessing(true);
     try {
-      const { data, error } = await (supabase as any).rpc("akademik_mutasi_antar_lembaga", {
+      const { data, error } = await supabase.rpc("akademik_mutasi_antar_lembaga", {
         p_siswa_id: selectedInternalStudent.id,
         p_departemen_tujuan_id: targetDepartemenInternal,
         p_angkatan_tujuan_id: targetAngkatanInternal,
@@ -209,7 +210,7 @@ export default function MutasiSiswa() {
       });
       if (error) throw error;
 
-      const result = Array.isArray(data) ? data[0] : data;
+      const result = fromJson<{ nis_baru?: string; nis_lama?: string } | null>(Array.isArray(data) ? data[0] : data);
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["siswa"] }),
         qc.invalidateQueries({ queryKey: ["siswa_detail"] }),
@@ -520,7 +521,7 @@ export default function MutasiSiswa() {
                   if (!targetTA || selected.size === 0) { toast.error("Pilih siswa dan tahun ajaran"); return; }
                   setIsProcessing(true);
                   try {
-                    const { error } = await (supabase as any).rpc("akademik_mutasi", {
+                    const { error } = await supabase.rpc("akademik_mutasi", {
                       p_ids: Array.from(selected), p_action: "tinggal", p_tahun_ajaran_id: targetTA,
                     });
                     if (error) throw error;

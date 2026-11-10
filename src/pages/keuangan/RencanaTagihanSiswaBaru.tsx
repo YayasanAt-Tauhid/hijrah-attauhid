@@ -36,6 +36,7 @@ import {
 import { toast } from "sonner";
 import { CalendarRange, CheckCircle2, GraduationCap, Info, Search, WalletCards } from "lucide-react";
 
+import { fromJson } from "@/lib/rpcJson";
 type InitialFeeState = Record<string, { checked: boolean; nominal: string }>;
 type EndMode = "level" | "date";
 
@@ -445,13 +446,13 @@ export default function RencanaTagihanSiswaBaru() {
         p_rencana_selesai: endMode === "date" ? manualEndDate : null,
       };
 
-      const { data: sppResult, error: sppError } = await (supabase as any).rpc(
+      const { data: sppResult, error: sppError } = await supabase.rpc(
         "simpan_tarif_generate_dan_rencana_fleksibel_atomik",
         sppPayload,
       );
       if (sppError) throw sppError;
 
-      const rencanaId = sppResult?.rencana?.rencana_id || selected.rencana_spp?.id;
+      const rencanaId = fromJson<{ rencana?: { rencana_id?: string } | null } | null>(sppResult)?.rencana?.rencana_id || selected.rencana_spp?.id;
       if (rencanaId && endMode === "level") {
         await updateSpmbBillingPlanEndMonth({
           data: {
@@ -487,7 +488,7 @@ export default function RencanaTagihanSiswaBaru() {
             continue;
           }
           const nominal = Number(initialFees[jenis.id]?.nominal);
-          const { error } = await (supabase as any).rpc(
+          const { error } = await supabase.rpc(
             "simpan_tarif_generate_dan_rencana_atomik",
             {
               p_tarif_rows: [{

@@ -66,6 +66,7 @@ import { AdminSpmbRegistrationDialog } from "@/components/akademik/AdminSpmbRegi
 import { spmbAdminUpdateRegistrantName, spmbAdminUpdateRegistrationMethod, spmbMarkLulusAndAccept } from "@/server/pmb";
 import { getErrorMessage } from "@/lib/errorMessage";
 
+import { fromJson } from "@/lib/rpcJson";
 const SPMB_FEE_TONE_CLASS: Record<SpmbRegistrationFeeTone, string> = {
   muted: "text-muted-foreground",
   success: "text-success",
@@ -416,7 +417,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
     enabled: Boolean(user && role),
     retry: 1,
     queryFn: async () => {
-      const { data: visibleRows, error: visibleError } = await (supabase as any).rpc("spmb_visible_siswa_ids");
+      const { data: visibleRows, error: visibleError } = await supabase.rpc("spmb_visible_siswa_ids");
       if (visibleError) throw visibleError;
 
       const visibleIds = [...new Set(
@@ -430,7 +431,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       const details: any[] = [];
       for (let i = 0; i < visibleIds.length; i += 150) {
         const chunk = visibleIds.slice(i, i + 150);
-        const rows = await fetchAllPages<any>((from, to) => (supabase as any)
+        const rows = await fetchAllPages<any>((from, to) => supabase
           .from("siswa_detail")
           .select("id,siswa_id,tahun_ajaran_id,nik,status_asrama,kategori,dokumen_kk_path,dokumen_akta_path,spmb_tanggal_tes,spmb_tanggal_lulus,spmb_tanggal_daftar_ulang,spmb_status_kelulusan,spmb_tanggal_keputusan,spmb_departemen_tujuan_id,spmb_angkatan_tujuan_id,spmb_status_pendaftaran,spmb_siswa_internal,spmb_kelas_tujuan_id,spmb_tanggal_aktivasi,spmb_gelombang_id,spmb_registered_at,spmb_inputer_nama,spmb_inputer_email,spmb_sumber_pendaftaran,spmb_metode_pendaftaran,ukuran_seragam")
           .in("siswa_id", chunk)
@@ -657,7 +658,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         const rows = await fetchSpmbReadinessInBatches(
           readinessIds,
           async (ids) => {
-            const { data, error } = await (supabase as any)
+            const { data, error } = await supabase
               .rpc("spmb_readiness_list", { p_ids: ids })
               .abortSignal(controller.signal);
             if (error) throw error;
@@ -713,7 +714,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
     queryKey: ["spmb", "activation-classes", activationTargetDeptId],
     enabled: Boolean(activationTargetDeptId),
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("kelas")
         .select("id,nama,departemen_id,aktif,tingkat:tingkat_id(id,nama,urutan)")
         .eq("departemen_id", activationTargetDeptId)
@@ -737,8 +738,8 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
     queryKey: ["spmb", "target-change-reference", targetChangeRow?.id],
     enabled: Boolean(targetChangeRow?.id) && canChangeSpmbTarget,
     queryFn: async () => {
-      const { data, error } = await (supabase as any).rpc("spmb_target_change_reference", {
-        p_siswa_id: targetChangeRow?.id,
+      const { data, error } = await supabase.rpc("spmb_target_change_reference", {
+        p_siswa_id: targetChangeRow?.id as string,
       });
       if (error) throw error;
       return data || { departemen: [], angkatan: [] };
@@ -863,7 +864,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
 
     setIsSaving(true);
     try {
-      const { data, error } = await (supabase as any).rpc("spmb_admin_register", {
+      const { data, error } = await supabase.rpc("spmb_admin_register", {
         p_payload: {
           nama: formData.nama.trim(),
           nik: normalizeDigits(formData.nik),
@@ -876,7 +877,8 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         },
       });
       if (error) throw error;
-      const id = data?.id as string | undefined;
+      const registered = fromJson<{ id?: string; gratis_pendaftaran?: boolean; gelombang_nama?: string | null } | null>(data);
+      const id = registered?.id;
       if (!id) throw new Error("Pendaftaran tersimpan tetapi ID calon murid tidak diterima dari server");
 
       await Promise.all([
@@ -885,8 +887,8 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
       setRegistrationSuccess({
         id,
         nama: formData.nama.trim(),
-        gratis_pendaftaran: data?.gratis_pendaftaran === true,
-        gelombang_nama: data?.gelombang_nama || null,
+        gratis_pendaftaran: registered?.gratis_pendaftaran === true,
+        gelombang_nama: registered?.gelombang_nama || null,
       });
       setFormErrors({});
       toast.success("Pendaftaran Penerimaan Murid Baru Berhasil", {
@@ -936,7 +938,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
     setNisLoadingId(id);
     try {
       if (row._spmbInternal) {
-        const { error } = await (supabase as any).rpc("spmb_set_registration_status", {
+        const { error } = await supabase.rpc("spmb_set_registration_status", {
           p_siswa_id: id,
           p_status: "diterima",
         });
@@ -1012,8 +1014,8 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         });
         await refreshStudentData();
       } else {
-        const { error } = await (supabase as any).rpc("spmb_mark_milestone", {
-          p_siswa_id: row.id,
+        const { error } = await supabase.rpc("spmb_mark_milestone", {
+          p_siswa_id: row.id as string,
           p_action: action,
         });
         if (error) throw error;
@@ -1056,8 +1058,8 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
 
     setActivationLoading(true);
     try {
-      const { data, error } = await (supabase as any).rpc("spmb_activate_internal_student", {
-        p_siswa_id: activationRow.id,
+      const { data, error } = await supabase.rpc("spmb_activate_internal_student", {
+        p_siswa_id: activationRow.id as string,
         p_kelas_id: activationClassId,
         p_tahun_ajaran_id: tahunAjaranId,
       });
@@ -1068,7 +1070,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         qc.invalidateQueries({ queryKey: ["kelas_siswa"] }),
       ]);
 
-      const result = Array.isArray(data) ? data[0] : data;
+      const result = fromJson<{ nis_baru?: string } | null>(Array.isArray(data) ? data[0] : data);
       toast.success(`${activationRow.nama as string} berhasil diaktifkan ke jenjang tujuan`, {
         description: result?.nis_baru
           ? `NIS baru: ${result.nis_baru}. NIS lama tetap tercatat pada audit identitas.`
@@ -1134,8 +1136,8 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
 
     setTargetChangeLoading(true);
     try {
-      const { data, error } = await (supabase as any).rpc("spmb_change_registration_target", {
-        p_siswa_id: targetChangeRow.id,
+      const { data, error } = await supabase.rpc("spmb_change_registration_target", {
+        p_siswa_id: targetChangeRow.id as string,
         p_departemen_tujuan_id: targetChangeDeptId,
         p_angkatan_tujuan_id: targetChangeCohortId,
         p_status_asrama: targetChangeNeedsAsrama
@@ -1144,7 +1146,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
         p_alasan: targetChangeReason.trim(),
       });
       if (error) throw error;
-      const result = Array.isArray(data) ? data[0] : data;
+      const result = fromJson<{ milestones_reset?: boolean } | null>(Array.isArray(data) ? data[0] : data);
 
       await Promise.all([
         refreshStudentData(),

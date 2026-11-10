@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import type { TablesUpdate } from "@/integrations/supabase/types";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ export function useKasKecilSetting() {
   return useQuery({
     queryKey: ["kas_kecil_setting"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("kas_kecil_setting")
         .select("*")
         .limit(1)
@@ -59,20 +60,20 @@ export function useUpdateKasKecilSetting() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (values: Partial<Omit<KasKecilSetting, "id" | "updated_at">>) => {
-      const { data: existing } = await (supabase as any)
+      const { data: existing } = await supabase
         .from("kas_kecil_setting")
         .select("id")
         .limit(1)
         .maybeSingle();
 
       if (existing?.id) {
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from("kas_kecil_setting")
           .update({ ...values, updated_at: new Date().toISOString() })
           .eq("id", existing.id);
         if (error) throw error;
       } else {
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from("kas_kecil_setting")
           .insert({ ...values });
         if (error) throw error;
@@ -96,7 +97,7 @@ export function useTransaksiKasKecilList(filters?: {
   return useQuery({
     queryKey: ["transaksi_kas_kecil", filters],
     queryFn: async () => {
-      let q = (supabase as any)
+      let q = supabase
         .from("transaksi_kas_kecil")
         .select("*, jenis_pengeluaran:jenis_pengeluaran_id(id, nama, akun_beban_id)")
         .order("tanggal", { ascending: false });
@@ -133,7 +134,7 @@ export function useCreateTransaksiKasKecil() {
       no_bukti?: string | null;
     }) => {
       const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("transaksi_kas_kecil")
         .insert({ ...values, dibuat_oleh: user?.id })
         .select()
@@ -152,8 +153,8 @@ export function useCreateTransaksiKasKecil() {
 export function useUpdateTransaksiKasKecil() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...values }: { id: string; [key: string]: any }) => {
-      const { error } = await (supabase as any)
+    mutationFn: async ({ id, ...values }: { id: string } & TablesUpdate<"transaksi_kas_kecil">) => {
+      const { error } = await supabase
         .from("transaksi_kas_kecil")
         .update(values)
         .eq("id", id);
@@ -171,7 +172,7 @@ export function useDeleteTransaksiKasKecil() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("transaksi_kas_kecil")
         .delete()
         .eq("id", id);
@@ -191,7 +192,7 @@ export function useReplenishmentList() {
   return useQuery({
     queryKey: ["replenishment_kas_kecil"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("replenishment_kas_kecil")
         .select("*, jurnal:jurnal_id(nomor)")
         .order("tanggal", { ascending: false });
@@ -214,7 +215,7 @@ export function useCreateReplenishment() {
       transaksiIds: string[];
     }) => {
       // 1. Ambil data transaksi yang dipilih
-      const { data: transaksiList, error: tErr } = await (supabase as any)
+      const { data: transaksiList, error: tErr } = await supabase
         .from("transaksi_kas_kecil")
         .select("*, jenis_pengeluaran:jenis_pengeluaran_id(id, nama, akun_beban_id)")
         .in("id", transaksiIds);
@@ -226,7 +227,7 @@ export function useCreateReplenishment() {
       );
 
       // 2. Ambil setting akun
-      const { data: setting } = await (supabase as any)
+      const { data: setting } = await supabase
         .from("kas_kecil_setting")
         .select("akun_pengisian_id")
         .limit(1)
@@ -234,7 +235,7 @@ export function useCreateReplenishment() {
 
       // 3. Buat record replenishment
       const { data: { user } } = await supabase.auth.getUser();
-      const { data: rep, error: repErr } = await (supabase as any)
+      const { data: rep, error: repErr } = await supabase
         .from("replenishment_kas_kecil")
         .insert({
           tanggal,
@@ -247,7 +248,7 @@ export function useCreateReplenishment() {
       if (repErr) throw repErr;
 
       // 4. Tandai transaksi sebagai sudah diisi
-      const { error: updErr } = await (supabase as any)
+      const { error: updErr } = await supabase
         .from("transaksi_kas_kecil")
         .update({ replenishment_id: rep.id })
         .in("id", transaksiIds);
@@ -264,7 +265,7 @@ export function useCreateReplenishment() {
           });
 
           if (nomorJurnal) {
-            const { data: jurnal, error: jErr } = await (supabase as any)
+            const { data: jurnal, error: jErr } = await supabase
               .from("jurnal")
               .insert({
                 nomor: nomorJurnal,
@@ -331,10 +332,10 @@ export function useCreateReplenishment() {
                 });
               }
 
-              await (supabase as any).from("jurnal_detail").insert(details);
+              await supabase.from("jurnal_detail").insert(details);
 
               // Link jurnal ke replenishment
-              await (supabase as any)
+              await supabase
                 .from("replenishment_kas_kecil")
                 .update({ jurnal_id: jurnal.id })
                 .eq("id", rep.id);
@@ -364,8 +365,8 @@ export function useSaldoKasKecil() {
     queryKey: ["saldo_kas_kecil"],
     queryFn: async () => {
       const [{ data: setting }, { data: pending }] = await Promise.all([
-        (supabase as any).from("kas_kecil_setting").select("dana_imprest").limit(1).maybeSingle(),
-        (supabase as any)
+        supabase.from("kas_kecil_setting").select("dana_imprest").limit(1).maybeSingle(),
+        supabase
           .from("transaksi_kas_kecil")
           .select("jumlah")
           .is("replenishment_id", null),

@@ -142,10 +142,10 @@ const labelDepartemenSpmb = (d: any) => {
       if (!siswaRows.length) return [];
 
       const siswaIds = siswaRows.map((s) => s.id);
-      const { data: readinessRows, error } = await (supabase as any).rpc("spmb_readiness_list", { p_ids: siswaIds });
+      const { data: readinessRows, error } = await supabase.rpc("spmb_readiness_list", { p_ids: siswaIds });
       if (error) throw error;
       const byId = new Map<string, any>((readinessRows || []).map((r: any) => [r.siswa_id, r.readiness]));
-      const { data: details, error: detailError } = await (supabase as any).from("siswa_detail")
+      const { data: details, error: detailError } = await supabase.from("siswa_detail")
         .select("siswa_id, status_asrama, dokumen_kk_path, dokumen_akta_path, spmb_tanggal_tes, spmb_tanggal_lulus, spmb_tanggal_daftar_ulang")
         .in("siswa_id", siswaIds);
       if (detailError) throw detailError;
@@ -206,7 +206,7 @@ const labelDepartemenSpmb = (d: any) => {
     if (formData.kelas_id && !formData.tahun_ajaran_id) { toast.error("Pilih tahun ajaran untuk kelas"); return; }
     setIsSaving(true);
     try {
-      const { error } = await (supabase as any).rpc("akademik_save_siswa", {
+      const { error } = await supabase.rpc("akademik_save_siswa", {
         p_siswa: { nama: formData.nama, jenis_kelamin: formData.jenis_kelamin, telepon: formData.telepon || null,
           alamat: formData.alamat || null, angkatan_id: formData.angkatan_id || null,
           departemen_id: formData.departemen_id, agama: "Islam", status: "calon" },
@@ -293,8 +293,8 @@ const labelDepartemenSpmb = (d: any) => {
     const loadingKey = `${row.id}:${action}`;
     setMilestoneLoadingId(loadingKey);
     try {
-      const { error } = await (supabase as any).rpc("spmb_mark_milestone", {
-        p_siswa_id: row.id,
+      const { error } = await supabase.rpc("spmb_mark_milestone", {
+        p_siswa_id: row.id as string,
         p_action: action,
       });
       if (error) throw error;
