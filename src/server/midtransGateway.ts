@@ -1,5 +1,19 @@
 
-export type GatewayPayload = Record<string, any>;
+/** Payload Midtrans (status API, Snap, notifikasi). Hanya field yang dibaca kode ini yang diketik; sisanya unknown. */
+export interface GatewayPayload {
+  order_id?: string;
+  transaction_status?: string;
+  fraud_status?: string;
+  status_code?: string | number;
+  status_message?: string;
+  message?: string;
+  error_messages?: string[];
+  token?: string;
+  canceled_at?: string;
+  gross_amount?: string | number;
+  transaction_details?: { order_id?: string; [key: string]: unknown };
+  [key: string]: unknown;
+}
 export interface GatewaySession {
   order_id: string;
   snap_token: string | null;

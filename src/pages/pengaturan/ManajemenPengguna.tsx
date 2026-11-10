@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { Pencil, Info, UserPlus } from "lucide-react";
 import Unauthorized from "@/pages/Unauthorized";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "admin", label: "Admin" },
@@ -242,8 +243,8 @@ function DialogTambahUser({ open, onOpenChange, departemenList, pegawaiList, onS
       });
       toast.success("Akun berhasil dibuat");
       onSaved();
-    } catch (e: any) {
-      toast.error("Gagal membuat akun: " + (e?.message || "unknown"));
+    } catch (e: unknown) {
+      toast.error("Gagal membuat akun: " + getErrorMessage(e, "unknown"));
     } finally {
       setSaving(false);
     }

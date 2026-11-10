@@ -153,7 +153,7 @@ export default function Anjungan() {
               {pengumuman.length === 0 ? (
                 <p className="text-emerald-300 text-sm">Tidak ada pengumuman saat ini</p>
               ) : (
-                pengumuman.map((p: any) => (
+                pengumuman.map((p) => (
                   <div
                     key={p.id}
                     className={`rounded-lg border p-4 ${
@@ -192,7 +192,7 @@ export default function Anjungan() {
               {jadwalHariIni.length === 0 ? (
                 <p className="text-emerald-300 text-sm">Tidak ada jadwal hari ini</p>
               ) : (
-                jadwalHariIni.slice(0, 10).map((j: any) => (
+                jadwalHariIni.slice(0, 10).map((j) => (
                   <div key={j.id} className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
                     <div className="text-emerald-400 font-mono text-xs shrink-0">
                       {j.jam_mulai?.slice(0, 5)}-{j.jam_selesai?.slice(0, 5)}

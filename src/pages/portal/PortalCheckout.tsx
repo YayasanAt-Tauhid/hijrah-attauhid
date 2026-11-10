@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { ArrowLeft, CreditCard, Info, Loader2, ShieldCheck } from "lucide-react";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 // Di atas nominal ini biaya QRIS cenderung lebih mahal daripada Virtual Account,
 // sehingga orang tua diimbau memilih VA. Hanya imbauan; QRIS tetap bisa dipilih.
@@ -132,8 +133,8 @@ export default function PortalCheckout() {
             },
           },
         });
-      } catch (err: any) {
-        toast.error(err?.message || "Gagal membuat transaksi");
+      } catch (err: unknown) {
+        toast.error(getErrorMessage(err, "Gagal membuat transaksi"));
         setIsLoading(false);
         return;
       }
@@ -164,7 +165,7 @@ export default function PortalCheckout() {
           sessionStorage.removeItem("keranjang_tagihan");
           navigate(`/portal/pembayaran?order=${result.order_id}`);
         },
-        onError: (snapResult: any) => {
+        onError: (snapResult) => {
           toast.error(
             "Pembayaran gagal: " +
               (snapResult?.status_message || "Unknown error")
@@ -176,8 +177,8 @@ export default function PortalCheckout() {
           setIsLoading(false);
         },
       });
-    } catch (err: any) {
-      toast.error("Terjadi kesalahan: " + err.message);
+    } catch (err: unknown) {
+      toast.error("Terjadi kesalahan: " + getErrorMessage(err));
       setIsLoading(false);
     }
   };

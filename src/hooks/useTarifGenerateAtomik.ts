@@ -110,7 +110,7 @@ export function useSimpanTarifGenerateAtomik() {
         `Override & tagihan berhasil disimpan atomik: ${data.tarif_inserted} override, ${data.generated} tagihan baru, ${data.skipped} sudah ada${scheduledInfo}${rencanaInfo}`
       );
     },
-    onError: (e: any) => {
+    onError: (e) => {
       toast.error(`Proses tarif/tagihan dibatalkan/rollback: ${e.message}`);
     },
   });

@@ -121,7 +121,7 @@ export default function PortalTagihan() {
         .from("ortu_siswa")
         .select("siswa_id")
         .eq("user_id", user!.id);
-      return (data || []).map((d: any) => d.siswa_id);
+      return (data || []).map((d) => d.siswa_id);
     },
     enabled: !!user,
   });

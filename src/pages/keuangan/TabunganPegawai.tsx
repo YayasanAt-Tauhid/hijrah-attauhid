@@ -89,7 +89,7 @@ export default function TabunganPegawai() {
             />
             {searchResults && searchResults.length > 0 && searchTerm.length >= 2 && (
               <div className="absolute z-50 mt-1 w-full bg-popover border rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                {searchResults.map((p: any) => (
+                {searchResults.map((p) => (
                   <button
                     key={p.id}
                     className="w-full text-left px-4 py-2.5 hover:bg-accent flex items-center gap-3"

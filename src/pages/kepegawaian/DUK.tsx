@@ -30,7 +30,7 @@ export default function DUK() {
       if (error) throw error;
 
       // Sort: golongan desc, then masa kerja desc
-      return (data || []).map((p: any, idx: number) => ({
+      return (data || []).map((p, idx: number) => ({
         ...p,
         urutan: idx + 1,
         masa_kerja: p.tanggal_masuk ? differenceInYears(new Date(), new Date(p.tanggal_masuk)) : null,
@@ -66,7 +66,7 @@ export default function DUK() {
             <SelectContent>
               <SelectItem value="all">Semua Lembaga</SelectItem>
               <SelectItem value="yayasan">Yayasan</SelectItem>
-              {lembagaList?.map((l: any) => (
+              {lembagaList?.map((l) => (
                 <SelectItem key={l.id} value={l.id}>{l.kode} — {l.nama}</SelectItem>
               ))}
             </SelectContent>

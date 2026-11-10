@@ -7,7 +7,7 @@ const items = [{tagihan_id:"bill",jumlah:100}];
 const expired = { id:"old",order_id:"HAT-OLD",user_id:"another-parent",status:"pending",snap_token:"old-token",
   gateway_closed_at:null,created_at:"2026-01-01T00:00:00Z",expired_at:"2026-01-02T00:00:00Z",metadata:{} };
 function rows(transactions: object[]) {
-  const q = {select:()=>q,in:()=>q,then:(resolve:any)=>resolve({data:transactions.map(transaksi=>({transaksi})),error:null})};
+  const q = {select:()=>q,in:()=>q,then:(resolve:(value: unknown)=>unknown)=>resolve({data:transactions.map(transaksi=>({transaksi})),error:null})};
   mocks.from.mockReturnValue(q);
 }
 beforeEach(()=>{vi.clearAllMocks();mocks.close.mockReset();mocks.close.mockResolvedValue(undefined);});
@@ -45,9 +45,9 @@ describe("checkout expired blockers",()=>{
   it("recognizes an active session created through the same payment link",async()=>{
     const active={...expired,user_id:null,payment_link_id:"link-1",expired_at:new Date(Date.now()+3600000).toISOString()};
     const blockersQuery={select:()=>blockersQuery,in:()=>blockersQuery,
-      then:(resolve:any)=>resolve({data:[{transaksi:active}],error:null})};
+      then:(resolve:(value: unknown)=>unknown)=>resolve({data:[{transaksi:active}],error:null})};
     const itemsQuery={select:()=>itemsQuery,eq:()=>itemsQuery,
-      then:(resolve:any)=>resolve({data:[{tagihan_id:"other-bill",jumlah:100}],error:null})};
+      then:(resolve:(value: unknown)=>unknown)=>resolve({data:[{tagihan_id:"other-bill",jumlah:100}],error:null})};
     mocks.from.mockImplementationOnce(()=>blockersQuery).mockImplementationOnce(()=>itemsQuery);
     // Owned by this link → reaches the "same items" comparison instead of "online lain".
     await expect(findReusablePaymentForBills({paymentLinkId:"link-1"},items)).rejects.toThrow("sebagian tagihan");

@@ -4,6 +4,7 @@ import { spmbCreateAdminDocumentUpload, spmbGetDocumentUrl } from "@/server/spmb
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 export function SpmbDocumentUpload({ kind, label, value, onChange, onBusy }: {
   kind: string; label: string; value?: string;
@@ -24,14 +25,14 @@ export function SpmbDocumentUpload({ kind, label, value, onChange, onBusy }: {
         if (error) throw error;
         onChange(path); setFileName(file.name);
         toast.success("Dokumen diunggah. Simpan formulir untuk menerapkan perubahan.");
-      } catch (error: any) { toast.error(error.message || "Upload gagal"); }
+      } catch (error: unknown) { toast.error(getErrorMessage(error, "Upload gagal")); }
       finally { setBusy(false); onBusy(false); }
     }} />
     <div className="flex items-center gap-2 text-xs text-muted-foreground">
       <span>{busy ? "Mengunggah..." : fileName || (value ? "Dokumen tersedia" : "Belum diunggah")} · Maksimal 10 MB</span>
       {value && <Button type="button" size="sm" variant="outline" onClick={async () => {
         try { const { url } = await spmbGetDocumentUrl({ data: { path: value } }); window.open(url, "_blank", "noopener,noreferrer"); }
-        catch (error: any) { toast.error(error.message || "Dokumen gagal dibuka"); }
+        catch (error: unknown) { toast.error(getErrorMessage(error, "Dokumen gagal dibuka")); }
       }}>Buka</Button>}
     </div>
   </div>;

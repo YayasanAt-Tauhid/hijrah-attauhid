@@ -11,6 +11,7 @@ import { FormSection } from "@/components/shared/FormSection";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { UserPlus, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/errorMessage";
 
 interface Departemen { id: string; nama: string; kode: string | null; }
 interface Angkatan { id: string; nama: string; departemen_id: string | null; }
@@ -71,8 +72,8 @@ export default function PMBDaftar() {
     try {
       await pmbDaftar({ data: form });
       setSuccess(true);
-    } catch (err: any) {
-      toast.error(err?.message || "Gagal mendaftar. Coba lagi.");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Gagal mendaftar. Coba lagi."));
     } finally {
       setLoading(false);
     }

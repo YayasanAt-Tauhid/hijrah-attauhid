@@ -68,14 +68,14 @@ export default function StatistikPegawai() {
 
   // Distribution per lembaga
   const lembagaMap = new Map<string, string>();
-  lembagaList?.forEach((l: any) => lembagaMap.set(l.id, l.kode || l.nama));
+  lembagaList?.forEach((l) => lembagaMap.set(l.id, l.kode || l.nama));
 
   const perLembaga: { name: string; guru: number; tendik: number }[] = [];
   const yayasanGuru = aktif.filter(p => !p.departemen_id && (p.jabatan || "").toLowerCase().includes("guru")).length;
   const yayasanTendik = aktif.filter(p => !p.departemen_id && !(p.jabatan || "").toLowerCase().includes("guru")).length;
   if (yayasanGuru || yayasanTendik) perLembaga.push({ name: "Yayasan", guru: yayasanGuru, tendik: yayasanTendik });
 
-  lembagaList?.forEach((l: any) => {
+  lembagaList?.forEach((l) => {
     const lPeg = aktif.filter(p => p.departemen_id === l.id);
     const lGuru = lPeg.filter(p => (p.jabatan || "").toLowerCase().includes("guru")).length;
     const lTendik = lPeg.length - lGuru;

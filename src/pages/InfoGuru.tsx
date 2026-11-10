@@ -59,7 +59,7 @@ export default function InfoGuru() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Semua Lembaga</SelectItem>
-              {depts.map((d: any) => (
+              {depts.map((d) => (
                 <SelectItem key={d.id} value={d.id}>{d.kode || d.nama}</SelectItem>
               ))}
             </SelectContent>
@@ -78,7 +78,7 @@ export default function InfoGuru() {
           </Card>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {guru.map((g: any) => (
+            {guru.map((g) => (
               <Card key={g.id} className="hover:shadow-lg transition-shadow overflow-hidden">
                 <CardContent className="p-5">
                   <div className="flex items-start gap-4">

@@ -12,7 +12,7 @@ vi.mock("@tanstack/react-start", () => ({
     const chain = {
       middleware: () => chain,
       inputValidator: () => chain,
-      handler: (fn: (args: any) => unknown) => (args: any) => fn(args),
+      handler: <A>(fn: (args: A) => unknown) => (args: A) => fn(args),
     };
     return chain;
   },
@@ -41,7 +41,7 @@ describe("tunggakan per siswa lintas Tahun Buku", () => {
       };
       return q;
     });
-    const result = await (rekapTunggakan as any)({
+    const result = await (rekapTunggakan as unknown as (args: { data: Record<string, unknown> }) => Promise<{ total: number; tunggakan: unknown[] }>)({
       data: { siswa_id: "student", tahun_ajaran_id: "book2027", per_tanggal: "2026-10-09" },
     });
     expect(result.total).toBe(2_000_000);
