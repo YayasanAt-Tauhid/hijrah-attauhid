@@ -191,8 +191,7 @@ jibas-2-main/
 ├── package.json
 ├── vite.config.ts
 ├── tailwind.config.ts
-├── tsconfig.json
-└── planning.md               ← Prompt guide untuk Lovable.dev
+└── tsconfig.json
 ```
 
 ---
@@ -894,7 +893,7 @@ VITE_APP_VERSION=2.0.0
 
 ## 11. Urutan Pembangunan yang Disarankan
 
-Gunakan urutan ini saat membangun fitur baru, khususnya bila menggunakan **Lovable.dev** atau AI assistant. Selalu jalankan **PROMPT KONTEKS** di `planning.md` terlebih dahulu di setiap sesi baru.
+Gunakan urutan ini saat membangun fitur baru, khususnya bila menggunakan AI assistant. Selalu baca `CLAUDE.md` dan `SESI_NOTES.md` terlebih dahulu di setiap sesi baru.
 
 ### Fase 1 — Fondasi (SUDAH SELESAI ✅)
 
@@ -1141,7 +1140,6 @@ function NamaForm() {
 | Tambah hook data | `src/hooks/` |
 | Tambah tabel database | `supabase/migrations/` (file SQL baru) |
 | Tambah role baru | `AuthContext.tsx` (type `UserRole`) + trigger `validate_user_role` di DB |
-| Prompt Lovable.dev | `planning.md` |
 | Schema database lama | `jibas-32.0/jibas_db.sql` |
 | Referensi kode PHP lama | `jibas-32.0/jibas/` |
 
