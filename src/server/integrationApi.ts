@@ -34,7 +34,7 @@ export async function authenticateIntegration(request:Request):Promise<Ctx|Respo
  await Promise.all([(admin.from('integration_tokens') as any).update({last_used_at:new Date().toISOString()}).eq('id',t.id),(admin.from('integration_apps') as any).update({last_used_at:new Date().toISOString()}).eq('id',i.id)])
  return {integration:i,token:t,admin,requestId,started,tokenHash}
 }
-export async function done(ctx:Ctx,route:string,response:Response){try{await (ctx.admin.from('integration_api_usage') as any).insert({integration_id:ctx.integration.id,route,request_id:ctx.requestId,status:response.status,duration_ms:Date.now()-ctx.started})}catch{}response.headers.set('X-Request-ID',ctx.requestId);response.headers.set('X-Hijrah-API-Version','1.1');response.headers.set('X-Hijrah-API-Major','1');return response}
+export async function done(ctx:Ctx,route:string,response:Response){try{await (ctx.admin.from('integration_api_usage') as any).insert({integration_id:ctx.integration.id,route,request_id:ctx.requestId,status:response.status,duration_ms:Date.now()-ctx.started})}catch{/* log permintaan best-effort; kegagalan log tidak boleh menggagalkan respons */}response.headers.set('X-Request-ID',ctx.requestId);response.headers.set('X-Hijrah-API-Version','1.1');response.headers.set('X-Hijrah-API-Major','1');return response}
 export function need(ctx:Ctx,s:Scope){return has(ctx,s)?null:err('forbidden',`Scope ${s} diperlukan`,403,ctx.requestId)}
 
 const BASE='id,nis,nisn,id_santri_pihak3,nama,jenis_kelamin,tempat_lahir,tanggal_lahir,agama,alamat,telepon,email,status,angkatan_id,created_at,departemen_id,terverifikasi'

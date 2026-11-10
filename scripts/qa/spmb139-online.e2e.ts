@@ -17,7 +17,7 @@ import {service,admin,parent,ok,f,c,ref,type,subject,readFixture} from './spmb13
 const online=readFixture('spmb139-online-fixture.json');
 const fee=type('UANG PANGKAL SMP');
 const realFetch=globalThis.fetch;
-let gatewayRequests:any[]=[];
+const gatewayRequests:any[]=[];
 beforeAll(()=>{globalThis.fetch=async(u:any,o:any)=>{
  const url=String(u);
  if(url.startsWith('https://app.sandbox.midtrans.com/snap/v1/transactions')){

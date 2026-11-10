@@ -86,7 +86,7 @@ function useTagihanBelumLunas(departemenId?: string) {
   return useQuery({
     queryKey: ["tagihan_belum_lunas_writeoff", departemenId],
     queryFn: async () => {
-      let q = supabase
+      const q = supabase
         .from("tagihan")
         .select(`
           id, nominal, bulan, status,

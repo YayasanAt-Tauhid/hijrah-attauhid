@@ -98,7 +98,7 @@ function parseDate(value: unknown): string | null | "invalid" {
     return "invalid";
   }
 
-  const dmy = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  const dmy = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (dmy) {
     const d = Number(dmy[1]), m = Number(dmy[2]), y = Number(dmy[3]);
     const date = new Date(Date.UTC(y, m - 1, d));

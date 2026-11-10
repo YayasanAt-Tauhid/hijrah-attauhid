@@ -65,3 +65,35 @@ jobs:
           name: typescript-baseline-comparison
           path: ${{ runner.temp }}/pr-typecheck/
           if-no-files-found: ignore
+      # Lint repo masih punya ribuan error lama (terutama no-explicit-any), jadi lint penuh
+      # tidak bisa jadi gerbang. Cek ini hanya menggagalkan PR yang MENAMBAH error dibanding
+      # commit dasar. Memakai ulang worktree dasar (sudah ter-install) dari langkah typecheck.
+      - name: Compare ESLint with main
+        if: ${{ !cancelled() }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          lint_dir="$RUNNER_TEMP/pr-lint"
+          baseline_repo="$RUNNER_TEMP/pr-typecheck-base"
+          mkdir -p "$lint_dir"
+          if [ ! -d "$baseline_repo" ]; then
+            git worktree add --detach "$baseline_repo" "$PR_BASE_SHA"
+            (cd "$baseline_repo" && bun install --frozen-lockfile)
+          fi
+          record_eslint() {
+            set +e
+            (cd "$1" && npx eslint . -f json -o "$2")
+            lint_exit="$?"
+            set -e
+            printf '%s\n' "$lint_exit" >"${2%.json}.exit"
+          }
+          record_eslint "$baseline_repo" "$lint_dir/base.json"
+          record_eslint "$GITHUB_WORKSPACE" "$lint_dir/current.json"
+          python3 scripts/qa/compare-lint.py --base "$lint_dir/base.json" --current "$lint_dir/current.json" --base-root "$baseline_repo" --current-root "$GITHUB_WORKSPACE" --label application
+      - name: Upload ESLint evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eslint-baseline-comparison
+          path: ${{ runner.temp }}/pr-lint/
+          if-no-files-found: ignore

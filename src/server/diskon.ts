@@ -219,7 +219,7 @@ export const cariKebijakanKeringananAktif = createServerFn({ method: "POST" })
       kelasNama = String(kelasRows?.[0]?.kelas?.nama || "");
     }
 
-    let q = (admin as any)
+    const q = (admin as any)
       .from("kebijakan_keringanan")
       .select(
         "id,kode,versi,nama,skema_diskon_id,jenis_id,kelas_regex,tipe,nilai," +

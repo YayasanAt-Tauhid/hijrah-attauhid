@@ -7,7 +7,7 @@ export function useAngkatan() {
   return useQuery({
     queryKey: ["angkatan", role === "admin_tu" ? "scoped" : "all"],
     queryFn: async () => {
-      let q = supabase
+      const q = supabase
         .from("angkatan")
         .select("*, departemen:departemen_id(id, nama)")
         .order("nama", { ascending: false });
@@ -23,7 +23,7 @@ export function useDepartemen() {
   return useQuery({
     queryKey: ["departemen", role === "admin_tu" ? "scoped" : "all"],
     queryFn: async () => {
-      let q = supabase.from("departemen").select("*").eq("aktif", true).order("nama");
+      const q = supabase.from("departemen").select("*").eq("aktif", true).order("nama");
       const { data, error } = await q;
       if (error) throw error;
       return data;
@@ -36,7 +36,7 @@ export function useDepartemenPendidikan() {
   return useQuery({
     queryKey: ["departemen", "unit_pendidikan", role === "admin_tu" ? "scoped" : "all"],
     queryFn: async () => {
-      let q = supabase
+      const q = supabase
         .from("departemen")
         .select("*")
         .eq("aktif", true)
