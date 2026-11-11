@@ -8,12 +8,12 @@ import { CheckCircle2 } from "lucide-react";
 
 type Status = "memeriksa" | "sukses" | "gagal";
 
-// Jendela waktu sejak akun auth dibuat yang masih dianggap "baru saja
-// dibuat lewat sign-in Google ini" -- akun staff selalu dibuat admin lebih
-// dulu lewat Manajemen Pengguna, jadi kalau akun auth ternyata baru saja
-// muncul di jendela ini berarti tidak ada akun staff yang cocok dengan
-// email Google tsb. dan tidak boleh otomatis dapat akses.
-const JENDELA_AKUN_BARU_MS = 10 * 60 * 1000;
+// Akun staff selalu dibuat admin lebih dulu lewat Manajemen Pengguna, lengkap
+// dengan role. Akun yang baru muncul lewat sign-in Google (tidak ada akun staff
+// dengan email yang sama) dibuat oleh trigger handle_new_user dengan role NULL,
+// jadi cukup diperiksa lewat role: tanpa role berarti belum didaftarkan.
+// Jangan memakai umur akun (created_at) sebagai penanda: akun yang baru dibuat
+// admin juga berumur beberapa menit, dan staff itu tidak boleh ikut ditolak.
 
 export default function OAuthCallback() {
   const navigate = useNavigate();
@@ -37,10 +37,7 @@ export default function OAuthCallback() {
         return;
       }
 
-      const createdAt = user.created_at ? new Date(user.created_at).getTime() : 0;
-      const akunBaruDibuat = !createdAt || Date.now() - createdAt <= JENDELA_AKUN_BARU_MS;
-
-      if (!role || akunBaruDibuat) {
+      if (!role) {
         await signOut();
         setStatus("gagal");
         setError(
