@@ -53,7 +53,8 @@ components:
         id: { type: string, format: uuid, description: Stable registration ID, distinct from siswa.id }
         siswa_id: { type: [string, 'null'], format: uuid }
         status: { type: string }
-        id_santri_pihak3: { type: [string, 'null'], description: 'ID Santri (YY.KK.NNN) dibuat saat mendaftar; null bila belum terbentuk. Sama dengan ID pada payload siswa. Tersedia dengan pendaftaran:read.' }
+        id_santri: { type: [string, 'null'], description: 'Hijrah-issued student ID (YY.KK.NNN), generated automatically at registration; null when not yet issued. Same value as id_santri in the student payload. Available with pendaftaran:read.' }
+        id_santri_pihak3: { type: [string, 'null'], deprecated: true, description: 'Deprecated alias of id_santri with an identical value. Read id_santri instead.' }
         tanggal_pendaftaran: { type: [string, 'null'], format: date-time }
         unit: { type: object, properties: { id: { type: [string, 'null'], format: uuid } } }
         tahun_ajaran: { type: object, properties: { id: { type: [string, 'null'], format: uuid } } }
@@ -98,7 +99,8 @@ components:
       properties:
         id: { type: string, format: uuid }
         nis: { type: [string, 'null'] }
-        id_santri_pihak3: { type: [string, 'null'], description: 'Student ID from the third party (SiPaksa) kept by Hijrah as a temporary link; null when not set. Available with siswa:read, including class members and sync. The name id_santri is reserved for the future Hijrah-issued ID.' }
+        id_santri: { type: [string, 'null'], description: 'Hijrah-issued student ID (YY.KK.NNN), generated automatically at registration; null when not yet issued. Available with siswa:read, including class members and sync.' }
+        id_santri_pihak3: { type: [string, 'null'], deprecated: true, description: 'Deprecated alias of id_santri with an identical value (historical name from when the ID came from SiPaksa). Read id_santri instead.' }
         nisn: { type: [string, 'null'], description: Available with siswa:identity:read on scoped student responses. }
         nik_hijrah: { type: [string, 'null'], description: Legacy Hijrah identity field. Omitted unless siswa:identity:read is granted. }
         nik_dapodik: { type: [string, 'null'], description: Dapodik identity field. Omitted unless siswa:identity:read is granted. }

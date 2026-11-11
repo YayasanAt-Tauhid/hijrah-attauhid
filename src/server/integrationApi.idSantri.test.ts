@@ -146,17 +146,18 @@ describe('Dokumentasi API memuat id_santri_pihak3', () => {
   const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8')
   const files = ['integration-api.md', 'openapi-integration-v1.yaml']
 
-  it('dijelaskan di markdown dan OpenAPI, bukan sebagai id_santri', () => {
+  it('dijelaskan di markdown dan OpenAPI sebagai alias deprecated dari id_santri', () => {
     expect(read('docs/integration-api.md')).toContain('id_santri_pihak3')
     const openapi = read('docs/openapi-integration-v1.yaml')
     expect(openapi).toMatch(/^\s+id_santri_pihak3: \{/m)
-    expect(openapi).not.toMatch(/^\s+id_santri: /m)
+    // Kontrak 11 Nov 2026: ID mandiri tampil sebagai id_santri; id_santri_pihak3 tinggal alias deprecated.
+    expect(openapi).toMatch(/^\s+id_santri: \{/m)
   })
 
   it('menyatakan bahwa field juga ada pada payload pendaftaran sejak ID dibuat saat mendaftar', () => {
     const md = read('docs/integration-api.md')
     expect(md).not.toContain('Field ini tidak ada pada payload pendaftaran')
-    expect(md).toMatch(/payload pendaftaran[^.]*id_santri_pihak3|id_santri_pihak3[^.]*payload pendaftaran/)
+    expect(md).toMatch(/payload pendaftaran[^.]*id_santri|id_santri[^.]*payload pendaftaran/)
     const openapi = read('docs/openapi-integration-v1.yaml')
     const reg = openapi.slice(openapi.indexOf('    Registration:'), openapi.indexOf('pembayaran_pendaftaran:'))
     expect(reg).toContain('id_santri_pihak3')
