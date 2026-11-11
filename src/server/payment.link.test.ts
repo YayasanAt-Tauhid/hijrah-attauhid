@@ -30,7 +30,7 @@ beforeEach(() => {
   db.from.mockImplementation((table: string) => {
     touchedTables.push(table);
     const rows = table === "tagihan"
-      ? [{ id: "bill", nominal: 250_000, status: "belum_bayar", bulan: null,
+      ? [{ id: "bill", siswa_id: "student", jenis_id: "fee", nominal: 250_000, status: "belum_bayar", bulan: null,
         tahun_ajaran_id: "ta", jenis: { nama: "INFAQ GEDUNG", departemen_id: "SD" } }]
       : table === "transaksi_midtrans" ? [{ id: "transaction" }] : [];
     const q = {
