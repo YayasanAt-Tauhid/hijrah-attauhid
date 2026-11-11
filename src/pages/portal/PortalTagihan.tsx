@@ -112,6 +112,7 @@ export default function PortalTagihan() {
   const navigate = useNavigate();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [partialAmounts, setPartialAmounts] = useState<Record<string, number>>({});
+  const [showNext, setShowNext] = useState(false);
 
   // Get anak IDs
   const { data: anakIds = [] } = useQuery({
@@ -127,7 +128,7 @@ export default function PortalTagihan() {
   });
 
   // Get tagihan belum bayar
-  const { data: tagihan = [], isLoading } = useQuery({
+  const { data: semuaTagihan = [], isLoading } = useQuery({
     queryKey: ["portal-tagihan", anakIds],
     queryFn: async () => {
       if (anakIds.length === 0) return [];
@@ -167,6 +168,27 @@ export default function PortalTagihan() {
     },
     enabled: anakIds.length > 0,
   });
+
+  // Awalnya hanya tunggakan yang tampil supaya orang tua tidak bingung;
+  // tagihan bulan ini dan mendatang baru muncul lewat tombol "Lihat tagihan berikutnya".
+  const tagihan = useMemo(
+    () =>
+      showNext
+        ? semuaTagihan
+        : semuaTagihan.filter((t) => getBillBucket(t) === "overdue"),
+    [semuaTagihan, showNext],
+  );
+  const jumlahBerikutnya = semuaTagihan.length - tagihan.length;
+  const tombolBerikutnya = jumlahBerikutnya > 0 && (
+    <Button
+      type="button"
+      variant="outline"
+      className="w-full"
+      onClick={() => setShowNext(true)}
+    >
+      Lihat tagihan berikutnya ({jumlahBerikutnya})
+    </Button>
+  );
 
   // Group by siswa
   const grouped = useMemo(() => {
@@ -729,10 +751,17 @@ export default function PortalTagihan() {
         </Card>
       )}
 
-      {tagihan.length === 0 ? (
+      {semuaTagihan.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             🎉 Tidak ada tagihan yang belum dibayar
+          </CardContent>
+        </Card>
+      ) : tagihan.length === 0 ? (
+        <Card>
+          <CardContent className="space-y-4 py-12 text-center">
+            <p className="text-muted-foreground">🎉 Tidak ada tunggakan</p>
+            {tombolBerikutnya}
           </CardContent>
         </Card>
       ) : (
@@ -949,6 +978,8 @@ export default function PortalTagihan() {
           })}
         </Accordion>
       )}
+
+      {tagihan.length > 0 && tombolBerikutnya}
 
       {tagihan.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/90">

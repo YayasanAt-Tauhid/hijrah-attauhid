@@ -23,6 +23,9 @@ vi.mock("@tanstack/react-query", () => ({
 afterEach(cleanup);
 beforeEach(() => { sessionStorage.clear(); vi.clearAllMocks(); });
 
+const lihatBerikutnya = () =>
+  fireEvent.click(screen.getByRole("button", { name: /Lihat tagihan berikutnya/ }));
+
 describe("PortalTagihan selection and installment checkout", () => {
   it("keeps the cart action visible but disabled before a bill is selected", () => {
     render(<PortalTagihan />);
@@ -48,6 +51,7 @@ describe("PortalTagihan selection and installment checkout", () => {
 
     try {
       render(<PortalTagihan />);
+      lihatBerikutnya();
       fireEvent.click(screen.getByRole("button", { name: /UANG PANGKAL SMP 1 tagihan/ }));
       fireEvent.click(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ }));
       expect(screen.getByLabelText("Bayar cicilan")).toHaveValue("1.500.000");
@@ -79,6 +83,7 @@ describe("PortalTagihan selection and installment checkout", () => {
     render(<PortalTagihan />);
     fireEvent.click(screen.getByRole("button", { name: /Pilih semua tagihan Anak Pertama/ }));
     expect(screen.getByText(/2 tagihan dari 1 anak dipilih/)).toBeInTheDocument();
+    lihatBerikutnya();
     fireEvent.click(screen.getByRole("button", { name: /Buka tagihan Anak Kedua/ }));
     expect(screen.getByRole("checkbox", { name: /Pilih SPP SD/ })).not.toBeChecked();
     fireEvent.change(screen.getByLabelText("Bayar cicilan"), { target: { value: "250.000" } });
@@ -97,6 +102,7 @@ describe("PortalTagihan selection and installment checkout", () => {
     expect(screen.getByText("2 dari 2 tagihan dipilih")).toBeInTheDocument();
     const clearFirst = screen.getByRole("button", { name: /Batalkan pilihan Anak Pertama/ });
     expect(clearFirst).toHaveAttribute("aria-pressed", "true");
+    lihatBerikutnya();
     fireEvent.click(screen.getByRole("button", { name: /Buka tagihan Anak Kedua/ }));
     fireEvent.click(screen.getByRole("button", { name: /Pilih semua tagihan Anak Kedua/ }));
     fireEvent.click(clearFirst);
@@ -144,6 +150,7 @@ describe("PortalTagihan selection and installment checkout", () => {
 
     try {
       render(<PortalTagihan />);
+      lihatBerikutnya();
       const yearButtons = screen.getAllByRole("button", { name: /2 Semester · Jul–Jun/ });
       fireEvent.click(yearButtons[0]);
 
@@ -165,5 +172,31 @@ describe("PortalTagihan selection and installment checkout", () => {
     fireEvent.click(buttons[buttons.length - 1]);
     expect(sessionStorage.getItem("keranjang_tagihan")).toBeNull();
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("shows only arrears by default and reveals the next bills on demand", () => {
+    render(<PortalTagihan />);
+    expect(screen.getByRole("checkbox", { name: /Pilih SPP SMP/ })).toBeInTheDocument();
+    expect(screen.queryByText("Anak Kedua")).not.toBeInTheDocument();
+
+    lihatBerikutnya();
+    expect(screen.getByText("Anak Kedua")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Lihat tagihan berikutnya/ })).not.toBeInTheDocument();
+  });
+
+  it("says there is no arrears and offers the next bills when nothing is overdue", () => {
+    const originals = mocks.rows.map((row) => row.menunggak);
+    mocks.rows.forEach((row) => { row.menunggak = false; });
+
+    try {
+      render(<PortalTagihan />);
+      expect(screen.getByText(/Tidak ada tunggakan/)).toBeInTheDocument();
+      expect(screen.queryByRole("checkbox", { name: /Pilih SPP SMP/ })).not.toBeInTheDocument();
+
+      lihatBerikutnya();
+      expect(screen.getByRole("checkbox", { name: /Pilih SPP SMP/ })).toBeInTheDocument();
+    } finally {
+      mocks.rows.forEach((row, i) => { row.menunggak = originals[i]; });
+    }
   });
 });
