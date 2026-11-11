@@ -850,3 +850,10 @@ Pada rencana siswa baru, SPP awal sudah tersedia di RPC, tetapi aksesnya tersemb
 - Perubahan: pencarian kini mencocokkan `nama`, `nis`, `nisn`, dan `id_santri_pihak3` (satu query ilike per kolom; filter status/tagihan terbuka tidak diubah). Placeholder dan teks kosong halaman diperbarui. Tes kontrak: `src/lib/cariSiswaPembayaran.contract.test.ts`.
 - Keputusan pengguna (10 Nov 2026): siswa `calon/diterima` yang lulus SPMB (punya gelombang) tetap muncul di pencarian walau semua tagihannya sudah lunas. Aturan dipusatkan di `layakTampilDiPencarianPembayaran` (`src/lib/pencarianSiswaPembayaran.ts`, dites perilakunya). `keluar/alumni/pindah` tetap hanya muncul bila punya tagihan terbuka; calon/diterima yang belum lulus tetap disembunyikan.
 - Tidak ada perubahan data produksi dan tidak ada migrasi. Belum diverifikasi di lingkungan nyata (UI): setelah deploy, cari Inayah (NIS 2702075 / ID Santri 27.02.054) di `/keuangan/pembayaran`.
+
+## Login Google staff ditolak untuk akun yang baru dibuat admin (11 November 2026)
+
+- Gejala: staff yang baru ditambahkan di `/pengaturan/pengguna` ditolak "belum terdaftar sebagai staff" saat memakai tombol Google di `/login`, padahal role dan email sudah benar. Terbukti di Rustbase produksi (hanya baca): akun `smpita.attauhid@gmail.com` role `admin`, identitas Google tertaut ke akun yang sama (Rustbase menautkan berdasarkan email), dua percobaan Google jatuh di dalam 10 menit sejak akun dibuat.
+- Penyebab: `OAuthCallback.tsx` menolak akun yang `created_at`-nya kurang dari 10 menit. Akun yang baru dibuat admin lewat `adminCreateUser` juga berumur beberapa menit, jadi ikut ditolak.
+- Keputusan: jendela umur akun dihapus; yang menentukan hanya role. Akun baru dari Google selalu berrole `NULL` (trigger `handle_new_user`, kolom `users_profile.role` tanpa default; sudah dicek sama di produksi 11 Nov 2026), sehingga tetap ditolak. Tes: `src/pages/OAuthCallback.test.tsx`.
+- Tidak ada perubahan data produksi dan tidak ada migrasi. Belum diverifikasi di UI produksi setelah deploy: coba login Google dengan akun staff yang baru dibuat.
