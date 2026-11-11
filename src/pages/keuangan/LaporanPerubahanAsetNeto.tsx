@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useLaporanKomprehensif, useLaporanPosisiKeuangan, useDepartemenGroups, PeriodeFilter, periodeLabel } from "@/hooks/useISAK35";
 import { formatRupiah, useTahunBuku } from "@/hooks/useKeuangan";
 import KopLaporan from "@/components/keuangan/KopLaporan";
+import { labelTahunBuku } from "@/lib/labelTahunBuku";
 import TandaTanganLaporan from "@/components/keuangan/TandaTanganLaporan";
 import { Printer } from "lucide-react";
 
@@ -159,7 +160,7 @@ export default function LaporanPerubahanAsetNeto() {
         <KopLaporan />
         <CardHeader className="text-center">
           <CardTitle className="text-lg">LAPORAN PERUBAHAN ASET NETO</CardTitle>
-          <p className="text-sm text-muted-foreground">{labelUnit} — {modePeriode === "tahun" ? namaTampil : periodeLabel(filter)}</p>
+          <p className="text-sm text-muted-foreground">{labelUnit} — {modePeriode === "tahun" ? labelTahunBuku(selectedTA, undefined, namaTampil) : periodeLabel(filter)}</p>
         </CardHeader>
         <CardContent>
           {isLoading ? <p className="text-muted-foreground">Memuat...</p> : (

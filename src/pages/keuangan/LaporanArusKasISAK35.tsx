@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useLaporanArusKas, useDepartemenGroups, PeriodeFilter, periodeLabel } from "@/hooks/useISAK35";
 import { formatRupiah, useTahunBuku } from "@/hooks/useKeuangan";
 import KopLaporan from "@/components/keuangan/KopLaporan";
+import { labelTahunBuku } from "@/lib/labelTahunBuku";
 import TandaTanganLaporan from "@/components/keuangan/TandaTanganLaporan";
 import { Printer, Info } from "lucide-react";
 
@@ -125,7 +126,7 @@ export default function LaporanArusKasISAK35() {
         <KopLaporan />
         <CardHeader className="text-center">
           <CardTitle className="text-lg">LAPORAN ARUS KAS</CardTitle>
-          <p className="text-sm text-muted-foreground">{labelUnit} — {modePeriode === "tahun" ? namaTampil : periodeLabel(filter)}</p>
+          <p className="text-sm text-muted-foreground">{labelUnit} — {modePeriode === "tahun" ? labelTahunBuku(selectedTA, undefined, namaTampil) : periodeLabel(filter)}</p>
           <p className="text-xs text-muted-foreground">(Metode Langsung)</p>
         </CardHeader>
         <CardContent>

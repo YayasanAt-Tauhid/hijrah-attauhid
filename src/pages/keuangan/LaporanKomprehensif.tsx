@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useLaporanKomprehensif, useDepartemenGroups, PeriodeFilter, periodeLabel } from "@/hooks/useISAK35";
 import { formatRupiah, useTahunBuku } from "@/hooks/useKeuangan";
 import KopLaporan from "@/components/keuangan/KopLaporan";
+import { labelTahunBuku } from "@/lib/labelTahunBuku";
 import TandaTanganLaporan from "@/components/keuangan/TandaTanganLaporan";
 import { Printer, EyeOff, Eye } from "lucide-react";
 
@@ -113,7 +114,7 @@ export default function LaporanKomprehensif() {
         <KopLaporan />
         <CardHeader className="text-center">
           <CardTitle className="text-lg">LAPORAN PENGHASILAN KOMPREHENSIF</CardTitle>
-          <p className="text-sm text-muted-foreground">{labelUnit} — {modePeriode === "tahun" ? namaTampil : periodeLabel(filter)}</p>
+          <p className="text-sm text-muted-foreground">{labelUnit} — {modePeriode === "tahun" ? labelTahunBuku(selectedTA, undefined, namaTampil) : periodeLabel(filter)}</p>
         </CardHeader>
         <CardContent>
           {isError ? <p className="text-destructive text-sm">Gagal memuat data: {(error as any)?.message}</p> : isLoading || !data ? <p className="text-muted-foreground">Memuat...</p> : (
