@@ -20,6 +20,7 @@ import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan
 import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/components/shared/ReceiptOrientationSelect";
 import { Skeleton } from "@/components/ui/skeleton";
 import { parseRekapKasirRange, REKAP_KASIR_MAX_HARI } from "@/lib/rekapKasirRange";
+import { unduhRekapKasirExcel } from "@/lib/rekapKasirDownload";
 
 export default function RekapKasirSaya() {
   const { role, can, permissionsLoading } = useAuth();
@@ -57,19 +58,7 @@ function RekapKasirSayaContent() {
     if (!data) return;
     setMengunduh(true);
     try {
-      // Dimuat saat dibutuhkan agar pustaka xlsx tidak memperbesar bundle awal halaman.
-      const [{ buildRekapKasirWorkbook, rekapKasirFilename }, XLSX] = await Promise.all([
-        import("@/lib/rekapKasirExcel"),
-        import("xlsx"),
-      ]);
-      const workbook = buildRekapKasirWorkbook({
-        petugasNama: data.petugas_nama,
-        dari: data.tanggal_dari,
-        sampai: data.tanggal_sampai,
-        dicetakPada: new Date(),
-        items: data.items,
-      });
-      XLSX.writeFile(workbook, rekapKasirFilename(data.tanggal_dari, data.tanggal_sampai));
+      await unduhRekapKasirExcel(data);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal membuat laporan Excel");
     } finally {

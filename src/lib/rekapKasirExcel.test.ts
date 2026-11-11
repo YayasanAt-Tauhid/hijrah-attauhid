@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   buildRekapKasirWorkbook,
   normalizePaymentMethod,
   parseRekapKasirRange,
   rekapKasirFilename,
+  REKAP_KASIR_WARNA,
   type RekapKasirExcelItem,
 } from "./rekapKasirExcel";
 
@@ -43,28 +46,45 @@ const items: RekapKasirExcelItem[] = [
     payment_method: null, receipt_number: null, jurnal_nomor: null, bulan: 3 }),
 ];
 
-function sheetRows(wb: XLSX.WorkBook, name: string): unknown[][] {
-  const rows: unknown[][] = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, blankrows: true, defval: "" });
-  // sheet_to_json mengisi sel kosong sampai lebar sheet; buang ekor kosong agar mudah dibandingkan.
-  return rows.map((row) => {
-    const copy = [...row];
-    while (copy.length && copy[copy.length - 1] === "") copy.pop();
-    return copy;
-  });
-}
+const LOGO = readFileSync(resolve(process.cwd(), "public/branding/yayasan-at-tauhid-kop.png"));
 
-function findRow(rows: unknown[][], first: string) {
-  return rows.find((row) => row.some((cell) => cell === first));
-}
-
-const build = () =>
-  buildRekapKasirWorkbook({
+/** Tulis ke buffer lalu baca balik, agar yang dites adalah isi file sesungguhnya. */
+async function buildAndReload(overrides: Partial<Parameters<typeof buildRekapKasirWorkbook>[0]> = {}) {
+  const workbook = buildRekapKasirWorkbook({
     petugasNama: "Fitri Yanto, S.Si",
     dari: "2026-11-11",
     sampai: "2026-11-12",
     dicetakPada: new Date("2026-11-12T10:15:00+07:00"),
     items,
+    logo: new Uint8Array(LOGO),
+    ...overrides,
   });
+  const buffer = await workbook.xlsx.writeBuffer();
+  const back = new ExcelJS.Workbook();
+  await back.xlsx.load(buffer);
+  return back;
+}
+
+/** Nilai sel per baris (indeks 0 = baris 1); sel bawahan dari merge dianggap kosong. */
+function sheetRows(ws: ExcelJS.Worksheet): unknown[][] {
+  const out: unknown[][] = [];
+  for (let r = 1; r <= ws.rowCount; r++) {
+    const row = ws.getRow(r);
+    const values: unknown[] = [];
+    for (let c = 1; c <= ws.columnCount; c++) {
+      const cell = row.getCell(c);
+      const slave = cell.isMerged && cell.master.address !== cell.address;
+      values.push(slave || cell.value === null || cell.value === undefined ? "" : cell.value);
+    }
+    while (values.length && values[values.length - 1] === "") values.pop();
+    out.push(values);
+  }
+  return out;
+}
+
+const findRowIndex = (rows: unknown[][], value: string) => rows.findIndex((row) => row.includes(value));
+const findRow = (rows: unknown[][], value: string) => rows[findRowIndex(rows, value)];
+const compact = (row: unknown[] | undefined) => (row ?? []).filter((value) => value !== "");
 
 describe("parseRekapKasirRange", () => {
   it("keeps single-date requests working", () => {
@@ -96,14 +116,15 @@ describe("normalizePaymentMethod", () => {
   });
 });
 
-describe("buildRekapKasirWorkbook", () => {
-  it("creates Rekapitulasi and Rincian sheets", () => {
-    expect(build().SheetNames).toEqual(["Rekapitulasi", "Rincian"]);
+describe("buildRekapKasirWorkbook — isi", () => {
+  it("creates Rekapitulasi and Rincian sheets", async () => {
+    const wb = await buildAndReload();
+    expect(wb.worksheets.map((ws) => ws.name)).toEqual(["Rekapitulasi", "Rincian"]);
   });
 
-  it("lists every transaction in Rincian with numeric amounts and a total row", () => {
-    const wb = build();
-    const rows = sheetRows(wb, "Rincian");
+  it("lists every transaction in Rincian with numeric amounts and a total row", async () => {
+    const ws = (await buildAndReload()).getWorksheet("Rincian")!;
+    const rows = sheetRows(ws);
     const headerIndex = rows.findIndex((row) => row[0] === "No");
     expect(rows[headerIndex]).toEqual([
       "No", "Tanggal", "No. Kwitansi", "Nama", "NIS / NISN", "Kelas", "Lembaga",
@@ -119,55 +140,107 @@ describe("buildRekapKasirWorkbook", () => {
     expect(body[3][9]).toBe("Transfer");
     // Anti formula-injection di teks bebas.
     expect(body[3][12]).toBe("'=HYPERLINK(\"x\")");
-    const total = findRow(rows, "TOTAL");
-    expect(total?.[10]).toBe(1780000);
-
-    const sheet = wb.Sheets.Rincian;
-    const amountCell = sheet[XLSX.utils.encode_cell({ r: headerIndex + 1, c: 10 })];
-    expect(amountCell.t).toBe("n");
-    expect(amountCell.z).toBe("#,##0");
+    expect(findRow(rows, "TOTAL")?.[10]).toBe(1780000);
   });
 
-  it("summarises by lembaga and jenis, by payment method and by date", () => {
-    const rows = sheetRows(build(), "Rekapitulasi");
-    const flat = rows.map((row) => row.join("|"));
+  it("summarises by lembaga and jenis, by payment method and by date", async () => {
+    const rows = sheetRows((await buildAndReload()).getWorksheet("Rekapitulasi")!);
+    const flat = rows.map((row) => compact(row).join("|"));
+    expect(flat).toContain("YAYASAN AT-TAUHID AL ISLAMY BANGKA BELITUNG");
     expect(flat).toContain("Petugas : Fitri Yanto, S.Si");
     expect(flat).toContain("Periode : 11 November 2026 s.d. 12 November 2026");
 
-    // Per lembaga dan jenis (urut lembaga, lalu jenis)
-    expect(findRow(rows, "SPP SMP")).toEqual(expect.arrayContaining(["SMP", "SPP SMP", 2, 900000]));
-    expect(findRow(rows, "UANG SERAGAM OLAHRAGA SMP")).toEqual(expect.arrayContaining([1, 330000]));
-    expect(findRow(rows, "Subtotal SMP")).toEqual(expect.arrayContaining([3, 1230000]));
-    expect(findRow(rows, "Subtotal SD")).toEqual(expect.arrayContaining([2, 550000]));
+    expect(compact(findRow(rows, "SPP SMP"))).toEqual([3, "SMP", "SPP SMP", 2, 900000]);
+    expect(compact(findRow(rows, "UANG SERAGAM OLAHRAGA SMP"))).toEqual([4, "SMP", "UANG SERAGAM OLAHRAGA SMP", 1, 330000]);
+    expect(compact(findRow(rows, "Subtotal SMP"))).toEqual(["Subtotal SMP", 3, 1230000]);
+    expect(compact(findRow(rows, "Subtotal SD"))).toEqual(["Subtotal SD", 2, 550000]);
 
-    // Per metode bayar
-    expect(findRow(rows, "Tunai")).toEqual(expect.arrayContaining([3, 1230000]));
-    expect(findRow(rows, "Transfer")).toEqual(expect.arrayContaining([1, 350000]));
-    expect(findRow(rows, "Tidak tercatat")).toEqual(expect.arrayContaining([1, 200000]));
+    expect(compact(findRow(rows, "Tunai"))).toEqual([1, "Tunai", 3, 1230000]);
+    expect(compact(findRow(rows, "Transfer"))).toEqual([2, "Transfer", 1, 350000]);
+    expect(compact(findRow(rows, "Tidak tercatat"))).toEqual([3, "Tidak tercatat", 1, 200000]);
 
-    // Per tanggal, dengan kolom per metode
     const dateHeader = rows.find((row) => row[1] === "Tanggal" && row.includes("Tunai"));
     expect(dateHeader).toEqual(["No", "Tanggal", "Jumlah Transaksi", "Tunai", "Transfer", "Tidak tercatat", "Total (Rp)"]);
     expect(findRow(rows, "11/11/2026")).toEqual([1, "11/11/2026", 3, 1230000, 0, 0, 1230000]);
     expect(findRow(rows, "12/11/2026")).toEqual([2, "12/11/2026", 2, 0, 350000, 200000, 550000]);
 
-    expect(findRow(rows, "TOTAL PENERIMAAN")).toEqual(expect.arrayContaining([5, 1780000]));
+    expect(compact(findRow(rows, "TOTAL PENERIMAAN"))).toEqual(["TOTAL PENERIMAAN", 5, 1780000]);
   });
 
-  it("ends the summary with Kasir and Bendahara signature blocks", () => {
-    const rows = sheetRows(build(), "Rekapitulasi");
-    const label = rows.findIndex((row) => row.includes("Kasir,") && row.includes("Bendahara,"));
-    expect(label).toBeGreaterThan(0);
+  it("ends the summary with Kasir, Staf Keuangan and Mengetahui Bendahara signatures", async () => {
+    const rows = sheetRows((await buildAndReload()).getWorksheet("Rekapitulasi")!);
+    const label = rows.findIndex((row) => row.includes("Kasir,"));
+    expect(compact(rows[label])).toEqual(["Kasir,", "Staf Keuangan,", "Mengetahui, Bendahara,"]);
     const names = rows.slice(label + 1).find((row) => row.some((cell) => String(cell).includes("Fitri Yanto")));
-    expect(names).toEqual(expect.arrayContaining(["( Fitri Yanto, S.Si )", "( ............................ )"]));
+    expect(compact(names)).toEqual([
+      "( Fitri Yanto, S.Si )", "( ............................ )", "( ............................ )",
+    ]);
   });
 
-  it("still produces a valid report for an empty period", () => {
-    const wb = buildRekapKasirWorkbook({
-      petugasNama: null, dari: "2026-11-11", sampai: "2026-11-11", dicetakPada: new Date(), items: [],
-    });
-    const rows = sheetRows(wb, "Rekapitulasi");
-    expect(findRow(rows, "TOTAL PENERIMAAN")).toEqual(expect.arrayContaining([0, 0]));
+  it("still produces a valid report for an empty period and without a logo", async () => {
+    const wb = await buildAndReload({ items: [], petugasNama: null, logo: undefined, sampai: "2026-11-11" });
+    const ws = wb.getWorksheet("Rekapitulasi")!;
+    expect(compact(findRow(sheetRows(ws), "TOTAL PENERIMAAN"))).toEqual(["TOTAL PENERIMAAN", 0, 0]);
+    expect(ws.getImages()).toHaveLength(0);
+  });
+});
+
+describe("buildRekapKasirWorkbook — tampilan", () => {
+  it("puts the foundation logo in the letterhead of both sheets", async () => {
+    const wb = await buildAndReload();
+    for (const ws of wb.worksheets) {
+      const images = ws.getImages();
+      expect(images).toHaveLength(1);
+      expect(Math.floor(images[0].range.tl.col)).toBe(0);
+      expect(Math.floor(images[0].range.tl.row)).toBe(0);
+    }
+  });
+
+  it("colours table headers, subtotal and total rows", async () => {
+    const wb = await buildAndReload();
+    const recap = wb.getWorksheet("Rekapitulasi")!;
+    const rows = sheetRows(recap);
+
+    const yayasan = recap.getRow(findRowIndex(rows, "YAYASAN AT-TAUHID AL ISLAMY BANGKA BELITUNG") + 1).getCell(2);
+    expect(yayasan.font?.bold).toBe(true);
+    expect(yayasan.font?.color?.argb).toBe(REKAP_KASIR_WARNA.utama);
+
+    const header = recap.getRow(rows.findIndex((row) => row[1] === "Lembaga") + 1).getCell(2);
+    expect((header.fill as ExcelJS.FillPattern).fgColor?.argb).toBe(REKAP_KASIR_WARNA.utama);
+    expect(header.font?.color?.argb).toBe("FFFFFFFF");
+    expect(header.font?.bold).toBe(true);
+    expect(header.border?.bottom?.style).toBe("thin");
+
+    const subtotal = recap.getRow(findRowIndex(rows, "Subtotal SMP") + 1).getCell(2);
+    expect((subtotal.fill as ExcelJS.FillPattern).fgColor?.argb).toBe(REKAP_KASIR_WARNA.subtotal);
+    expect(subtotal.font?.bold).toBe(true);
+
+    const totalRow = recap.getRow(findRowIndex(rows, "TOTAL PENERIMAAN") + 1);
+    expect(totalRow.getCell(2).font?.bold).toBe(true);
+    expect(totalRow.getCell(4).border?.top?.style).toBe("double");
+    expect(totalRow.getCell(4).numFmt).toBe("#,##0");
+  });
+
+  it("formats amounts with thousands separators and right alignment", async () => {
+    const ws = (await buildAndReload()).getWorksheet("Rincian")!;
+    const rows = sheetRows(ws);
+    const firstData = ws.getRow(rows.findIndex((row) => row[0] === "No") + 2).getCell(11);
+    expect(firstData.value).toBe(450000);
+    expect(firstData.numFmt).toBe("#,##0");
+    expect(firstData.alignment?.horizontal).toBe("right");
+  });
+
+  it("freezes and filters the Rincian header, and prints A4 landscape fit to width", async () => {
+    const wb = await buildAndReload();
+    const ws = wb.getWorksheet("Rincian")!;
+    const headerRow = sheetRows(ws).findIndex((row) => row[0] === "No") + 1;
+    expect(ws.views[0]).toMatchObject({ state: "frozen", ySplit: headerRow });
+    expect(ws.autoFilter).toBe(`A${headerRow}:M${headerRow + items.length}`);
+    for (const sheet of wb.worksheets) {
+      expect(sheet.pageSetup.orientation).toBe("landscape");
+      expect(sheet.pageSetup.paperSize).toBe(9);
+      expect(sheet.pageSetup.fitToWidth).toBe(1);
+    }
   });
 });
 
@@ -179,17 +252,21 @@ describe("rekapKasirFilename", () => {
 });
 
 describe("halaman Rekap Kasir Saya", () => {
-  // Kontrak sumber: halaman memakai rentang tanggal dan tombol unduh laporan
-  // yang membangun workbook lewat helper ini (dimuat dinamis agar xlsx tidak
-  // ikut di bundle awal halaman).
-  it("offers a date range and an Excel report download", async () => {
-    const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
+  // Kontrak sumber: halaman memakai rentang tanggal dan tombol unduh. Unduhan
+  // dibungkus createClientOnlyFn dan memuat exceljs secara dinamis, agar
+  // exceljs tidak masuk bundle awal halaman maupun bundle Worker server.
+  it("offers a date range and a styled Excel report download", () => {
     const page = readFileSync(resolve(process.cwd(), "src/pages/keuangan/RekapKasirSaya.tsx"), "utf8");
+    const download = readFileSync(resolve(process.cwd(), "src/lib/rekapKasirDownload.ts"), "utf8");
     expect(page).toContain("tanggal_dari: tanggalDari");
     expect(page).toContain("tanggal_sampai: tanggalSampai");
     expect(page).toContain("Unduh Laporan Excel");
-    expect(page).toContain('import("@/lib/rekapKasirExcel")');
-    expect(page).not.toMatch(/^import .*from "xlsx";$/m);
+    expect(page).toContain("await unduhRekapKasirExcel(data)");
+    expect(page).not.toMatch(/^import .*from "(xlsx|exceljs|@\/lib\/rekapKasirExcel)";$/m);
+    expect(download).toContain("createClientOnlyFn(");
+    expect(download).toContain('import("@/lib/rekapKasirExcel")');
+    expect(download).toContain("/branding/yayasan-at-tauhid-kop.png");
+    expect(download).toContain("xlsx.writeBuffer()");
+    expect(download).not.toMatch(/^import (?!type ).*rekapKasirExcel/m);
   });
 });
