@@ -63,6 +63,15 @@ export function PrintKuitansi({
     ? `${payment.jenisNama} ( ${periode.toUpperCase()} )`
     : payment.jenisNama;
 
+  const kontakSekolah = [
+    sekolah?.alamat,
+    sekolah?.telepon ? `Telp: ${sekolah.telepon}` : "",
+    sekolah?.email,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const kelasLembaga = [kelasNama, lembagaNama].filter(Boolean).join(" · ") || "-";
+
   if (typeof document === "undefined") return null;
 
   const isPortrait = orientation === "portrait";
@@ -85,27 +94,19 @@ export function PrintKuitansi({
             <h1 className="text-[15pt] font-extrabold uppercase tracking-tight">
               YAYASAN AT-TAUHID AL ISLAMY BANGKA BELITUNG
             </h1>
-            {sekolah?.alamat && <p className="mt-0.5 text-[11pt]">{sekolah.alamat}</p>}
-            {(sekolah?.telepon || sekolah?.email) && (
-              <p className="text-[10.5pt]">
-                {[sekolah?.telepon ? `Telp: ${sekolah.telepon}` : "", sekolah?.email || ""]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-            )}
+            {kontakSekolah && <p className="mt-0.5 text-[10pt] leading-[1.15]">{kontakSekolah}</p>}
           </div>
         </div>
-        <div className={`shrink-0 border-y-2 border-black px-2 py-1 text-center text-[12.5pt] font-extrabold tracking-wide ${isPortrait ? "w-full" : ""}`}>
-          BUKTI PEMBAYARAN
+        <div className={`shrink-0 border-y-2 border-black px-2 py-0.5 text-center ${isPortrait ? "w-full" : ""}`}>
+          <div className="text-[12.5pt] font-extrabold tracking-wide">BUKTI PEMBAYARAN</div>
+          <div data-receipt-number className="text-[11pt] font-bold tracking-wide">{nomorBukti}</div>
         </div>
       </div>
-
-      <div className="mt-1 font-bold tracking-wide">{nomorBukti}</div>
 
       <table className="mt-1 w-full table-fixed text-[11.5pt]">
         <tbody>
           <tr>
-            <td className={`${isPortrait ? "w-[86px]" : "w-[115px]"} py-0.5 align-top`}>Nama Siswa</td>
+            <td className={`${isPortrait ? "w-[86px]" : "w-[128px]"} py-0.5 align-top`}>Nama Siswa</td>
             <td className="py-0.5 align-top font-semibold">{payment.siswa.nama}</td>
             <td className={`${isPortrait ? "w-[70px]" : "w-[92px]"} py-0.5 align-top`}>Tgl. Bayar</td>
             <td className={`${isPortrait ? "w-[100px]" : "w-[132px]"} py-0.5 align-top`}>
@@ -119,14 +120,10 @@ export function PrintKuitansi({
             <td className="py-0.5 align-top">{metode}</td>
           </tr>
           <tr>
-            <td className="py-0.5 align-top">Kelas</td>
-            <td className="py-0.5 align-top">{kelasNama || "-"}</td>
+            <td className="py-0.5 align-top">Kelas / Lembaga</td>
+            <td className="py-0.5 align-top">{kelasLembaga}</td>
             <td className="py-0.5 align-top">Petugas</td>
             <td className="py-0.5 align-top">{petugasNama || "-"}</td>
-          </tr>
-          <tr>
-            <td className="py-0.5 align-top">Lembaga</td>
-            <td className="py-0.5 align-top" colSpan={3}>{lembagaNama || "-"}</td>
           </tr>
         </tbody>
       </table>
@@ -135,7 +132,7 @@ export function PrintKuitansi({
         Dengan rincian pembayaran sebagai berikut:
       </div>
 
-      <table className="w-full text-[11.5pt]">
+      <table className="w-full text-[11pt]">
         <tbody>
           <tr>
             <td className="w-[28px] py-0.5 align-top">1.</td>
@@ -143,38 +140,41 @@ export function PrintKuitansi({
             <td className="w-[30px] py-0.5 align-top">Rp</td>
             <td className={`${isPortrait ? "w-[88px]" : "w-[105px]"} py-0.5 text-right align-top`}>{formatAngka(payment.jumlah)}</td>
           </tr>
-          <tr className="border-t-2 border-black font-extrabold">
-            <td className="py-0.5 pr-3 text-right" colSpan={2}>JUMLAH</td>
-            <td className="py-0.5">Rp</td>
-            <td className="py-0.5 text-right">{formatAngka(payment.jumlah)}</td>
+          <tr className="border-t-2 border-black">
+            <td className="py-0.5 pr-3 align-top" colSpan={2}>
+              <div className="flex items-start justify-between gap-3">
+                <span data-receipt-terbilang className="text-[10.5pt]">
+                  <span className="font-semibold">Terbilang:</span>{" "}
+                  <span className="italic">{terbilang(payment.jumlah)}</span>
+                </span>
+                <span className="shrink-0 font-extrabold">JUMLAH</span>
+              </div>
+            </td>
+            <td className="py-0.5 align-top font-extrabold">Rp</td>
+            <td className="py-0.5 text-right align-top font-extrabold">{formatAngka(payment.jumlah)}</td>
           </tr>
         </tbody>
       </table>
-
-      <div className="mt-1 text-[11pt]">
-        <span className="font-semibold">Terbilang:</span>{" "}
-        <span className="italic">{terbilang(payment.jumlah)}</span>
-      </div>
       {payment.keterangan && (
         <div className="mt-1 text-[11pt]">
           <span className="font-semibold">Keterangan:</span> {payment.keterangan}
         </div>
       )}
 
-      <div className="receipt-footer mt-2 grid grid-cols-[1.6fr_1fr] items-start gap-4">
-        <div className="text-[10pt] leading-[1.15]">
+      <div className="receipt-footer mt-1.5 grid grid-cols-[2.3fr_1fr] items-start gap-4">
+        <div className="text-[9.5pt] leading-[1.15]">
           <p className="italic">
             This is a computer generated message and requires no signature.
           </p>
           <p className="italic">
             Informasi ini merupakan hasil cetakan komputer dan tidak memerlukan tanda tangan petugas.
           </p>
-          <p className="mt-1 font-medium">Powered by Hijrah At-Tauhid</p>
+          <p className="mt-0.5 font-medium">Powered by Hijrah At-Tauhid</p>
         </div>
 
         <div className="text-center text-[11pt]">
           <p>Penyetor,</p>
-          <div className="h-6" />
+          <div className="h-5" />
           <p>(....................................)</p>
         </div>
       </div>

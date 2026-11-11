@@ -41,6 +41,21 @@ describe('receipt print layout contract', () => {
     expect(combined).toContain('src={YAYASAN_PRINT_LOGO_URL}')
   })
 
+  // Kwitansi 10 item (SPP satu tahun + seragam) harus muat dalam setengah lembar
+  // 9.5 x 5.5 inci. Sebelumnya footer terlempar ke setengah lembar kedua karena
+  // nomor bukti, baris Lembaga, dan Terbilang masing-masing memakan satu baris sendiri.
+  it('packs header, identity and total rows so a 10-item receipt fits one half sheet', () => {
+    for (const source of [single, combined]) {
+      // nomor bukti ikut di kotak judul, bukan baris tersendiri
+      expect(source).toContain('data-receipt-number')
+      // Kelas dan Lembaga digabung dalam satu baris identitas (3 baris, bukan 4)
+      expect(source).toContain('Kelas / Lembaga')
+      expect(source).not.toMatch(/>Lembaga<\/td>/)
+      // Terbilang berada di baris JUMLAH
+      expect(source).toContain('data-receipt-terbilang')
+    }
+  })
+
   it('keeps the existing receipt font sizes while tightening receipt spacing', () => {
     expect(single).toContain('text-[12pt] leading-[1.15]')
     expect(combined).toContain('text-[12pt] leading-[1.15]')
