@@ -1,3 +1,12 @@
+# Catatan Sesi — Rekap Kasir: Cetak / PDF dan nama Bendahara otomatis (11 November 2026)
+
+- **Permintaan (user):** setelah laporan Excel berwarna (#233), tambahkan versi print/PDF. Keputusan user: tombol **Cetak / PDF** (dialog cetak browser: printer atau "Simpan sebagai PDF"), bukan unduh file PDF; nama **Bendahara diisi otomatis** dari Pengaturan → Profil Yayasan (`sekolah.bendahara`) di PDF dan Excel.
+- **Perubahan:** `src/lib/rekapKasirSummary.ts` kini satu-satunya sumber angka (urutan, per lembaga/jenis, per metode, per tanggal, total) dipakai Excel dan PDF; Excel di-refactor memakainya (tes Excel lama tetap lulus). `CetakRekapKasir` (portal ke body, hanya tampil saat cetak, `@page rekap-kasir` A4 landscape, `print-color-adjust: exact`): kop logo, tabel A dan B berdampingan, C, total, tanda tangan Kasir/Staf Keuangan/Mengetahui Bendahara, lalu Rincian di halaman baru dengan judul kolom terulang. Server mengembalikan `bendahara_nama`.
+- **Keputusan tata letak Rincian:** `table-layout: fixed` dengan lebar kolom mm (total 277 = lebar cetak A4 landscape, konstanta `RINCIAN_MM`) dan font 7pt; kolom kode (tanggal, kwitansi, NIS/NISN, periode, jurnal) tidak dipotong baris, Nama/Jenis/Metode/Keterangan boleh turun di spasi. Hasil render Chrome: 28 transaksi per halaman tanpa sel terpotong. Bila menambah kolom, sesuaikan `RINCIAN_MM` dan render ulang (cek tanda "…").
+- **Alur cetak:** komponen dirender saat tombol ditekan, dialog cetak dibuka setelah logo termuat (cadangan 2 detik), dan dilepas lagi pada `afterprint`. Tidak bentrok dengan cetak kwitansi karena hanya satu portal cetak yang ada pada satu waktu.
+- **Verifikasi:** 187 file/1526 tes lulus (baru: ringkasan 7, komponen cetak 8, server bendahara 1, Excel bendahara 1; semuanya ditulis gagal dulu); lint total 1850 sama dengan `main`; `tsc` 39 diagnosis identik dengan `main` (keduanya dengan `routeTree.gen.ts` ada); build sukses, server gzip tetap 1,89 MB tanpa exceljs; komponen asli dirender ke PDF via Chrome: 3 halaman A4 landscape untuk 40 transaksi.
+- **Belum dilakukan:** belum dicoba di browser kasir dengan data produksi; pastikan nama Bendahara di Profil Yayasan sudah benar.
+
 # Catatan Sesi — Laporan Excel rekap kasir berwarna dan berlogo (11 November 2026)
 
 - **Permintaan (user):** laporan Excel Rekap Kasir (PR #232) terlalu polos dan tanpa logo yayasan. Tambahan keputusan user: tanda tangan tiga kolom, yaitu **Kasir**, **Staf Keuangan** (penerima setoran), dan **Mengetahui, Bendahara**.

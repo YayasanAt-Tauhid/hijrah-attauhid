@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
@@ -21,6 +21,7 @@ import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/compon
 import { Skeleton } from "@/components/ui/skeleton";
 import { parseRekapKasirRange, REKAP_KASIR_MAX_HARI } from "@/lib/rekapKasirRange";
 import { unduhRekapKasirExcel } from "@/lib/rekapKasirDownload";
+import { CetakRekapKasir } from "@/components/keuangan/CetakRekapKasir";
 
 export default function RekapKasirSaya() {
   const { role, can, permissionsLoading } = useAuth();
@@ -36,6 +37,8 @@ function RekapKasirSayaContent() {
   const [tanggalDari, setTanggalDari] = useState(hariIni);
   const [tanggalSampai, setTanggalSampai] = useState(hariIni);
   const [mengunduh, setMengunduh] = useState(false);
+  const [mencetak, setMencetak] = useState(false);
+  const sudahDicetak = useRef(false);
   const [printRow, setPrintRow] = useState<RekapKasirSayaRow | null>(null);
   const [kuitansiOrientation, setKuitansiOrientation] = useState<ReceiptPrintOrientation>("landscape");
 
@@ -53,6 +56,26 @@ function RekapKasirSayaContent() {
     enabled: !rangeError,
     queryFn: async () => getRekapKasirSaya({ data: { tanggal_dari: tanggalDari, tanggal_sampai: tanggalSampai } }),
   });
+
+  // Cetak / PDF: render laporan cetak, tunggu logo termuat (maks. 2 detik),
+  // lalu buka dialog cetak browser (pilih printer atau "Simpan sebagai PDF").
+  const cetakSekarang = useCallback(() => {
+    if (sudahDicetak.current) return;
+    sudahDicetak.current = true;
+    window.print();
+  }, []);
+
+  useEffect(() => {
+    if (!mencetak) return;
+    sudahDicetak.current = false;
+    const selesai = () => setMencetak(false);
+    window.addEventListener("afterprint", selesai);
+    const cadangan = window.setTimeout(cetakSekarang, 2000);
+    return () => {
+      window.clearTimeout(cadangan);
+      window.removeEventListener("afterprint", selesai);
+    };
+  }, [mencetak, cetakSekarang]);
 
   const unduhExcel = async () => {
     if (!data) return;
@@ -164,7 +187,16 @@ function RekapKasirSayaContent() {
               )}
               {data?.petugas_nama && <p>Petugas: <span className="font-medium text-foreground">{data.petugas_nama}</span></p>}
             </div>
-            <div className="ml-auto">
+            <div className="ml-auto flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setMencetak(true)}
+                disabled={!!rangeError || isLoading || !data || mencetak}
+                title="Buka dialog cetak: pilih printer atau Simpan sebagai PDF"
+              >
+                {mencetak ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Printer className="mr-1.5 h-4 w-4" />}
+                Cetak / PDF
+              </Button>
               <Button
                 onClick={unduhExcel}
                 disabled={!!rangeError || isLoading || !data || mengunduh}
@@ -211,6 +243,18 @@ function RekapKasirSayaContent() {
           />
         </CardContent>
       </Card>
+
+      {mencetak && data && (
+        <CetakRekapKasir
+          items={data.items}
+          petugasNama={data.petugas_nama}
+          bendaharaNama={data.bendahara_nama}
+          dari={data.tanggal_dari}
+          sampai={data.tanggal_sampai}
+          dicetakPada={new Date()}
+          onReady={cetakSekarang}
+        />
+      )}
 
       {printRow && (
         <Dialog open={!!printRow} onOpenChange={(open) => !open && setPrintRow(null)}>

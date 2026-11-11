@@ -217,6 +217,74 @@
   margin: 10mm;
 }
 
+/* Laporan Rekap Kasir versi cetak/PDF (CetakRekapKasir): A4 landscape,
+ * berwarna. Warna latar dipertahankan saat dicetak (print-color-adjust). */
+@page rekap-kasir {
+  size: A4 landscape;
+  margin: 10mm;
+}
+
+.rekap-kasir-print {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 8.5pt;
+  line-height: 1.25;
+  color: #111827;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.rekap-kasir-print p { margin: 0; }
+.rekap-kasir-print .rekap-kop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+  border-bottom: 2px solid #166a3b;
+}
+.rekap-kasir-print .rekap-kop img { height: 15mm; width: auto; object-fit: contain; }
+.rekap-kasir-print .rekap-kop-yayasan { font-size: 14pt; font-weight: 700; color: #166a3b; }
+.rekap-kasir-print .rekap-kop-judul { font-size: 11pt; font-weight: 700; margin: 1px 0 2px; }
+.rekap-kasir-print .rekap-kop-sep { margin: 0 8px; color: #6b7280; }
+.rekap-kasir-print .rekap-kop-cetak { font-size: 7.5pt; font-style: italic; color: #4b5563; }
+.rekap-kasir-print .rekap-section { font-size: 9.5pt; font-weight: 700; color: #166a3b; margin: 8px 0 3px; }
+.rekap-kasir-print .rekap-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 14px; align-items: start; }
+.rekap-kasir-print table { width: 100%; border-collapse: collapse; }
+.rekap-kasir-print thead { display: table-header-group; }
+.rekap-kasir-print tr { break-inside: avoid; page-break-inside: avoid; }
+.rekap-kasir-print th {
+  background: #166a3b;
+  color: #ffffff;
+  font-weight: 700;
+  padding: 3px 5px;
+  border: 1px solid #166a3b;
+  text-align: center;
+}
+.rekap-kasir-print td { padding: 2px 5px; border: 1px solid #b7cfc0; vertical-align: top; }
+.rekap-kasir-print tbody tr:nth-child(even) td { background: #f4f9f6; }
+.rekap-kasir-print tr.subtotal td { background: #e3f1e8; font-weight: 700; }
+.rekap-kasir-print tr.total td { background: #cfe8d8; font-weight: 700; border-top: 3px double #166a3b; }
+.rekap-kasir-print .rekap-total { margin-top: 10px; font-size: 10pt; }
+.rekap-kasir-print .rekap-total td:first-child { color: #166a3b; }
+.rekap-kasir-print .num { text-align: right; white-space: nowrap; }
+.rekap-kasir-print .center { text-align: center; }
+.rekap-kasir-print .rekap-ttd {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 16px;
+  text-align: center;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.rekap-kasir-print .rekap-ttd-ruang { height: 15mm; }
+.rekap-kasir-print .rekap-ttd-nama { font-weight: 700; text-decoration: underline; }
+.rekap-kasir-print .rekap-page-break { break-before: page; page-break-before: always; }
+.rekap-kasir-print .rekap-rincian { font-size: 7pt; table-layout: fixed; }
+.rekap-kasir-print .rekap-rincian th,
+.rekap-kasir-print .rekap-rincian td { padding: 2px 3px; overflow-wrap: break-word; }
+.rekap-kasir-print .rekap-rincian td.nw { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Judul kolom hanya boleh turun di spasi, tidak dipecah di tengah kata. */
+.rekap-kasir-print .rekap-rincian th { overflow-wrap: normal; word-break: keep-all; padding: 3px 2px; }
+
 @media print {
   .no-print,
   nav, aside, header, button,
@@ -273,6 +341,14 @@
    * seluruh UI aplikasi dan sisakan hanya dokumen kuitansi. */
   body:has(> #kuitansi-print) > *:not(#kuitansi-print) {
     display: none !important;
+  }
+
+  /* Laporan Rekap Kasir: sama seperti kuitansi, cetak hanya dokumennya. */
+  body:has(> #rekap-kasir-print) > *:not(#rekap-kasir-print) {
+    display: none !important;
+  }
+  #rekap-kasir-print {
+    page: rekap-kasir;
   }
 
   /* Area aman printer continuous-form/dot-matrix: font tetap, tetapi konten

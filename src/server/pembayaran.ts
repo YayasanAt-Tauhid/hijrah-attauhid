@@ -313,6 +313,8 @@ export interface RekapKasirSayaRow {
 
 export interface RekapKasirSayaResult {
   petugas_nama: string | null;
+  /** Dari Pengaturan → Profil Yayasan, untuk blok tanda tangan laporan. */
+  bendahara_nama: string | null;
   tanggal_dari: string;
   tanggal_sampai: string;
   items: RekapKasirSayaRow[];
@@ -414,6 +416,14 @@ export const getRekapKasirSaya = createServerFn({ method: "POST" })
       .eq("id", profile.pegawai_id)
       .maybeSingle();
 
+    // Nama Bendahara hanya pelengkap tanda tangan laporan: bila gagal dibaca,
+    // rekap tetap dikembalikan dengan kolom tanda tangan kosong.
+    const { data: sekolah } = await admin
+      .from("sekolah")
+      .select("bendahara")
+      .limit(1)
+      .maybeSingle();
+
     const { data: rows, error } = await admin
       .from("pembayaran")
       .select(
@@ -469,6 +479,7 @@ export const getRekapKasirSaya = createServerFn({ method: "POST" })
 
     return {
       petugas_nama: pegawai?.nama?.trim() || null,
+      bendahara_nama: sekolah?.bendahara?.trim() || null,
       tanggal_dari: dari,
       tanggal_sampai: sampai,
       items,

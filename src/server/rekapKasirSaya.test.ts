@@ -32,6 +32,7 @@ vi.mock("./supabase", () => ({
         lte: (c: string, v: string) => { record("lte", c, v); filters.push((r) => String(r[c]) <= v); return q; },
         in: (c: string, v: unknown[]) => { record("in", c, v); filters.push((r) => v.includes(r[c])); return q; },
         order: () => q,
+        limit: () => q,
         maybeSingle: () => Promise.resolve({ data: rows()[0] ?? null, error: null }),
         then: (resolve: (v: unknown) => unknown) => resolve({ data: rows(), error: null }),
       };
@@ -75,6 +76,7 @@ beforeEach(() => {
       { payment_id: "p2", receipt_id: "r1", period_label: "November 2026" },
     ],
     payment_receipts: [{ id: "r1", receipt_number: "KWT-2026-11-0439", payment_method: "bank_transfer" }],
+    sekolah: [{ bendahara: "  Hj. Siti Aminah  " }],
   };
 });
 
@@ -103,6 +105,13 @@ describe("getRekapKasirSaya", () => {
     expect(byId.p3).toMatchObject({ receipt_number: null, payment_method: null, periode_label: null });
     const lookups = state.calls.filter((call) => call.op === "select" && call.table.startsWith("payment_receipt"));
     expect(lookups.map((call) => call.table)).toEqual(["payment_receipt_items", "payment_receipts"]);
+  });
+
+  it("includes the treasurer name from Profil Yayasan for the signature block", async () => {
+    const result = await getRekapKasirSaya({ data: { tanggal: "2026-11-11" } });
+    expect(result.bendahara_nama).toBe("Hj. Siti Aminah");
+    state.tables.sekolah = [{ bendahara: "   " }];
+    expect((await getRekapKasirSaya({ data: { tanggal: "2026-11-11" } })).bendahara_nama).toBeNull();
   });
 
   it("rejects ranges longer than 31 days", async () => {
