@@ -82,7 +82,11 @@ Dengan `siswa:read`, respons list, detail, anggota kelas, dan incremental sync s
 
 Data pribadi siswa hanya untuk token dengan `siswa:identity:read`. Dengan `siswa:read` saja, detail (`GET /api/v1/siswa/{id}`) dan incremental sync siswa tidak menyertakan `nisn`, `nik_hijrah`, `nik_dapodik`, `alamat`, `telepon`, `email`, `tempat_lahir`, `tanggal_lahir`, maupun `agama`. Dengan `siswa:identity:read`, field-field itu dikirim pada detail dan incremental sync; list dan anggota kelas tidak pernah memuat alamat, telepon, email, tempat/tanggal lahir, maupun agama. Alamat, telepon, email, tempat/tanggal lahir, dan agama tidak pernah dijanjikan untuk `siswa:read`; sebelum perbaikan ini detail dan incremental sync mengirimnya juga kepada token tanpa scope identitas, dan hal itu dikoreksi tanpa mengubah versi (`1.1`, prefix `/api/v1`). Token yang memiliki `siswa:identity:read` tidak mengalami perubahan.
 
-Dengan `siswa:read`, payload siswa pada list, detail, anggota kelas, dan incremental sync juga menyertakan `id_santri_pihak3`: ID Santri dari SiPaksa yang disimpan Hijrah sebagai penghubung sementara, atau `null` bila belum ada. Nama field sengaja `id_santri_pihak3`; nama `id_santri` dicadangkan untuk ID Santri mandiri Hijrah yang kelak menggantikannya, sehingga nilai yang sudah disimpan penerima tidak berubah makna. Sejak ID Santri dibuat otomatis saat mendaftar (status `calon`), field `id_santri_pihak3` juga ada pada payload pendaftaran (`GET /pendaftaran`, detail, dan `/sync/pendaftaran`) dengan scope `pendaftaran:read`; nilainya sama dengan ID siswa yang sama kelak, tidak berubah saat lulus atau pindah lembaga, dan `null` bila belum terbentuk. Penambahan ini kompatibel mundur (field baru, versi mayor tetap `/api/v1`).
+Dengan `siswa:read`, payload siswa pada list, detail, anggota kelas, dan incremental sync menyertakan `id_santri`: ID Santri mandiri yang dibuat otomatis oleh Hijrah (format `YY.KK.NNN`, satu format untuk semua lembaga), atau `null` bila belum terbentuk. ID dibuat sejak pendaftaran (status `calon`), tidak berubah saat lulus atau pindah lembaga, dan tidak pernah ditimpa; nomor yang terpakai calon yang tidak jadi lulus dibiarkan bolong. Untuk data lama, nilainya berasal dari ID SiPaksa yang sudah dicocokkan.
+
+Field `id_santri_pihak3` masih dikirim dengan nilai yang sama persis, tetapi **deprecated**: itu nama historis dari masa ketika ID masih berasal dari SiPaksa. Penerima sebaiknya membaca `id_santri`; `id_santri_pihak3` akan dihapus lewat jalur deprecation setelah penerima diberi tahu (tanggal belum ditetapkan).
+
+`id_santri` juga ada pada payload pendaftaran (`GET /pendaftaran`, detail, dan `/sync/pendaftaran`) dengan scope `pendaftaran:read`; nilainya sama dengan ID siswa yang sama. Penambahan ini kompatibel mundur (field baru, versi tetap `1.1`, prefix `/api/v1`).
 
 Contoh berikut memakai token dengan `siswa:identity:read`; tanpa scope itu `nisn`, `nik_hijrah`, dan `nik_dapodik` tidak ada.
 
@@ -90,6 +94,7 @@ Contoh berikut memakai token dengan `siswa:identity:read`; tanpa scope itu `nisn
 {
   "id": "UUID",
   "nis": "26-03-001",
+  "id_santri": "21.01.001",
   "id_santri_pihak3": "21.01.001",
   "nisn": "1234567890",
   "nama": "Fulan",
@@ -115,7 +120,7 @@ Jika filter unit/tahun ajaran berada di luar scope token, server mengembalikan `
 
 ## Payload pendaftaran
 
-Field dasar mencakup `id`, `siswa_id`, `status`, `id_santri_pihak3`, `tanggal_pendaftaran`, `unit`, `tahun_ajaran`, `angkatan`, `identitas`, `jenis_pendaftaran`, `kategori`, `status_asrama`, `gelombang`, `status_tes`, `tanggal_tes`, `status_kelulusan`, `tanggal_kelulusan`, `tanggal_keputusan`, `tanggal_daftar_ulang`, `status_verifikasi`, `verifikasi`, dan `pembayaran_pendaftaran`.
+Field dasar mencakup `id`, `siswa_id`, `status`, `id_santri`, `id_santri_pihak3` (deprecated), `tanggal_pendaftaran`, `unit`, `tahun_ajaran`, `angkatan`, `identitas`, `jenis_pendaftaran`, `kategori`, `status_asrama`, `gelombang`, `status_tes`, `tanggal_tes`, `status_kelulusan`, `tanggal_kelulusan`, `tanggal_keputusan`, `tanggal_daftar_ulang`, `status_verifikasi`, `verifikasi`, dan `pembayaran_pendaftaran`.
 
 `status_tes` bernilai `sudah_tes` bila `tanggal_tes` sudah ada dan `belum_tes` bila belum. Field `tanggal_tes` lama tetap dipertahankan.
 

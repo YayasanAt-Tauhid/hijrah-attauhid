@@ -77,7 +77,7 @@ const PRIVATE_VALUES = [...Object.values(PRIVATE), ...Object.values(NIK)]
 
 // Field yang boleh dilihat klien siswa:read saja (detail menambah kelas_aktif).
 const PUBLIC_KEYS = [
-  'id', 'nis', 'id_santri_pihak3', 'nama', 'jenis_kelamin', 'status', 'angkatan_id',
+  'id', 'nis', 'id_santri', 'id_santri_pihak3', 'nama', 'jenis_kelamin', 'status', 'angkatan_id',
   'created_at', 'departemen_id', 'terverifikasi', 'status_asrama',
 ]
 // Tambahan untuk klien yang juga punya siswa:identity:read: identik dengan keadaan sebelum perbaikan.

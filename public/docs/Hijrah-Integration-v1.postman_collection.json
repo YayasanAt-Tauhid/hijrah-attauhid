@@ -90,7 +90,7 @@
     },
     {
       "name": "Siswa",
-      "description": "GET requires siswa:read. Responses include id_santri_pihak3 (nullable; temporary third-party student ID). Add siswa:identity:read to receive nisn, nik_hijrah, and nik_dapodik. Existing tokens without that scope do not receive the NIK fields.",
+      "description": "GET requires siswa:read. Responses include id_santri (nullable; Hijrah-issued student ID, YY.KK.NNN) and id_santri_pihak3 (deprecated alias with the same value). Add siswa:identity:read to receive nisn, nik_hijrah, and nik_dapodik. Existing tokens without that scope do not receive the NIK fields.",
       "item": [
         {
           "name": "List",
