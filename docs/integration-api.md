@@ -84,9 +84,9 @@ Data pribadi siswa hanya untuk token dengan `siswa:identity:read`. Dengan `siswa
 
 Dengan `siswa:read`, payload siswa pada list, detail, anggota kelas, dan incremental sync menyertakan `id_santri`: ID Santri mandiri yang dibuat otomatis oleh Hijrah (format `YY.KK.NNN`, satu format untuk semua lembaga), atau `null` bila belum terbentuk. ID dibuat sejak pendaftaran (status `calon`), tidak berubah saat lulus atau pindah lembaga, dan tidak pernah ditimpa; nomor yang terpakai calon yang tidak jadi lulus dibiarkan bolong. Untuk data lama, nilainya berasal dari ID SiPaksa yang sudah dicocokkan.
 
-Field `id_santri_pihak3` masih dikirim dengan nilai yang sama persis, tetapi **deprecated**: itu nama historis dari masa ketika ID masih berasal dari SiPaksa. Penerima sebaiknya membaca `id_santri`; `id_santri_pihak3` akan dihapus lewat jalur deprecation setelah penerima diberi tahu (tanggal belum ditetapkan).
+**Perubahan 11 November 2026:** field `id_santri_pihak3` (nama sementara dari masa ketika ID masih berasal dari SiPaksa) dihapus dari semua payload. Gunakan `id_santri`, yang berisi nilai yang sama. Versi API tetap `1.1`, prefix `/api/v1`.
 
-`id_santri` juga ada pada payload pendaftaran (`GET /pendaftaran`, detail, dan `/sync/pendaftaran`) dengan scope `pendaftaran:read`; nilainya sama dengan ID siswa yang sama. Penambahan ini kompatibel mundur (field baru, versi tetap `1.1`, prefix `/api/v1`).
+`id_santri` juga ada pada payload pendaftaran (`GET /pendaftaran`, detail, dan `/sync/pendaftaran`) dengan scope `pendaftaran:read`; nilainya sama dengan ID siswa yang sama.
 
 Contoh berikut memakai token dengan `siswa:identity:read`; tanpa scope itu `nisn`, `nik_hijrah`, dan `nik_dapodik` tidak ada.
 
@@ -95,7 +95,6 @@ Contoh berikut memakai token dengan `siswa:identity:read`; tanpa scope itu `nisn
   "id": "UUID",
   "nis": "26-03-001",
   "id_santri": "21.01.001",
-  "id_santri_pihak3": "21.01.001",
   "nisn": "1234567890",
   "nama": "Fulan",
   "nik_hijrah": "1971066310140001",
@@ -120,7 +119,7 @@ Jika filter unit/tahun ajaran berada di luar scope token, server mengembalikan `
 
 ## Payload pendaftaran
 
-Field dasar mencakup `id`, `siswa_id`, `status`, `id_santri`, `id_santri_pihak3` (deprecated), `tanggal_pendaftaran`, `unit`, `tahun_ajaran`, `angkatan`, `identitas`, `jenis_pendaftaran`, `kategori`, `status_asrama`, `gelombang`, `status_tes`, `tanggal_tes`, `status_kelulusan`, `tanggal_kelulusan`, `tanggal_keputusan`, `tanggal_daftar_ulang`, `status_verifikasi`, `verifikasi`, dan `pembayaran_pendaftaran`.
+Field dasar mencakup `id`, `siswa_id`, `status`, `id_santri`, `tanggal_pendaftaran`, `unit`, `tahun_ajaran`, `angkatan`, `identitas`, `jenis_pendaftaran`, `kategori`, `status_asrama`, `gelombang`, `status_tes`, `tanggal_tes`, `status_kelulusan`, `tanggal_kelulusan`, `tanggal_keputusan`, `tanggal_daftar_ulang`, `status_verifikasi`, `verifikasi`, dan `pembayaran_pendaftaran`.
 
 `status_tes` bernilai `sudah_tes` bila `tanggal_tes` sudah ada dan `belum_tes` bila belum. Field `tanggal_tes` lama tetap dipertahankan.
 

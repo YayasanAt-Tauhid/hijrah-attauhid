@@ -79,61 +79,51 @@ beforeEach(() => {
   }
 })
 
-describe('Integration API: id_santri_pihak3 pada data siswa', () => {
-  it('muncul di daftar siswa dengan scope siswa:read saja; null bila kosong atau tidak ada', async () => {
+
+// Kontrak (11 Nov 2026): ID Santri mandiri Hijrah (YY.KK.NNN) tampil sebagai `id_santri`.
+// Field `id_santri_pihak3` sudah DIHAPUS dari API. Kolom database historisnya tetap menjadi sumber nilai
+// (fixture di atas memakai nama kolom itu), tetapi namanya tidak boleh bocor ke respons.
+type WithId = { id_santri?: unknown }
+const ids = (rows: WithId[]) => rows.map(x => x.id_santri)
+const noLegacy = (x: object) => expect(x).not.toHaveProperty('id_santri_pihak3')
+
+describe('Integration API: id_santri (ID Santri mandiri) pada data siswa', () => {
+  it('daftar siswa memuat id_santri; null bila kosong; tanpa id_santri_pihak3', async () => {
     const r = await handleList(req('siswa'), 'siswa'); expect(r.status).toBe(200)
     const { data } = await r.json()
-    expect(data.map((x: { id_santri_pihak3?: unknown }) => x.id_santri_pihak3)).toEqual(EXPECTED)
-    for (const x of data) expect(x).toHaveProperty('id_santri_pihak3')
+    for (const x of data) { expect(x).toHaveProperty('id_santri'); noLegacy(x) }
+    expect(ids(data)).toEqual(EXPECTED)
   })
 
-  it.each([[1, '21.01.001'], [2, null], [3, null], [4, '21.01.004']])('muncul di detail siswa %s', async (n, expected) => {
-    const r = await handleDetail(req('siswa/' + id(n as number)), 'siswa', id(n as number))
-    expect(r.status).toBe(200)
+  it.each([[1, '21.01.001'], [2, null], [3, null], [4, '21.01.004']])('detail siswa %s memuat id_santri', async (n, expected) => {
+    const r = await handleDetail(req('siswa/' + id(n as number)), 'siswa', id(n as number)); expect(r.status).toBe(200)
     const { data } = await r.json()
-    expect(data).toHaveProperty('id_santri_pihak3')
-    expect(data.id_santri_pihak3).toBe(expected)
+    expect(data).toHaveProperty('id_santri')
+    expect(data.id_santri).toBe(expected)
+    noLegacy(data)
   })
 
-  it('muncul di anggota kelas', async () => {
+  it('anggota kelas memuat id_santri tanpa id_santri_pihak3', async () => {
     const r = await handleClassStudents(req('kelas/' + id(12) + '/siswa'), id(12)); expect(r.status).toBe(200)
     const { data } = await r.json()
-    expect(data.map((x: { id_santri_pihak3?: unknown }) => x.id_santri_pihak3)).toEqual(EXPECTED)
-    for (const x of data) expect(x).toHaveProperty('id_santri_pihak3')
+    for (const x of data) { expect(x).toHaveProperty('id_santri'); noLegacy(x) }
+    expect(ids(data)).toEqual(EXPECTED)
   })
 
-  it('muncul di sinkronisasi incremental siswa', async () => {
+  it('sinkronisasi incremental siswa memuat id_santri tanpa id_santri_pihak3', async () => {
     const r = await handleSync(req('sync/siswa'), 'siswa'); expect(r.status).toBe(200)
     const { data } = await r.json()
-    expect(data.map((x: { data: { id_santri_pihak3?: unknown } }) => x.data.id_santri_pihak3)).toEqual(EXPECTED)
-    for (const x of data) expect(x.data).toHaveProperty('id_santri_pihak3')
+    for (const x of data) { expect(x.data).toHaveProperty('id_santri'); noLegacy(x.data) }
+    expect(ids(data.map((x: { data: WithId }) => x.data))).toEqual(EXPECTED)
   })
 
-  it('tidak menambah field identitas lain dan tidak membuka NISN/NIK tanpa scope identitas pada daftar', async () => {
+  it('cukup scope siswa:read dan tidak membuka NISN/NIK pada daftar', async () => {
+    state.scopes.splice(0, state.scopes.length, 'siswa:read')
     const { data } = await (await handleList(req('siswa'), 'siswa')).json()
-    for (const x of data) { expect(x).not.toHaveProperty('nisn'); expect(x).not.toHaveProperty('nik_hijrah'); expect(x).not.toHaveProperty('nik_dapodik') }
-  })
-
-  it('muncul pada daftar pendaftaran dengan pendaftaran:read saja; null bila kosong', async () => {
-    state.scopes.splice(0, state.scopes.length, 'pendaftaran:read')
-    const r = await handleList(req('pendaftaran'), 'pendaftaran'); expect(r.status).toBe(200)
-    const { data } = await r.json()
-    expect(data.length).toBe(3)
-    for (const x of data) expect(x).toHaveProperty('id_santri_pihak3')
-    expect(data.map((x: { id_santri_pihak3?: unknown }) => x.id_santri_pihak3)).toEqual(['21.01.001', null, null])
-  })
-
-  it.each([[1, '21.01.001'], [2, null]])('muncul di detail pendaftaran milik siswa %s', async (n, expected) => {
-    const pid = id((n as number) + 20)
-    const r = await handleDetail(req('pendaftaran/' + pid), 'pendaftaran', pid); expect(r.status).toBe(200)
-    const { data } = await r.json()
-    expect(data).toHaveProperty('id_santri_pihak3')
-    expect(data.id_santri_pihak3).toBe(expected)
-  })
-
-  it('tidak membuka identitas tambahan pada payload pendaftaran', async () => {
-    const { data } = await (await handleList(req('pendaftaran'), 'pendaftaran')).json()
-    for (const x of data) { expect(x).not.toHaveProperty('nisn'); expect(x).not.toHaveProperty('nik_dapodik') }
+    for (const x of data) {
+      expect(x).toHaveProperty('id_santri')
+      expect(x).not.toHaveProperty('nisn'); expect(x).not.toHaveProperty('nik_hijrah'); expect(x).not.toHaveProperty('nik_dapodik')
+    }
   })
 
   it('tetap 403 tanpa scope siswa:read', async () => {
@@ -142,28 +132,72 @@ describe('Integration API: id_santri_pihak3 pada data siswa', () => {
   })
 })
 
-describe('Dokumentasi API memuat id_santri_pihak3', () => {
-  const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8')
-  const files = ['integration-api.md', 'openapi-integration-v1.yaml']
-
-  it('dijelaskan di markdown dan OpenAPI sebagai alias deprecated dari id_santri', () => {
-    expect(read('docs/integration-api.md')).toContain('id_santri_pihak3')
-    const openapi = read('docs/openapi-integration-v1.yaml')
-    expect(openapi).toMatch(/^\s+id_santri_pihak3: \{/m)
-    // Kontrak 11 Nov 2026: ID mandiri tampil sebagai id_santri; id_santri_pihak3 tinggal alias deprecated.
-    expect(openapi).toMatch(/^\s+id_santri: \{/m)
+describe('Integration API: id_santri pada payload pendaftaran', () => {
+  it('daftar pendaftaran dengan pendaftaran:read saja memuat id_santri; null bila kosong', async () => {
+    state.scopes.splice(0, state.scopes.length, 'pendaftaran:read')
+    const r = await handleList(req('pendaftaran'), 'pendaftaran'); expect(r.status).toBe(200)
+    const { data } = await r.json()
+    expect(data.length).toBe(3)
+    for (const x of data) { expect(x).toHaveProperty('id_santri'); noLegacy(x) }
+    expect(ids(data)).toEqual(['21.01.001', null, null])
   })
 
-  it('menyatakan bahwa field juga ada pada payload pendaftaran sejak ID dibuat saat mendaftar', () => {
+  it.each([[1, '21.01.001'], [2, null]])('detail pendaftaran milik siswa %s memuat id_santri', async (n, expected) => {
+    const pid = id((n as number) + 20)
+    const r = await handleDetail(req('pendaftaran/' + pid), 'pendaftaran', pid); expect(r.status).toBe(200)
+    const { data } = await r.json()
+    expect(data).toHaveProperty('id_santri')
+    expect(data.id_santri).toBe(expected)
+    noLegacy(data)
+  })
+
+  it('tidak membuka identitas tambahan pada payload pendaftaran', async () => {
+    const { data } = await (await handleList(req('pendaftaran'), 'pendaftaran')).json()
+    for (const x of data) { expect(x).not.toHaveProperty('nisn'); expect(x).not.toHaveProperty('nik_dapodik') }
+  })
+})
+
+describe('Dokumentasi API memuat id_santri dan tidak lagi id_santri_pihak3', () => {
+  const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8')
+  const openapi = () => read('docs/openapi-integration-v1.yaml')
+  const postman = () => read('docs/postman/Hijrah-Integration-v1.postman_collection.json')
+  const files = ['integration-api.md', 'openapi-integration-v1.yaml']
+
+  it('OpenAPI mendefinisikan id_santri pada skema siswa DAN pendaftaran', () => {
+    const y = openapi()
+    expect((y.match(/^\s+id_santri: \{/gm) || []).length).toBeGreaterThanOrEqual(2)
+    const reg = y.slice(y.indexOf('    Registration:'), y.indexOf('pembayaran_pendaftaran:'))
+    expect(reg).toMatch(/^\s+id_santri: \{/m)
+  })
+
+  it('OpenAPI dan Postman tidak lagi menyebut id_santri_pihak3', () => {
+    expect(openapi()).not.toContain('id_santri_pihak3')
+    expect(postman()).not.toContain('id_santri_pihak3')
+    expect(postman()).toMatch(/id_santri[^_]/)
+  })
+
+  it('markdown menjelaskan id_santri sebagai ID mandiri Hijrah dan mencatat penghapusan id_santri_pihak3', () => {
     const md = read('docs/integration-api.md')
-    expect(md).not.toContain('Field ini tidak ada pada payload pendaftaran')
-    expect(md).toMatch(/payload pendaftaran[^.]*id_santri|id_santri[^.]*payload pendaftaran/)
-    const openapi = read('docs/openapi-integration-v1.yaml')
-    const reg = openapi.slice(openapi.indexOf('    Registration:'), openapi.indexOf('pembayaran_pendaftaran:'))
-    expect(reg).toContain('id_santri_pihak3')
+    expect(md).toMatch(/`id_santri`/)
+    expect(md).toMatch(/mandiri/)
+    expect(md).toMatch(/payload pendaftaran/)
+    const legacy = md.split('\n').filter(l => l.includes('id_santri_pihak3'))
+    expect(legacy.length).toBe(1) // satu catatan perubahan saja
+    expect(legacy[0]).toMatch(/dihapus/)
+    expect(md).not.toMatch(/deprecated/i)
+  })
+
+  it('contoh JSON siswa di markdown memuat id_santri saja', () => {
+    const md = read('docs/integration-api.md')
+    expect(md).toMatch(/"id_santri": "\d{2}\.\d{2}\.\d{3}"/)
+    expect(md).not.toMatch(/"id_santri_pihak3"/)
   })
 
   it.each(files)('salinan public/docs/%s identik dengan docs/', (name) => {
     expect(read('public/docs/' + name)).toBe(read('docs/' + name))
+  })
+
+  it('salinan public/docs Postman identik dengan docs/', () => {
+    expect(read('public/docs/Hijrah-Integration-v1.postman_collection.json')).toBe(postman())
   })
 })
