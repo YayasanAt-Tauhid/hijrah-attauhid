@@ -104,6 +104,69 @@ export interface SnapCallbacks {
   error: string;
 }
 
+// Status tagihan yang masih bisa dibayar.
+const TAGIHAN_AKTIF = ["belum_bayar", "sebagian", "terjadwal"];
+
+interface TagihanRow {
+  id: string;
+  siswa_id: string;
+  jenis_id: string;
+  nominal: number | string | null;
+  status: string;
+  tahun_ajaran_id: string | null;
+  bulan: number | null;
+  jatuh_tempo: string | null;
+  jenis: { nama: string; departemen_id: string | null } | null;
+}
+
+/**
+ * Ambil tagihan terbuka untuk SEMUA grup (siswa x jenis) dalam satu query lalu
+ * partisi di memori. Menggantikan query per grup supaya jumlah subrequest Worker
+ * tidak ikut naik bersama ukuran keranjang.
+ * - "periodik": tagihan bulanan (bulan terisi), dasar cek urutan bulan.
+ * - "sekali_bayar": tagihan tanpa bulan (mis. Uang Pangkal), dasar cek tahun lama.
+ */
+async function fetchOpenBillsByGroup(
+  admin: ReturnType<typeof createAdminClient>,
+  groups: Map<string, TagihanItem[]>,
+  kind: "periodik" | "sekali_bayar",
+): Promise<Map<string, BillingSequenceBill[]>> {
+  const result = new Map<string, BillingSequenceBill[]>();
+  if (groups.size === 0) return result;
+  const firsts = [...groups.values()].map((group) => group[0]);
+  const siswaIds = [...new Set(firsts.map((item) => item.siswa_id))];
+  const jenisIds = [...new Set(firsts.map((item) => item.jenis_id))];
+
+  const base = admin
+    .from("tagihan")
+    .select(
+      "id, siswa_id, jenis_id, bulan, jatuh_tempo, tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai)"
+    )
+    .in("siswa_id", siswaIds)
+    .in("jenis_id", jenisIds);
+  const { data, error } = await (kind === "periodik"
+    ? base.not("bulan", "is", null)
+    : base.is("bulan", null)
+  ).in("status", TAGIHAN_AKTIF);
+
+  if (error) {
+    throw new Error(
+      (kind === "periodik"
+        ? "Gagal memeriksa urutan tagihan: "
+        : "Gagal memeriksa tagihan tahun ajaran sebelumnya: ") + error.message
+    );
+  }
+
+  for (const row of (data ?? []) as unknown as BillingSequenceBill[]) {
+    const key = `${row.siswa_id}:${row.jenis_id}`;
+    if (!groups.has(key)) continue;
+    const list = result.get(key) ?? [];
+    list.push(row);
+    result.set(key, list);
+  }
+  return result;
+}
+
 /**
  * Inti pembuatan transaksi Midtrans Snap — dipakai dua jalur:
  *   - server function `createPayment` (portal web, callback ke halaman portal)
@@ -167,33 +230,79 @@ export async function buatTransaksiSnap(params: {
   // Re-fetch TAGIHAN dari DB (JANGAN percaya nominal frontend). Untuk
   // tagihan sekali bayar yang sudah jatuh tempo, jumlah frontend adalah nominal
   // cicilan yang diminta; server tetap menghitung sisa dan membatasi nominalnya.
+  //
+  // PENTING — jangan kembalikan ke query per item. Setiap panggilan ke database
+  // dihitung sebagai satu subrequest Worker, dan batasnya per invocation hanya
+  // 50 (plan gratis). Keranjang besar (puluhan bulan/jenis) dulu memicu
+  // "Too many subrequests by single Worker invocation". Semua pembacaan di fase
+  // validasi dibatch: satu query per tabel, lalu dicocokkan per item di memori.
+  const itemSiswaIds = [...new Set(items.map((i) => i.siswa_id))];
+  const itemJenisIds = [...new Set(items.map((i) => i.jenis_id))];
+  const itemTagihanIds = [
+    ...new Set(items.map((i) => i.tagihan_id).filter((id): id is string => Boolean(id))),
+  ];
+  const TAGIHAN_COLUMNS =
+    "id, siswa_id, jenis_id, nominal, nominal_bruto, nominal_diskon, status, tahun_ajaran_id, bulan, jatuh_tempo, jenis:jenis_id(nama, departemen_id)";
+
+  const candidateById = new Map<string, TagihanRow>();
+  if (itemTagihanIds.length > 0) {
+    const { data: byIdRows, error: byIdError } = await admin
+      .from("tagihan")
+      .select(TAGIHAN_COLUMNS)
+      .in("id", itemTagihanIds)
+      .in("status", TAGIHAN_AKTIF);
+    if (byIdError) throw byIdError;
+    for (const row of (byIdRows ?? []) as unknown as TagihanRow[]) candidateById.set(row.id, row);
+  }
+  if (items.some((i) => !i.tagihan_id)) {
+    // Klien lama tanpa tagihan_id: cocokkan lewat siswa + jenis (+ tahun ajaran + bulan).
+    const { data: legacyRows, error: legacyError } = await admin
+      .from("tagihan")
+      .select(TAGIHAN_COLUMNS)
+      .in("siswa_id", itemSiswaIds)
+      .in("jenis_id", itemJenisIds)
+      .in("status", TAGIHAN_AKTIF);
+    if (legacyError) throw legacyError;
+    for (const row of (legacyRows ?? []) as unknown as TagihanRow[]) candidateById.set(row.id, row);
+  }
+  const candidates = [...candidateById.values()];
+
+  // Cocokkan tiap item ke tagihan aktif (murni di memori, tanpa query).
+  const matchesPerItem = items.map((item) =>
+    candidates.filter(
+      (row) =>
+        row.siswa_id === item.siswa_id &&
+        row.jenis_id === item.jenis_id &&
+        (item.tagihan_id
+          ? row.id === item.tagihan_id
+          : !item.tahun_ajaran_id || row.tahun_ajaran_id === item.tahun_ajaran_id) &&
+        (item.bulan === 0 ? row.bulan == null : row.bulan === item.bulan),
+    ),
+  );
+
+  // Total yang sudah dibayar per tagihan — satu query untuk semua tagihan yang cocok.
+  const matchedBillIds = [
+    ...new Set(matchesPerItem.filter((m) => m.length === 1).map((m) => m[0].id)),
+  ];
+  const paidByBill = new Map<string, number>();
+  if (matchedBillIds.length > 0) {
+    const { data: paidRows, error: paidError } = await admin
+      .from("pembayaran")
+      .select("tagihan_id, jumlah")
+      .in("tagihan_id", matchedBillIds);
+    if (paidError) throw paidError;
+    for (const row of paidRows || []) {
+      const key = String(row.tagihan_id);
+      paidByBill.set(key, (paidByBill.get(key) ?? 0) + Number(row.jumlah || 0));
+    }
+  }
+
   const validatedItems: TagihanItem[] = [];
   // Tagihan yang ikut dibayar penuh pada transaksi ini (dasar syarat urutan).
   const fullyPaidBillIds = new Set<string>();
-  for (const item of items) {
-    let tagihanQuery = admin
-      .from("tagihan")
-      .select("id, nominal, nominal_bruto, nominal_diskon, status, tahun_ajaran_id, bulan, jatuh_tempo, jenis:jenis_id(nama, departemen_id)")
-      .eq("siswa_id", item.siswa_id)
-      .eq("jenis_id", item.jenis_id);
-
-    if (item.tagihan_id) {
-      tagihanQuery = tagihanQuery.eq("id", item.tagihan_id);
-    } else if (item.tahun_ajaran_id) {
-      tagihanQuery = tagihanQuery.eq("tahun_ajaran_id", item.tahun_ajaran_id);
-    }
-
-    tagihanQuery =
-      item.bulan === 0
-        ? tagihanQuery.is("bulan", null)
-        : tagihanQuery.eq("bulan", item.bulan);
-
-    const { data: tagihanRows, error: tagihanError } = await tagihanQuery
-      .in("status", ["belum_bayar", "sebagian", "terjadwal"])
-      .limit(2);
-
-    if (tagihanError) throw tagihanError;
-    if (!tagihanRows || tagihanRows.length === 0) {
+  for (const [index, item] of items.entries()) {
+    const tagihanRows = matchesPerItem[index];
+    if (tagihanRows.length === 0) {
       throw new Error(
         `Tagihan aktif tidak ditemukan untuk ${item.jenis_nama} - ${item.nama_siswa}`
       );
@@ -214,15 +323,7 @@ export async function buatTransaksiSnap(params: {
       );
     }
 
-    const { data: paidRows, error: paidError } = await admin
-      .from("pembayaran")
-      .select("jumlah")
-      .eq("tagihan_id", tagihan.id);
-    if (paidError) throw paidError;
-    const totalSudahBayar = (paidRows || []).reduce(
-      (sum, row) => sum + Number(row.jumlah || 0),
-      0
-    );
+    const totalSudahBayar = paidByBill.get(tagihan.id) ?? 0;
     const sisa = Math.max(nominalTagihan - totalSudahBayar, 0);
     if (sisa <= 0) {
       throw new Error(
@@ -276,23 +377,11 @@ export async function buatTransaksiSnap(params: {
     periodicGroups.set(key, group);
   }
 
-  for (const groupItems of periodicGroups.values()) {
-    const first = groupItems[0];
-    const { data: openRows, error: openError } = await admin
-      .from("tagihan")
-      .select(
-        "id, siswa_id, jenis_id, bulan, jatuh_tempo, tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai)"
-      )
-      .eq("siswa_id", first.siswa_id)
-      .eq("jenis_id", first.jenis_id)
-      .not("bulan", "is", null)
-      .in("status", ["belum_bayar", "sebagian", "terjadwal"]);
+  // Satu query untuk semua grup (siswa x jenis), dipartisi di memori per grup.
+  const openPeriodicByGroup = await fetchOpenBillsByGroup(admin, periodicGroups, "periodik");
 
-    if (openError) {
-      throw new Error("Gagal memeriksa urutan tagihan: " + openError.message);
-    }
-
-    const openBills = (openRows ?? []) as unknown as BillingSequenceBill[];
+  for (const [groupKey, groupItems] of periodicGroups) {
+    const openBills = openPeriodicByGroup.get(groupKey) ?? [];
     const selectedIds = new Set(
       groupItems
         .map((item) => item.tagihan_id)
@@ -333,25 +422,10 @@ export async function buatTransaksiSnap(params: {
     oneTimeGroups.set(key, group);
   }
 
-  for (const groupItems of oneTimeGroups.values()) {
-    const first = groupItems[0];
-    const { data: onceRows, error: onceError } = await admin
-      .from("tagihan")
-      .select(
-        "id, siswa_id, jenis_id, bulan, jatuh_tempo, tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai)"
-      )
-      .eq("siswa_id", first.siswa_id)
-      .eq("jenis_id", first.jenis_id)
-      .is("bulan", null)
-      .in("status", ["belum_bayar", "sebagian", "terjadwal"]);
+  const openOneTimeByGroup = await fetchOpenBillsByGroup(admin, oneTimeGroups, "sekali_bayar");
 
-    if (onceError) {
-      throw new Error(
-        "Gagal memeriksa tagihan tahun ajaran sebelumnya: " + onceError.message
-      );
-    }
-
-    const onceBills = (onceRows ?? []) as unknown as BillingSequenceBill[];
+  for (const [groupKey, groupItems] of oneTimeGroups) {
+    const onceBills = openOneTimeByGroup.get(groupKey) ?? [];
     for (const item of groupItems) {
       const target = onceBills.find((bill) => bill.id === item.tagihan_id);
       if (!target) {

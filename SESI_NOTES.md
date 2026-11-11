@@ -1,3 +1,11 @@
+# Catatan Sesi — Checkout portal: error "Too many subrequests" (11 November 2026)
+
+- **Permintaan (user):** orang tua dengan total tagihan Rp13.560.000 gagal membayar lewat Midtrans; halaman checkout menampilkan "Error: Too many subrequests by single Worker invocation".
+- **Akar masalah (terbukti):** `buatTransaksiSnap` (`src/server/payment.ts`) membaca database per item di dalam loop (2 query per item, ditambah query per grup siswa x jenis untuk cek urutan bulan dan syarat sekali bayar). Tiap panggilan DB dihitung satu subrequest Worker (batas 50 per invocation di plan gratis). Tes baru dengan klien DB palsu: 30 item = 69 panggilan, 6 item = 21.
+- **Perbaikan:** semua pembacaan fase validasi dibatch (satu query per tabel untuk `tagihan`, `pembayaran`, urutan bulan, dan sekali bayar; pencocokan per item di memori). Subrequest kini tetap (sekitar 10) berapa pun jumlah item. Aturan bisnis dan urutan pesan error tidak berubah. Tes regresi `src/server/payment.subrequests.test.ts` ditulis gagal dulu; fixture `payment.link.test.ts` dan `payment.preplacement.test.ts` ditambah kolom `siswa_id`/`jenis_id` karena pencocokan kini di memori.
+- **Verifikasi:** 182 file/1481 tes lulus; error lint di berkas yang diubah sama dengan `main` (11 `any` lama, tidak ada yang baru).
+- **Belum dilakukan:** (a) cek pola serupa (query per item) di `src/server/pendingMidtrans.ts` (loop per link di `resumeOwnedMidtransPayment`) dan jalur link pembayaran/PMB; (b) belum diuji di produksi — setelah deploy, coba checkout keranjang besar; (c) plan Cloudflare Worker yang dipakai belum diverifikasi.
+
 # Catatan Sesi — Pilot penurunan `no-explicit-any` (10 November 2026)
 
 - **Permintaan (user):** setelah gerbang lint anti-bertambah berjalan, tangani 1973 error `no-explicit-any`; user memilih "pilot kecil dulu": selidiki `types.ts`, lalu bereskan 45 file yang hanya punya 1-3 error, tiap perubahan dicek `tsc` terhadap `main`.

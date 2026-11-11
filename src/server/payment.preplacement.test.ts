@@ -29,7 +29,7 @@ beforeEach(() => {
     const rows = table === "ortu_siswa"
       ? (state.ownsStudent ? [{ siswa_id: "student" }] : [])
       : table === "tagihan"
-        ? [{ id: "bill", nominal: 4_200_000, status: "terjadwal", bulan: null,
+        ? [{ id: "bill", siswa_id: "student", jenis_id: "fee", nominal: 4_200_000, status: "terjadwal", bulan: null,
           tahun_ajaran_id: "book-2027", jenis: { nama: state.kindName, departemen_id: "SMP" } }]
         : table === "transaksi_midtrans" ? [{ id: "transaction" }] : [];
     const q = {
