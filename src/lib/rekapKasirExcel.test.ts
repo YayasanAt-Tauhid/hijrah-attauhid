@@ -177,6 +177,15 @@ describe("buildRekapKasirWorkbook — isi", () => {
     ]);
   });
 
+  it("fills the Bendahara signature from Profil Yayasan when available", async () => {
+    const rows = sheetRows((await buildAndReload({ bendaharaNama: "Hj. Siti Aminah" })).getWorksheet("Rekapitulasi")!);
+    const label = rows.findIndex((row) => row.includes("Kasir,"));
+    const names = rows.slice(label + 1).find((row) => row.some((cell) => String(cell).includes("Fitri Yanto")));
+    expect(compact(names)).toEqual([
+      "( Fitri Yanto, S.Si )", "( ............................ )", "( Hj. Siti Aminah )",
+    ]);
+  });
+
   it("still produces a valid report for an empty period and without a logo", async () => {
     const wb = await buildAndReload({ items: [], petugasNama: null, logo: undefined, sampai: "2026-11-11" });
     const ws = wb.getWorksheet("Rekapitulasi")!;

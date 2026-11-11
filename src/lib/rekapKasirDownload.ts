@@ -1,11 +1,12 @@
 import { createClientOnlyFn } from "@tanstack/react-start";
-import type { RekapKasirExcelItem } from "./rekapKasirExcel";
+import type { RekapKasirItem } from "./rekapKasirSummary";
 
 export interface RekapKasirDownloadData {
   petugas_nama: string | null;
+  bendahara_nama?: string | null;
   tanggal_dari: string;
   tanggal_sampai: string;
-  items: RekapKasirExcelItem[];
+  items: RekapKasirItem[];
 }
 
 /**
@@ -25,6 +26,7 @@ export const unduhRekapKasirExcel = createClientOnlyFn(async (data: RekapKasirDo
   ]);
   const workbook = buildRekapKasirWorkbook({
     petugasNama: data.petugas_nama,
+    bendaharaNama: data.bendahara_nama ?? null,
     dari: data.tanggal_dari,
     sampai: data.tanggal_sampai,
     dicetakPada: new Date(),
