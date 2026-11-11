@@ -77,7 +77,7 @@ const PRIVATE_VALUES = [...Object.values(PRIVATE), ...Object.values(NIK)]
 
 // Field yang boleh dilihat klien siswa:read saja (detail menambah kelas_aktif).
 const PUBLIC_KEYS = [
-  'id', 'nis', 'id_santri', 'id_santri_pihak3', 'nama', 'jenis_kelamin', 'status', 'angkatan_id',
+  'id', 'nis', 'id_santri', 'nama', 'jenis_kelamin', 'status', 'angkatan_id',
   'created_at', 'departemen_id', 'terverifikasi', 'status_asrama',
 ]
 // Tambahan untuk klien yang juga punya siswa:identity:read: identik dengan keadaan sebelum perbaikan.
@@ -127,7 +127,7 @@ describe('Detail siswa: data pribadi hanya dengan siswa:identity:read', () => {
 
   it('siswa:read saja: field publik tetap benar nilainya', async () => {
     const { body } = await detail()
-    expect(body.data).toMatchObject({ id: id(1), nis: '1', id_santri_pihak3: '21.01.001', nama: 'Student 1', jenis_kelamin: 'L', status: 'aktif', status_asrama: null })
+    expect(body.data).toMatchObject({ id: id(1), nis: '1', id_santri: '21.01.001', nama: 'Student 1', jenis_kelamin: 'L', status: 'aktif', status_asrama: null })
     expect(body.data.kelas_aktif).toHaveLength(1)
   })
 
