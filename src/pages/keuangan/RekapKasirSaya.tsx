@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
-import { GraduationCap, Printer, ReceiptText, Users, Wallet } from "lucide-react";
+import { FileSpreadsheet, GraduationCap, Loader2, Printer, ReceiptText, Users, Wallet } from "lucide-react";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import Unauthorized from "@/pages/Unauthorized";
 import { getPaymentReceiptGroups, getRekapKasirSaya, type RekapKasirSayaRow } from "@/server/pembayaran";
@@ -18,6 +19,7 @@ import { PrintKuitansi } from "@/components/shared/PrintKuitansi";
 import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan";
 import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/components/shared/ReceiptOrientationSelect";
 import { Skeleton } from "@/components/ui/skeleton";
+import { parseRekapKasirRange, REKAP_KASIR_MAX_HARI } from "@/lib/rekapKasirRange";
 
 export default function RekapKasirSaya() {
   const { role, can, permissionsLoading } = useAuth();
@@ -29,14 +31,51 @@ export default function RekapKasirSaya() {
 }
 
 function RekapKasirSayaContent() {
-  const [tanggal, setTanggal] = useState(format(new Date(), "yyyy-MM-dd"));
+  const hariIni = format(new Date(), "yyyy-MM-dd");
+  const [tanggalDari, setTanggalDari] = useState(hariIni);
+  const [tanggalSampai, setTanggalSampai] = useState(hariIni);
+  const [mengunduh, setMengunduh] = useState(false);
   const [printRow, setPrintRow] = useState<RekapKasirSayaRow | null>(null);
   const [kuitansiOrientation, setKuitansiOrientation] = useState<ReceiptPrintOrientation>("landscape");
 
+  const rangeError = useMemo(() => {
+    try {
+      parseRekapKasirRange({ tanggal_dari: tanggalDari, tanggal_sampai: tanggalSampai });
+      return null;
+    } catch (err) {
+      return err instanceof Error ? err.message : "Periode tidak valid";
+    }
+  }, [tanggalDari, tanggalSampai]);
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ["rekap_kasir_saya", tanggal],
-    queryFn: async () => getRekapKasirSaya({ data: { tanggal } }),
+    queryKey: ["rekap_kasir_saya", tanggalDari, tanggalSampai],
+    enabled: !rangeError,
+    queryFn: async () => getRekapKasirSaya({ data: { tanggal_dari: tanggalDari, tanggal_sampai: tanggalSampai } }),
   });
+
+  const unduhExcel = async () => {
+    if (!data) return;
+    setMengunduh(true);
+    try {
+      // Dimuat saat dibutuhkan agar pustaka xlsx tidak memperbesar bundle awal halaman.
+      const [{ buildRekapKasirWorkbook, rekapKasirFilename }, XLSX] = await Promise.all([
+        import("@/lib/rekapKasirExcel"),
+        import("xlsx"),
+      ]);
+      const workbook = buildRekapKasirWorkbook({
+        petugasNama: data.petugas_nama,
+        dari: data.tanggal_dari,
+        sampai: data.tanggal_sampai,
+        dicetakPada: new Date(),
+        items: data.items,
+      });
+      XLSX.writeFile(workbook, rekapKasirFilename(data.tanggal_dari, data.tanggal_sampai));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal membuat laporan Excel");
+    } finally {
+      setMengunduh(false);
+    }
+  };
 
   const { data: printReceiptGroups = {} } = useQuery({
     queryKey: ["rekap_kasir_receipt", printRow?.id],
@@ -46,6 +85,12 @@ function RekapKasirSayaContent() {
   const printReceipt = printRow ? printReceiptGroups[printRow.id] ?? null : null;
 
   const columns: DataTableColumn<RekapKasirSayaRow>[] = [
+    {
+      key: "tanggal_bayar",
+      label: "Tanggal",
+      render: (value) => value ? format(new Date(String(value) + "T00:00:00"), "dd/MM/yyyy") : "-",
+    },
+    { key: "receipt_number", label: "No. Kwitansi", render: (value) => (value as string) || "-" },
     {
       key: "siswa_nama",
       label: "Siswa / Calon Murid",
@@ -67,6 +112,7 @@ function RekapKasirSayaContent() {
       label: "Lembaga",
       render: (_, row) => row.departemen_kode ? row.departemen_kode + " — " + row.departemen_nama : row.departemen_nama,
     },
+    { key: "payment_method", label: "Metode", render: (value) => (value as string) || "-" },
     { key: "jumlah", label: "Jumlah", render: (value) => formatRupiah(Number(value || 0)) },
     { key: "jurnal_nomor", label: "No. Jurnal", render: (value) => (value as string) || "-" },
     { key: "keterangan", label: "Keterangan", render: (value) => (value as string) || "-" },
@@ -82,7 +128,12 @@ function RekapKasirSayaContent() {
     },
   ];
 
-  const tanggalLabel = format(new Date(tanggal + "T00:00:00"), "EEEE, dd MMMM yyyy", { locale: idLocale });
+  const labelTanggal = (iso: string) => format(new Date(iso + "T00:00:00"), "EEEE, dd MMMM yyyy", { locale: idLocale });
+  const tanggalLabel = rangeError
+    ? ""
+    : tanggalDari === tanggalSampai
+      ? labelTanggal(tanggalDari)
+      : labelTanggal(tanggalDari) + " s.d. " + labelTanggal(tanggalSampai);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -97,17 +148,42 @@ function RekapKasirSayaContent() {
         <CardContent className="pt-6">
           <div className="flex flex-wrap items-end gap-4">
             <div>
-              <Label>Tanggal</Label>
+              <Label htmlFor="rekap-dari">Dari Tanggal</Label>
               <Input
+                id="rekap-dari"
                 type="date"
-                value={tanggal}
-                onChange={(event) => setTanggal(event.target.value)}
+                value={tanggalDari}
+                onChange={(event) => setTanggalDari(event.target.value)}
+                className="w-44"
+              />
+            </div>
+            <div>
+              <Label htmlFor="rekap-sampai">Sampai Tanggal</Label>
+              <Input
+                id="rekap-sampai"
+                type="date"
+                value={tanggalSampai}
+                onChange={(event) => setTanggalSampai(event.target.value)}
                 className="w-44"
               />
             </div>
             <div className="text-sm text-muted-foreground">
-              <p>{tanggalLabel}</p>
+              {rangeError ? (
+                <p className="text-destructive">{rangeError}</p>
+              ) : (
+                <p>{tanggalLabel}</p>
+              )}
               {data?.petugas_nama && <p>Petugas: <span className="font-medium text-foreground">{data.petugas_nama}</span></p>}
+            </div>
+            <div className="ml-auto">
+              <Button
+                onClick={unduhExcel}
+                disabled={!!rangeError || isLoading || !data || mengunduh}
+                title={`Rekapitulasi dan rincian, maksimal ${REKAP_KASIR_MAX_HARI} hari`}
+              >
+                {mengunduh ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <FileSpreadsheet className="mr-1.5 h-4 w-4" />}
+                Unduh Laporan Excel
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -141,10 +217,8 @@ function RekapKasirSayaContent() {
             data={data?.items || []}
             loading={isLoading}
             searchable={false}
-            exportable
-            exportFilename={"rekap-kasir-saya-" + tanggal}
             pageSize={20}
-            emptyMessage="Belum ada transaksi yang Anda catat pada tanggal ini."
+            emptyMessage="Belum ada transaksi yang Anda catat pada periode ini."
           />
         </CardContent>
       </Card>
@@ -191,7 +265,7 @@ function RekapKasirSayaContent() {
                   nomorJurnal: printRow.jurnal_nomor || undefined,
                   jumlah: printRow.jumlah,
                   bulan: printRow.bulan || 0,
-                  tanggal_bayar: printRow.tanggal_bayar || tanggal,
+                  tanggal_bayar: printRow.tanggal_bayar || tanggalDari,
                   keterangan: printRow.keterangan || undefined,
                   jenisNama: printRow.jenis_nama,
                   siswa: {

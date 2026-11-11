@@ -24,6 +24,7 @@ import { evaluateOneTimeGate } from "@/lib/oneTimePrerequisiteGate";
 import { formatSequenceOverrideNote } from "@/lib/sequenceOverride";
 import { authMiddleware, requireContext, requirePermission } from "./auth";
 import { createAdminClient } from "./supabase";
+import { parseRekapKasirRange } from "@/lib/rekapKasirRange";
 import { closeOnlineSessionsForBills } from "./midtransSessions";
 
 // audit_keuangan belum ada di tipe Supabase yang dihasilkan; klien dipersempit
@@ -283,7 +284,10 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
   });
 
 export interface RekapKasirSayaInput {
-  tanggal: string;
+  /** Satu tanggal (perilaku lama); diabaikan bila tanggal_dari diisi. */
+  tanggal?: string;
+  tanggal_dari?: string;
+  tanggal_sampai?: string;
 }
 
 export interface RekapKasirSayaRow {
@@ -302,15 +306,75 @@ export interface RekapKasirSayaRow {
   departemen_nama: string;
   departemen_kode: string | null;
   jurnal_nomor: string | null;
+  receipt_number: string | null;
+  payment_method: string | null;
+  periode_label: string | null;
 }
 
 export interface RekapKasirSayaResult {
   petugas_nama: string | null;
+  tanggal_dari: string;
+  tanggal_sampai: string;
   items: RekapKasirSayaRow[];
   jumlah_transaksi: number;
   total_penerimaan: number;
   transaksi_spmb: number;
   transaksi_siswa: number;
+}
+
+interface RekapReceiptInfo {
+  receipt_number: string | null;
+  payment_method: string | null;
+  period_label: string | null;
+}
+
+/**
+ * Ambil nomor kwitansi, metode bayar, dan label periode untuk banyak
+ * pembayaran sekaligus: dua query per potongan id (bukan per baris) agar
+ * jumlah subrequest Worker tetap kecil untuk rentang satu bulan.
+ */
+async function fetchReceiptInfoByPayment(
+  admin: ReturnType<typeof createAdminClient>,
+  paymentIds: string[]
+): Promise<Map<string, RekapReceiptInfo>> {
+  const result = new Map<string, RekapReceiptInfo>();
+  const ids = [...new Set(paymentIds)];
+  const CHUNK = 200;
+  for (let start = 0; start < ids.length; start += CHUNK) {
+    const chunk = ids.slice(start, start + CHUNK);
+    const { data: links, error: linkError } = await admin
+      .from("payment_receipt_items")
+      .select("payment_id, receipt_id, period_label")
+      .in("payment_id", chunk);
+    if (linkError) throw new Error("Gagal membaca relasi kuitansi: " + linkError.message);
+
+    const receiptIds = [...new Set((links || []).map((row) => row.receipt_id).filter(Boolean))];
+    const receipts = new Map<string, { receipt_number: string | null; payment_method: string | null }>();
+    if (receiptIds.length > 0) {
+      const { data: receiptRows, error: receiptError } = await admin
+        .from("payment_receipts")
+        .select("id, receipt_number, payment_method")
+        .in("id", receiptIds);
+      if (receiptError) throw new Error("Gagal membaca kuitansi: " + receiptError.message);
+      for (const receipt of receiptRows || []) {
+        receipts.set(receipt.id, {
+          receipt_number: receipt.receipt_number ?? null,
+          payment_method: receipt.payment_method ?? null,
+        });
+      }
+    }
+
+    for (const link of links || []) {
+      if (!link.payment_id) continue;
+      const receipt = receipts.get(link.receipt_id);
+      result.set(link.payment_id, {
+        receipt_number: receipt?.receipt_number ?? null,
+        payment_method: receipt?.payment_method ?? null,
+        period_label: link.period_label?.trim() || null,
+      });
+    }
+  }
+  return result;
 }
 
 /**
@@ -328,10 +392,7 @@ export const getRekapKasirSaya = createServerFn({ method: "POST" })
     const { userId } = requireContext(context);
     await requirePermission(admin, userId, "keuangan.pembayaran");
 
-    const tanggal = String(data?.tanggal ?? "").trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) {
-      throw new Error("Tanggal rekap tidak valid");
-    }
+    const { dari, sampai } = parseRekapKasirRange(data ?? {});
 
     const { data: profile, error: profileError } = await admin
       .from("users_profile")
@@ -358,7 +419,8 @@ export const getRekapKasirSaya = createServerFn({ method: "POST" })
       .select(
         "id, jumlah, tanggal_bayar, bulan, keterangan, siswa_id, jenis_pembayaran:jenis_id(nama), siswa:siswa_id(nama, nis, nisn, status, kelas_siswa(aktif, kelas:kelas_id(nama))), departemen:departemen_id(kode, nama), jurnal:jurnal_id(nomor)"
       )
-      .eq("tanggal_bayar", tanggal)
+      .gte("tanggal_bayar", dari)
+      .lte("tanggal_bayar", sampai)
       // Pembayaran loket saat ini menyimpan auth user id sebagai petugas_id.
       // Data historis/legacy dapat menyimpan pegawai_id, jadi terima keduanya
       // agar Rekap Kasir Saya tetap terbatas pada identitas petugas yang sama.
@@ -368,7 +430,15 @@ export const getRekapKasirSaya = createServerFn({ method: "POST" })
       throw new Error("Gagal mengambil rekap kasir: " + error.message);
     }
 
+    const receiptInfo = await fetchReceiptInfoByPayment(
+      admin,
+      ((rows ?? []) as unknown as Array<{ id?: string | null }>)
+        .map((row) => row.id)
+        .filter((id): id is string => !!id)
+    );
+
     const items: RekapKasirSayaRow[] = ((rows ?? []) as any[]).map((row) => {
+      const receipt = receiptInfo.get(row.id);
       const kelasAktif = Array.isArray(row.siswa?.kelas_siswa)
         ? row.siswa.kelas_siswa.find((ks: any) => ks?.aktif) ?? row.siswa.kelas_siswa[0]
         : null;
@@ -388,6 +458,9 @@ export const getRekapKasirSaya = createServerFn({ method: "POST" })
         departemen_nama: row.departemen?.nama ?? "—",
         departemen_kode: row.departemen?.kode ?? null,
         jurnal_nomor: row.jurnal?.nomor ?? null,
+        receipt_number: receipt?.receipt_number ?? null,
+        payment_method: receipt?.payment_method ?? null,
+        periode_label: receipt?.period_label ?? null,
       };
     });
 
@@ -396,6 +469,8 @@ export const getRekapKasirSaya = createServerFn({ method: "POST" })
 
     return {
       petugas_nama: pegawai?.nama?.trim() || null,
+      tanggal_dari: dari,
+      tanggal_sampai: sampai,
       items,
       jumlah_transaksi: items.length,
       total_penerimaan: totalPenerimaan,
