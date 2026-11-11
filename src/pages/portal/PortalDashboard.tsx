@@ -69,7 +69,8 @@ export default function PortalDashboard() {
         .from("v_tagihan_belum_bayar")
         .select("*")
         .in("siswa_id", siswaIds)
-        .eq("sudah_bayar", false);
+        .eq("sudah_bayar", false)
+        .eq("menunggak", true);
 
       // nominal sudah final dari tabel tagihan (dihitung saat tagihan di-generate),
       // tidak perlu dihitung ulang di klien.
@@ -127,7 +128,7 @@ export default function PortalDashboard() {
             </div>
             <div>
               <p className="text-2xl font-bold">{tagihanCount}</p>
-              <p className="text-sm text-muted-foreground">Tagihan Belum Bayar</p>
+              <p className="text-sm text-muted-foreground">Tunggakan</p>
             </div>
           </CardContent>
         </Card>
