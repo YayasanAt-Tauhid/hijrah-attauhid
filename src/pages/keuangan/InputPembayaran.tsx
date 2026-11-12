@@ -96,6 +96,8 @@ type PaymentCartItem = {
   jenisId: string;
   jenisNama: string;
   jenisTipe: string;
+  /** Label tagihan untuk teks cetak (mis. rincian biaya lama); logika tetap memakai jenisNama. */
+  namaTampil?: string | null;
   bulan: number;
   jumlah: number;
   tahunAjaranId: string;
@@ -222,7 +224,7 @@ function InputPembayaranContent() {
   const [cartProgress, setCartProgress] = useState<{ done: number; total: number } | null>(null);
   const [showCartKuitansi, setShowCartKuitansi] = useState(false);
   const [lastCartPayment, setLastCartPayment] = useState<{
-    items: Array<{ pembayaran_id: string; jumlah: number; jenisNama: string; bulan: number; tahunLabel: string }>;
+    items: Array<{ pembayaran_id: string; jumlah: number; jenisNama: string; bulan: number; tahunLabel: string; namaTampil?: string | null }>;
     siswa: SiswaWithKelas;
     tanggal_bayar: string;
     keterangan?: string;
@@ -985,6 +987,7 @@ function InputPembayaranContent() {
       jenisId: bill.jenis_id,
       jenisNama: bill.jenis_pembayaran.nama,
       jenisTipe: bill.jenis_pembayaran.tipe,
+      namaTampil: bill.label_tampil ?? null,
       bulan: bill.bulan ?? 0,
       jumlah: bill.sisa,
       tahunAjaranId: bill.tahun_ajaran_id,
@@ -1321,7 +1324,7 @@ function InputPembayaranContent() {
     setCartProgress({ done: 0, total: cartItems.length });
 
     const berhasilKeys = new Set<string>();
-    const berhasilItems: Array<{ pembayaran_id: string; jumlah: number; jenisNama: string; bulan: number; tahunLabel: string }> = [];
+    const berhasilItems: Array<{ pembayaran_id: string; jumlah: number; jenisNama: string; bulan: number; tahunLabel: string; namaTampil?: string | null }> = [];
     let petugasNama: string | undefined;
     let receiptId: string | undefined;
     let receiptNumber: string | undefined;
@@ -1357,6 +1360,7 @@ function InputPembayaranContent() {
           jenisNama: item.jenisNama,
           bulan: item.bulan,
           tahunLabel: item.tahunLabel,
+          namaTampil: item.namaTampil ?? null,
         });
       } catch (e) {
         const message = e instanceof Error ? e.message : "Gagal diproses";
@@ -2333,7 +2337,7 @@ function InputPembayaranContent() {
               items={lastCartPayment.items.map(item => ({
                 id: item.pembayaran_id,
                 jumlah: item.jumlah,
-                jenisNama: item.jenisNama,
+                jenisNama: item.namaTampil ?? item.jenisNama,
                 bulan: item.bulan,
                 periodeLabel: item.bulan ? `${namaBulan(item.bulan)} ${item.tahunLabel}`.trim() : "Sekali Bayar",
               }))}
