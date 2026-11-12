@@ -270,12 +270,38 @@ describe("halaman Rekap Kasir Saya", () => {
     expect(page).toContain("tanggal_dari: tanggalDari");
     expect(page).toContain("tanggal_sampai: tanggalSampai");
     expect(page).toContain("Unduh Laporan Excel");
-    expect(page).toContain("await unduhRekapKasirExcel(data)");
+    // Unduhan dan cetak harus memakai baris terfilter lembaga, bukan semua baris.
+    expect(page).toContain("await unduhRekapKasirExcel({ ...data, items: itemsTerfilter, lembaga_label: lembagaLabel })");
+    expect(page).toContain("items={itemsTerfilter}");
+    expect(page).toContain("lembagaLabel={lembagaLabel}");
     expect(page).not.toMatch(/^import .*from "(xlsx|exceljs|@\/lib\/rekapKasirExcel)";$/m);
     expect(download).toContain("createClientOnlyFn(");
     expect(download).toContain('import("@/lib/rekapKasirExcel")');
     expect(download).toContain("/branding/yayasan-at-tauhid-kop.png");
     expect(download).toContain("xlsx.writeBuffer()");
     expect(download).not.toMatch(/^import (?!type ).*rekapKasirExcel/m);
+  });
+});
+
+describe("filter lembaga pada laporan Excel", () => {
+  it("nama file memuat lembaga terpilih", () => {
+    expect(rekapKasirFilename("2026-11-11", "2026-11-11", "SMP — SMP")).toBe("rekap-kasir-2026-11-11_smp-smp.xlsx");
+    expect(rekapKasirFilename("2026-11-01", "2026-11-30", "SD — Sekolah Dasar")).toBe("rekap-kasir-2026-11-01_sd_2026-11-30_sd-sekolah-dasar.xlsx");
+  });
+
+  it("nama file tidak berubah tanpa filter lembaga", () => {
+    expect(rekapKasirFilename("2026-11-11", "2026-11-11", null)).toBe("rekap-kasir-2026-11-11.xlsx");
+  });
+
+  it("header laporan menyebut lembaga bila difilter", async () => {
+    const wb = await buildAndReload({ lembagaLabel: "SD — Sekolah Dasar" });
+    const teks = sheetRows(wb.worksheets[0]).flat().map((v) => String(v ?? ""));
+    expect(teks.some((t) => t.includes("Lembaga : SD — Sekolah Dasar"))).toBe(true);
+  });
+
+  it("header laporan tanpa filter tidak menyebut lembaga", async () => {
+    const wb = await buildAndReload();
+    const teks = sheetRows(wb.worksheets[0]).flat().map((v) => String(v ?? ""));
+    expect(teks.some((t) => t.includes("Lembaga :"))).toBe(false);
   });
 });

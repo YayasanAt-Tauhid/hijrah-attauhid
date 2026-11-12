@@ -130,3 +130,17 @@ describe("kontrak cetak rekap kasir", () => {
     expect(page).toContain("bendaharaNama={data.bendahara_nama}");
   });
 });
+
+describe("CetakRekapKasir dengan filter lembaga", () => {
+  it("menyebut lembaga di kop bila difilter", () => {
+    renderPrint({ lembagaLabel: "SD — Sekolah Dasar" });
+    const root = document.getElementById("rekap-kasir-print")!;
+    expect(root.textContent).toContain("Lembaga : SD — Sekolah Dasar");
+  });
+
+  it("tidak menyebut baris Lembaga di kop tanpa filter", () => {
+    renderPrint();
+    const root = document.getElementById("rekap-kasir-print")!;
+    expect(root.textContent).not.toContain("Lembaga :");
+  });
+});

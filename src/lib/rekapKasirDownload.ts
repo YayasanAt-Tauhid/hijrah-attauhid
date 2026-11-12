@@ -7,6 +7,8 @@ export interface RekapKasirDownloadData {
   tanggal_dari: string;
   tanggal_sampai: string;
   items: RekapKasirItem[];
+  /** Lembaga yang difilter ("KODE — Nama"); kosong = Semua Lembaga. */
+  lembaga_label?: string | null;
 }
 
 /**
@@ -31,6 +33,7 @@ export const unduhRekapKasirExcel = createClientOnlyFn(async (data: RekapKasirDo
     sampai: data.tanggal_sampai,
     dicetakPada: new Date(),
     items: data.items,
+    lembagaLabel: data.lembaga_label ?? null,
     logo,
   });
   const buffer = await workbook.xlsx.writeBuffer();
@@ -40,7 +43,7 @@ export const unduhRekapKasirExcel = createClientOnlyFn(async (data: RekapKasirDo
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = rekapKasirFilename(data.tanggal_dari, data.tanggal_sampai);
+  link.download = rekapKasirFilename(data.tanggal_dari, data.tanggal_sampai, data.lembaga_label);
   document.body.appendChild(link);
   link.click();
   link.remove();

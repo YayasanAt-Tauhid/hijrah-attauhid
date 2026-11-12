@@ -37,6 +37,8 @@ export interface RekapKasirExcelInput {
   bendaharaNama?: string | null;
   /** PNG logo kop yayasan; laporan tetap dibuat tanpa logo bila kosong. */
   logo?: Uint8Array | ArrayBuffer;
+  /** Lembaga yang difilter ("KODE — Nama"); kosong = Semua Lembaga. */
+  lembagaLabel?: string | null;
 }
 
 /** Warna ARGB, selaras dengan hijau utama aplikasi (hsl 149 66% 25%). */
@@ -54,8 +56,13 @@ const AMOUNT_FORMAT = "#,##0";
 const YAYASAN = "YAYASAN AT-TAUHID AL ISLAMY BANGKA BELITUNG";
 const TTD_KOSONG = "( ............................ )";
 
-export function rekapKasirFilename(dari: string, sampai: string): string {
-  return dari === sampai ? `rekap-kasir-${dari}.xlsx` : `rekap-kasir-${dari}_sd_${sampai}.xlsx`;
+export function rekapKasirFilename(dari: string, sampai: string, lembagaLabel?: string | null): string {
+  const periode = dari === sampai ? dari : `${dari}_sd_${sampai}`;
+  const slug = (lembagaLabel ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `rekap-kasir-${periode}${slug ? `_${slug}` : ""}.xlsx`;
 }
 
 /** Hindari formula injection saat file dibuka di Excel/LibreOffice. */
@@ -146,7 +153,10 @@ function letterhead(
     { text: judul, font: { size: 12, bold: true } },
     // Label dan nilai dalam satu sel: kolom A dipakai logo dan kolom "No".
     { text: `Petugas : ${safeText(input.petugasNama)}`, font: { size: 10 } },
-    { text: `Periode : ${periode}`, font: { size: 10 } },
+    {
+      text: `Periode : ${periode}` + (input.lembagaLabel ? ` · Lembaga : ${safeText(input.lembagaLabel)}` : ""),
+      font: { size: 10 },
+    },
     { text: `Diunduh : ${waktuCetak(input.dicetakPada)}`, font: { size: 9, italic: true, color: { argb: REKAP_KASIR_WARNA.teksRedup } } },
   ];
   lines.forEach((line, index) => {
