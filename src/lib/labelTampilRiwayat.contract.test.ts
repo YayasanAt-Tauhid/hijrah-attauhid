@@ -29,10 +29,15 @@ describe("label tampil tagihan — riwayat pembayaran kasir", () => {
     expect(inputPembayaran).toContain('keterangan: `${batalTarget.jenis_pembayaran?.nama ?? ""}');
   });
 
-  it("kwitansi cetak dan teks pengajuan pembatalan tetap memakai nama jenis (dokumen/data yang disimpan)", () => {
-    expect(inputPembayaran).toContain('jenisNama: riwayatPrintTarget.jenis_pembayaran?.nama || "Pembayaran",');
+  it("cetak tunggal untuk pembayaran tanpa kuitansi tersimpan memakai label tagihan", () => {
+    expect(inputPembayaran).toContain(
+      'jenisNama: riwayatPrintTarget.tagihan?.label_tampil || riwayatPrintTarget.jenis_pembayaran?.nama || "Pembayaran",',
+    );
+  });
+
+  it("kuitansi tersimpan tetap dicetak dari salinannya, dan teks pengajuan pembatalan tetap nama jenis", () => {
+    expect(inputPembayaran).toContain("jenisNama: item.jenis_nama,");
     expect(inputPembayaran).toContain('label: `${r.jenis_pembayaran?.nama ?? "Pembayaran"}');
-    expect(inputPembayaran).not.toMatch(/riwayatPrintTarget\.tagihan/);
   });
 });
 

@@ -2416,7 +2416,7 @@ function InputPembayaranContent() {
                   bulan: Number(riwayatPrintTarget.bulan || 0),
                   tanggal_bayar: riwayatPrintTarget.tanggal_bayar || new Date().toISOString().slice(0, 10),
                   keterangan: riwayatPrintTarget.keterangan || undefined,
-                  jenisNama: riwayatPrintTarget.jenis_pembayaran?.nama || "Pembayaran",
+                  jenisNama: riwayatPrintTarget.tagihan?.label_tampil || riwayatPrintTarget.jenis_pembayaran?.nama || "Pembayaran",
                   periodeLabel: riwayatPrintTarget.periodeTagihanLabel || undefined,
                   siswa: selectedSiswa,
                 }}
