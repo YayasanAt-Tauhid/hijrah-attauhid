@@ -28,6 +28,13 @@ import {
   listLembaga,
   resolveLembagaFilter,
 } from "@/lib/rekapKasirLembaga";
+import {
+  SEMUA_JENIS,
+  filterByJenis,
+  labelJenisFilter,
+  listJenis,
+  resolveJenisFilter,
+} from "@/lib/rekapKasirJenis";
 import { parseRekapKasirRange, REKAP_KASIR_MAX_HARI } from "@/lib/rekapKasirRange";
 import { unduhRekapKasirExcel } from "@/lib/rekapKasirDownload";
 import { CetakRekapKasir } from "@/components/keuangan/CetakRekapKasir";
@@ -46,6 +53,7 @@ function RekapKasirSayaContent() {
   const [tanggalDari, setTanggalDari] = useState(hariIni);
   const [tanggalSampai, setTanggalSampai] = useState(hariIni);
   const [lembagaFilter, setLembagaFilter] = useState<string>(SEMUA_LEMBAGA);
+  const [jenisFilter, setJenisFilter] = useState<string>(SEMUA_JENIS);
   const [mengunduh, setMengunduh] = useState(false);
   const [mencetak, setMencetak] = useState(false);
   const sudahDicetak = useRef(false);
@@ -67,13 +75,18 @@ function RekapKasirSayaContent() {
     queryFn: async () => getRekapKasirSaya({ data: { tanggal_dari: tanggalDari, tanggal_sampai: tanggalSampai } }),
   });
 
-  // Filter lembaga dijalankan di klien: setiap transaksi sudah membawa lembaganya.
-  // Tabel, statistik, cetak/PDF, dan Excel semuanya memakai baris terfilter yang sama.
+  // Filter lembaga dan jenis pembayaran dijalankan di klien: setiap transaksi sudah
+  // membawa keduanya. Daftar jenis mengikuti lembaga terpilih. Tabel, statistik,
+  // cetak/PDF, dan Excel semuanya memakai baris terfilter yang sama.
   const semuaItems = useMemo(() => data?.items ?? [], [data]);
   const opsiLembaga = useMemo(() => listLembaga(semuaItems), [semuaItems]);
   const lembagaAktif = resolveLembagaFilter(semuaItems, lembagaFilter);
-  const itemsTerfilter = useMemo(() => filterByLembaga(semuaItems, lembagaAktif), [semuaItems, lembagaAktif]);
+  const itemsLembaga = useMemo(() => filterByLembaga(semuaItems, lembagaAktif), [semuaItems, lembagaAktif]);
   const lembagaLabel = labelLembagaFilter(semuaItems, lembagaAktif);
+  const opsiJenis = useMemo(() => listJenis(itemsLembaga), [itemsLembaga]);
+  const jenisAktif = resolveJenisFilter(itemsLembaga, jenisFilter);
+  const itemsTerfilter = useMemo(() => filterByJenis(itemsLembaga, jenisAktif), [itemsLembaga, jenisAktif]);
+  const jenisLabel = labelJenisFilter(itemsLembaga, jenisAktif);
   const statistik = useMemo(() => hitungStatistikRekap(itemsTerfilter), [itemsTerfilter]);
 
   // Cetak / PDF: render laporan cetak, tunggu logo termuat (maks. 2 detik),
@@ -100,7 +113,7 @@ function RekapKasirSayaContent() {
     if (!data) return;
     setMengunduh(true);
     try {
-      await unduhRekapKasirExcel({ ...data, items: itemsTerfilter, lembaga_label: lembagaLabel });
+      await unduhRekapKasirExcel({ ...data, items: itemsTerfilter, lembaga_label: lembagaLabel, jenis_label: jenisLabel });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal membuat laporan Excel");
     } finally {
@@ -214,6 +227,22 @@ function RekapKasirSayaContent() {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label htmlFor="rekap-jenis">Jenis Pembayaran</Label>
+              <Select value={jenisAktif} onValueChange={setJenisFilter} disabled={!!rangeError || isLoading || !data}>
+                <SelectTrigger id="rekap-jenis" className="w-60">
+                  <SelectValue placeholder="Semua Jenis" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SEMUA_JENIS}>Semua Jenis</SelectItem>
+                  {opsiJenis.map((opsi) => (
+                    <SelectItem key={opsi.key} value={opsi.key}>
+                      {opsi.label} ({opsi.count})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="text-sm text-muted-foreground">
               {rangeError ? (
                 <p className="text-destructive">{rangeError}</p>
@@ -275,8 +304,8 @@ function RekapKasirSayaContent() {
             searchable={false}
             pageSize={20}
             emptyMessage={
-              lembagaLabel
-                ? "Belum ada transaksi di lembaga ini pada periode ini."
+              lembagaLabel || jenisLabel
+                ? "Belum ada transaksi dengan filter ini pada periode ini."
                 : "Belum ada transaksi yang Anda catat pada periode ini."
             }
           />
@@ -287,6 +316,7 @@ function RekapKasirSayaContent() {
         <CetakRekapKasir
           items={itemsTerfilter}
           lembagaLabel={lembagaLabel}
+          jenisLabel={jenisLabel}
           petugasNama={data.petugas_nama}
           bendaharaNama={data.bendahara_nama}
           dari={data.tanggal_dari}
