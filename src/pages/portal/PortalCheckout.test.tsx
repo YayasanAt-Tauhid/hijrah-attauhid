@@ -1,14 +1,17 @@
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PortalCheckout from "./PortalCheckout";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   loadMidtrans: vi.fn(),
+  getSession: vi.fn(),
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "parent", email: "ortu@example.com" } }) }));
-vi.mock("@/integrations/supabase/client", () => ({ supabase: {} }));
+vi.mock("@/integrations/supabase/client", () => ({
+  supabase: { auth: { getSession: mocks.getSession } },
+}));
 vi.mock("@/server/payment", () => ({ createPayment: vi.fn() }));
 vi.mock("@/hooks/useMidtrans", () => ({
   useMidtrans: () => ({
@@ -35,40 +38,68 @@ const renderWithCart = (items: ReturnType<typeof item>[]) => {
   return render(<PortalCheckout />);
 };
 
-const IMBAUAN_VA = /Virtual Account \(VA\)/;
+const SARAN_VA = /Virtual Account \(VA\)/;
+
+const klikBayar = () =>
+  fireEvent.click(screen.getByRole("button", { name: /Lanjutkan Pembayaran/ }));
 
 afterEach(cleanup);
 beforeEach(() => {
   sessionStorage.clear();
   vi.clearAllMocks();
+  // Tanpa sesi login, handleBayar berhenti lebih awal; cukup untuk membuktikan ia dipanggil.
+  mocks.getSession.mockResolvedValue({ data: { session: null } });
 });
 
-describe("PortalCheckout imbauan VA untuk total di atas Rp628.000", () => {
-  it("tidak menampilkan imbauan VA untuk total di bawah batas", () => {
+describe("PortalCheckout pop up saran VA untuk total di atas Rp628.000", () => {
+  it("tidak menampilkan saran VA sebagai kartu di halaman", () => {
+    renderWithCart([item(1500000)]);
+    expect(screen.queryByText(SARAN_VA)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("langsung memproses pembayaran tanpa pop up untuk total di bawah batas", async () => {
     renderWithCart([item(450000)]);
-    expect(screen.queryByText(IMBAUAN_VA)).not.toBeInTheDocument();
+    klikBayar();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(mocks.getSession).toHaveBeenCalled());
   });
 
-  it("tidak menampilkan imbauan VA tepat di Rp628.000", () => {
+  it("langsung memproses pembayaran tanpa pop up tepat di Rp628.000", async () => {
     renderWithCart([item(628000)]);
-    expect(screen.queryByText(IMBAUAN_VA)).not.toBeInTheDocument();
+    klikBayar();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(mocks.getSession).toHaveBeenCalled());
   });
 
-  it("menampilkan imbauan VA begitu total melebihi Rp628.000", () => {
+  it("menampilkan pop up begitu total melebihi Rp628.000, tanpa memulai pembayaran", () => {
     renderWithCart([item(628001)]);
-    const imbauan = screen.getByText(IMBAUAN_VA);
-    expect(imbauan).toBeInTheDocument();
-    expect(imbauan.textContent).toMatch(/QRIS/);
+    klikBayar();
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Saran metode pembayaran");
+    expect(dialog).toHaveTextContent(SARAN_VA);
+    expect(dialog.textContent).toMatch(/QRIS/);
+    expect(mocks.getSession).not.toHaveBeenCalled();
   });
 
   it("menjumlahkan semua item keranjang sebelum membandingkan dengan batas", () => {
     renderWithCart([item(450000, 7), item(200000, 8)]);
-    expect(screen.getByText(IMBAUAN_VA)).toBeInTheDocument();
+    klikBayar();
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
   });
 
-  it("tetap menampilkan tombol Lanjutkan Pembayaran aktif saat imbauan tampil", () => {
+  it("tombol Kembali menutup pop up tanpa memulai pembayaran", async () => {
     renderWithCart([item(1500000)]);
-    expect(screen.getByText(IMBAUAN_VA)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Lanjutkan Pembayaran/ })).not.toBeDisabled();
+    klikBayar();
+    fireEvent.click(screen.getByRole("button", { name: "Kembali" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(mocks.getSession).not.toHaveBeenCalled();
+  });
+
+  it("tombol Lanjut ke Midtrans meneruskan ke pembayaran (QRIS tetap bisa dipilih)", async () => {
+    renderWithCart([item(1500000)]);
+    klikBayar();
+    fireEvent.click(screen.getByRole("button", { name: "Lanjut ke Midtrans" }));
+    await waitFor(() => expect(mocks.getSession).toHaveBeenCalled());
   });
 });

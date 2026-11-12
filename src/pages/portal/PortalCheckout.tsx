@@ -16,7 +16,17 @@ import {
   TableFooter,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { ArrowLeft, CreditCard, Info, Loader2, ShieldCheck } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ArrowLeft, CreditCard, Loader2, ShieldCheck } from "lucide-react";
 import { getErrorMessage } from "@/lib/errorMessage";
 
 // Di atas nominal ini biaya QRIS cenderung lebih mahal daripada Virtual Account,
@@ -64,6 +74,7 @@ export default function PortalCheckout() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const [tampilkanSaranVA, setTampilkanSaranVA] = useState(false);
   const [keranjang, setKeranjang] = useState<KeranjangItem[]>([]);
   const {
     isReady: isMidtransReady,
@@ -108,6 +119,16 @@ export default function PortalCheckout() {
 
   const totalAmount = keranjang.reduce((sum, i) => sum + i.jumlah, 0);
   const sarankanVA = totalAmount > BATAS_IMBAUAN_VA;
+
+  // Di atas batas, tampilkan saran VA dulu lewat pop up; pembayaran baru
+  // dimulai setelah orang tua memilih "Lanjut ke Midtrans".
+  const handleKlikBayar = () => {
+    if (sarankanVA) {
+      setTampilkanSaranVA(true);
+      return;
+    }
+    handleBayar();
+  };
 
   const handleBayar = async () => {
     setIsLoading(true);
@@ -283,22 +304,6 @@ export default function PortalCheckout() {
         </CardContent>
       </Card>
 
-      {sarankanVA ? (
-        <Card className="border-amber-300 bg-amber-50">
-          <CardContent className="flex items-start gap-4 p-5">
-            <Info className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
-            <div className="text-sm text-amber-900 space-y-1">
-              <p className="font-medium">Saran metode pembayaran</p>
-              <p>
-                Untuk pembayaran di atas {formatRupiah(BATAS_IMBAUAN_VA)}, sebaiknya
-                pilih Virtual Account (VA) di halaman Midtrans. Biaya layanan QRIS
-                untuk nominal sebesar ini cenderung lebih mahal dibandingkan VA.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
       {midtransError ? (
         <p className="text-sm text-destructive text-center">
           Layanan pembayaran belum siap: {midtransError}
@@ -318,7 +323,7 @@ export default function PortalCheckout() {
         </Button>
         <Button
           className="flex-1 bg-emerald-600 hover:bg-emerald-700 h-12 text-base"
-          onClick={handleBayar}
+          onClick={handleKlikBayar}
           disabled={isLoading || !isMidtransReady}
         >
           {isLoading || isMidtransLoading ? (
@@ -329,6 +334,28 @@ export default function PortalCheckout() {
           {isMidtransLoading ? "Memuat..." : "Lanjutkan Pembayaran"}
         </Button>
       </div>
+
+      <AlertDialog open={tampilkanSaranVA} onOpenChange={setTampilkanSaranVA}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Saran metode pembayaran</AlertDialogTitle>
+            <AlertDialogDescription>
+              Untuk pembayaran di atas {formatRupiah(BATAS_IMBAUAN_VA)}, sebaiknya
+              pilih Virtual Account (VA) di halaman Midtrans. Biaya layanan QRIS
+              untuk nominal sebesar ini cenderung lebih mahal dibandingkan VA.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Kembali</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={handleBayar}
+            >
+              Lanjut ke Midtrans
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
