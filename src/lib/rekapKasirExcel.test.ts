@@ -271,9 +271,10 @@ describe("halaman Rekap Kasir Saya", () => {
     expect(page).toContain("tanggal_sampai: tanggalSampai");
     expect(page).toContain("Unduh Laporan Excel");
     // Unduhan dan cetak harus memakai baris terfilter lembaga, bukan semua baris.
-    expect(page).toContain("await unduhRekapKasirExcel({ ...data, items: itemsTerfilter, lembaga_label: lembagaLabel })");
+    expect(page).toContain("await unduhRekapKasirExcel({ ...data, items: itemsTerfilter, lembaga_label: lembagaLabel, jenis_label: jenisLabel })");
     expect(page).toContain("items={itemsTerfilter}");
     expect(page).toContain("lembagaLabel={lembagaLabel}");
+    expect(page).toContain("jenisLabel={jenisLabel}");
     expect(page).not.toMatch(/^import .*from "(xlsx|exceljs|@\/lib\/rekapKasirExcel)";$/m);
     expect(download).toContain("createClientOnlyFn(");
     expect(download).toContain('import("@/lib/rekapKasirExcel")');
@@ -303,5 +304,35 @@ describe("filter lembaga pada laporan Excel", () => {
     const wb = await buildAndReload();
     const teks = sheetRows(wb.worksheets[0]).flat().map((v) => String(v ?? ""));
     expect(teks.some((t) => t.includes("Lembaga :"))).toBe(false);
+  });
+});
+
+describe("filter jenis pembayaran pada laporan Excel", () => {
+  it("nama file memuat jenis terpilih", () => {
+    expect(rekapKasirFilename("2026-11-11", "2026-11-11", null, "SPP SMP")).toBe("rekap-kasir-2026-11-11_spp-smp.xlsx");
+  });
+
+  it("nama file memuat lembaga dan jenis berurutan", () => {
+    expect(rekapKasirFilename("2026-11-11", "2026-11-12", "SD — Sekolah Dasar", "Formulir SPMB")).toBe(
+      "rekap-kasir-2026-11-11_sd_2026-11-12_sd-sekolah-dasar_formulir-spmb.xlsx",
+    );
+  });
+
+  it("header laporan menyebut jenis bila difilter", async () => {
+    const wb = await buildAndReload({ jenisLabel: "SPP SMP" });
+    const teks = sheetRows(wb.worksheets[0]).flat().map((v) => String(v ?? ""));
+    expect(teks.some((t) => t.includes("Jenis : SPP SMP"))).toBe(true);
+  });
+
+  it("header laporan menyebut lembaga dan jenis sekaligus", async () => {
+    const wb = await buildAndReload({ lembagaLabel: "SD — Sekolah Dasar", jenisLabel: "Formulir SPMB" });
+    const teks = sheetRows(wb.worksheets[0]).flat().map((v) => String(v ?? ""));
+    expect(teks.some((t) => t.includes("Lembaga : SD — Sekolah Dasar · Jenis : Formulir SPMB"))).toBe(true);
+  });
+
+  it("header laporan tanpa filter jenis tidak menyebut jenis", async () => {
+    const wb = await buildAndReload({ lembagaLabel: "SD — Sekolah Dasar" });
+    const teks = sheetRows(wb.worksheets[0]).flat().map((v) => String(v ?? ""));
+    expect(teks.some((t) => t.includes("Jenis :"))).toBe(false);
   });
 });

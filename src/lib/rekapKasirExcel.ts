@@ -39,6 +39,8 @@ export interface RekapKasirExcelInput {
   logo?: Uint8Array | ArrayBuffer;
   /** Lembaga yang difilter ("KODE — Nama"); kosong = Semua Lembaga. */
   lembagaLabel?: string | null;
+  /** Jenis pembayaran yang difilter; kosong = Semua Jenis. */
+  jenisLabel?: string | null;
 }
 
 /** Warna ARGB, selaras dengan hijau utama aplikasi (hsl 149 66% 25%). */
@@ -56,13 +58,20 @@ const AMOUNT_FORMAT = "#,##0";
 const YAYASAN = "YAYASAN AT-TAUHID AL ISLAMY BANGKA BELITUNG";
 const TTD_KOSONG = "( ............................ )";
 
-export function rekapKasirFilename(dari: string, sampai: string, lembagaLabel?: string | null): string {
+export function rekapKasirFilename(
+  dari: string,
+  sampai: string,
+  lembagaLabel?: string | null,
+  jenisLabel?: string | null,
+): string {
   const periode = dari === sampai ? dari : `${dari}_sd_${sampai}`;
-  const slug = (lembagaLabel ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return `rekap-kasir-${periode}${slug ? `_${slug}` : ""}.xlsx`;
+  const slug = (label?: string | null) =>
+    (label ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  const filter = [slug(lembagaLabel), slug(jenisLabel)].filter(Boolean).map((s) => `_${s}`).join("");
+  return `rekap-kasir-${periode}${filter}.xlsx`;
 }
 
 /** Hindari formula injection saat file dibuka di Excel/LibreOffice. */
@@ -154,7 +163,10 @@ function letterhead(
     // Label dan nilai dalam satu sel: kolom A dipakai logo dan kolom "No".
     { text: `Petugas : ${safeText(input.petugasNama)}`, font: { size: 10 } },
     {
-      text: `Periode : ${periode}` + (input.lembagaLabel ? ` · Lembaga : ${safeText(input.lembagaLabel)}` : ""),
+      text:
+        `Periode : ${periode}` +
+        (input.lembagaLabel ? ` · Lembaga : ${safeText(input.lembagaLabel)}` : "") +
+        (input.jenisLabel ? ` · Jenis : ${safeText(input.jenisLabel)}` : ""),
       font: { size: 10 },
     },
     { text: `Diunduh : ${waktuCetak(input.dicetakPada)}`, font: { size: 9, italic: true, color: { argb: REKAP_KASIR_WARNA.teksRedup } } },

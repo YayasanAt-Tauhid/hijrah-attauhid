@@ -144,3 +144,23 @@ describe("CetakRekapKasir dengan filter lembaga", () => {
     expect(root.textContent).not.toContain("Lembaga :");
   });
 });
+
+describe("CetakRekapKasir dengan filter jenis pembayaran", () => {
+  it("menyebut jenis di kop bila difilter", () => {
+    renderPrint({ jenisLabel: "SPP SMP" });
+    const root = document.getElementById("rekap-kasir-print")!;
+    expect(root.textContent).toContain("Jenis : SPP SMP");
+  });
+
+  it("menyebut lembaga dan jenis berdampingan", () => {
+    renderPrint({ lembagaLabel: "SD — Sekolah Dasar", jenisLabel: "SPP SD" });
+    const root = document.getElementById("rekap-kasir-print")!;
+    expect(root.textContent).toContain("Lembaga : SD — Sekolah Dasar·Jenis : SPP SD");
+  });
+
+  it("tidak menyebut Jenis di kop tanpa filter", () => {
+    renderPrint();
+    const root = document.getElementById("rekap-kasir-print")!;
+    expect(root.textContent).not.toContain("Jenis :");
+  });
+});
