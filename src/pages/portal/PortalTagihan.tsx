@@ -77,6 +77,8 @@ interface TagihanItem {
   departemen_id: string;
   jenis_id: string;
   jenis_nama: string;
+  /** Nama tampilan opsional dari view (mis. rincian biaya lama); hanya untuk teks, bukan logika. */
+  nama_tampil: string | null;
   nominal: number;
   bulan: number;
   tahun_ajaran_id: string;
@@ -438,6 +440,7 @@ export default function PortalTagihan() {
           nama_siswa: t.nama_siswa,
           jenis_id: t.jenis_id,
           jenis_nama: t.jenis_nama,
+          nama_tampil: t.nama_tampil,
           bulan: t.bulan,
           jumlah: amountFor(t),
           departemen_id: t.departemen_id,
@@ -641,7 +644,7 @@ export default function PortalTagihan() {
         >
           <span className="min-w-0 break-words text-sm font-medium leading-snug">
             {t.bulan === 0
-              ? t.jenis_nama
+              ? (t.nama_tampil ?? t.jenis_nama)
               : labelBulanTA(t.bulan, t.tahun_ajaran_mulai)}
           </span>
           <span className="whitespace-nowrap text-sm font-semibold tabular-nums leading-snug">
@@ -652,7 +655,7 @@ export default function PortalTagihan() {
               ? `Sekali Bayar — TA ${t.tahun_ajaran_nama}`
               : t.jatuh_tempo
                 ? `Jatuh tempo ${labelTanggal(t.jatuh_tempo)}`
-                : t.jenis_nama}
+                : (t.nama_tampil ?? t.jenis_nama)}
           </span>
           {isLocked && prerequisite ? (
             <span className="col-span-2 mt-1 flex w-fit items-center gap-1 rounded bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
@@ -936,7 +939,7 @@ export default function PortalTagihan() {
                                   <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 pr-2">
                                     <div className="min-w-0">
                                       <p className="break-words text-sm font-medium leading-snug">
-                                        {typeFirst.jenis_nama}
+                                        {typeItems.length === 1 ? (typeFirst.nama_tampil ?? typeFirst.jenis_nama) : typeFirst.jenis_nama}
                                       </p>
                                       <p className="mt-1 text-[11px] font-normal text-muted-foreground">
                                         {typeItems.length} tagihan

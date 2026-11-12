@@ -114,6 +114,8 @@ type OpenBillRow = {
   nominal_diskon: number | null;
   status: string;
   jatuh_tempo: string | null;
+  /** Nama tampilan opsional (mis. rincian biaya lama pada Saldo Piutang Lama); hanya untuk teks, bukan logika. */
+  label_tampil: string | null;
   jenis_pembayaran: { id: string; nama: string; tipe: string; departemen_id: string | null } | null;
   tahun_ajaran: { id: string; nama: string; tanggal_mulai: string | null } | null;
   terbayar: number;
@@ -515,7 +517,7 @@ function InputPembayaranContent() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tagihan")
-        .select("id, jenis_id, tahun_ajaran_id, bulan, nominal, nominal_bruto, nominal_diskon, status, jatuh_tempo, jenis_pembayaran:jenis_id(id, nama, tipe, departemen_id), tahun_ajaran:tahun_ajaran_id(id, nama, tanggal_mulai)")
+        .select("id, jenis_id, tahun_ajaran_id, bulan, nominal, nominal_bruto, nominal_diskon, status, jatuh_tempo, label_tampil, jenis_pembayaran:jenis_id(id, nama, tipe, departemen_id), tahun_ajaran:tahun_ajaran_id(id, nama, tanggal_mulai)")
         .eq("siswa_id", selectedSiswa!.id)
         .eq("tahun_ajaran_id", effectiveTahunAjaranId)
         .in("status", payableTagihanStatuses)
@@ -913,7 +915,7 @@ function InputPembayaranContent() {
     if (!selectedSiswa || !bill.jenis_pembayaran) return null;
     return {
       id: bill.id,
-      jenisNama: bill.jenis_pembayaran.nama,
+      jenisNama: bill.label_tampil ?? bill.jenis_pembayaran.nama,
       periodeLabel: billPeriodLabel(bill),
       nominal: Number(bill.nominal),
       terbayar: Number(bill.terbayar),
@@ -1198,7 +1200,7 @@ function InputPembayaranContent() {
       .filter(bill => Number(bill.sisa) > 0)
       .map(bill => ({
         id: bill.id,
-        label: [bill.jenis_pembayaran?.nama ?? "Tagihan", billPeriodLabel(bill)].filter(Boolean).join(" · "),
+        label: [bill.label_tampil ?? bill.jenis_pembayaran?.nama ?? "Tagihan", billPeriodLabel(bill)].filter(Boolean).join(" · "),
         sisa: Number(bill.sisa),
         bolehCicil: isLinkInstallmentAllowed({
           bulan: bill.bulan,
@@ -1797,14 +1799,14 @@ function InputPembayaranContent() {
                           <td className="px-4 py-3">
                             <input
                               type="checkbox"
-                              aria-label={"Pilih tagihan " + (bill.jenis_pembayaran?.nama ?? "")}
+                              aria-label={"Pilih tagihan " + (bill.label_tampil ?? bill.jenis_pembayaran?.nama ?? "")}
                               checked={!!cartItem}
                               disabled={isCartPaying || sequenceLocked}
                               onChange={event => handleToggleBillPay(bill, event.target.checked)}
                               className="h-4 w-4"
                             />
                           </td>
-                          <td className="px-3 py-3 font-medium">{bill.jenis_pembayaran?.nama ?? "-"}</td>
+                          <td className="px-3 py-3 font-medium">{bill.label_tampil ?? bill.jenis_pembayaran?.nama ?? "-"}</td>
                           <td className="px-3 py-3 text-muted-foreground">
                             {billPeriodLabel(bill)}
                             {bill.status === "sebagian" && (
@@ -1838,7 +1840,7 @@ function InputPembayaranContent() {
                                   </span>
                                   <Input
                                     inputMode="numeric"
-                                    aria-label={"Jumlah bayar " + (bill.jenis_pembayaran?.nama ?? "")}
+                                    aria-label={"Jumlah bayar " + (bill.label_tampil ?? bill.jenis_pembayaran?.nama ?? "")}
                                     className="h-9 pl-8 text-right font-medium"
                                     disabled={isCartPaying}
                                     value={cartItem.jumlah ? new Intl.NumberFormat("id-ID").format(cartItem.jumlah) : ""}

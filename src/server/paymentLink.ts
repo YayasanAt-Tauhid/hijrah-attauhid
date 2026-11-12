@@ -49,6 +49,7 @@ interface TagihanDbRow extends BillingSequenceBill {
   nominal: number | string;
   status: string;
   tahun_ajaran_id: string | null;
+  label_tampil?: string | null;
   jenis: { nama: string } | null;
   pembayaran: Array<{ jumlah: number | string }> | null;
 }
@@ -81,6 +82,8 @@ export interface PaymentLinkBill {
   id: string;
   jenis_id: string;
   jenis_nama: string;
+  /** Nama tampilan opsional (mis. rincian biaya lama); hanya untuk teks, bukan logika. */
+  nama_tampil: string | null;
   bulan: number | null;
   periode: string;
   tahun_ajaran_id: string | null;
@@ -126,7 +129,7 @@ async function loadOpenBills(admin: LooseAdmin, ids: string[], siswaId?: string)
   let query = admin
     .from("tagihan")
     .select(
-      "id, siswa_id, jenis_id, bulan, nominal, status, jatuh_tempo, tahun_ajaran_id, " +
+      "id, siswa_id, jenis_id, bulan, nominal, status, jatuh_tempo, tahun_ajaran_id, label_tampil, " +
       "jenis:jenis_id(nama), tahun_ajaran:tahun_ajaran_id(nama, tanggal_mulai), " +
       "pembayaran!pembayaran_tagihan_id_fkey(jumlah)",
     )
@@ -147,6 +150,7 @@ async function loadOpenBills(admin: LooseAdmin, ids: string[], siswaId?: string)
     siswa_id: row.siswa_id,
     jenis_id: row.jenis_id,
     jenis_nama: row.jenis?.nama ?? "Tagihan",
+    nama_tampil: row.label_tampil ?? null,
     bulan: row.bulan ?? null,
     periode: row.bulan ? billingPeriodLabel(row) : (row.tahun_ajaran?.nama ?? ""),
     tahun_ajaran_id: row.tahun_ajaran_id ?? null,
@@ -432,7 +436,7 @@ export interface PublicPaymentLinkView {
   nama_siswa: string;
   expires_at: string;
   /** `sisa` = nominal yang dibayar lewat link; `sisa_tagihan` = sisa tagihan keseluruhan. */
-  bills: Array<Pick<PaymentLinkBill, "id" | "jenis_nama" | "periode" | "bulan" | "jatuh_tempo" | "sisa"> & {
+  bills: Array<Pick<PaymentLinkBill, "id" | "jenis_nama" | "nama_tampil" | "periode" | "bulan" | "jatuh_tempo" | "sisa"> & {
     sisa_tagihan: number;
     cicilan: boolean;
   }>;
@@ -466,8 +470,8 @@ export async function resolvePaymentLinkByToken(token: unknown): Promise<PublicP
     state,
     nama_siswa: siswa?.nama ?? "Siswa",
     expires_at: link.expires_at,
-    bills: visible.map(({ id, jenis_nama, periode, bulan, jatuh_tempo, due, sisa_tagihan, cicilan }) => ({
-      id, jenis_nama, periode, bulan, jatuh_tempo, sisa: due, sisa_tagihan, cicilan,
+    bills: visible.map(({ id, jenis_nama, nama_tampil, periode, bulan, jatuh_tempo, due, sisa_tagihan, cicilan }) => ({
+      id, jenis_nama, nama_tampil, periode, bulan, jatuh_tempo, sisa: due, sisa_tagihan, cicilan,
     })),
     total: visible.reduce((sum, b) => sum + b.due, 0),
     pending,

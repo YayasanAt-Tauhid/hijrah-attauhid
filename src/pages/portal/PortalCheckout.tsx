@@ -51,6 +51,8 @@ interface KeranjangItem {
   nama_siswa: string;
   jenis_id: string;
   jenis_nama: string;
+  /** Nama tampilan opsional; hanya untuk teks, bukan logika. */
+  nama_tampil?: string | null;
   bulan: number;
   jumlah: number;
   departemen_id?: string;
@@ -231,7 +233,7 @@ export default function PortalCheckout() {
                   <TableBody>
                     {items.map((item, idx) => (
                       <TableRow key={idx}>
-                        <TableCell>{item.jenis_nama}</TableCell>
+                        <TableCell>{item.nama_tampil ?? item.jenis_nama}</TableCell>
                         <TableCell>
                           {item.bulan === 0
                             ? `Sekali Bayar${item.tahun_ajaran_nama ? ` — TA ${item.tahun_ajaran_nama}` : ""}`
