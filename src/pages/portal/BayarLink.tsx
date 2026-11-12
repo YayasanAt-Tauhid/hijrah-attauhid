@@ -181,7 +181,7 @@ export default function BayarLink() {
                             onChange={(e) => setSelected(toggleLinkBillSelection(view.bills, selected, bill.id, e.target.checked))}
                           />
                           <span className="flex-1 text-sm">
-                            <span className="font-medium">{bill.jenis_nama}</span>
+                            <span className="font-medium">{bill.nama_tampil ?? bill.jenis_nama}</span>
                             {bill.cicilan && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">Cicilan</span>}
                             {bill.periode && <span className="block text-xs text-muted-foreground">{bill.periode}</span>}
                             {bill.cicilan && (

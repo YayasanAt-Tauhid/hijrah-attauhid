@@ -3986,6 +3986,7 @@ export type Database = {
           pengakuan_spp_selesai: boolean
           jatuh_tempo: string | null
           jenis_id: string
+          label_tampil: string | null
           jurnal_pembalik_id: string | null
           jurnal_piutang_id: string | null
           kelas_id: string | null
@@ -4014,6 +4015,7 @@ export type Database = {
           pengakuan_spp_selesai?: boolean
           jatuh_tempo?: string | null
           jenis_id: string
+          label_tampil?: string | null
           jurnal_pembalik_id?: string | null
           jurnal_piutang_id?: string | null
           kelas_id?: string | null
@@ -4042,6 +4044,7 @@ export type Database = {
           pengakuan_spp_selesai?: boolean
           jatuh_tempo?: string | null
           jenis_id?: string
+          label_tampil?: string | null
           jurnal_pembalik_id?: string | null
           jurnal_piutang_id?: string | null
           kelas_id?: string | null
@@ -6044,6 +6047,7 @@ export type Database = {
           kelas_nama: string | null
           menunggak: boolean | null
           nama_siswa: string | null
+          nama_tampil: string | null
           nis: string | null
           nominal: number | null
           pembayaran_id: string | null
