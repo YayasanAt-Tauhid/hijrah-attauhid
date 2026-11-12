@@ -83,6 +83,8 @@ const FORM_DEFAULT: FormPembayaran = {
 type PembayaranRiwayat = PembayaranWithJenis & {
   periodeTagihanLabel?: string | null;
   tagihan_id?: string | null;
+  /** Label tagihan asal pembayaran (mis. rincian biaya lama); hanya untuk teks tampilan. */
+  tagihan?: { label_tampil?: string | null } | null;
   petugas?: { nama?: string | null } | null;
   jurnal?: { nomor?: string | null } | null;
   receiptGroup?: PaymentReceiptHistoryGroup | null;
@@ -583,7 +585,7 @@ function InputPembayaranContent() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("pembayaran")
-        .select("*, jenis_pembayaran:jenis_id(id, nama, tipe), petugas:petugas_id(nama), jurnal:jurnal_id(nomor)")
+        .select("*, jenis_pembayaran:jenis_id(id, nama, tipe), petugas:petugas_id(nama), jurnal:jurnal_id(nomor), tagihan:tagihan_id(label_tampil)")
         .eq("siswa_id", selectedSiswa!.id)
         .order("tanggal_bayar", { ascending: false })
         .limit(20);
@@ -630,6 +632,7 @@ function InputPembayaranContent() {
     if (!q) return riwayat ?? [];
     return (riwayat ?? []).filter(row => {
       const haystack = [
+        row.tagihan?.label_tampil,
         row.jenis_pembayaran?.nama,
         row.periodeTagihanLabel,
         row.tanggal_bayar,
@@ -941,7 +944,7 @@ function InputPembayaranContent() {
   const canBatalLangsung = can("keuangan.pembatalan.langsung");
   const canAjukanBatal = !canBatalLangsung && can("keuangan.pembatalan.ajukan");
   const [ajukanTarget, setAjukanTarget] = useState<PembatalanTarget | null>(null);
-  const [batalTarget, setBatalTarget] = useState<PembayaranWithJenis | null>(null);
+  const [batalTarget, setBatalTarget] = useState<PembayaranRiwayat | null>(null);
   const [batalAlasan, setBatalAlasan] = useState("");
   const riwayatIds = (riwayat ?? []).map((row) => row.id);
   const { data: pengajuanMenunggu } = useQuery({
@@ -1480,7 +1483,7 @@ function InputPembayaranContent() {
   };
 
   const riwayatColumns: DataTableColumn<PembayaranRiwayat>[] = [
-    { key: "jenis_pembayaran", label: "Jenis", render: (_, r) => r.jenis_pembayaran?.nama ?? "-" },
+    { key: "jenis_pembayaran", label: "Jenis", render: (_, r) => r.tagihan?.label_tampil ?? r.jenis_pembayaran?.nama ?? "-" },
     { key: "bulan",   label: "Periode Tagihan",   render: (v, r) => v ? (r.periodeTagihanLabel || namaBulanTahun(v as number, { tanggalTransaksi: r.tanggal_bayar })) : <span className="text-muted-foreground text-xs">Sekali Bayar{r.tanggal_bayar ? ` ${new Date(r.tanggal_bayar).getFullYear()}` : ""}</span> },
     { key: "jumlah",  label: "Jumlah",  render: v => formatRupiah(Number(v)) },
     { key: "tanggal_bayar", label: "Tanggal", render: v => v ? format(new Date(v as string), "dd MMM yyyy", { locale: idLocale }) : "-" },
@@ -2279,7 +2282,7 @@ function InputPembayaranContent() {
                 Jurnal kas akan dibalik & tagihan terkait dikembalikan ke status belum bayar. Tercatat di Audit.
               </div>
               <div className="rounded-md bg-muted/50 p-3 text-xs space-y-1">
-                <p>Jenis: <span className="font-medium">{batalTarget.jenis_pembayaran?.nama ?? "-"}</span>
+                <p>Jenis: <span className="font-medium">{batalTarget.tagihan?.label_tampil ?? batalTarget.jenis_pembayaran?.nama ?? "-"}</span>
                   {batalTarget.bulan ? ` (${namaBulanTahun(batalTarget.bulan, { tanggalTransaksi: batalTarget.tanggal_bayar })})` : ""}</p>
                 <p>Jumlah: <span className="font-semibold text-destructive">{formatRupiah(Number(batalTarget.jumlah))}</span></p>
                 <p>Tanggal: <span className="font-medium">{batalTarget.tanggal_bayar ? format(new Date(batalTarget.tanggal_bayar), "dd MMM yyyy", { locale: idLocale }) : "-"}</span></p>

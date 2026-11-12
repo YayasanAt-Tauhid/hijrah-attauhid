@@ -100,7 +100,7 @@ export default function PortalRiwayat() {
         anakIds.length > 0
           ? supabase
               .from("pembayaran")
-              .select("id, jumlah, bulan, tanggal_bayar, keterangan, tagihan:tagihan_id(id, nominal, status, pembayaran!pembayaran_tagihan_id_fkey(jumlah)), siswa:siswa_id(nama, nis, nisn, kelas_siswa(aktif, kelas:kelas_id(nama))), departemen:departemen_id(nama), jenis_pembayaran:jenis_id(nama), jurnal:jurnal_id(nomor)")
+              .select("id, jumlah, bulan, tanggal_bayar, keterangan, tagihan:tagihan_id(id, label_tampil, nominal, status, pembayaran!pembayaran_tagihan_id_fkey(jumlah)), siswa:siswa_id(nama, nis, nisn, kelas_siswa(aktif, kelas:kelas_id(nama))), departemen:departemen_id(nama), jenis_pembayaran:jenis_id(nama), jurnal:jurnal_id(nomor)")
               .in("siswa_id", anakIds)
               .order("tanggal_bayar", { ascending: false })
           : Promise.resolve({ data: [] }),
@@ -176,7 +176,7 @@ export default function PortalRiwayat() {
           status: "paid",
           total_amount: Number(p.jumlah),
           biaya_admin: 0,
-          items: [{ id: p.id, nama_item: p.keterangan || p.jenis_pembayaran?.nama || "Pembayaran", jumlah: Number(p.jumlah), balance: historyBillBalance(p.tagihan) }],
+          items: [{ id: p.id, nama_item: p.tagihan?.label_tampil || p.keterangan || p.jenis_pembayaran?.nama || "Pembayaran", jumlah: Number(p.jumlah), balance: historyBillBalance(p.tagihan) }],
           receipt: {
             ...portalReceiptIdentity([p]),
             nomorBukti: p.jurnal?.nomor || `HT-${format(new Date(p.tanggal_bayar), "yyyyMMdd")}-${p.id.replace(/-/g, "").slice(0, 10).toUpperCase()}`,
