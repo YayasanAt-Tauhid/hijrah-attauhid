@@ -47,6 +47,23 @@ export default function CheckoutScreen() {
     router.replace("/riwayat");
   };
 
+  // Di atas batas, tampilkan saran VA dulu lewat pop up; pembayaran baru
+  // dimulai setelah orang tua memilih "Lanjut ke Midtrans".
+  const handleKlikBayar = () => {
+    if (!sarankanVA) {
+      handleBayar();
+      return;
+    }
+    Alert.alert(
+      "Saran metode pembayaran",
+      `Untuk pembayaran di atas ${formatRupiah(BATAS_IMBAUAN_VA)}, sebaiknya pilih Virtual Account (VA) di halaman Midtrans. Biaya layanan QRIS untuk nominal sebesar ini cenderung lebih mahal dibandingkan VA.`,
+      [
+        { text: "Kembali", style: "cancel" },
+        { text: "Lanjut ke Midtrans", onPress: handleBayar },
+      ],
+    );
+  };
+
   const handleBayar = async () => {
     const webUrl = process.env.EXPO_PUBLIC_PORTAL_WEB_URL?.replace(/\/$/, "");
     if (!webUrl) {
@@ -201,36 +218,12 @@ export default function CheckoutScreen() {
         </View>
       </Card>
 
-      {sarankanVA ? (
-        <Card
-          style={{
-            flexDirection: "row",
-            gap: 12,
-            alignItems: "flex-start",
-            backgroundColor: theme.amberSoft,
-            borderColor: theme.amber,
-          }}
-        >
-          <Ionicons name="information-circle-outline" size={22} color={theme.amber} />
-          <View style={{ flex: 1, gap: 3 }}>
-            <Text style={{ color: theme.amber, fontSize: 13, fontWeight: "600" }}>
-              Saran metode pembayaran
-            </Text>
-            <Text style={{ color: theme.text, fontSize: 12 }}>
-              Untuk pembayaran di atas {formatRupiah(BATAS_IMBAUAN_VA)}, sebaiknya pilih
-              Virtual Account (VA) di halaman Midtrans. Biaya layanan QRIS untuk nominal
-              sebesar ini cenderung lebih mahal dibandingkan VA.
-            </Text>
-          </View>
-        </Card>
-      ) : null}
-
       <View style={{ gap: 10 }}>
         <Button
           title={isLoading ? "Memproses..." : "Lanjut ke Pembayaran"}
           icon="card-outline"
           loading={isLoading}
-          onPress={handleBayar}
+          onPress={handleKlikBayar}
         />
         <Button
           title="Ubah Pilihan"
