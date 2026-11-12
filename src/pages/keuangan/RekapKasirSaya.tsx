@@ -19,6 +19,15 @@ import { PrintKuitansi } from "@/components/shared/PrintKuitansi";
 import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan";
 import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/components/shared/ReceiptOrientationSelect";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  SEMUA_LEMBAGA,
+  filterByLembaga,
+  hitungStatistikRekap,
+  labelLembagaFilter,
+  listLembaga,
+  resolveLembagaFilter,
+} from "@/lib/rekapKasirLembaga";
 import { parseRekapKasirRange, REKAP_KASIR_MAX_HARI } from "@/lib/rekapKasirRange";
 import { unduhRekapKasirExcel } from "@/lib/rekapKasirDownload";
 import { CetakRekapKasir } from "@/components/keuangan/CetakRekapKasir";
@@ -36,6 +45,7 @@ function RekapKasirSayaContent() {
   const hariIni = format(new Date(), "yyyy-MM-dd");
   const [tanggalDari, setTanggalDari] = useState(hariIni);
   const [tanggalSampai, setTanggalSampai] = useState(hariIni);
+  const [lembagaFilter, setLembagaFilter] = useState<string>(SEMUA_LEMBAGA);
   const [mengunduh, setMengunduh] = useState(false);
   const [mencetak, setMencetak] = useState(false);
   const sudahDicetak = useRef(false);
@@ -56,6 +66,15 @@ function RekapKasirSayaContent() {
     enabled: !rangeError,
     queryFn: async () => getRekapKasirSaya({ data: { tanggal_dari: tanggalDari, tanggal_sampai: tanggalSampai } }),
   });
+
+  // Filter lembaga dijalankan di klien: setiap transaksi sudah membawa lembaganya.
+  // Tabel, statistik, cetak/PDF, dan Excel semuanya memakai baris terfilter yang sama.
+  const semuaItems = useMemo(() => data?.items ?? [], [data]);
+  const opsiLembaga = useMemo(() => listLembaga(semuaItems), [semuaItems]);
+  const lembagaAktif = resolveLembagaFilter(semuaItems, lembagaFilter);
+  const itemsTerfilter = useMemo(() => filterByLembaga(semuaItems, lembagaAktif), [semuaItems, lembagaAktif]);
+  const lembagaLabel = labelLembagaFilter(semuaItems, lembagaAktif);
+  const statistik = useMemo(() => hitungStatistikRekap(itemsTerfilter), [itemsTerfilter]);
 
   // Cetak / PDF: render laporan cetak, tunggu logo termuat (maks. 2 detik),
   // lalu buka dialog cetak browser (pilih printer atau "Simpan sebagai PDF").
@@ -81,7 +100,7 @@ function RekapKasirSayaContent() {
     if (!data) return;
     setMengunduh(true);
     try {
-      await unduhRekapKasirExcel(data);
+      await unduhRekapKasirExcel({ ...data, items: itemsTerfilter, lembaga_label: lembagaLabel });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal membuat laporan Excel");
     } finally {
@@ -179,6 +198,22 @@ function RekapKasirSayaContent() {
                 className="w-44"
               />
             </div>
+            <div>
+              <Label htmlFor="rekap-lembaga">Lembaga</Label>
+              <Select value={lembagaAktif} onValueChange={setLembagaFilter} disabled={!!rangeError || isLoading || !data}>
+                <SelectTrigger id="rekap-lembaga" className="w-56">
+                  <SelectValue placeholder="Semua Lembaga" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SEMUA_LEMBAGA}>Semua Lembaga</SelectItem>
+                  {opsiLembaga.map((opsi) => (
+                    <SelectItem key={opsi.key} value={opsi.key}>
+                      {opsi.label} ({opsi.count})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="text-sm text-muted-foreground">
               {rangeError ? (
                 <p className="text-destructive">{rangeError}</p>
@@ -224,10 +259,10 @@ function RekapKasirSayaContent() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatsCard title="Total Penerimaan" value={formatRupiah(data?.total_penerimaan || 0)} icon={Wallet} color="success" />
-          <StatsCard title="Jumlah Transaksi" value={String(data?.jumlah_transaksi || 0)} icon={ReceiptText} color="primary" />
-          <StatsCard title="Pembayaran Siswa" value={String(data?.transaksi_siswa || 0)} icon={Users} color="info" />
-          <StatsCard title="Pembayaran SPMB" value={String(data?.transaksi_spmb || 0)} icon={GraduationCap} color="primary" />
+          <StatsCard title="Total Penerimaan" value={formatRupiah(statistik.total_penerimaan)} icon={Wallet} color="success" />
+          <StatsCard title="Jumlah Transaksi" value={String(statistik.jumlah_transaksi)} icon={ReceiptText} color="primary" />
+          <StatsCard title="Pembayaran Siswa" value={String(statistik.transaksi_siswa)} icon={Users} color="info" />
+          <StatsCard title="Pembayaran SPMB" value={String(statistik.transaksi_spmb)} icon={GraduationCap} color="primary" />
         </div>
       )}
 
@@ -235,18 +270,23 @@ function RekapKasirSayaContent() {
         <CardContent className="pt-6">
           <DataTable
             columns={columns}
-            data={data?.items || []}
+            data={itemsTerfilter}
             loading={isLoading}
             searchable={false}
             pageSize={20}
-            emptyMessage="Belum ada transaksi yang Anda catat pada periode ini."
+            emptyMessage={
+              lembagaLabel
+                ? "Belum ada transaksi di lembaga ini pada periode ini."
+                : "Belum ada transaksi yang Anda catat pada periode ini."
+            }
           />
         </CardContent>
       </Card>
 
       {mencetak && data && (
         <CetakRekapKasir
-          items={data.items}
+          items={itemsTerfilter}
+          lembagaLabel={lembagaLabel}
           petugasNama={data.petugas_nama}
           bendaharaNama={data.bendahara_nama}
           dari={data.tanggal_dari}

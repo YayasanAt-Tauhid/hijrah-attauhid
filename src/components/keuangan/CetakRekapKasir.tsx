@@ -19,6 +19,8 @@ export interface CetakRekapKasirProps {
   dari: string;
   sampai: string;
   dicetakPada: Date;
+  /** Lembaga yang difilter ("KODE — Nama"); kosong = Semua Lembaga. */
+  lembagaLabel?: string | null;
   /** Dipanggil sekali setelah logo selesai dimuat (atau gagal), tanda siap dicetak. */
   onReady?: () => void;
 }
@@ -42,6 +44,7 @@ export function CetakRekapKasir({
   dari,
   sampai,
   dicetakPada,
+  lembagaLabel,
   onReady,
 }: CetakRekapKasirProps) {
   const summary = useMemo(() => summarizeRekapKasir(items), [items]);
@@ -64,6 +67,12 @@ export function CetakRekapKasir({
           Petugas : {petugasNama?.trim() || "-"}
           <span className="rekap-kop-sep">·</span>
           Periode : {periodeRekap(dari, sampai)}
+          {lembagaLabel && (
+            <>
+              <span className="rekap-kop-sep">·</span>
+              Lembaga : {lembagaLabel}
+            </>
+          )}
         </p>
         <p className="rekap-kop-cetak">Dicetak : {waktuCetak(dicetakPada)}</p>
       </div>
