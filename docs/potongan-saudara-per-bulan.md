@@ -88,6 +88,6 @@ Cadangan penuh sebelum penerapan: `~/backups/proj_kqylkreswang-pra-saudara-20261
 
 ## Belum dikerjakan
 
-- Shofea (NIS 2702076, status diterima) belum punya `keluarga_id` dan `tanggal_mulai_aktif`; keduanya harus diisi agar dihitung sebagai saudara Thariq/Thaha.
+- Thariq (kakak, lulus akhir Juni 2027) belum dikeluarkan di data; lakukan lewat alur akhiri/nonaktifkan saat waktunya. (Data Shofea NIS 2702076 sudah diisi 13 Nov 2026: keluarga Bapak Reno Ismanto, mulai 2027-07-01.)
 - Tidak ada tampilan UI untuk `log_potongan_saudara` (hanya SQL).
 - Pemetaan akun lima jenis koreksi perlu dikonfirmasi bendahara.
