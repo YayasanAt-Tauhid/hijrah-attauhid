@@ -70,11 +70,11 @@ Pemeriksaan pertama terjadwal 14 November 2026 00:30 UTC (07:30 WIB). Lihat hasi
 Urutan terbalik dari penerapan. Objek baru cukup di-`DROP`; fungsi lama dipulihkan dari definisinya sebelum migrasi:
 
 1. `DROP TRIGGER trg_tinjau_potongan_saudara ON public.siswa;` lalu `DROP FUNCTION` untuk `pemicu_tinjau_potongan_saudara()`, `tinjau_potongan_saudara_semua(date)`, `tinjau_potongan_saudara(uuid,date,uuid,uuid,text,boolean)`, dan `cabut_potongan_saudara`.
-2. Pulihkan definisi asli `akademik_akhiri_siswa`, `akademik_nonaktifkan_siswa`, `sinkronkan_diskon_kakak_adik_keluarga`, `validasi_diskon_kakak_adik` dari migrasi sebelum `20261113031900` (definisi terakhir di riwayat git) atau dari salinan asli di VM `~/saudara/asli/`.
+2. Pulihkan definisi asli `akademik_akhiri_siswa`, `akademik_nonaktifkan_siswa`, `sinkronkan_diskon_kakak_adik_keluarga`, `validasi_diskon_kakak_adik` dari migrasi sebelum `20261113031900` (definisi terakhir di riwayat git). Salinan asli di VM sudah dihapus.
 3. Kolom `tanggal_mulai_aktif`/`tanggal_akhir_aktif`, tabel `log_potongan_saudara`, dan lima jenis koreksi sebaiknya dibiarkan (tidak merugikan); hapus hanya bila belum berisi data.
 4. Nonaktifkan timer: `sudo systemctl disable --now hijrah-tinjau-potongan-saudara.timer`.
 
-Cadangan penuh sebelum penerapan: `~/backups/proj_kqylkreswang-pra-saudara-20261113T031803Z.dump` (VM `hijrah-attauhid`).
+Cadangan khusus sebelum penerapan (`pra-saudara-20261113T031803Z.dump`) sudah dihapus pada 13 Nov 2026; cadangan otomatis harian ada di `/var/backups/hijrah` (VM `hijrah-attauhid`).
 
 ## Tes
 
