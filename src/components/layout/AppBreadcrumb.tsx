@@ -47,6 +47,7 @@ const routeMap: Record<string, string> = {
   "/akademik": "Akademik",
   "/akademik/siswa": "Data Siswa",
   "/akademik/siswa/tambah": "Tambah Siswa",
+  "/akademik/seragam": "Seragam Siswa",
   "/akademik/alumni": "Data Alumni",
   "/akademik/referensi": "Referensi",
   "/akademik/jadwal": "Jadwal",

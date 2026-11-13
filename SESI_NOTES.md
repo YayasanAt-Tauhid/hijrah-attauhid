@@ -1,3 +1,10 @@
+# Catatan Sesi — Halaman Seragam Siswa di Akademik (13 November 2026)
+
+- **Permintaan (user):** halaman daftar nama siswa beserta ukuran seragamnya di modul Akademik. Keputusan user: tampilkan siswa aktif **dan** calon diterima dalam satu daftar, bisa difilter. Rute `/akademik/seragam`, menu "Seragam Siswa" di grup Data Siswa.
+- **Tanpa migrasi dan tanpa izin baru:** data memakai `siswa_detail.ukuran_seragam` (4 stel `{jenis, ukuran}`) yang sudah ada. Hook `useSiswaSeragamList` hanya membaca `siswa` berstatus `aktif`/`diterima` dan membatasi `admin_tu` ke lembaga kelolaannya, sama seperti `useSiswaList`. Tidak ada data produksi yang disentuh.
+- **Keputusan dan alasan:** (1) lembaga untuk katalog seragam = lembaga tujuan SPMB (`spmb_departemen_tujuan_id`), lalu kelas aktif, lalu `siswa.departemen_id` (sama dengan `FormSiswa`, supaya nama bawaan stel cocok untuk siswa internal). (2) "Lengkap" berarti empat stel punya nama dan ukuran yang tersimpan; nama bawaan hanya melabeli stel kosong, dan `ukuran_baju` lama tidak dijadikan empat stel (sama dengan statistik SPMB). (3) TK ditandai "Data seragam TK belum tersedia" dan tidak dihitung belum lengkap. (4) Ukuran tidak diedit di halaman ini; tombol pensil membuka form siswa tempat `UniformSizeFields` berada, agar validasi dan RPC simpan yang ada tetap satu-satunya jalur. (5) Siswa berstatus `calon` (belum diterima), alumni, pindah, dan keluar tidak ditampilkan.
+- **Belum diverifikasi:** belum dibuka di UI dengan data produksi (hanya tes unit/komponen, lint berkas baru, build, dan seluruh tes). Waktu muat dengan ±1.200 siswa belum diukur; query mengambil `siswa_detail` dan `kelas_siswa` per siswa seperti daftar siswa, dan indeks `siswa_detail(siswa_id)` yang disebut di catatan JIT 11 Nov masih belum dibuat.
+
 # Catatan Sesi — Potongan kakak-adik per bulan SPP (13 November 2026)
 
 - **Permintaan (user):** potongan kakak-adik berlaku per bulan SPP: potongan bulan M sah hanya bila minimal 2 saudara aktif di bulan M (lintas lembaga; calon berstatus diterima dihitung sejak tanggal mulainya). Yang tidak sah dicabut otomatis dengan log. Kasus: Thariq + Thaha + Shofea (diterima, mulai SD Juli 2027).

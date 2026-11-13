@@ -61,6 +61,7 @@ const menuItems: MenuItem[] = [
         icon: Users,
         items: [
           { title: "Daftar Siswa", url: "/akademik/siswa" },
+          { title: "Seragam Siswa", url: "/akademik/seragam" },
           { title: "Data Alumni", url: "/akademik/alumni" },
           { title: "SPMB", url: "/akademik/spmb" },
           { title: "Statistik SPMB", url: "/akademik/spmb/statistik" },
