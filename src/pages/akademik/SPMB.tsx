@@ -1533,7 +1533,7 @@ export default function SPMB({ view = "list" }: { view?: "list" | "statistics" }
     <DropdownMenuSeparator /><DropdownMenuItem onSelect={() => setExtraColumns([])}>Kembali ke kolom ringkas</DropdownMenuItem>
   </DropdownMenuContent></DropdownMenu>;
 
-  if (view === "statistics") return <SpmbStatistics rows={statistikCalonList} departments={spmbDepartemenList} years={tahunList} waves={waveQuery.data || []} scope={{ departemen: filters.departemen, tahun: filters.tahun, gelombang: filters.gelombang }} onScopeChange={setFilter} onOpenList={openListFromStatistics} loading={isLoading || readinessQuery.isLoading || departemenQuery.isLoading || tahunQuery.isLoading || waveQuery.isLoading} error={listError || readinessQuery.error || departemenQuery.error || tahunQuery.error || waveQuery.error} />;
+  if (view === "statistics") return <SpmbStatistics rows={statistikCalonList} departments={spmbDepartemenList} years={tahunList} waves={waveQuery.data || []} scope={{ departemen: filters.departemen, tahun: filters.tahun, gelombang: filters.gelombang }} onScopeChange={setFilter} onOpenList={openListFromStatistics} loading={isLoading || departemenQuery.isLoading || tahunQuery.isLoading || waveQuery.isLoading} error={listError || departemenQuery.error || tahunQuery.error || waveQuery.error} readinessLoading={readinessQuery.isLoading} readinessError={readinessQuery.error} />;
 
   const optionsLoading = angkatanQuery.isLoading || departemenQuery.isLoading || tahunQuery.isLoading;
   const optionsError = angkatanQuery.error || departemenQuery.error || tahunQuery.error;

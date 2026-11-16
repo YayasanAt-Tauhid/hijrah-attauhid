@@ -43,3 +43,42 @@ describe("SPMB statistics graduation", () => {
     expect(screen.queryByRole("button", { name: /Lulus tes:/ })).not.toBeInTheDocument();
   });
 });
+
+// Pemeriksaan kesiapan (RPC spmb_readiness_list) bisa lambat, terutama untuk Admin TU.
+// Angka statistik tidak boleh ikut menunggunya; hanya kartu "Calon belum lengkap" yang bergantung padanya.
+describe("SPMB statistics readiness is independent from the counts", () => {
+  it("shows every count while readiness is still loading, without a page-level spinner", () => {
+    setup({ readinessLoading: true });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Total Pendaftar: 4. Buka daftar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lulus tes: 2. Buka daftar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Belum tes: 0. Buka daftar" })).toBeInTheDocument();
+  });
+
+  it("does not show a guessed number for incomplete candidates while readiness is loading", () => {
+    setup({ readinessLoading: true });
+    expect(screen.getByText("Calon belum lengkap")).toBeInTheDocument();
+    expect(screen.getByText("Memeriksa…")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Calon belum lengkap/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps the counts and marks only the readiness card unavailable when readiness fails", () => {
+    setup({ readinessError: new Error("timeout") });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lulus tes: 2. Buka daftar" })).toBeInTheDocument();
+    expect(screen.getByText("Tidak tersedia")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Calon belum lengkap/ })).not.toBeInTheDocument();
+  });
+
+  it("still blocks the whole page while the main list is loading", () => {
+    setup({ rows: [], loading: true });
+    expect(screen.getByRole("status")).toHaveTextContent("Memuat statistik SPMB");
+    expect(screen.queryByRole("button", { name: /Lulus tes:/ })).not.toBeInTheDocument();
+  });
+
+  it("counts incomplete candidates from readiness once it is available", () => {
+    const open = setup();
+    fireEvent.click(screen.getByRole("button", { name: "Calon belum lengkap: 2. Buka daftar" }));
+    expect(open).toHaveBeenLastCalledWith({ status: "calon", kesiapan: "belum" });
+  });
+});

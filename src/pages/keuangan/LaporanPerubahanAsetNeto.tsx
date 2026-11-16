@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useLaporanKomprehensif, useLaporanPosisiKeuangan, useDepartemenGroups, PeriodeFilter, periodeLabel } from "@/hooks/useISAK35";
 import { formatRupiah, useTahunBuku } from "@/hooks/useKeuangan";
 import KopLaporan from "@/components/keuangan/KopLaporan";
-import { labelTahunBuku } from "@/lib/labelTahunBuku";
+import { labelTahunBuku, pilihTahunBukuBawaan } from "@/lib/labelTahunBuku";
 import TandaTanganLaporan from "@/components/keuangan/TandaTanganLaporan";
 import { Printer } from "lucide-react";
 
@@ -29,7 +29,7 @@ export default function LaporanPerubahanAsetNeto() {
     .filter((t: any) => t.tanggal_selesai)
     .sort((a: any, b: any) => b.tanggal_selesai.localeCompare(a.tanggal_selesai));
 
-  const selectedTA = taOptions.find((t: any) => t.nama === selectedNama) ?? taOptions[0];
+  const selectedTA = taOptions.find((t: any) => t.nama === selectedNama) ?? pilihTahunBukuBawaan(taOptions);
   const selectedIdx = taOptions.indexOf(selectedTA);
   const prevTA = taOptions[selectedIdx + 1];
   const namaTampil = selectedTA?.nama ?? String(currentYear);

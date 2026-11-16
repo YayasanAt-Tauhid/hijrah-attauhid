@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLaporanPosisiKeuangan, useJumlahDraftJurnal, useDepartemenGroups, useRekonRekeningAntar, useRekonRekeningAntarDetail, RekonAntarRow, PeriodeFilter, posisiLabel } from "@/hooks/useISAK35";
 import { formatRupiah, useTahunBuku } from "@/hooks/useKeuangan";
 import KopLaporan from "@/components/keuangan/KopLaporan";
-import { labelTahunBuku } from "@/lib/labelTahunBuku";
+import { labelTahunBuku, pilihTahunBukuBawaan } from "@/lib/labelTahunBuku";
 import TandaTanganLaporan from "@/components/keuangan/TandaTanganLaporan";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -111,7 +111,7 @@ export default function LaporanPosisiKeuangan() {
     .filter((t: any) => t.tanggal_selesai)
     .sort((a: any, b: any) => b.tanggal_selesai.localeCompare(a.tanggal_selesai));
 
-  const selectedTA = taOptions.find((t: any) => t.nama === selectedNama) ?? taOptions[0];
+  const selectedTA = taOptions.find((t: any) => t.nama === selectedNama) ?? pilihTahunBukuBawaan(taOptions);
   const namaTampil = selectedTA?.nama ?? String(currentYear);
 
   const allDepts = [...(deptGroups?.pendidikanDepts ?? []), ...(deptGroups?.usahaDepts ?? [])];

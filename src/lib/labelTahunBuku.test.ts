@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { labelTahunBuku, tanggalLokalISO } from "./labelTahunBuku";
+import { labelTahunBuku, pilihTahunBukuBawaan, tanggalLokalISO } from "./labelTahunBuku";
 
 const tb2026 = { nama: "Tahun 2026", tanggal_mulai: "2026-01-01", tanggal_selesai: "2026-12-31", ditutup: false };
 const tb2025 = { nama: "Tahun 2025", tanggal_mulai: "2025-01-01", tanggal_selesai: "2025-12-31", ditutup: true };
@@ -53,4 +53,55 @@ describe("judul laporan ISAK 35 memakai labelTahunBuku", () => {
       expect(src).not.toMatch(/modePeriode === "tahun" \? namaTampil :/);
     });
   }
+});
+
+// Tahun buku masa depan (2027, 2028) sengaja dibuat untuk rencana tagihan. Laporan tidak boleh
+// membukanya sebagai bawaan hanya karena tanggal_selesai-nya paling akhir (laporan jadi nol).
+describe("pilihTahunBukuBawaan", () => {
+  const daftar = [
+    { nama: "Tahun 2028", tanggal_mulai: "2028-01-01", tanggal_selesai: "2028-12-31", aktif: false, ditutup: false },
+    { nama: "Tahun 2027", tanggal_mulai: "2027-01-01", tanggal_selesai: "2027-12-31", aktif: false, ditutup: false },
+    { nama: "Tahun 2026", tanggal_mulai: "2026-01-01", tanggal_selesai: "2026-12-31", aktif: true, ditutup: false },
+    { nama: "Tahun 2025", tanggal_mulai: "2025-01-01", tanggal_selesai: "2025-12-31", aktif: false, ditutup: true },
+  ];
+
+  it("memilih tahun buku yang aktif, bukan yang tanggal_selesai-nya paling akhir", () => {
+    expect(pilihTahunBukuBawaan(daftar, "2026-11-16")?.nama).toBe("Tahun 2026");
+  });
+
+  it("tidak bergantung pada urutan daftar", () => {
+    expect(pilihTahunBukuBawaan([...daftar].reverse(), "2026-11-16")?.nama).toBe("Tahun 2026");
+  });
+
+  it("bila tidak ada yang aktif, memilih yang mencakup hari ini", () => {
+    const tanpaAktif = daftar.map((t) => ({ ...t, aktif: false }));
+    expect(pilihTahunBukuBawaan(tanpaAktif, "2027-03-05")?.nama).toBe("Tahun 2027");
+  });
+
+  it("bila tidak ada yang aktif maupun mencakup hari ini, memilih yang terakhir sudah dimulai", () => {
+    const celah = [
+      { nama: "Tahun 2028", tanggal_mulai: "2028-01-01", tanggal_selesai: "2028-12-31", aktif: false },
+      { nama: "Tahun 2025", tanggal_mulai: "2025-01-01", tanggal_selesai: "2025-12-31", aktif: false },
+      { nama: "Tahun 2024", tanggal_mulai: "2024-01-01", tanggal_selesai: "2024-12-31", aktif: false },
+    ];
+    expect(pilihTahunBukuBawaan(celah, "2026-11-16")?.nama).toBe("Tahun 2025");
+  });
+
+  it("bila semua tahun buku belum dimulai, memilih yang paling awal", () => {
+    const depan = [
+      { nama: "Tahun 2028", tanggal_mulai: "2028-01-01", tanggal_selesai: "2028-12-31", aktif: false },
+      { nama: "Tahun 2027", tanggal_mulai: "2027-01-01", tanggal_selesai: "2027-12-31", aktif: false },
+    ];
+    expect(pilihTahunBukuBawaan(depan, "2026-11-16")?.nama).toBe("Tahun 2027");
+  });
+
+  it("bila beberapa tahun aktif, memilih yang sedang berjalan di antara yang aktif", () => {
+    const dua = daftar.map((t) => (t.nama === "Tahun 2027" ? { ...t, aktif: true } : t));
+    expect(pilihTahunBukuBawaan(dua, "2026-11-16")?.nama).toBe("Tahun 2026");
+  });
+
+  it("mengabaikan tahun buku tanpa tanggal dan mengembalikan undefined untuk daftar kosong", () => {
+    expect(pilihTahunBukuBawaan([], "2026-11-16")).toBeUndefined();
+    expect(pilihTahunBukuBawaan([{ nama: "X", tanggal_mulai: null, tanggal_selesai: null, aktif: true }], "2026-11-16")).toBeUndefined();
+  });
 });

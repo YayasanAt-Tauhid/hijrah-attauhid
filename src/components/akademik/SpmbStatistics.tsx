@@ -10,7 +10,7 @@ type Registration = Record<string, unknown>;
 type Option = { id: string; nama: string; kode?: string };
 export type StatisticsScope = { departemen: string; tahun: string; gelombang: string };
 
-export function SpmbStatistics({ rows, departments, years, waves, scope, onScopeChange, onOpenList, loading, error }: {
+export function SpmbStatistics({ rows, departments, years, waves, scope, onScopeChange, onOpenList, loading, error, readinessLoading = false, readinessError }: {
   rows: Registration[];
   departments: Option[];
   years: Option[];
@@ -20,6 +20,9 @@ export function SpmbStatistics({ rows, departments, years, waves, scope, onScope
   onOpenList: (filters?: Record<string, string>) => void;
   loading: boolean;
   error?: unknown;
+  // Pemeriksaan kesiapan (RPC spmb_readiness_list) bisa lambat; angka lain tidak boleh menunggunya.
+  readinessLoading?: boolean;
+  readinessError?: unknown;
 }) {
   const summarize = (list: Registration[]) => ({
     total: list.length,
@@ -34,6 +37,8 @@ export function SpmbStatistics({ rows, departments, years, waves, scope, onScope
     return { id: dept.id, lembaga: dept.kode || dept.nama, ...summarize(list) };
   }).filter((dept) => scope.departemen === "all" || dept.id === scope.departemen);
   const ready = (row: Registration) => (row._readiness as { siap?: boolean } | undefined)?.siap;
+  // Tanpa hasil kesiapan, semua calon akan terhitung "belum lengkap"; tampilkan status, bukan angka tebakan.
+  const incompleteState = readinessLoading ? "Memeriksa…" : readinessError ? "Tidak tersedia" : null;
 
   return (
     <div className="space-y-5">
@@ -66,7 +71,7 @@ export function SpmbStatistics({ rows, departments, years, waves, scope, onScope
           <StatsCard title="Belum tes" value={count("_spmbTesStatus", "belum")} icon={Clock} color="warning" onClick={() => onOpenList({ tes: "belum" })} />
           <StatsCard title="Sudah daftar ulang" value={rows.filter((row) => row._spmbTanggalDaftarUlang).length} icon={CheckCircle2} color="info" onClick={() => onOpenList({ daftarUlang: "sudah" })} />
           <StatsCard title="Belum diverifikasi" value={rows.filter((row) => !row.terverifikasi).length} icon={AlertTriangle} color="warning" onClick={() => onOpenList({ verifikasi: "belum" })} />
-          <StatsCard title="Calon belum lengkap" value={rows.filter((row) => row.status === "calon" && !ready(row)).length} icon={AlertTriangle} color="warning" onClick={() => onOpenList({ status: "calon", kesiapan: "belum" })} />
+          <StatsCard title="Calon belum lengkap" value={incompleteState ?? rows.filter((row) => row.status === "calon" && !ready(row)).length} icon={AlertTriangle} color="warning" onClick={incompleteState ? undefined : () => onOpenList({ status: "calon", kesiapan: "belum" })} />
         </div></div>
         <div><h2 className="mb-3 font-semibold">Asrama dan jenis kelamin</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatsCard title="Asrama" value={count("_spmbAsrama", "Asrama")} icon={Users} onClick={() => onOpenList({ asrama: "Asrama" })} />
