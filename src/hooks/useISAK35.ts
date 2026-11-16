@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { isAkunKas } from "@/lib/posIsak35";
+import { fetchRpcAllRows } from "@/lib/rpcPaging";
 import { hitungSaldoMenurutPos } from "@/lib/saldoIsak35";
 
 // ============================================================
@@ -375,17 +376,9 @@ function sumSaldo(items: SaldoAkun[]) {
 /** Ambil seluruh baris hasil RPC dengan paginasi — PostgREST membatasi
  *  maksimal 1000 baris per request, sedangkan detail jurnal kas setahun
  *  bisa belasan ribu baris. */
+// Rustbase mengabaikan .range() pada RPC (selalu mengembalikan semua baris); lihat rpcPaging.ts.
 async function rpcAllRows(fn: string, params: Record<string, any>): Promise<any[]> {
-  const pageSize = 1000;
-  const all: any[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await (supabase as any).rpc(fn, params).range(from, from + pageSize - 1);
-    if (error) throw error;
-    const rows = data || [];
-    all.push(...rows);
-    if (rows.length < pageSize) break;
-  }
-  return all;
+  return fetchRpcAllRows<any>((from, to) => (supabase as any).rpc(fn, params).range(from, to));
 }
 
 interface AkunMeta { id: string; kode: string; nama: string; pos_isak35: string | null; jenis: string }
