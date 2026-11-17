@@ -118,6 +118,74 @@ export function kelompokkanPerAkun(
   return groups;
 }
 
+// ─── Ringkasan per akun (tampilan layar "Semua akun") ───
+// Total debit/kredit/jumlah baris dihitung di database (buku_besar_ringkasan_semua);
+// mutasi rinci satu akun baru dimuat saat barisnya dibuka.
+export interface RingkasanRowBB {
+  akun_id: string;
+  total_debit: number;
+  total_kredit: number;
+  jumlah: number;
+}
+
+export interface RingkasanAkunBB {
+  akun: AkunBB;
+  saldoAwal: number;
+  totalDebit: number;
+  totalKredit: number;
+  jumlah: number;
+  saldoAkhir: number;
+}
+
+// Urutan mengikuti daftar akun. Akun tanpa saldo awal dan tanpa mutasi tidak ditampilkan
+// (aturan sama dengan kelompokkanPerAkun, sehingga angkanya identik dengan export rinci).
+export function hitungRingkasanPerAkun(
+  akunList: AkunBB[],
+  saldoAwalMap: Record<string, number>,
+  ringkasan: RingkasanRowBB[],
+): RingkasanAkunBB[] {
+  const byAkun = new Map<string, RingkasanRowBB>();
+  for (const r of ringkasan) byAkun.set(r.akun_id, r);
+  const out: RingkasanAkunBB[] = [];
+  for (const akun of akunList) {
+    const saldoAwal = Number(saldoAwalMap[akun.id]) || 0;
+    const r = byAkun.get(akun.id);
+    const totalDebit = Number(r?.total_debit) || 0;
+    const totalKredit = Number(r?.total_kredit) || 0;
+    const jumlah = Number(r?.jumlah) || 0;
+    if (jumlah === 0 && saldoAwal === 0) continue;
+    const debitNormal = akun.saldo_normal !== "K";
+    out.push({
+      akun,
+      saldoAwal,
+      totalDebit,
+      totalKredit,
+      jumlah,
+      saldoAkhir: saldoAwal + (debitNormal ? totalDebit - totalKredit : totalKredit - totalDebit),
+    });
+  }
+  return out;
+}
+
+export function filterRingkasan(
+  items: RingkasanAkunBB[],
+  opts: { cari: string; hanyaBermutasi: boolean },
+): RingkasanAkunBB[] {
+  const q = opts.cari.trim().toLowerCase();
+  return items.filter((r) => {
+    if (opts.hanyaBermutasi && r.jumlah === 0) return false;
+    if (!q) return true;
+    return `${r.akun.kode} ${r.akun.nama}`.toLowerCase().includes(q);
+  });
+}
+
+export function totalRingkasan(items: RingkasanAkunBB[]): { totalDebit: number; totalKredit: number; jumlah: number } {
+  return items.reduce(
+    (t, r) => ({ totalDebit: t.totalDebit + r.totalDebit, totalKredit: t.totalKredit + r.totalKredit, jumlah: t.jumlah + r.jumlah }),
+    { totalDebit: 0, totalKredit: 0, jumlah: 0 },
+  );
+}
+
 const TIPE_LABEL: Record<string, string> = {
   normal: "Normal", pembalik: "Pembalik", pengganti: "Pengganti", penutup: "Penutup",
 };
@@ -148,6 +216,22 @@ export function buildBukuBesarSingleAoa(
       safeText(r.keterangan), r.debit, r.kredit, r.saldo,
     ]),
     ["", "", "", "", "Total", totalDebit, totalKredit, saldoAkhir],
+  ];
+}
+
+// Sheet ringkasan: satu baris per akun + total (angka sama dengan layar).
+export function buildBukuBesarRingkasanAoa(p: InfoExport & { items: RingkasanAkunBB[] }): JurnalCell[][] {
+  const t = totalRingkasan(p.items);
+  return [
+    ["Ringkasan Buku Besar - Semua Akun Rekening"],
+    ["Unit", safeText(p.unitLabel)],
+    ["Periode", safeText(p.periodeLabel)],
+    [],
+    ["Kode Akun", "Nama Akun", "Saldo Awal", "Debit", "Kredit", "Saldo Akhir", "Jumlah Transaksi"],
+    ...p.items.map((r): JurnalCell[] => [
+      safeText(r.akun.kode), safeText(r.akun.nama), r.saldoAwal, r.totalDebit, r.totalKredit, r.saldoAkhir, r.jumlah,
+    ]),
+    ["Total", "", "", t.totalDebit, t.totalKredit, "", t.jumlah],
   ];
 }
 

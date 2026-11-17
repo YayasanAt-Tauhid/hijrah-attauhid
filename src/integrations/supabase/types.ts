@@ -6205,6 +6205,21 @@ export type Database = {
           tipe: string
         }[]
       }
+      buku_besar_ringkasan_semua: {
+        Args: {
+          p_departemen_ids?: string[]
+          p_exclude_koreksi?: boolean
+          p_include_penutup?: boolean
+          p_tgl_akhir: string
+          p_tgl_awal: string
+        }
+        Returns: {
+          akun_id: string
+          jumlah: number
+          total_debit: number
+          total_kredit: number
+        }[]
+      }
       buku_besar_saldo_awal: {
         Args: {
           p_akun_id: string
