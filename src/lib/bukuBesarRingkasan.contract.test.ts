@@ -87,3 +87,32 @@ describe("halaman Buku Besar: Semua akun tidak lagi mengunduh seluruh mutasi di 
     expect(page).toContain("Hanya akun yang ada mutasi");
   });
 });
+
+// Regresi #248: penggantian blok halaman ikut menghapus kartu tabel mutasi mode satu akun
+// (tabel, Export, Total, Saldo Akhir) sehingga memilih satu akun hanya menampilkan kartu info.
+describe("halaman Buku Besar: mode satu akun tetap menampilkan tabel mutasi", () => {
+  it("merender DataTable berisi computedData, export satu akun, total, dan saldo akhir", () => {
+    expect(page).toMatch(/\{akunId && !modeSemua && \(/);
+    expect(page).toContain("<DataTable");
+    expect(page).toContain("data={computedData}");
+    expect(page).toContain("loading={isLoading}");
+    expect(page).toContain('onExcel={() => exportSingle("xlsx")}');
+    expect(page).toContain('onCsv={() => exportSingle("csv")}');
+    expect(page).toContain("Saldo Awal per");
+    expect(page).toContain("Total Debit:");
+    expect(page).toContain("Total Kredit:");
+    expect(page).toContain("Saldo Akhir:");
+  });
+
+  it("tidak ada fungsi/nilai penting yang didefinisikan tetapi tidak dipakai (tanda blok tampilan hilang)", () => {
+    for (const nama of ["exportSingle", "exportSemua", "computedData", "totalDebit", "totalKredit", "saldoAkhir", "columns", "saldoAwal"]) {
+      const pakai = page.match(new RegExp(`\\b${nama}\\b`, "g"))?.length ?? 0;
+      expect(pakai, `${nama} harus dipakai di luar definisinya`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it("kartu ringkasan periode untuk mode Semua akun tetap ada", () => {
+    expect(page).toContain("Semua akun rekening</span>");
+    expect(page).toContain("Periode:");
+  });
+});
