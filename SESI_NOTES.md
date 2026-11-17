@@ -1,3 +1,11 @@
+# Catatan Sesi — Buku Besar: tabel mode satu akun hilang akibat #248 (17 November 2026)
+
+- **Gejala (laporan user dengan tangkapan layar, 10:47 WIB):** memilih satu akun rekening (1101 Kas Bendahara Yayasan) hanya menampilkan kartu info (Kode, Nama, Jenis, Saldo Normal, Unit); tabel mutasi, saldo awal, Export, total, saldo akhir tidak ada.
+- **Akar masalah (terbukti dengan `git show eeba60b` vs `origin/main`):** regresi dari #248, kesalahan saya. Skrip penggantian blok tampilan Semua akun mencari penanda `{modeSemua && (` + `<Card>` yang pertama, yaitu kartu info kecil "Akun/Unit/Periode", lalu menghapus sampai `{!akunId && (`; kartu tabel mode satu akun (`{akunId && !modeSemua && (` dengan DataTable, Export satu akun, total, saldo akhir) terletak di antaranya sehingga ikut terhapus. Tes #248 hanya memeriksa keberadaan string di berkas (`exportSingle` tetap ada sebagai fungsi yang tak terpakai), tidak merender halaman. Live sejak deploy #860 (±09:45 WIB) sampai #864.
+- **Perbaikan (PR #252, merge `0487b69`, deploy #864 sukses; tanpa migrasi):** blok dikembalikan persis dari `eeba60b` beserta kartu info Akun/Unit/Periode untuk mode Semua akun. Tes baru: `src/pages/keuangan/BukuBesar.render.test.tsx` (merender halaman dengan hook dimock; satu akun → tabel/total/saldo akhir/Export, memuat, galat; Semua akun → ringkasan dan mutasi rinci dimuat saat baris dibuka) yang terbukti gagal (2 tes) pada halaman `main` yang rusak dan lulus pada versi perbaikan; kontrak halaman menolak nilai/fungsi penting yang didefinisikan tapi tak dipakai. 67 tes lulus; `tsc` 187 error dan `eslint` = baseline.
+- **Pelajaran:** (1) mengganti blok JSX lewat skrip harus memakai penanda yang unik dan memeriksa blok apa saja yang ada di antara penanda awal dan akhir, atau tes render dulu sebelum mengubah halaman; (2) tes "string ada di berkas" tidak cukup untuk halaman, tulis uji render; (3) setelah perubahan tampilan, lihat hasilnya (uji render atau browser), jangan hanya tsc/lint.
+- **Belum diverifikasi:** tampilan di browser setelah perbaikan (user perlu Ctrl+F5).
+
 # Catatan Sesi — Buku Besar: loop paginasi tak berujung pada RPC (17 November 2026)
 
 - **Gejala (laporan user, 10:12 WIB):** setelah #248 live, membuka akun 1100 Kas Umum (1.717 trx) menampilkan "Memuat mutasi akun..." lebih dari 5 menit.
