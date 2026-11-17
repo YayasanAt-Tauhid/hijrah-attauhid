@@ -3,7 +3,7 @@ import { authMiddleware, requireAcademicDepartment, requireContext, requireRole 
 import { createAdminClient } from "./supabase";
 
 const PMB_DOCUMENT_BUCKET = "pmb-dokumen";
-const DOCUMENT_PATH_PATTERN = /^(kk|akta|rapor|ijazah)\/[0-9a-f-]+\.(pdf|jpg|jpeg|png)$/i;
+const DOCUMENT_PATH_PATTERN = /^(kk|akta|rapor|ijazah|mundur)\/[0-9a-f-]+\.(pdf|jpg|jpeg|png)$/i;
 
 interface SpmbDocumentUrlInput {
   path: string;
@@ -38,7 +38,10 @@ export const spmbGetDocumentUrl = createServerFn({ method: "POST" })
     if (role === "admin_tu") {
       let ownerCurrentDept: string | null = null;
       let ownerTargetDept: string | null = null;
-      for (const column of ["dokumen_kk_path", "dokumen_akta_path", "dokumen_rapor_path", "dokumen_ijazah_path"] as const) {
+      for (const column of [
+        "dokumen_kk_path", "dokumen_akta_path", "dokumen_rapor_path", "dokumen_ijazah_path",
+        "spmb_mundur_bukti_path",
+      ] as const) {
         const { data: owner } = await (admin
           .from("siswa_detail") as any)
           .select("spmb_departemen_tujuan_id,siswa:siswa_id(departemen_id)")
@@ -83,7 +86,7 @@ export const spmbCreateAdminDocumentUpload = createServerFn({ method: "POST" })
     await requireRole(admin, requireContext(context).userId, ["admin", "admin_tu"]);
     const extension = data.fileName.split(".").pop()?.toLowerCase();
     const mimeByExt: Record<string, string> = { pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png" };
-    if (!["kk", "akta", "rapor", "ijazah"].includes(data.kind) || !extension || mimeByExt[extension] !== data.mime) {
+    if (!["kk", "akta", "rapor", "ijazah", "mundur"].includes(data.kind) || !extension || mimeByExt[extension] !== data.mime) {
       throw new Error("Gunakan file PDF, JPG, atau PNG yang sesuai");
     }
     if (!Number.isFinite(data.size) || data.size <= 0 || data.size > 10 * 1024 * 1024) throw new Error("Ukuran dokumen maksimal 10 MB");

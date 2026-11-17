@@ -58,7 +58,13 @@ import { spmbWithdrawRegistration } from "./spmbWithdrawal";
 const DETAIL_ID = "11111111-1111-4111-8111-111111111111";
 const SISWA_ID = "22222222-2222-4222-8222-222222222222";
 const DEPT_ID = "33333333-3333-4333-8333-333333333333";
-const INPUT = { detail_id: DETAIL_ID, alasan: "Orang tua memilih sekolah lain", tanggal_efektif: "2026-11-04" };
+const BUKTI_PATH = "mundur/44444444-4444-4444-8444-444444444444.pdf";
+const INPUT = {
+  detail_id: DETAIL_ID,
+  alasan: "Orang tua memilih sekolah lain",
+  tanggal_efektif: "2026-11-04",
+  bukti_path: BUKTI_PATH,
+};
 const RPC_RESULT = {
   tagihan_dibatalkan: 3,
   total_dibayar: 500000,
@@ -93,8 +99,30 @@ describe("spmbWithdrawRegistration", () => {
       p_alasan: "Orang tua memilih sekolah lain",
       p_tanggal_efektif: "2026-11-04",
       p_actor_id: "staff",
+      p_bukti_path: BUKTI_PATH,
     });
     expect(result).toEqual({ success: true, ...RPC_RESULT, peringatan: [] });
+  });
+
+  it("mewajibkan bukti dari orang tua sebelum menyentuh database", async () => {
+    const { bukti_path: _omit, ...tanpaBukti } = INPUT;
+    await expect(spmbWithdrawRegistration({ data: tanpaBukti as typeof INPUT })).rejects.toThrow("Bukti pengunduran diri");
+    await expect(spmbWithdrawRegistration({ data: { ...INPUT, bukti_path: "   " } })).rejects.toThrow("Bukti pengunduran diri");
+    expect(state.access).not.toHaveBeenCalled();
+    expect(state.rpc).not.toHaveBeenCalled();
+  });
+
+  it("menolak path bukti di luar folder mundur/ atau berekstensi tidak diizinkan", async () => {
+    for (const bukti_path of [
+      "kk/44444444-4444-4444-8444-444444444444.pdf",
+      "mundur/../kk/44444444-4444-4444-8444-444444444444.pdf",
+      "mundur/44444444-4444-4444-8444-444444444444.exe",
+      "mundur/bukan-uuid.pdf",
+      "https://contoh.test/bukti.pdf",
+    ]) {
+      await expect(spmbWithdrawRegistration({ data: { ...INPUT, bukti_path } })).rejects.toThrow("Bukti pengunduran diri");
+    }
+    expect(state.rpc).not.toHaveBeenCalled();
   });
 
   it("menolak staf di luar kewenangan lembaga tanpa mengubah data", async () => {

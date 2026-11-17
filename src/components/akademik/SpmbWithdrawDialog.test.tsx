@@ -7,6 +7,22 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("sonner", () => ({ toast: mocks.toast }));
 vi.mock("@/server/spmbWithdrawal", () => ({ spmbWithdrawRegistration: mocks.withdraw }));
+// Upload ke storage diuji terpisah; di sini hanya kontrak props dengan dialog.
+vi.mock("./SpmbDocumentUpload", () => ({
+  SpmbDocumentUpload: (props: {
+    kind: string; label: string; value?: string;
+    onChange: (path: string) => void; onBusy: (busy: boolean) => void;
+  }) => (
+    <div>
+      <span>{props.label}</span>
+      <span data-testid="bukti-kind">{props.kind}</span>
+      <span data-testid="bukti-value">{props.value || ""}</span>
+      <button type="button" onClick={() => props.onChange("mundur/44444444-4444-4444-8444-444444444444.pdf")}>Pilih bukti (uji)</button>
+      <button type="button" onClick={() => props.onBusy(true)}>Mulai unggah (uji)</button>
+      <button type="button" onClick={() => props.onBusy(false)}>Selesai unggah (uji)</button>
+    </div>
+  ),
+}));
 
 import { SpmbWithdrawDialog } from "./SpmbWithdrawDialog";
 
@@ -44,13 +60,39 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SpmbWithdrawDialog", () => {
-  it("menonaktifkan tombol konfirmasi sampai alasan minimal 5 karakter", () => {
+  it("menonaktifkan tombol konfirmasi sampai alasan minimal 5 karakter DAN bukti orang tua diunggah", () => {
     setup();
     const button = screen.getByRole("button", { name: "Tandai mengundurkan diri" });
     expect(button).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/Alasan/), { target: { value: "ok" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pilih bukti (uji)" }));
     expect(button).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/Alasan/), { target: { value: "Pindah sekolah lain" } });
+    expect(button).toBeEnabled();
+  });
+
+  it("tidak bisa dikirim tanpa bukti walau alasan dan tanggal sudah valid", () => {
+    setup();
+    fireEvent.change(screen.getByLabelText(/Alasan/), { target: { value: "Pindah sekolah lain" } });
+    expect(screen.getByRole("button", { name: "Tandai mengundurkan diri" })).toBeDisabled();
+    expect(mocks.withdraw).not.toHaveBeenCalled();
+  });
+
+  it("menampilkan field bukti dari orang tua bertanda wajib dengan jenis upload 'mundur'", () => {
+    setup();
+    expect(document.body.textContent).toContain("Bukti dari orang tua *");
+    expect(screen.getByTestId("bukti-kind").textContent).toBe("mundur");
+  });
+
+  it("menonaktifkan tombol selama upload bukti masih berjalan", () => {
+    setup();
+    fireEvent.change(screen.getByLabelText(/Alasan/), { target: { value: "Pindah sekolah lain" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pilih bukti (uji)" }));
+    const button = screen.getByRole("button", { name: "Tandai mengundurkan diri" });
+    expect(button).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Mulai unggah (uji)" }));
+    expect(button).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Selesai unggah (uji)" }));
     expect(button).toBeEnabled();
   });
 
@@ -58,10 +100,16 @@ describe("SpmbWithdrawDialog", () => {
     const { onOpenChange, onWithdrawn } = setup();
     fireEvent.change(screen.getByLabelText(/Alasan/), { target: { value: "  Pindah sekolah lain  " } });
     fireEvent.change(screen.getByLabelText(/Tanggal efektif/), { target: { value: "2026-11-05" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pilih bukti (uji)" }));
     fireEvent.click(screen.getByRole("button", { name: "Tandai mengundurkan diri" }));
     await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
     expect(mocks.withdraw).toHaveBeenCalledWith({
-      data: { detail_id: "detail-1", alasan: "Pindah sekolah lain", tanggal_efektif: "2026-11-05" },
+      data: {
+        detail_id: "detail-1",
+        alasan: "Pindah sekolah lain",
+        tanggal_efektif: "2026-11-05",
+        bukti_path: "mundur/44444444-4444-4444-8444-444444444444.pdf",
+      },
     });
     await waitFor(() => expect(onWithdrawn).toHaveBeenCalled());
     expect(mocks.toast.success).toHaveBeenCalledWith("Budi ditandai mengundurkan diri", expect.anything());
@@ -79,6 +127,7 @@ describe("SpmbWithdrawDialog", () => {
     });
     setup();
     fireEvent.change(screen.getByLabelText(/Alasan/), { target: { value: "Pindah sekolah lain" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pilih bukti (uji)" }));
     fireEvent.click(screen.getByRole("button", { name: "Tandai mengundurkan diri" }));
     await waitFor(() => expect(mocks.toast.warning).toHaveBeenCalledWith("Perlu tindak lanjut keuangan", expect.anything()));
     expect(mocks.toast.warning).toHaveBeenCalledWith("Sesi belum bisa ditutup");
@@ -88,6 +137,7 @@ describe("SpmbWithdrawDialog", () => {
     mocks.withdraw.mockRejectedValue(new Error('Transaksi ditolak: periode "2026" sudah ditutup buku.'));
     const { onOpenChange, onWithdrawn } = setup();
     fireEvent.change(screen.getByLabelText(/Alasan/), { target: { value: "Pindah sekolah lain" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pilih bukti (uji)" }));
     fireEvent.click(screen.getByRole("button", { name: "Tandai mengundurkan diri" }));
     await waitFor(() => expect(mocks.toast.error).toHaveBeenCalledWith(
       "Gagal menandai mengundurkan diri",

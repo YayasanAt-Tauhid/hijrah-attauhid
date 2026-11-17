@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { isSpmbActivated } from "@/lib/spmbAdmission";
 import { canWithdrawSpmbRegistration } from "@/lib/spmbWithdrawalNotices";
 import { SpmbWithdrawDialog } from "@/components/akademik/SpmbWithdrawDialog";
+import { spmbGetDocumentUrl } from "@/server/spmbDocuments";
 import { getAvailableSpmbMilestones, SPMB_MILESTONE_ACTION_LABELS, SPMB_MILESTONE_SUCCESS_LABELS, type SpmbMilestoneAction } from "@/lib/spmbMilestoneActions";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
@@ -311,6 +312,26 @@ export default function DetailSPMB() {
             Efektif {detail.spmb_mundur_tanggal_efektif || "-"}. Alasan: {detail.spmb_mundur_alasan || "-"}.
             {" "}Tautan pembayaran tidak aktif dan NIS yang sudah terbit tidak dipakai ulang.
           </p>
+          {detail.spmb_mundur_bukti_path ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              onClick={async () => {
+                try {
+                  const { url } = await spmbGetDocumentUrl({ data: { path: String(detail.spmb_mundur_bukti_path) } });
+                  window.open(url, "_blank", "noopener,noreferrer");
+                } catch (error: unknown) {
+                  toast.error("Bukti tidak dapat dibuka", { description: error instanceof Error ? error.message : "Terjadi kesalahan saat membuat tautan dokumen." });
+                }
+              }}
+            >
+              Lihat bukti dari orang tua
+            </Button>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">Bukti dari orang tua tidak tercatat (pengunduran diri dicatat sebelum fitur bukti tersedia).</p>
+          )}
           {detail.spmb_mundur_perlu_keuangan === true && (
             <p className="mt-1 font-medium text-warning">
               Perlu tindak lanjut keuangan

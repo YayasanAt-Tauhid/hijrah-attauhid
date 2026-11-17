@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { buildSpmbWithdrawalNotices } from "@/lib/spmbWithdrawalNotices";
 import { spmbWithdrawRegistration } from "@/server/spmbWithdrawal";
+import { SpmbDocumentUpload } from "./SpmbDocumentUpload";
 
 interface SpmbWithdrawDialogProps {
   open: boolean;
@@ -30,23 +31,27 @@ function todayLocalISO(): string {
 export function SpmbWithdrawDialog({ open, onOpenChange, detailId, nama, internal, onWithdrawn }: SpmbWithdrawDialogProps) {
   const [alasan, setAlasan] = useState("");
   const [tanggal, setTanggal] = useState(todayLocalISO);
+  const [buktiPath, setBuktiPath] = useState("");
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (open) return;
     setAlasan("");
     setTanggal(todayLocalISO());
+    setBuktiPath("");
+    setUploading(false);
   }, [open]);
 
   const reasonValid = alasan.trim().length >= MIN_REASON;
-  const canSubmit = reasonValid && Boolean(tanggal) && !loading;
+  const canSubmit = reasonValid && Boolean(tanggal) && Boolean(buktiPath) && !uploading && !loading;
 
   const submit = async () => {
     if (!canSubmit) return;
     setLoading(true);
     try {
       const result = await spmbWithdrawRegistration({
-        data: { detail_id: detailId, alasan: alasan.trim(), tanggal_efektif: tanggal },
+        data: { detail_id: detailId, alasan: alasan.trim(), tanggal_efektif: tanggal, bukti_path: buktiPath },
       });
       const notices = buildSpmbWithdrawalNotices(nama, result);
       toast.success(notices.success.title, { description: notices.success.description });
@@ -106,6 +111,18 @@ export function SpmbWithdrawDialog({ open, onOpenChange, detailId, nama, interna
               value={tanggal}
               onChange={(event) => setTanggal(event.target.value)}
             />
+          </div>
+          <div className="space-y-1">
+            <SpmbDocumentUpload
+              kind="mundur"
+              label="Bukti dari orang tua *"
+              value={buktiPath}
+              onChange={setBuktiPath}
+              onBusy={setUploading}
+            />
+            <p className="text-xs text-muted-foreground">
+              Surat pernyataan atau foto/scan bukti pengunduran diri dari orang tua atau wali (PDF, JPG, atau PNG).
+            </p>
           </div>
         </div>
 

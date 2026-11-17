@@ -45,6 +45,8 @@ export interface SpmbWithdrawalResult {
 
 const WITHDRAWABLE_STATUSES = ["calon", "diterima"];
 const SESSION_CLOSE_REASON = "pendaftar_mengundurkan_diri";
+// Bukti dari orang tua diunggah lewat spmbCreateAdminDocumentUpload (kind "mundur").
+const BUKTI_PATH_PATTERN = /^mundur\/[0-9a-f-]{36}\.(pdf|jpg|jpeg|png)$/i;
 
 function parseEffectiveDate(value: unknown): string {
   const text = typeof value === "string" ? value.trim() : "";
@@ -58,7 +60,7 @@ function parseEffectiveDate(value: unknown): string {
 
 export const spmbWithdrawRegistration = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .inputValidator((d: { detail_id: string; alasan: string; tanggal_efektif: string }) => d)
+  .inputValidator((d: { detail_id: string; alasan: string; tanggal_efektif: string; bukti_path: string }) => d)
   .handler(async ({ data, context }): Promise<SpmbWithdrawalResult> => {
     const actor = requireContext(context);
 
@@ -68,6 +70,10 @@ export const spmbWithdrawRegistration = createServerFn({ method: "POST" })
     if (alasan.length < 5) throw new Error("Alasan pengunduran diri wajib diisi minimal 5 karakter");
     if (alasan.length > 500) throw new Error("Alasan pengunduran diri maksimal 500 karakter");
     const tanggalEfektif = parseEffectiveDate(data.tanggal_efektif);
+    const buktiPath = typeof data.bukti_path === "string" ? data.bukti_path.trim() : "";
+    if (!BUKTI_PATH_PATTERN.test(buktiPath)) {
+      throw new Error("Bukti pengunduran diri dari orang tua wajib diunggah (PDF, JPG, atau PNG)");
+    }
 
     const adminClient = createAdminClient();
     const admin = adminClient as unknown as LooseAdmin;
@@ -135,6 +141,7 @@ export const spmbWithdrawRegistration = createServerFn({ method: "POST" })
       p_alasan: alasan,
       p_tanggal_efektif: tanggalEfektif,
       p_actor_id: actor.userId,
+      p_bukti_path: buktiPath,
     });
     if (rpcError) throw new Error(rpcError.message);
 
