@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { fetchAllPages } from "@/lib/fetchAll";
 import type { JurnalExportDetail } from "@/lib/jurnalExport";
+import type { AkunBB } from "@/lib/bukuBesar";
 
 // ─── Akun Rekening ───
 export function useAkunRekening() {
@@ -833,6 +834,71 @@ export function useBukuBesar(
       }
 
       return { saldoAwal: Number(saldoAwalData || 0), mutasi };
+    },
+  });
+}
+
+// ─── Buku Besar: semua akun rekening ───
+// Daftar akun lengkap (termasuk nonaktif) supaya mutasi akun nonaktif tidak hilang
+// dari tampilan/export "Semua akun". Picker akun biasa tetap memakai useAkunRekening (aktif saja).
+export function useAkunRekeningSemua(enabled = true) {
+  return useQuery({
+    queryKey: ["akun_rekening", "semua"],
+    enabled,
+    queryFn: async (): Promise<AkunBB[]> => {
+      const { data, error } = await supabase
+        .from("akun_rekening")
+        .select("id, kode, nama, saldo_normal, jenis, aktif")
+        .order("kode");
+      if (error) throw error;
+      return (data || []) as AkunBB[];
+    },
+  });
+}
+
+export interface BukuBesarSemuaData {
+  saldoAwal: Record<string, number>;
+  mutasi: (BukuBesarMutasiRow & { akun_id: string })[];
+}
+
+export function useBukuBesarSemua(opts: {
+  tglAwal?: string;
+  tglAkhir?: string;
+  departemenIds?: string[];
+  includePenutup?: boolean;
+  excludeKoreksi?: boolean;
+  enabled?: boolean;
+}) {
+  const { tglAwal, tglAkhir, departemenIds, includePenutup, excludeKoreksi, enabled = true } = opts;
+  return useQuery({
+    queryKey: ["buku_besar_semua", tglAwal, tglAkhir, departemenIds, includePenutup, excludeKoreksi],
+    enabled: enabled && !!tglAwal && !!tglAkhir,
+    queryFn: async (): Promise<BukuBesarSemuaData> => {
+      const depts = departemenIds && departemenIds.length > 0 ? departemenIds : null;
+
+      const { data: saData, error: saErr } = await supabase.rpc("buku_besar_saldo_awal_semua", {
+        p_tgl_awal: tglAwal!,
+        p_departemen_ids: depts,
+        p_exclude_koreksi: excludeKoreksi ?? false,
+      });
+      if (saErr) throw saErr;
+      const saldoAwal: Record<string, number> = {};
+      for (const r of saData || []) saldoAwal[r.akun_id] = Number(r.saldo || 0);
+
+      // Urutan di fungsi database stabil (kode akun, tanggal, nomor, urutan, id) sehingga aman dipaginasi.
+      const rows = await fetchAllPages((from, to) =>
+        supabase
+          .rpc("buku_besar_mutasi_semua", {
+            p_tgl_awal: tglAwal!,
+            p_tgl_akhir: tglAkhir!,
+            p_departemen_ids: depts,
+            p_include_penutup: includePenutup ?? false,
+            p_exclude_koreksi: excludeKoreksi ?? false,
+          })
+          .range(from, to),
+      );
+      const mutasi = rows.map((r) => ({ ...r, debit: Number(r.debit || 0), kredit: Number(r.kredit || 0) }));
+      return { saldoAwal, mutasi };
     },
   });
 }

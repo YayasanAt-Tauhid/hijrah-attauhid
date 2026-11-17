@@ -52,7 +52,7 @@ export function labelPenginput(j: Pick<JurnalExportHeader, "penginput" | "refere
 }
 
 // Hindari formula injection saat file dibuka di Excel/LibreOffice (pola sama dengan ExportButton).
-function safeText(value: unknown): string {
+export function safeText(value: unknown): string {
   if (value == null) return "";
   const text = String(value);
   return /^[=+\-@]/.test(text) ? `'${text}` : text;
