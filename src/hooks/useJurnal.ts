@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { fetchAllPages } from "@/lib/fetchAll";
 import type { JurnalExportDetail } from "@/lib/jurnalExport";
-import type { AkunBB } from "@/lib/bukuBesar";
+import type { AkunBB, RingkasanRowBB } from "@/lib/bukuBesar";
 
 // ─── Akun Rekening ───
 export function useAkunRekening() {
@@ -861,34 +861,47 @@ export interface BukuBesarSemuaData {
   mutasi: (BukuBesarMutasiRow & { akun_id: string })[];
 }
 
-export function useBukuBesarSemua(opts: {
+export interface BukuBesarSemuaParams {
   tglAwal?: string;
   tglAkhir?: string;
   departemenIds?: string[];
   includePenutup?: boolean;
   excludeKoreksi?: boolean;
-  enabled?: boolean;
-}) {
+}
+
+async function fetchSaldoAwalSemua(p: BukuBesarSemuaParams): Promise<Record<string, number>> {
+  const depts = p.departemenIds && p.departemenIds.length > 0 ? p.departemenIds : null;
+  const { data, error } = await supabase.rpc("buku_besar_saldo_awal_semua", {
+    p_tgl_awal: p.tglAwal!,
+    p_departemen_ids: depts,
+    p_exclude_koreksi: p.excludeKoreksi ?? false,
+  });
+  if (error) throw error;
+  const saldoAwal: Record<string, number> = {};
+  for (const r of data || []) saldoAwal[r.akun_id] = Number(r.saldo || 0);
+  return saldoAwal;
+}
+
+export interface BukuBesarRingkasanData {
+  saldoAwal: Record<string, number>;
+  ringkasan: RingkasanRowBB[];
+}
+
+/** Layar "Semua akun": hanya saldo awal + total debit/kredit/jumlah per akun (±200 baris),
+ *  bukan puluhan ribu baris mutasi. Mutasi rinci satu akun dimuat saat baris dibuka
+ *  (useBukuBesar) dan seluruh mutasi hanya diambil saat export (fetchBukuBesarSemuaRinci). */
+export function useBukuBesarRingkasanSemua(opts: BukuBesarSemuaParams & { enabled?: boolean }) {
   const { tglAwal, tglAkhir, departemenIds, includePenutup, excludeKoreksi, enabled = true } = opts;
   return useQuery({
-    queryKey: ["buku_besar_semua", tglAwal, tglAkhir, departemenIds, includePenutup, excludeKoreksi],
+    queryKey: ["buku_besar_ringkasan_semua", tglAwal, tglAkhir, departemenIds, includePenutup, excludeKoreksi],
     enabled: enabled && !!tglAwal && !!tglAkhir,
-    queryFn: async (): Promise<BukuBesarSemuaData> => {
+    queryFn: async (): Promise<BukuBesarRingkasanData> => {
       const depts = departemenIds && departemenIds.length > 0 ? departemenIds : null;
-
-      const { data: saData, error: saErr } = await supabase.rpc("buku_besar_saldo_awal_semua", {
-        p_tgl_awal: tglAwal!,
-        p_departemen_ids: depts,
-        p_exclude_koreksi: excludeKoreksi ?? false,
-      });
-      if (saErr) throw saErr;
-      const saldoAwal: Record<string, number> = {};
-      for (const r of saData || []) saldoAwal[r.akun_id] = Number(r.saldo || 0);
-
-      // Urutan di fungsi database stabil (kode akun, tanggal, nomor, urutan, id) sehingga aman dipaginasi.
+      const saldoAwal = await fetchSaldoAwalSemua({ tglAwal, departemenIds, excludeKoreksi });
+      // Urutan di fungsi database stabil (kode akun, id akun) sehingga aman dipaginasi.
       const rows = await fetchAllPages((from, to) =>
         supabase
-          .rpc("buku_besar_mutasi_semua", {
+          .rpc("buku_besar_ringkasan_semua", {
             p_tgl_awal: tglAwal!,
             p_tgl_akhir: tglAkhir!,
             p_departemen_ids: depts,
@@ -897,8 +910,34 @@ export function useBukuBesarSemua(opts: {
           })
           .range(from, to),
       );
-      const mutasi = rows.map((r) => ({ ...r, debit: Number(r.debit || 0), kredit: Number(r.kredit || 0) }));
-      return { saldoAwal, mutasi };
+      const ringkasan = rows.map((r) => ({
+        akun_id: r.akun_id,
+        total_debit: Number(r.total_debit || 0),
+        total_kredit: Number(r.total_kredit || 0),
+        jumlah: Number(r.jumlah || 0),
+      }));
+      return { saldoAwal, ringkasan };
     },
   });
+}
+
+/** Seluruh mutasi semua akun (bisa puluhan ribu baris, ±1 request per 1000 baris).
+ *  Dipanggil hanya saat export, bukan sebagai query layar. */
+export async function fetchBukuBesarSemuaRinci(p: BukuBesarSemuaParams): Promise<BukuBesarSemuaData> {
+  const depts = p.departemenIds && p.departemenIds.length > 0 ? p.departemenIds : null;
+  const saldoAwal = await fetchSaldoAwalSemua(p);
+  // Urutan di fungsi database stabil (kode akun, tanggal, nomor, urutan, id) sehingga aman dipaginasi.
+  const rows = await fetchAllPages((from, to) =>
+    supabase
+      .rpc("buku_besar_mutasi_semua", {
+        p_tgl_awal: p.tglAwal!,
+        p_tgl_akhir: p.tglAkhir!,
+        p_departemen_ids: depts,
+        p_include_penutup: p.includePenutup ?? false,
+        p_exclude_koreksi: p.excludeKoreksi ?? false,
+      })
+      .range(from, to),
+  );
+  const mutasi = rows.map((r) => ({ ...r, debit: Number(r.debit || 0), kredit: Number(r.kredit || 0) }));
+  return { saldoAwal, mutasi };
 }

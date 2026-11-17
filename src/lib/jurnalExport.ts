@@ -157,6 +157,17 @@ export function downloadAoaXlsx(aoa: JurnalCell[][], filename: string, sheetName
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
 
+// Satu file .xlsx dengan beberapa sheet (mis. Ringkasan + Mutasi).
+export function downloadSheetsXlsx(sheets: { name: string; aoa: JurnalCell[][] }[], filename: string) {
+  const wb = XLSX.utils.book_new();
+  for (const s of sheets) {
+    const ws = XLSX.utils.aoa_to_sheet(s.aoa);
+    ws["!cols"] = widths(s.aoa);
+    XLSX.utils.book_append_sheet(wb, ws, s.name.slice(0, 31) || "Data");
+  }
+  XLSX.writeFile(wb, `${filename}.xlsx`);
+}
+
 const csvCell = (v: JurnalCell) => {
   const t = String(v);
   return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;

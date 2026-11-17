@@ -9,18 +9,20 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
-import { ChevronsUpDown, Check } from "lucide-react";
+import { ChevronsUpDown, Check, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { ExportMenu } from "@/components/shared/ExportMenu";
-import { useAkunRekening, useAkunRekeningSemua, useBukuBesar, useBukuBesarSemua } from "@/hooks/useJurnal";
+import { fetchBukuBesarSemuaRinci, useAkunRekening, useAkunRekeningSemua, useBukuBesar, useBukuBesarRingkasanSemua } from "@/hooks/useJurnal";
 import { useDepartemenGroups } from "@/hooks/useISAK35";
 import { formatRupiah, namaBulan } from "@/hooks/useKeuangan";
 import {
-  BULAN_KALENDER, buildBukuBesarSemuaAoa, buildBukuBesarSingleAoa, bukuBesarFilename, hitungSaldoBerjalan,
-  kelompokkanPerAkun, labelPeriode, parseTahunInput, periodeBukuBesar, type MutasiBBSaldo,
+  BULAN_KALENDER, buildBukuBesarRingkasanAoa, buildBukuBesarSemuaAoa, buildBukuBesarSingleAoa, bukuBesarFilename,
+  filterRingkasan, hitungRingkasanPerAkun, hitungSaldoBerjalan, kelompokkanPerAkun, labelPeriode, parseTahunInput,
+  periodeBukuBesar, totalRingkasan, type AkunBB, type MutasiBBSaldo,
 } from "@/lib/bukuBesar";
-import { downloadAoaCsv, downloadAoaXlsx } from "@/lib/jurnalExport";
+import { downloadAoaCsv, downloadAoaXlsx, downloadSheetsXlsx } from "@/lib/jurnalExport";
 import { getErrorMessage } from "@/lib/errorMessage";
 import { format, parseISO } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
@@ -69,6 +71,36 @@ function MutasiTable({ saldoAwal, rows }: { saldoAwal: number; rows: MutasiBBSal
   );
 }
 
+// Mutasi rinci satu akun, dimuat hanya saat baris akun dibuka (komponen ini baru di-mount
+// ketika AccordionContent terbuka), memakai fungsi per akun yang sama dengan mode satu akun.
+function MutasiAkunMalas(props: {
+  akun: AkunBB;
+  tglAwal: string;
+  tglAkhir: string;
+  departemenIds?: string[];
+  includePenutup: boolean;
+  excludeKoreksi: boolean;
+}) {
+  const { akun, tglAwal, tglAkhir, departemenIds, includePenutup, excludeKoreksi } = props;
+  const { data, isLoading, isError, error } = useBukuBesar(akun.id, tglAwal, tglAkhir, departemenIds, includePenutup, excludeKoreksi);
+  const rows = useMemo(
+    () => (data ? hitungSaldoBerjalan(data.saldoAwal, data.mutasi, akun.saldo_normal) : []),
+    [data, akun.saldo_normal],
+  );
+  if (isLoading) {
+    return (
+      <p className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Memuat mutasi akun...
+      </p>
+    );
+  }
+  if (isError) {
+    return <p className="py-4 text-sm text-destructive">Gagal memuat mutasi akun: {getErrorMessage(error)}</p>;
+  }
+  if (!data) return null;
+  return <MutasiTable saldoAwal={data.saldoAwal} rows={rows} />;
+}
+
 export default function BukuBesar() {
   const [akunId, setAkunId] = useState<string>("");
   const [akunOpen, setAkunOpen] = useState(false);
@@ -79,6 +111,9 @@ export default function BukuBesar() {
   const [unitOpen, setUnitOpen] = useState(false);
   const [tampilkanPenutup, setTampilkanPenutup] = useState(false);
   const [sembunyikanKoreksi, setSembunyikanKoreksi] = useState(true);
+  const [cari, setCari] = useState("");
+  const [hanyaBermutasi, setHanyaBermutasi] = useState(false);
+  const [mengekspor, setMengekspor] = useState(false);
 
   const modeSemua = akunId === SEMUA_AKUN;
 
@@ -114,7 +149,7 @@ export default function BukuBesar() {
   } = useBukuBesar(!modeSemua && unitSiap ? akunId || undefined : undefined, tglAwal, tglAkhir, departemenIds, tampilkanPenutup, sembunyikanKoreksi);
   const {
     data: dataSemua, isLoading: loadingSemua, isError: isErrorSemua, error: errorSemua,
-  } = useBukuBesarSemua({
+  } = useBukuBesarRingkasanSemua({
     tglAwal, tglAkhir, departemenIds,
     includePenutup: tampilkanPenutup, excludeKoreksi: sembunyikanKoreksi,
     enabled: modeSemua && unitSiap,
@@ -130,12 +165,15 @@ export default function BukuBesar() {
   const totalKredit = computedData.reduce((s, r) => s + r.kredit, 0);
   const saldoAkhir = computedData.length > 0 ? computedData[computedData.length - 1].saldo : saldoAwal;
 
-  const groupsSemua = useMemo(() => {
+  const ringkasanSemua = useMemo(() => {
     if (!modeSemua || !akunSemua || !dataSemua) return [];
-    return kelompokkanPerAkun(akunSemua, dataSemua.saldoAwal, dataSemua.mutasi);
+    return hitungRingkasanPerAkun(akunSemua, dataSemua.saldoAwal, dataSemua.ringkasan);
   }, [modeSemua, akunSemua, dataSemua]);
-  const totalDebitSemua = groupsSemua.reduce((s, g) => s + g.totalDebit, 0);
-  const totalKreditSemua = groupsSemua.reduce((s, g) => s + g.totalKredit, 0);
+  const tampilSemua = useMemo(
+    () => filterRingkasan(ringkasanSemua, { cari, hanyaBermutasi }),
+    [ringkasanSemua, cari, hanyaBermutasi],
+  );
+  const totalSemua = totalRingkasan(tampilSemua);
 
   const exportSingle = (tipe: "xlsx" | "csv") => {
     if (!periode.valid || !selectedAkun) return;
@@ -145,12 +183,36 @@ export default function BukuBesar() {
     else downloadAoaCsv(aoa, nama);
   };
 
-  const exportSemua = (tipe: "xlsx" | "csv") => {
-    if (!periode.valid || groupsSemua.length === 0) return;
-    const aoa = buildBukuBesarSemuaAoa({ unitLabel: labelUnit, periodeLabel, groups: groupsSemua });
-    const nama = bukuBesarFilename({ kode: null, tglAwal: periode.tglAwal, tglAkhir: periode.tglAkhir });
-    if (tipe === "xlsx") downloadAoaXlsx(aoa, nama, "Buku Besar");
-    else downloadAoaCsv(aoa, nama);
+  // Mutasi rinci semua akun (puluhan ribu baris) hanya diambil di sini, saat tombol export diklik.
+  const exportSemua = async (tipe: "xlsx" | "csv") => {
+    if (!periode.valid || !akunSemua || mengekspor) return;
+    setMengekspor(true);
+    try {
+      const rinci = await fetchBukuBesarSemuaRinci({
+        tglAwal: periode.tglAwal, tglAkhir: periode.tglAkhir, departemenIds,
+        includePenutup: tampilkanPenutup, excludeKoreksi: sembunyikanKoreksi,
+      });
+      const groups = kelompokkanPerAkun(akunSemua, rinci.saldoAwal, rinci.mutasi);
+      const nama = bukuBesarFilename({ kode: null, tglAwal: periode.tglAwal, tglAkhir: periode.tglAkhir });
+      const mutasiAoa = buildBukuBesarSemuaAoa({ unitLabel: labelUnit, periodeLabel, groups });
+      if (tipe === "xlsx") {
+        // Ringkasan dihitung dari data rinci yang sama supaya angka kedua sheet pasti konsisten.
+        const ringkasanAoa = buildBukuBesarRingkasanAoa({
+          unitLabel: labelUnit, periodeLabel,
+          items: groups.map((g) => ({
+            akun: g.akun, saldoAwal: g.saldoAwal, totalDebit: g.totalDebit, totalKredit: g.totalKredit,
+            jumlah: g.rows.length, saldoAkhir: g.saldoAkhir,
+          })),
+        });
+        downloadSheetsXlsx([{ name: "Ringkasan", aoa: ringkasanAoa }, { name: "Mutasi", aoa: mutasiAoa }], nama);
+      } else {
+        downloadAoaCsv(mutasiAoa, nama);
+      }
+    } catch (e) {
+      toast.error(`Gagal export buku besar: ${getErrorMessage(e)}`);
+    } finally {
+      setMengekspor(false);
+    }
   };
 
   const columns: DataTableColumn<any>[] = [
@@ -301,7 +363,7 @@ export default function BukuBesar() {
         <p className="text-sm text-destructive">Gagal memuat buku besar: {getErrorMessage(error)}</p>
       )}
       {isErrorSemua && modeSemua && (
-        <p className="text-sm text-destructive">Gagal memuat buku besar semua akun: {getErrorMessage(errorSemua)}</p>
+        <p className="text-sm text-destructive">Gagal memuat ringkasan buku besar semua akun: {getErrorMessage(errorSemua)}</p>
       )}
 
       {selectedAkun && !modeSemua && (
@@ -320,113 +382,108 @@ export default function BukuBesar() {
 
       {modeSemua && (
         <Card>
-          <CardContent className="pt-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-              <div><span className="text-muted-foreground">Akun:</span> <span className="font-semibold">Semua akun rekening</span></div>
-              <div><span className="text-muted-foreground">Unit:</span> <span className="font-semibold">{labelUnit}</span></div>
-              <div><span className="text-muted-foreground">Periode:</span> <span className="font-semibold">{periodeLabel || "-"}</span></div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {akunId && !modeSemua && (
-        <Card>
-          <CardContent className="pt-6">
-            {periode.valid && (
-              <div className="mb-3 p-3 bg-muted/50 rounded-md flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">
-                  Saldo Awal per {tglPendek(periode.tglAwal)} ({labelUnit})
-                </span>
-                <span className="font-semibold">{formatRupiah(Math.round(saldoAwal))}</span>
-              </div>
-            )}
-            <DataTable
-              columns={columns}
-              data={computedData}
-              loading={isLoading}
-              pageSize={50}
-              actions={
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-sm text-muted-foreground">
+                {loadingSemua
+                  ? "Memuat ringkasan semua akun..."
+                  : `${tampilSemua.length} dari ${ringkasanSemua.length} akun memiliki saldo awal atau mutasi pada periode ini`}
+              </span>
+              <div className="flex items-center gap-2">
+                {mengekspor && (
+                  <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Menyiapkan file (semua mutasi)...
+                  </span>
+                )}
                 <ExportMenu
-                  disabled={!periode.valid || (computedData.length === 0 && saldoAwal === 0)}
-                  onExcel={() => exportSingle("xlsx")}
-                  onCsv={() => exportSingle("csv")}
+                  loading={loadingSemua || mengekspor}
+                  disabled={!periode.valid || ringkasanSemua.length === 0}
+                  onExcel={() => exportSemua("xlsx")}
+                  onCsv={() => exportSemua("csv")}
                   onPrint={() => window.print()}
                 />
-              }
-            />
-            {computedData.length > 0 && (
-              <div className="mt-4 p-3 bg-muted/50 rounded-md grid grid-cols-1 md:grid-cols-3 gap-2 text-right">
-                <div>
-                  <span className="text-sm text-muted-foreground mr-2">Total Debit:</span>
-                  <span className="font-bold">{formatRupiah(Math.round(totalDebit))}</span>
-                </div>
-                <div>
-                  <span className="text-sm text-muted-foreground mr-2">Total Kredit:</span>
-                  <span className="font-bold">{formatRupiah(Math.round(totalKredit))}</span>
-                </div>
-                <div>
-                  <span className="text-sm text-muted-foreground mr-2">Saldo Akhir:</span>
-                  <span className="text-lg font-bold">{formatRupiah(Math.round(saldoAkhir))}</span>
-                </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {modeSemua && (
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-muted-foreground">
-                {loadingSemua ? "Memuat buku besar semua akun..." : `${groupsSemua.length} akun memiliki saldo awal atau mutasi pada periode ini`}
-              </span>
-              <ExportMenu
-                loading={loadingSemua}
-                disabled={!periode.valid || groupsSemua.length === 0}
-                onExcel={() => exportSemua("xlsx")}
-                onCsv={() => exportSemua("csv")}
-                onPrint={() => window.print()}
-              />
             </div>
-            {!loadingSemua && periode.valid && groupsSemua.length === 0 && !isErrorSemua && (
+            <div className="flex flex-wrap items-center gap-4">
+              <Input
+                className="w-full max-w-xs"
+                placeholder="Cari kode atau nama akun..."
+                value={cari}
+                onChange={(e) => setCari(e.target.value)}
+              />
+              <div className="flex items-center gap-2">
+                <Checkbox id="hanya-mutasi" checked={hanyaBermutasi} onCheckedChange={(v) => setHanyaBermutasi(v === true)} />
+                <Label htmlFor="hanya-mutasi" className="font-normal text-sm cursor-pointer">Hanya akun yang ada mutasi</Label>
+              </div>
+            </div>
+            {!loadingSemua && periode.valid && ringkasanSemua.length === 0 && !isErrorSemua && (
               <p className="py-8 text-center text-muted-foreground">Tidak ada saldo awal atau mutasi pada periode dan unit ini.</p>
             )}
-            {groupsSemua.length > 0 && (
-              <Accordion type="multiple" className="w-full">
-                {groupsSemua.map((g) => (
-                  <AccordionItem key={g.akun.id} value={g.akun.id}>
-                    <AccordionTrigger className="hover:no-underline">
-                      <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-1 pr-3 text-left text-sm">
-                        <span className="font-medium">
-                          {g.akun.kode} - {g.akun.nama}
-                          {g.akun.aktif === false && <Badge variant="outline" className="ml-2">Nonaktif</Badge>}
-                        </span>
-                        <span className="flex flex-wrap gap-x-4 text-xs text-muted-foreground tabular-nums">
-                          <span>Awal {formatRupiah(Math.round(g.saldoAwal))}</span>
-                          <span>Debit {formatRupiah(Math.round(g.totalDebit))}</span>
-                          <span>Kredit {formatRupiah(Math.round(g.totalKredit))}</span>
-                          <span className="font-semibold text-foreground">Akhir {formatRupiah(Math.round(g.saldoAkhir))}</span>
-                        </span>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <MutasiTable saldoAwal={g.saldoAwal} rows={g.rows} />
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
+            {ringkasanSemua.length > 0 && tampilSemua.length === 0 && (
+              <p className="py-8 text-center text-muted-foreground">Tidak ada akun yang cocok dengan pencarian.</p>
             )}
-            {groupsSemua.length > 0 && (
+            {tampilSemua.length > 0 && (
+              <div>
+                <div className="hidden md:grid md:grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_8.5rem_8.5rem_3.5rem] gap-x-4 border-b px-1 pb-2 pr-8 text-xs font-medium text-muted-foreground">
+                  <span>Akun</span>
+                  <span className="text-right">Saldo Awal</span>
+                  <span className="text-right">Debit</span>
+                  <span className="text-right">Kredit</span>
+                  <span className="text-right">Saldo Akhir</span>
+                  <span className="text-right">Trx</span>
+                </div>
+                <Accordion type="multiple" className="w-full">
+                  {tampilSemua.map((r) => (
+                    <AccordionItem key={r.akun.id} value={r.akun.id}>
+                      <AccordionTrigger className="px-1 hover:no-underline">
+                        <div className="grid w-full items-center gap-x-4 gap-y-1 pr-3 text-left text-sm md:grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_8.5rem_8.5rem_3.5rem]">
+                          <span className="font-medium">
+                            {r.akun.kode} - {r.akun.nama}
+                            {r.akun.aktif === false && <Badge variant="outline" className="ml-2">Nonaktif</Badge>}
+                          </span>
+                          <span className="tabular-nums md:text-right">
+                            <span className="mr-1 text-xs text-muted-foreground md:hidden">Awal</span>{formatRupiah(Math.round(r.saldoAwal))}
+                          </span>
+                          <span className="tabular-nums md:text-right">
+                            <span className="mr-1 text-xs text-muted-foreground md:hidden">Debit</span>{formatRupiah(Math.round(r.totalDebit))}
+                          </span>
+                          <span className="tabular-nums md:text-right">
+                            <span className="mr-1 text-xs text-muted-foreground md:hidden">Kredit</span>{formatRupiah(Math.round(r.totalKredit))}
+                          </span>
+                          <span className="font-semibold tabular-nums md:text-right">
+                            <span className="mr-1 text-xs font-normal text-muted-foreground md:hidden">Akhir</span>{formatRupiah(Math.round(r.saldoAkhir))}
+                          </span>
+                          <span className="tabular-nums text-muted-foreground md:text-right">
+                            <span className="mr-1 text-xs md:hidden">Trx</span>{r.jumlah}
+                          </span>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        {periode.valid && (
+                          <MutasiAkunMalas
+                            akun={r.akun}
+                            tglAwal={periode.tglAwal}
+                            tglAkhir={periode.tglAkhir}
+                            departemenIds={departemenIds}
+                            includePenutup={tampilkanPenutup}
+                            excludeKoreksi={sembunyikanKoreksi}
+                          />
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </div>
+            )}
+            {tampilSemua.length > 0 && (
               <div className="p-3 bg-muted/50 rounded-md grid grid-cols-1 md:grid-cols-2 gap-2 text-right">
                 <div>
-                  <span className="text-sm text-muted-foreground mr-2">Total Debit (semua akun):</span>
-                  <span className="font-bold">{formatRupiah(Math.round(totalDebitSemua))}</span>
+                  <span className="text-sm text-muted-foreground mr-2">Total Debit ({tampilSemua.length} akun):</span>
+                  <span className="font-bold">{formatRupiah(Math.round(totalSemua.totalDebit))}</span>
                 </div>
                 <div>
-                  <span className="text-sm text-muted-foreground mr-2">Total Kredit (semua akun):</span>
-                  <span className="font-bold">{formatRupiah(Math.round(totalKreditSemua))}</span>
+                  <span className="text-sm text-muted-foreground mr-2">Total Kredit ({tampilSemua.length} akun):</span>
+                  <span className="font-bold">{formatRupiah(Math.round(totalSemua.totalKredit))}</span>
                 </div>
               </div>
             )}

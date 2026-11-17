@@ -44,9 +44,10 @@ describe("migrasi buku besar semua akun", () => {
 });
 
 describe("halaman Buku Besar", () => {
-  it("menyediakan pilihan Semua akun rekening dan memakai hook semua akun", () => {
+  it("menyediakan pilihan Semua akun rekening; layar memakai ringkasan, export memakai mutasi semua akun", () => {
     expect(page).toContain("Semua akun rekening");
-    expect(page).toContain("useBukuBesarSemua");
+    expect(page).toContain("useBukuBesarRingkasanSemua");
+    expect(page).toContain("fetchBukuBesarSemuaRinci");
     expect(hook).toContain('supabase.rpc("buku_besar_saldo_awal_semua"');
     expect(hook).toContain('.rpc("buku_besar_mutasi_semua"');
   });
