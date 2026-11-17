@@ -13,12 +13,18 @@ import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FilterToolbar, ActiveFilter } from "@/components/shared/FilterToolbar";
 import { Badge } from "@/components/ui/badge";
-import { useJurnalList, useJurnalPenginput, useJurnalDetail, useCreateJurnal, useUpdateJurnal, useDeleteJurnal, usePostJurnal, useAkunRekening, useKoreksiJurnal, useJurnalDikoreksiIds } from "@/hooks/useJurnal";
+import { useJurnalList, useJurnalPenginput, useJurnalDetail, useCreateJurnal, useUpdateJurnal, useDeleteJurnal, usePostJurnal, useAkunRekening, useKoreksiJurnal, useJurnalDikoreksiIds, fetchJurnalDetailMap } from "@/hooks/useJurnal";
 import { AkunCombobox } from "@/components/shared/AkunCombobox";
 import { RupiahInput } from "@/components/shared/RupiahInput";
 import { formatRupiah, useLembaga } from "@/hooks/useKeuangan";
 import { StatsCard } from "@/components/shared/StatsCard";
-import { Plus, Eye, Pencil, Trash2, Lock, Send, Search, BookOpen, CheckCircle, FileEdit, RotateCcw, Printer } from "lucide-react";
+import { Plus, Eye, Pencil, Trash2, Lock, Send, Search, BookOpen, CheckCircle, FileEdit, RotateCcw, Printer, FileSpreadsheet, Download, Loader2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  JURNAL_BULK_HEADERS, buildJurnalBulkRows, buildJurnalSingleAoa, downloadAoaCsv, downloadAoaXlsx,
+  isJurnalOtomatis, jurnalSingleFilename, type JurnalCell, type JurnalExportHeader,
+} from "@/lib/jurnalExport";
+import { getErrorMessage } from "@/lib/errorMessage";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
@@ -32,10 +38,6 @@ interface DetailRow {
 
 const defaultDari = format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), "yyyy-MM-dd");
 const defaultSampai = format(new Date(), "yyyy-MM-dd");
-
-// Jurnal online payment (webhook Midtrans) tidak punya penginput manusia —
-// dikenali dari referensi berupa order_id dengan prefix "HAT-"
-const isJurnalOtomatis = (referensi?: string | null) => !!referensi?.startsWith("HAT-");
 
 const PenginputCell = ({ nama, referensi }: { nama?: string | null; referensi?: string | null }) => {
   if (nama) return <>{nama}</>;
@@ -365,6 +367,42 @@ export default function JurnalUmum() {
     }] : []),
   ];
 
+  // ─── Export ───
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const [exportingMassal, setExportingMassal] = useState(false);
+
+  // Export 1 jurnal (header + semua baris akun), isinya sama dengan dialog "Lihat detail".
+  const exportSatuJurnal = async (j: JurnalExportHeader & { id: string }) => {
+    setExportingId(j.id);
+    try {
+      const detailMap = await fetchJurnalDetailMap([j.id]);
+      const aoa = buildJurnalSingleAoa({ ...j, details: detailMap[j.id] || [] }, !!dikoreksiIds?.has(j.id));
+      downloadAoaXlsx(aoa, jurnalSingleFilename(j.nomor), "Jurnal");
+    } catch (e) {
+      toast.error(`Gagal export jurnal: ${getErrorMessage(e)}`);
+    } finally {
+      setExportingId(null);
+    }
+  };
+
+  // Export semua jurnal sesuai filter aktif: 1 baris = 1 baris akun jurnal.
+  const exportMassal = async (tipe: "xlsx" | "csv") => {
+    if (!filteredJurnal.length) return;
+    setExportingMassal(true);
+    try {
+      const detailMap = await fetchJurnalDetailMap(filteredJurnal.map((j) => j.id));
+      const rows = buildJurnalBulkRows(filteredJurnal, detailMap, dikoreksiIds);
+      const aoa: JurnalCell[][] = [[...JURNAL_BULK_HEADERS], ...rows];
+      const nama = `jurnal-${tanggalDari || "awal"}-sd-${tanggalSampai || "akhir"}`;
+      if (tipe === "xlsx") downloadAoaXlsx(aoa, nama, "Jurnal Umum");
+      else downloadAoaCsv(aoa, nama);
+    } catch (e) {
+      toast.error(`Gagal export jurnal: ${getErrorMessage(e)}`);
+    } finally {
+      setExportingMassal(false);
+    }
+  };
+
   const columns: DataTableColumn<any>[] = [
     { key: "nomor", label: "Nomor", sortable: true },
     {
@@ -416,6 +454,19 @@ export default function JurnalUmum() {
               </Button>
             </TooltipTrigger>
             <TooltipContent>Lihat detail</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost" size="icon" className="h-8 w-8"
+                disabled={exportingId === r.id}
+                aria-label="Export jurnal ini"
+                onClick={() => exportSatuJurnal(r)}
+              >
+                {exportingId === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Export jurnal ini (Excel)</TooltipContent>
           </Tooltip>
 
           {r.status === "draft" ? (
@@ -599,8 +650,26 @@ export default function JurnalUmum() {
         loading={isLoading}
         pageSize={20}
         searchable={false}
-        exportable
-        exportFilename={`jurnal-${tanggalDari || "awal"}-sd-${tanggalSampai || "akhir"}`}
+        actions={
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" disabled={!filteredJurnal.length || exportingMassal}>
+                {exportingMassal ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => exportMassal("xlsx")}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Export Excel (.xlsx)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportMassal("csv")}>
+                <Download className="mr-2 h-4 w-4" />
+                Export CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
       />
 
       {/* Form Dialog */}

@@ -145,10 +145,10 @@ export default function JurnalUmumDesktopLayout() {
             white-space: nowrap;
           }
 
-          /* Aksi */
+          /* Aksi: jurnal draft memuat 5 tombol (detail, export, edit, hapus, posting). */
           .jurnal-umum-desktop > div > :nth-child(4) > :nth-child(2) th:nth-child(10),
           .jurnal-umum-desktop > div > :nth-child(4) > :nth-child(2) td:nth-child(10) {
-            width: 100px;
+            width: 204px;
             white-space: nowrap;
           }
         }

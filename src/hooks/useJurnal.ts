@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { fetchAllPages } from "@/lib/fetchAll";
+import type { JurnalExportDetail } from "@/lib/jurnalExport";
 
 // ─── Akun Rekening ───
 export function useAkunRekening() {
@@ -182,6 +184,31 @@ export function useJurnalDetail(jurnalId?: string) {
       return { ...(jurnal as any), details: details as any[] };
     },
   });
+}
+
+// Ambil baris detail banyak jurnal sekaligus (untuk export), dikelompokkan per jurnal_id.
+// Id dipecah per 100 agar URL filter .in() aman, tiap pecahan dipaginasi karena batas 1000 baris.
+export async function fetchJurnalDetailMap(jurnalIds: string[]): Promise<Record<string, JurnalExportDetail[]>> {
+  const map: Record<string, JurnalExportDetail[]> = {};
+  const CHUNK = 100;
+  for (let i = 0; i < jurnalIds.length; i += CHUNK) {
+    const ids = jurnalIds.slice(i, i + CHUNK);
+    const rows = await fetchAllPages<JurnalExportDetail & { jurnal_id: string }>((from, to) =>
+      supabase
+        .from("jurnal_detail")
+        .select("*, akun_rekening:akun_id(kode, nama)")
+        .in("jurnal_id", ids)
+        .order("jurnal_id")
+        .order("urutan")
+        .order("id")
+        .range(from, to),
+    );
+    for (const r of rows) {
+      if (!map[r.jurnal_id]) map[r.jurnal_id] = [];
+      map[r.jurnal_id].push(r);
+    }
+  }
+  return map;
 }
 
 // ─── Period Lock Check (unit-aware) — sama dengan useKeuangan.ts ───
