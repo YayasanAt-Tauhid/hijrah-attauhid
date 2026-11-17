@@ -382,6 +382,63 @@ export default function BukuBesar() {
 
       {modeSemua && (
         <Card>
+          <CardContent className="pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+              <div><span className="text-muted-foreground">Akun:</span> <span className="font-semibold">Semua akun rekening</span></div>
+              <div><span className="text-muted-foreground">Unit:</span> <span className="font-semibold">{labelUnit}</span></div>
+              <div><span className="text-muted-foreground">Periode:</span> <span className="font-semibold">{periodeLabel || "-"}</span></div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {akunId && !modeSemua && (
+        <Card>
+          <CardContent className="pt-6">
+            {periode.valid && (
+              <div className="mb-3 p-3 bg-muted/50 rounded-md flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">
+                  Saldo Awal per {tglPendek(periode.tglAwal)} ({labelUnit})
+                </span>
+                <span className="font-semibold">{formatRupiah(Math.round(saldoAwal))}</span>
+              </div>
+            )}
+            <DataTable
+              columns={columns}
+              data={computedData}
+              loading={isLoading}
+              pageSize={50}
+              actions={
+                <ExportMenu
+                  disabled={!periode.valid || (computedData.length === 0 && saldoAwal === 0)}
+                  onExcel={() => exportSingle("xlsx")}
+                  onCsv={() => exportSingle("csv")}
+                  onPrint={() => window.print()}
+                />
+              }
+            />
+            {computedData.length > 0 && (
+              <div className="mt-4 p-3 bg-muted/50 rounded-md grid grid-cols-1 md:grid-cols-3 gap-2 text-right">
+                <div>
+                  <span className="text-sm text-muted-foreground mr-2">Total Debit:</span>
+                  <span className="font-bold">{formatRupiah(Math.round(totalDebit))}</span>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground mr-2">Total Kredit:</span>
+                  <span className="font-bold">{formatRupiah(Math.round(totalKredit))}</span>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground mr-2">Saldo Akhir:</span>
+                  <span className="text-lg font-bold">{formatRupiah(Math.round(saldoAkhir))}</span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {modeSemua && (
+        <Card>
           <CardContent className="pt-6 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-sm text-muted-foreground">
