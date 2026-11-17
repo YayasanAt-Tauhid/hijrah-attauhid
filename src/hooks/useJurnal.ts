@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { fetchAllPages } from "@/lib/fetchAll";
+import { fetchRpcAllRows } from "@/lib/rpcPaging";
 import type { JurnalExportDetail } from "@/lib/jurnalExport";
 import type { AkunBB, RingkasanRowBB } from "@/lib/bukuBesar";
 
@@ -787,9 +788,47 @@ export interface BukuBesarData {
   mutasi: BukuBesarMutasiRow[];
 }
 
-/** Buku besar per akun: saldo awal periode + mutasi dihitung di server
- *  (RPC buku_besar_saldo_awal & buku_besar_mutasi, exclude jurnal penutup
- *  kecuali diminta). Mutasi diambil per 1000 baris karena batas PostgREST. */
+export interface BukuBesarAkunParams {
+  akunId?: string;
+  tglAwal?: string;
+  tglAkhir?: string;
+  departemenIds?: string[];
+  includePenutup?: boolean;
+  excludeKoreksi?: boolean;
+}
+
+/** Saldo awal periode + seluruh mutasi satu akun (RPC buku_besar_saldo_awal & buku_besar_mutasi,
+ *  tanpa jurnal penutup kecuali diminta). Rustbase mengabaikan .range() pada RPC dan selalu
+ *  mengembalikan SEMUA baris, jadi paginasi memakai fetchRpcAllRows (tahan terhadap kedua
+ *  perilaku). Loop manual "lanjut selama halaman penuh" berputar tanpa akhir untuk akun
+ *  dengan >= 1000 transaksi. */
+export async function fetchBukuBesarAkun(p: BukuBesarAkunParams): Promise<BukuBesarData> {
+  const depts = p.departemenIds && p.departemenIds.length > 0 ? p.departemenIds : null;
+
+  const { data: saldoAwalData, error: saErr } = await supabase.rpc("buku_besar_saldo_awal", {
+    p_akun_id: p.akunId,
+    p_tgl_awal: p.tglAwal,
+    p_departemen_ids: depts,
+    p_exclude_koreksi: p.excludeKoreksi ?? false,
+  });
+  if (saErr) throw saErr;
+
+  const rows = await fetchRpcAllRows<BukuBesarMutasiRow>((from, to) =>
+    supabase
+      .rpc("buku_besar_mutasi", {
+        p_akun_id: p.akunId,
+        p_tgl_awal: p.tglAwal,
+        p_tgl_akhir: p.tglAkhir,
+        p_departemen_ids: depts,
+        p_include_penutup: p.includePenutup ?? false,
+        p_exclude_koreksi: p.excludeKoreksi ?? false,
+      })
+      .range(from, to),
+  );
+  const mutasi = rows.map((r) => ({ ...r, debit: Number(r.debit || 0), kredit: Number(r.kredit || 0) }));
+  return { saldoAwal: Number(saldoAwalData || 0), mutasi };
+}
+
 export function useBukuBesar(
   akunId?: string,
   tglAwal?: string,
@@ -801,40 +840,7 @@ export function useBukuBesar(
   return useQuery({
     queryKey: ["buku_besar", akunId, tglAwal, tglAkhir, departemenIds, includePenutup, excludeKoreksi],
     enabled: !!akunId && !!tglAwal && !!tglAkhir,
-    queryFn: async (): Promise<BukuBesarData> => {
-      const depts = departemenIds && departemenIds.length > 0 ? departemenIds : null;
-
-      const { data: saldoAwalData, error: saErr } = await supabase.rpc("buku_besar_saldo_awal", {
-        p_akun_id: akunId,
-        p_tgl_awal: tglAwal,
-        p_departemen_ids: depts,
-        p_exclude_koreksi: excludeKoreksi ?? false,
-      });
-      if (saErr) throw saErr;
-
-      const pageSize = 1000;
-      const mutasi: BukuBesarMutasiRow[] = [];
-      for (let from = 0; ; from += pageSize) {
-        const { data, error } = await supabase
-          .rpc("buku_besar_mutasi", {
-            p_akun_id: akunId,
-            p_tgl_awal: tglAwal,
-            p_tgl_akhir: tglAkhir,
-            p_departemen_ids: depts,
-            p_include_penutup: includePenutup ?? false,
-            p_exclude_koreksi: excludeKoreksi ?? false,
-          })
-          .range(from, from + pageSize - 1);
-        if (error) throw error;
-        const rows = (data || []) as any[];
-        for (const r of rows) {
-          mutasi.push({ ...r, debit: Number(r.debit || 0), kredit: Number(r.kredit || 0) });
-        }
-        if (rows.length < pageSize) break;
-      }
-
-      return { saldoAwal: Number(saldoAwalData || 0), mutasi };
-    },
+    queryFn: () => fetchBukuBesarAkun({ akunId, tglAwal, tglAkhir, departemenIds, includePenutup, excludeKoreksi }),
   });
 }
 
@@ -898,8 +904,8 @@ export function useBukuBesarRingkasanSemua(opts: BukuBesarSemuaParams & { enable
     queryFn: async (): Promise<BukuBesarRingkasanData> => {
       const depts = departemenIds && departemenIds.length > 0 ? departemenIds : null;
       const saldoAwal = await fetchSaldoAwalSemua({ tglAwal, departemenIds, excludeKoreksi });
-      // Urutan di fungsi database stabil (kode akun, id akun) sehingga aman dipaginasi.
-      const rows = await fetchAllPages((from, to) =>
+      // Rustbase mengabaikan range pada RPC (lihat rpcPaging.ts); urutan fungsi stabil (kode akun, id akun).
+      const rows = await fetchRpcAllRows((from, to) =>
         supabase
           .rpc("buku_besar_ringkasan_semua", {
             p_tgl_awal: tglAwal!,
@@ -926,8 +932,8 @@ export function useBukuBesarRingkasanSemua(opts: BukuBesarSemuaParams & { enable
 export async function fetchBukuBesarSemuaRinci(p: BukuBesarSemuaParams): Promise<BukuBesarSemuaData> {
   const depts = p.departemenIds && p.departemenIds.length > 0 ? p.departemenIds : null;
   const saldoAwal = await fetchSaldoAwalSemua(p);
-  // Urutan di fungsi database stabil (kode akun, tanggal, nomor, urutan, id) sehingga aman dipaginasi.
-  const rows = await fetchAllPages((from, to) =>
+  // Rustbase mengabaikan range pada RPC (lihat rpcPaging.ts); urutan fungsi stabil (kode akun, tanggal, nomor, urutan, id).
+  const rows = await fetchRpcAllRows((from, to) =>
     supabase
       .rpc("buku_besar_mutasi_semua", {
         p_tgl_awal: p.tglAwal!,
