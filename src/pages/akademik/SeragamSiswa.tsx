@@ -10,10 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   SERAGAM_EXPORT_COLUMNS,
-  SERAGAM_REKAP_COLUMNS,
   buildSeragamSiswaRows,
   filterSeragamSiswaRows,
-  rekapUangPangkalPerLembaga,
+  rekapSeragam,
   seragamExportColumns,
   seragamExportRows,
   seragamKelengkapanLabel,
@@ -64,6 +63,7 @@ export default function SeragamSiswa() {
   const rows = useMemo(() => buildSeragamSiswaRows(siswaList, departemenList, showUangPangkal ? byStudent : undefined),
     [siswaList, departemenList, showUangPangkal, byStudent]);
   const filtered = useMemo(() => filterSeragamSiswaRows(rows, filters), [rows, filters]);
+  const rekap = useMemo(() => rekapSeragam(filtered), [filtered]);
 
   // Pilihan filter diturunkan dari data yang boleh dilihat pengguna (admin_tu hanya lembaganya).
   const lembagaOptions = useMemo(() => {
@@ -215,7 +215,7 @@ export default function SeragamSiswa() {
           columns={showUangPangkal ? seragamExportColumns(true) : SERAGAM_EXPORT_COLUMNS}
           filename="seragam-siswa"
           sheetName="Seragam Siswa"
-          extraSheets={showUangPangkal ? [{ name: "Rekap Uang Pangkal", columns: SERAGAM_REKAP_COLUMNS, data: rekapUangPangkalPerLembaga(filtered) }] : undefined}
+          extraSheets={[{ name: "Rekap Seragam", columns: rekap.columns, data: rekap.data }]}
         />}
       />
     </div>

@@ -164,16 +164,16 @@ describe("halaman Seragam Siswa", () => {
     expect(screen.queryByText("Ahmad Aktif")).toBeNull();
   });
 
-  it("ekspor peran keuangan memuat sheet rekap; peran lain tidak melihat data keuangan sama sekali", () => {
+  it("ekspor memuat sheet Rekap Seragam untuk semua peran; peran lain tidak melihat data keuangan sama sekali", () => {
     const { unmount } = render(<SeragamSiswa />);
-    expect(screen.getByRole("button", { name: /Ekspor/ }).getAttribute("data-sheets")).toBe("Rekap Uang Pangkal");
+    expect(screen.getByRole("button", { name: /Ekspor/ }).getAttribute("data-sheets")).toBe("Rekap Seragam");
     unmount();
     mocks.finance = false;
     render(<SeragamSiswa />);
     expect(screen.queryByRole("columnheader", { name: /Uang Pangkal/ })).toBeNull();
     expect(screen.queryByLabelText("Uang pangkal")).toBeNull();
     expect(screen.queryByText("Rp 10.100.000")).toBeNull();
-    expect(screen.getByRole("button", { name: /Ekspor/ }).getAttribute("data-sheets")).toBe("");
+    expect(screen.getByRole("button", { name: /Ekspor/ }).getAttribute("data-sheets")).toBe("Rekap Seragam");
   });
 
   it("ekspor mengikuti hasil filter", () => {

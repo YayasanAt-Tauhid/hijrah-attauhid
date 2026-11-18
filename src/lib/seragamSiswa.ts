@@ -2,10 +2,11 @@ import {
   defaultUniformSizes,
   readUniformSizes,
   uniformDepartment,
+  UNIFORM_SIZES,
   UNIFORM_SLOT_COUNT,
   type UniformSize,
 } from "@/lib/ukuranSeragam";
-import { MONITOR_PAYMENT_LABELS, type MonitorPaymentStatus } from "@/lib/spmbPaymentMonitor";
+import type { MonitorPaymentStatus } from "@/lib/spmbPaymentMonitor";
 import { uangPangkalAmounts, uangPangkalKeterangan, uangPangkalStatus, type UangPangkalInfo } from "@/lib/seragamUangPangkal";
 
 /** Status siswa yang tampil di daftar seragam: aktif dan calon yang sudah diterima. */
@@ -213,49 +214,59 @@ function uangPangkalExportCells(row: SeragamSiswaRow): Record<string, string | n
   };
 }
 
-export type UangPangkalRekapRow = {
-  lembaga: string; siswa: number; nominal: number; dibayar: number; sisa: number;
-  lunas: number; sebagian: number; belumBayar: number; belumAdaTagihan: number; perluVerifikasi: number;
-};
+export type SeragamRekapColumn = { key: string; label: string };
 
-export const SERAGAM_REKAP_COLUMNS = [
-  { key: "lembaga", label: "Lembaga" },
-  { key: "siswa", label: "Jumlah Siswa" },
-  { key: "nominal", label: "Nominal Uang Pangkal" },
-  { key: "dibayar", label: "Jumlah Dibayar" },
-  { key: "sisa", label: "Sisa" },
-  { key: "lunas", label: MONITOR_PAYMENT_LABELS.lunas },
-  { key: "sebagian", label: MONITOR_PAYMENT_LABELS.sebagian },
-  { key: "belumBayar", label: MONITOR_PAYMENT_LABELS.belum_bayar },
-  { key: "belumAdaTagihan", label: MONITOR_PAYMENT_LABELS.belum_ada_tagihan },
-  { key: "perluVerifikasi", label: MONITOR_PAYMENT_LABELS.perlu_verifikasi },
-];
+const ukuranKey = (ukuran: string) => `ukuran_${ukuran.replace(/\s+/g, "_")}`;
 
-const emptyRekap = (lembaga: string): UangPangkalRekapRow => ({
-  lembaga, siswa: 0, nominal: 0, dibayar: 0, sisa: 0, lunas: 0, sebagian: 0, belumBayar: 0, belumAdaTagihan: 0, perluVerifikasi: 0,
-});
+/**
+ * Rekap seragam untuk sheet kedua file Excel: jumlah siswa per ukuran untuk tiap lembaga, jenis kelamin,
+ * dan nama seragam. Hanya stel yang nama dan ukurannya sama-sama terisi yang dihitung; mengikuti baris
+ * yang sedang difilter. Ukuran di luar daftar baku mendapat kolom tambahan. Baris terakhir TOTAL.
+ */
+export function rekapSeragam(rows: SeragamSiswaRow[]): { columns: SeragamRekapColumn[]; data: Record<string, string | number>[] } {
+  const groups = new Map<string, { lembaga: string; jenisKelamin: string; seragam: string; counts: Map<string, number> }>();
+  const sizeSet = new Set<string>(UNIFORM_SIZES);
+  const extraSizes = new Set<string>();
 
-function addToRekap(target: UangPangkalRekapRow, row: SeragamSiswaRow) {
-  const amounts = uangPangkalAmounts(row.uangPangkal);
-  target.siswa += 1;
-  if (amounts) { target.nominal += amounts.nominal; target.dibayar += amounts.dibayar; target.sisa += amounts.sisa; }
-  if (row.statusUangPangkal === "lunas") target.lunas += 1;
-  else if (row.statusUangPangkal === "sebagian") target.sebagian += 1;
-  else if (row.statusUangPangkal === "belum_bayar") target.belumBayar += 1;
-  else if (row.statusUangPangkal === "perlu_verifikasi") target.perluVerifikasi += 1;
-  else target.belumAdaTagihan += 1;
-}
-
-/** Rekap per lembaga untuk sheet kedua file Excel; mengikuti baris yang sedang difilter. Baris terakhir TOTAL. */
-export function rekapUangPangkalPerLembaga(rows: SeragamSiswaRow[]): UangPangkalRekapRow[] {
-  const groups = new Map<string, UangPangkalRekapRow>();
-  const total = emptyRekap("TOTAL");
   for (const row of rows) {
-    const group = groups.get(row.lembaga) ?? emptyRekap(row.lembaga);
-    groups.set(row.lembaga, group);
-    addToRekap(group, row);
-    addToRekap(total, row);
+    for (const stel of row.stel) {
+      if (!stel.jenis || !stel.ukuran) continue;
+      if (!sizeSet.has(stel.ukuran)) extraSizes.add(stel.ukuran);
+      const key = [row.lembaga, row.jenisKelamin, stel.jenis].join("\u0000");
+      const group = groups.get(key) ?? { lembaga: row.lembaga, jenisKelamin: row.jenisKelamin, seragam: stel.jenis, counts: new Map() };
+      group.counts.set(stel.ukuran, (group.counts.get(stel.ukuran) ?? 0) + 1);
+      groups.set(key, group);
+    }
   }
-  const sorted = [...groups.values()].sort((a, b) => a.lembaga.localeCompare(b.lembaga, "id"));
-  return [...sorted, total];
+
+  const sizes = [...UNIFORM_SIZES, ...[...extraSizes].sort((a, b) => a.localeCompare(b, "id"))];
+  const genderOrder = (value: string) => (value === "Ikhwan" ? 0 : value === "Akhwat" ? 1 : 2);
+  const sorted = [...groups.values()].sort((a, b) =>
+    a.lembaga.localeCompare(b.lembaga, "id") || genderOrder(a.jenisKelamin) - genderOrder(b.jenisKelamin) || a.seragam.localeCompare(b.seragam, "id"));
+
+  const toRow = (lembaga: string, jenisKelamin: string, seragam: string, counts: Map<string, number>) => {
+    const row: Record<string, string | number> = { lembaga, jenisKelamin, seragam };
+    let total = 0;
+    for (const size of sizes) {
+      const count = counts.get(size) ?? 0;
+      row[ukuranKey(size)] = count;
+      total += count;
+    }
+    row.total = total;
+    return row;
+  };
+
+  const totals = new Map<string, number>();
+  for (const group of sorted) for (const [size, count] of group.counts) totals.set(size, (totals.get(size) ?? 0) + count);
+
+  return {
+    columns: [
+      { key: "lembaga", label: "Lembaga" },
+      { key: "jenisKelamin", label: "Jenis Kelamin" },
+      { key: "seragam", label: "Seragam" },
+      ...sizes.map((size) => ({ key: ukuranKey(size), label: size })),
+      { key: "total", label: "Total" },
+    ],
+    data: [...sorted.map((group) => toRow(group.lembaga, group.jenisKelamin, group.seragam, group.counts)), toRow("TOTAL", "", "", totals)],
+  };
 }

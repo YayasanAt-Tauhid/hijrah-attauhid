@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   SERAGAM_EXPORT_COLUMNS,
-  SERAGAM_REKAP_COLUMNS,
   buildSeragamSiswaRows,
   filterSeragamSiswaRows,
-  rekapUangPangkalPerLembaga,
+  rekapSeragam,
   seragamExportColumns,
   seragamExportRows,
   seragamStelLabel,
@@ -242,14 +241,42 @@ describe("uang pangkal pada daftar seragam", () => {
     expect(seragamExportColumns(true).map((column) => column.key).slice(-4)).toEqual(["uangPangkalNominal", "uangPangkalDibayar", "uangPangkalSisa", "uangPangkalKeterangan"]);
     expect(seragamExportColumns(false)).toEqual(SERAGAM_EXPORT_COLUMNS);
   });
+});
 
-  it("rekap per lembaga menjumlahkan nominal, dibayar, sisa, dan jumlah per status, dengan baris total", () => {
-    const rekap = rekapUangPangkalPerLembaga(rows);
-    expect(rekap.map((row) => row.lembaga)).toEqual(["SD", "SMP", "TOTAL"]);
-    expect(rekap[0]).toMatchObject({ siswa: 2, nominal: 10_100_000, dibayar: 2_525_000, sisa: 7_575_000, lunas: 0, sebagian: 1, belumBayar: 0, belumAdaTagihan: 1, perluVerifikasi: 0 });
-    expect(rekap[1]).toMatchObject({ siswa: 1, nominal: 13_100_000, dibayar: 13_100_000, sisa: 0, lunas: 1 });
-    expect(rekap[2]).toMatchObject({ siswa: 3, nominal: 23_200_000, dibayar: 15_625_000, sisa: 7_575_000, lunas: 1, sebagian: 1, belumAdaTagihan: 1 });
-    expect(SERAGAM_REKAP_COLUMNS.map((column) => column.key)).toEqual(Object.keys(rekap[0]));
-    expect(rekapUangPangkalPerLembaga([])).toEqual([expect.objectContaining({ lembaga: "TOTAL", siswa: 0, nominal: 0 })]);
+describe("rekapSeragam", () => {
+  const rows = buildSeragamSiswaRows([
+    siswa({ id: "1", nama: "Ahmad", departemen_id: "sd", siswa_detail: { ukuran_seragam: FULL } }),
+    siswa({ id: "2", nama: "Budi", departemen_id: "sd", siswa_detail: { ukuran_seragam: [
+      { jenis: "Olah raga", ukuran: "S" }, { jenis: "Coklat", ukuran: "M" }, { jenis: "Pramuka", ukuran: "" }, { jenis: "", ukuran: "" }, { jenis: "", ukuran: "L" },
+    ] } }),
+    siswa({ id: "3", nama: "Aisyah", departemen_id: "smp", jenis_kelamin: "P", siswa_detail: { ukuran_seragam: [{ jenis: "Olah raga", ukuran: "S" }] } }),
+  ], departemen);
+
+  it("menghitung siswa per ukuran untuk tiap lembaga, jenis kelamin, dan seragam, dengan baris TOTAL", () => {
+    const { columns, data } = rekapSeragam(rows);
+    expect(columns.map((column) => column.label)).toEqual(["Lembaga", "Jenis Kelamin", "Seragam", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "ALL SIZE", "Total"]);
+    const pick = (row: Record<string, string | number>) => [row.lembaga, row.jenisKelamin, row.seragam, row.total];
+    expect(data.map(pick)).toEqual([
+      ["SD", "Ikhwan", "Coklat", 2], ["SD", "Ikhwan", "Gamis Biru", 1], ["SD", "Ikhwan", "Olah raga", 2],
+      ["SD", "Ikhwan", "Pramuka", 1], ["SD", "Ikhwan", "Putih Merah", 1], ["SMP", "Akhwat", "Olah raga", 1], ["TOTAL", "", "", 8],
+    ]);
+    expect(data[0]).toMatchObject({ ukuran_M: 1, ukuran_L: 1, ukuran_S: 0 });
+    expect(data[2]).toMatchObject({ ukuran_S: 2, ukuran_M: 0 });
+    expect(data[6]).toMatchObject({ ukuran_S: 3, ukuran_M: 2, ukuran_L: 1, ukuran_XL: 1, ukuran_XXL: 1, ukuran_ALL_SIZE: 0 });
+    expect(columns.map((column) => column.key)).toEqual(Object.keys(data[0]));
+  });
+
+  it("mengabaikan stel tanpa nama atau tanpa ukuran, dan menambah kolom untuk ukuran di luar daftar baku", () => {
+    const extra = buildSeragamSiswaRows([
+      siswa({ id: "4", nama: "Cici", departemen_id: "sd", siswa_detail: { ukuran_seragam: [{ jenis: "Olah raga", ukuran: "5XL" }] } }),
+    ], departemen);
+    const { columns, data } = rekapSeragam(extra);
+    expect(columns.map((column) => column.label).slice(-3)).toEqual(["ALL SIZE", "5XL", "Total"]);
+    expect(data[0]).toMatchObject({ seragam: "Olah raga", ukuran_5XL: 1, total: 1 });
+  });
+
+  it("tanpa data hanya memuat baris TOTAL bernilai nol", () => {
+    const { data } = rekapSeragam([]);
+    expect(data).toEqual([expect.objectContaining({ lembaga: "TOTAL", total: 0, ukuran_S: 0 })]);
   });
 });
