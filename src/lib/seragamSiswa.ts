@@ -5,6 +5,8 @@ import {
   UNIFORM_SLOT_COUNT,
   type UniformSize,
 } from "@/lib/ukuranSeragam";
+import { MONITOR_PAYMENT_LABELS, type MonitorPaymentStatus } from "@/lib/spmbPaymentMonitor";
+import { uangPangkalAmounts, uangPangkalKeterangan, uangPangkalStatus, type UangPangkalInfo } from "@/lib/seragamUangPangkal";
 
 /** Status siswa yang tampil di daftar seragam: aktif dan calon yang sudah diterima. */
 export const SERAGAM_SISWA_STATUSES = ["aktif", "diterima"] as const;
@@ -56,6 +58,9 @@ export type SeragamSiswaRow = {
   /** Jumlah stel yang nama dan ukurannya sama-sama tersimpan. */
   terisi: number;
   kelengkapan: SeragamKelengkapan;
+  /** Dari Monitoring Pembayaran SPMB; null bila tidak ada datanya (atau peran tidak berhak melihat). */
+  uangPangkal: UangPangkalInfo | null;
+  statusUangPangkal: MonitorPaymentStatus;
 };
 
 function firstDetail(value: unknown): Record<string, unknown> {
@@ -67,7 +72,11 @@ function isSeragamStatus(value: unknown): value is SeragamSiswaStatus {
   return (SERAGAM_SISWA_STATUSES as readonly string[]).includes(String(value));
 }
 
-export function buildSeragamSiswaRows(list: SeragamSiswaSource[], departemen: DepartemenRef[]): SeragamSiswaRow[] {
+export function buildSeragamSiswaRows(
+  list: SeragamSiswaSource[],
+  departemen: DepartemenRef[],
+  uangPangkal?: ReadonlyMap<string, UangPangkalInfo>,
+): SeragamSiswaRow[] {
   const rows: SeragamSiswaRow[] = [];
   for (const siswa of list) {
     if (!isSeragamStatus(siswa.status)) continue;
@@ -102,6 +111,8 @@ export function buildSeragamSiswaRows(list: SeragamSiswaSource[], departemen: De
       stel,
       terisi,
       kelengkapan,
+      uangPangkal: uangPangkal?.get(siswa.id) ?? null,
+      statusUangPangkal: uangPangkalStatus(uangPangkal?.get(siswa.id)),
     });
   }
   return rows.sort((a, b) => a.nama.localeCompare(b.nama, "id") || a.id.localeCompare(b.id));
@@ -117,6 +128,8 @@ export type SeragamSiswaFilters = {
   /** Sama seperti filter Tahun ajaran tujuan dan Gelombang di halaman SPMB. */
   tahunId: string;
   gelombangId: string;
+  /** Status uang pangkal: "all" atau salah satu kunci MONITOR_PAYMENT_LABELS. */
+  uangPangkal: string;
 };
 
 export function filterSeragamSiswaRows(rows: SeragamSiswaRow[], filters: SeragamSiswaFilters): SeragamSiswaRow[] {
@@ -130,6 +143,7 @@ export function filterSeragamSiswaRows(rows: SeragamSiswaRow[], filters: Seragam
     if (filters.kelengkapan !== "all" && row.kelengkapan !== filters.kelengkapan) return false;
     if (filters.tahunId !== "all" && row.tahunAjaranId !== filters.tahunId) return false;
     if (filters.gelombangId !== "all" && row.gelombangId !== filters.gelombangId) return false;
+    if (filters.uangPangkal !== "all" && row.statusUangPangkal !== filters.uangPangkal) return false;
     return true;
   });
 }
@@ -160,7 +174,18 @@ export const SERAGAM_EXPORT_COLUMNS = [
   { key: "kelengkapan", label: "Kelengkapan" },
 ];
 
-export function seragamExportRows(rows: SeragamSiswaRow[]): Record<string, string>[] {
+export const SERAGAM_UANG_PANGKAL_EXPORT_COLUMNS = [
+  { key: "uangPangkalNominal", label: "Nominal Uang Pangkal" },
+  { key: "uangPangkalDibayar", label: "Jumlah Dibayar Uang Pangkal" },
+  { key: "uangPangkalSisa", label: "Sisa Uang Pangkal" },
+  { key: "uangPangkalKeterangan", label: "Keterangan Uang Pangkal" },
+];
+
+export function seragamExportColumns(withUangPangkal: boolean) {
+  return withUangPangkal ? [...SERAGAM_EXPORT_COLUMNS, ...SERAGAM_UANG_PANGKAL_EXPORT_COLUMNS] : SERAGAM_EXPORT_COLUMNS;
+}
+
+export function seragamExportRows(rows: SeragamSiswaRow[], options: { uangPangkal?: boolean } = {}): Record<string, string | number>[] {
   return rows.map((row) => ({
     nama: row.nama,
     nis: row.nis,
@@ -174,5 +199,63 @@ export function seragamExportRows(rows: SeragamSiswaRow[]): Record<string, strin
     stel4: seragamStelLabel(row.stel[3]),
     stel5: seragamStelLabel(row.stel[4]),
     kelengkapan: seragamKelengkapanLabel(row.kelengkapan),
+    ...(options.uangPangkal ? uangPangkalExportCells(row) : {}),
   }));
+}
+
+function uangPangkalExportCells(row: SeragamSiswaRow): Record<string, string | number> {
+  const amounts = uangPangkalAmounts(row.uangPangkal);
+  return {
+    uangPangkalNominal: amounts ? amounts.nominal : "",
+    uangPangkalDibayar: amounts ? amounts.dibayar : "",
+    uangPangkalSisa: amounts ? amounts.sisa : "",
+    uangPangkalKeterangan: uangPangkalKeterangan(row.uangPangkal),
+  };
+}
+
+export type UangPangkalRekapRow = {
+  lembaga: string; siswa: number; nominal: number; dibayar: number; sisa: number;
+  lunas: number; sebagian: number; belumBayar: number; belumAdaTagihan: number; perluVerifikasi: number;
+};
+
+export const SERAGAM_REKAP_COLUMNS = [
+  { key: "lembaga", label: "Lembaga" },
+  { key: "siswa", label: "Jumlah Siswa" },
+  { key: "nominal", label: "Nominal Uang Pangkal" },
+  { key: "dibayar", label: "Jumlah Dibayar" },
+  { key: "sisa", label: "Sisa" },
+  { key: "lunas", label: MONITOR_PAYMENT_LABELS.lunas },
+  { key: "sebagian", label: MONITOR_PAYMENT_LABELS.sebagian },
+  { key: "belumBayar", label: MONITOR_PAYMENT_LABELS.belum_bayar },
+  { key: "belumAdaTagihan", label: MONITOR_PAYMENT_LABELS.belum_ada_tagihan },
+  { key: "perluVerifikasi", label: MONITOR_PAYMENT_LABELS.perlu_verifikasi },
+];
+
+const emptyRekap = (lembaga: string): UangPangkalRekapRow => ({
+  lembaga, siswa: 0, nominal: 0, dibayar: 0, sisa: 0, lunas: 0, sebagian: 0, belumBayar: 0, belumAdaTagihan: 0, perluVerifikasi: 0,
+});
+
+function addToRekap(target: UangPangkalRekapRow, row: SeragamSiswaRow) {
+  const amounts = uangPangkalAmounts(row.uangPangkal);
+  target.siswa += 1;
+  if (amounts) { target.nominal += amounts.nominal; target.dibayar += amounts.dibayar; target.sisa += amounts.sisa; }
+  if (row.statusUangPangkal === "lunas") target.lunas += 1;
+  else if (row.statusUangPangkal === "sebagian") target.sebagian += 1;
+  else if (row.statusUangPangkal === "belum_bayar") target.belumBayar += 1;
+  else if (row.statusUangPangkal === "perlu_verifikasi") target.perluVerifikasi += 1;
+  else target.belumAdaTagihan += 1;
+}
+
+/** Rekap per lembaga untuk sheet kedua file Excel; mengikuti baris yang sedang difilter. Baris terakhir TOTAL. */
+export function rekapUangPangkalPerLembaga(rows: SeragamSiswaRow[]): UangPangkalRekapRow[] {
+  const groups = new Map<string, UangPangkalRekapRow>();
+  const total = emptyRekap("TOTAL");
+  for (const row of rows) {
+    const group = groups.get(row.lembaga) ?? emptyRekap(row.lembaga);
+    groups.set(row.lembaga, group);
+    addToRekap(group, row);
+    addToRekap(total, row);
+  }
+  const sorted = [...groups.values()].sort((a, b) => a.lembaga.localeCompare(b.lembaga, "id"));
+  return [...sorted, total];
 }

@@ -1,9 +1,31 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllPages } from "@/lib/fetchAll";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAkademikManagedDepartemenIds } from "@/lib/akademikScope";
 import { SERAGAM_SISWA_STATUSES, type SeragamSiswaSource } from "@/lib/seragamSiswa";
+import { canViewUangPangkal, uangPangkalFromMonitor } from "@/lib/seragamUangPangkal";
+import { getSpmbPaymentMonitor } from "@/server/spmbPaymentMonitor";
+
+/**
+ * Uang pangkal per siswa dari Monitoring Pembayaran SPMB (nominal netto dari tagihan, dibayar dari pembayaran).
+ * Hanya peran yang berhak melihat keuangan; server tetap memeriksa izin dan membatasi lembaga Admin TU.
+ * Kunci query sama dengan halaman monitoring agar cache dipakai bersama.
+ */
+export function useSeragamUangPangkal() {
+  const { user, role, can } = useAuth();
+  const allowed = canViewUangPangkal(role, can("keuangan.pembayaran"));
+  const query = useQuery({
+    queryKey: ["spmb_payment_monitor", user?.id, role],
+    queryFn: () => getSpmbPaymentMonitor(),
+    enabled: allowed && Boolean(user),
+    staleTime: 60_000,
+    retry: 1,
+  });
+  const byStudent = useMemo(() => uangPangkalFromMonitor(query.data?.items ?? []), [query.data]);
+  return { allowed, isLoading: allowed && query.isLoading, error: allowed ? query.error : null, byStudent };
+}
 
 /** Daftar gelombang SPMB untuk filter; kunci query sama dengan halaman SPMB agar cache dipakai bersama. */
 export function useSpmbGelombang() {

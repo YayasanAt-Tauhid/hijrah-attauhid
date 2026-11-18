@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  SERAGAM_EXPORT_COLUMNS,
+  SERAGAM_REKAP_COLUMNS,
   buildSeragamSiswaRows,
   filterSeragamSiswaRows,
+  rekapUangPangkalPerLembaga,
+  seragamExportColumns,
   seragamExportRows,
   seragamStelLabel,
   type SeragamSiswaSource,
@@ -144,7 +148,7 @@ describe("filterSeragamSiswaRows", () => {
       kelas_siswa: [{ aktif: true, kelas: { id: "k7", nama: "7A", departemen_id: "smp" } }] }),
     siswa({ id: "3", nama: "Budi", nis: "2538003", status: "aktif", jenis_kelamin: "L", departemen_id: "tk" }),
   ], departemen);
-  const all = { search: "", lembagaId: "all", kelasId: "all", jenisKelamin: "all", status: "all", kelengkapan: "all", tahunId: "all", gelombangId: "all" };
+  const all = { search: "", lembagaId: "all", kelasId: "all", jenisKelamin: "all", status: "all", kelengkapan: "all", tahunId: "all", gelombangId: "all", uangPangkal: "all" };
 
   it("tanpa filter mengembalikan semua baris", () => {
     expect(filterSeragamSiswaRows(rows, all)).toHaveLength(3);
@@ -201,5 +205,51 @@ describe("seragamStelLabel dan seragamExportRows", () => {
       stel1: "Olah raga: S", stel2: "Putih Merah: M", stel3: "Coklat: L", stel4: "Gamis Biru: XL", stel5: "Pramuka: XXL",
       kelengkapan: "Lengkap",
     }]);
+  });
+});
+
+describe("uang pangkal pada daftar seragam", () => {
+  const info = new Map([
+    ["1", { total: 10_100_000, paid: 2_525_000, remaining: 7_575_000, status: "sebagian" as const }],
+    ["2", { total: 13_100_000, paid: 13_100_000, remaining: 0, status: "lunas" as const }],
+  ]);
+  const rows = buildSeragamSiswaRows([
+    siswa({ id: "1", nama: "Ahmad", departemen_id: "sd" }),
+    siswa({ id: "2", nama: "Aisyah", departemen_id: "smp", jenis_kelamin: "P" }),
+    siswa({ id: "3", nama: "Budi", departemen_id: "sd" }),
+  ], departemen, info);
+  const all = { search: "", lembagaId: "all", kelasId: "all", jenisKelamin: "all", status: "all", kelengkapan: "all", tahunId: "all", gelombangId: "all", uangPangkal: "all" };
+
+  it("menempelkan status uang pangkal; siswa tanpa data monitoring berarti belum ada tagihan", () => {
+    expect(rows.map((row) => row.statusUangPangkal)).toEqual(["sebagian", "lunas", "belum_ada_tagihan"]);
+    expect(rows[2].uangPangkal).toBeNull();
+    expect(buildSeragamSiswaRows([siswa({ id: "9", nama: "Tanpa" })], departemen)[0].statusUangPangkal).toBe("belum_ada_tagihan");
+  });
+
+  it("menyaring dropdown status uang pangkal", () => {
+    expect(filterSeragamSiswaRows(rows, { ...all, uangPangkal: "sebagian" }).map((row) => row.id)).toEqual(["1"]);
+    expect(filterSeragamSiswaRows(rows, { ...all, uangPangkal: "lunas" }).map((row) => row.id)).toEqual(["2"]);
+    expect(filterSeragamSiswaRows(rows, { ...all, uangPangkal: "belum_ada_tagihan" }).map((row) => row.id)).toEqual(["3"]);
+    expect(filterSeragamSiswaRows(rows, { ...all, uangPangkal: "belum_bayar" })).toEqual([]);
+  });
+
+  it("ekspor menambah kolom nominal, dibayar, sisa, dan keterangan hanya bila diminta", () => {
+    const biasa = seragamExportRows(rows)[0];
+    expect(biasa).not.toHaveProperty("uangPangkalNominal");
+    const lengkap = seragamExportRows(rows, { uangPangkal: true });
+    expect(lengkap[0]).toMatchObject({ uangPangkalNominal: 10_100_000, uangPangkalDibayar: 2_525_000, uangPangkalSisa: 7_575_000, uangPangkalKeterangan: "Dibayar sebagian" });
+    expect(lengkap[2]).toMatchObject({ uangPangkalNominal: "", uangPangkalDibayar: "", uangPangkalSisa: "", uangPangkalKeterangan: "Belum ada tagihan" });
+    expect(seragamExportColumns(true).map((column) => column.key).slice(-4)).toEqual(["uangPangkalNominal", "uangPangkalDibayar", "uangPangkalSisa", "uangPangkalKeterangan"]);
+    expect(seragamExportColumns(false)).toEqual(SERAGAM_EXPORT_COLUMNS);
+  });
+
+  it("rekap per lembaga menjumlahkan nominal, dibayar, sisa, dan jumlah per status, dengan baris total", () => {
+    const rekap = rekapUangPangkalPerLembaga(rows);
+    expect(rekap.map((row) => row.lembaga)).toEqual(["SD", "SMP", "TOTAL"]);
+    expect(rekap[0]).toMatchObject({ siswa: 2, nominal: 10_100_000, dibayar: 2_525_000, sisa: 7_575_000, lunas: 0, sebagian: 1, belumBayar: 0, belumAdaTagihan: 1, perluVerifikasi: 0 });
+    expect(rekap[1]).toMatchObject({ siswa: 1, nominal: 13_100_000, dibayar: 13_100_000, sisa: 0, lunas: 1 });
+    expect(rekap[2]).toMatchObject({ siswa: 3, nominal: 23_200_000, dibayar: 15_625_000, sisa: 7_575_000, lunas: 1, sebagian: 1, belumAdaTagihan: 1 });
+    expect(SERAGAM_REKAP_COLUMNS.map((column) => column.key)).toEqual(Object.keys(rekap[0]));
+    expect(rekapUangPangkalPerLembaga([])).toEqual([expect.objectContaining({ lembaga: "TOTAL", siswa: 0, nominal: 0 })]);
   });
 });

@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
 import { useNavigate } from "@/lib/router-compat";
-import { useSiswaSeragamList, useSpmbGelombang } from "@/hooks/useSiswaSeragam";
+import { useSeragamUangPangkal, useSiswaSeragamList, useSpmbGelombang } from "@/hooks/useSiswaSeragam";
 import { useDepartemen, useTahunAjaran } from "@/hooks/useAkademikData";
 import { DataTable, type DataTableColumn } from "@/components/shared/DataTable";
 import { ExportButton } from "@/components/shared/ExportButton";
@@ -10,14 +10,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   SERAGAM_EXPORT_COLUMNS,
+  SERAGAM_REKAP_COLUMNS,
   buildSeragamSiswaRows,
   filterSeragamSiswaRows,
+  rekapUangPangkalPerLembaga,
+  seragamExportColumns,
   seragamExportRows,
   seragamKelengkapanLabel,
   seragamStelLabel,
   type SeragamSiswaFilters,
   type SeragamSiswaRow,
 } from "@/lib/seragamSiswa";
+import { formatUangPangkal, uangPangkalAmounts, uangPangkalKeterangan } from "@/lib/seragamUangPangkal";
+import { MONITOR_PAYMENT_LABELS } from "@/lib/spmbPaymentMonitor";
 
 const selectClass = "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
 
@@ -29,7 +34,7 @@ const KELENGKAPAN_CLASS: Record<SeragamSiswaRow["kelengkapan"], string> = {
 
 const initialFilters: SeragamSiswaFilters = {
   search: "", lembagaId: "all", kelasId: "all", jenisKelamin: "all", status: "all", kelengkapan: "all",
-  tahunId: "all", gelombangId: "all",
+  tahunId: "all", gelombangId: "all", uangPangkal: "all",
 };
 
 function FilterSelect({ label, value, onChange, children }: {
@@ -52,10 +57,12 @@ export default function SeragamSiswa() {
   const { data: departemenList = [] } = useDepartemen();
   const { data: tahunList = [] } = useTahunAjaran();
   const { data: gelombangList = [] } = useSpmbGelombang();
+  const { allowed: showUangPangkal, isLoading: uangPangkalLoading, error: uangPangkalError, byStudent } = useSeragamUangPangkal();
   const [filters, setFilters] = useState<SeragamSiswaFilters>(initialFilters);
   const set = (patch: Partial<SeragamSiswaFilters>) => setFilters((current) => ({ ...current, ...patch }));
 
-  const rows = useMemo(() => buildSeragamSiswaRows(siswaList, departemenList), [siswaList, departemenList]);
+  const rows = useMemo(() => buildSeragamSiswaRows(siswaList, departemenList, showUangPangkal ? byStudent : undefined),
+    [siswaList, departemenList, showUangPangkal, byStudent]);
   const filtered = useMemo(() => filterSeragamSiswaRows(rows, filters), [rows, filters]);
 
   // Pilihan filter diturunkan dari data yang boleh dilihat pengguna (admin_tu hanya lembaganya).
@@ -82,6 +89,17 @@ export default function SeragamSiswa() {
     },
   });
 
+  const amountCell = (pick: "nominal" | "dibayar" | "sisa") => (_: unknown, row: SeragamSiswaRow) => {
+    const amounts = uangPangkalAmounts(row.uangPangkal);
+    return amounts ? <span className="whitespace-nowrap">{formatUangPangkal(amounts[pick])}</span> : <span className="text-muted-foreground">-</span>;
+  };
+  const uangPangkalColumns: DataTableColumn<SeragamSiswaRow>[] = [
+    { key: "uangPangkalNominal", label: "Nominal Uang Pangkal", className: "min-w-[150px]", render: amountCell("nominal") },
+    { key: "uangPangkalDibayar", label: "Jumlah Dibayar Uang Pangkal", className: "min-w-[150px]", render: amountCell("dibayar") },
+    { key: "uangPangkalSisa", label: "Sisa Uang Pangkal", className: "min-w-[150px]", render: amountCell("sisa") },
+    { key: "uangPangkalKeterangan", label: "Keterangan Uang Pangkal", className: "min-w-[150px]", render: (_, row) => <span className="whitespace-nowrap">{uangPangkalKeterangan(row.uangPangkal)}</span> },
+  ];
+
   const columns: DataTableColumn<SeragamSiswaRow>[] = [
     { key: "nama", label: "Nama", sortable: true, className: "min-w-[180px] font-medium" },
     { key: "nis", label: "NIS", sortable: true, render: (value) => (value as string) || "-" },
@@ -105,6 +123,7 @@ export default function SeragamSiswa() {
         </span>
       ),
     },
+    ...(showUangPangkal ? uangPangkalColumns : []),
     {
       key: "id", label: "Aksi", className: "w-16",
       render: (_, row) => (
@@ -149,6 +168,14 @@ export default function SeragamSiswa() {
           <option value="all">Semua</option>
           {gelombangList.map((gelombang: { id: string; nama: string }) => <option key={gelombang.id} value={gelombang.id}>{gelombang.nama}</option>)}
         </FilterSelect>
+        {showUangPangkal && (
+          <FilterSelect label="Uang pangkal" value={filters.uangPangkal} onChange={(uangPangkal) => set({ uangPangkal })}>
+            <option value="all">Semua</option>
+            {(Object.keys(MONITOR_PAYMENT_LABELS) as Array<keyof typeof MONITOR_PAYMENT_LABELS>).map((key) => (
+              <option key={key} value={key}>{MONITOR_PAYMENT_LABELS[key]}</option>
+            ))}
+          </FilterSelect>
+        )}
         <FilterSelect label="Lembaga" value={filters.lembagaId} onChange={(lembagaId) => set({ lembagaId, kelasId: "all" })}>
           <option value="all">Semua lembaga</option>
           {lembagaOptions.map(([id, nama]) => <option key={id} value={id}>{nama}</option>)}
@@ -170,6 +197,10 @@ export default function SeragamSiswa() {
         </FilterSelect>
       </div>
 
+      {showUangPangkal && uangPangkalError && (
+        <p role="alert" className="text-sm text-destructive">Data uang pangkal belum dapat dimuat. Coba muat ulang halaman.</p>
+      )}
+      {showUangPangkal && uangPangkalLoading && <p className="text-sm text-muted-foreground">Memuat data uang pangkal...</p>}
       <p className="text-sm text-muted-foreground">{filtered.length} siswa</p>
 
       <DataTable
@@ -179,7 +210,13 @@ export default function SeragamSiswa() {
         pageSize={25}
         loading={isLoading}
         emptyMessage="Tidak ada siswa yang cocok dengan filter ini"
-        actions={<ExportButton data={seragamExportRows(filtered)} columns={SERAGAM_EXPORT_COLUMNS} filename="seragam-siswa" sheetName="Seragam Siswa" />}
+        actions={<ExportButton
+          data={seragamExportRows(filtered, { uangPangkal: showUangPangkal })}
+          columns={showUangPangkal ? seragamExportColumns(true) : SERAGAM_EXPORT_COLUMNS}
+          filename="seragam-siswa"
+          sheetName="Seragam Siswa"
+          extraSheets={showUangPangkal ? [{ name: "Rekap Uang Pangkal", columns: SERAGAM_REKAP_COLUMNS, data: rekapUangPangkalPerLembaga(filtered) }] : undefined}
+        />}
       />
     </div>
   );

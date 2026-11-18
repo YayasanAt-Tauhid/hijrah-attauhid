@@ -6,11 +6,14 @@ const mocks = vi.hoisted(() => ({
   loading: false,
   navigate: vi.fn(),
   waves: [{ id: "g1", nama: "Gelombang 1" }, { id: "g2", nama: "Gelombang 2" }] as Array<{ id: string; nama: string }>,
+  finance: true,
+  up: new Map<string, { total: number; paid: number; remaining: number; status: string }>(),
 }));
 
 vi.mock("@/hooks/useSiswaSeragam", () => ({
   useSiswaSeragamList: () => ({ data: mocks.siswa, isLoading: mocks.loading }),
   useSpmbGelombang: () => ({ data: mocks.waves }),
+  useSeragamUangPangkal: () => ({ allowed: mocks.finance, isLoading: false, error: null, byStudent: mocks.up }),
 }));
 vi.mock("@/hooks/useAkademikData", () => ({
   useDepartemen: () => ({ data: [
@@ -22,8 +25,8 @@ vi.mock("@/hooks/useAkademikData", () => ({
 }));
 vi.mock("@/lib/router-compat", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("@/components/shared/ExportButton", () => ({
-  ExportButton: ({ data, filename }: { data: unknown[]; filename?: string }) => (
-    <button type="button" data-filename={filename}>Ekspor {data.length} baris</button>
+  ExportButton: ({ data, filename, extraSheets, columns }: { data: unknown[]; filename?: string; extraSheets?: Array<{ name: string }>; columns?: unknown[] }) => (
+    <button type="button" data-filename={filename} data-sheets={(extraSheets || []).map((sheet) => sheet.name).join("|")} data-columns={columns?.length}>Ekspor {data.length} baris</button>
   ),
 }));
 
@@ -43,6 +46,11 @@ const row = (over: Record<string, unknown>) => ({
 });
 
 beforeEach(() => {
+  mocks.finance = true;
+  mocks.up = new Map([
+    ["a", { total: 10_100_000, paid: 2_525_000, remaining: 7_575_000, status: "sebagian" }],
+    ["b", { total: 13_100_000, paid: 13_100_000, remaining: 0, status: "lunas" }],
+  ]);
   mocks.loading = false;
   mocks.navigate.mockClear();
   mocks.siswa = [
@@ -127,6 +135,45 @@ describe("halaman Seragam Siswa", () => {
     render(<SeragamSiswa />);
     expect(screen.getByRole("columnheader", { name: /Stel 5/ })).toBeTruthy();
     expect(screen.getByText("Pramuka: XXL")).toBeTruthy();
+  });
+
+  it("peran keuangan melihat kolom nominal, dibayar, sisa, dan keterangan uang pangkal", () => {
+    render(<SeragamSiswa />);
+    expect(screen.getByRole("columnheader", { name: /Nominal Uang Pangkal/ })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /Jumlah Dibayar Uang Pangkal/ })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /Sisa Uang Pangkal/ })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /Keterangan Uang Pangkal/ })).toBeTruthy();
+    const ahmad = screen.getByText("Ahmad Aktif").closest("tr") as HTMLElement;
+    expect(within(ahmad).getByText("Rp 10.100.000")).toBeTruthy();
+    expect(within(ahmad).getByText("Rp 2.525.000")).toBeTruthy();
+    expect(within(ahmad).getByText("Rp 7.575.000")).toBeTruthy();
+    expect(within(ahmad).getByText("Dibayar sebagian")).toBeTruthy();
+    const bilal = screen.getByText("Bilal Calon").closest("tr") as HTMLElement;
+    expect(within(bilal).getByText("Lunas")).toBeTruthy();
+    const dina = screen.getByText("Dina TK").closest("tr") as HTMLElement;
+    expect(within(dina).getByText("Belum ada tagihan")).toBeTruthy();
+  });
+
+  it("dropdown status uang pangkal menyaring daftar", () => {
+    render(<SeragamSiswa />);
+    fireEvent.change(screen.getByLabelText("Uang pangkal"), { target: { value: "sebagian" } });
+    expect(screen.getByText("Ahmad Aktif")).toBeTruthy();
+    expect(screen.queryByText("Bilal Calon")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Uang pangkal"), { target: { value: "lunas" } });
+    expect(screen.getByText("Bilal Calon")).toBeTruthy();
+    expect(screen.queryByText("Ahmad Aktif")).toBeNull();
+  });
+
+  it("ekspor peran keuangan memuat sheet rekap; peran lain tidak melihat data keuangan sama sekali", () => {
+    const { unmount } = render(<SeragamSiswa />);
+    expect(screen.getByRole("button", { name: /Ekspor/ }).getAttribute("data-sheets")).toBe("Rekap Uang Pangkal");
+    unmount();
+    mocks.finance = false;
+    render(<SeragamSiswa />);
+    expect(screen.queryByRole("columnheader", { name: /Uang Pangkal/ })).toBeNull();
+    expect(screen.queryByLabelText("Uang pangkal")).toBeNull();
+    expect(screen.queryByText("Rp 10.100.000")).toBeNull();
+    expect(screen.getByRole("button", { name: /Ekspor/ }).getAttribute("data-sheets")).toBe("");
   });
 
   it("ekspor mengikuti hasil filter", () => {

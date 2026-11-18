@@ -11,11 +11,19 @@ export interface ExportColumn {
   label: string;
 }
 
+/** Sheet tambahan (mis. rekapitulasi) yang ikut ditulis ke file Excel; CSV hanya memuat data utama. */
+export interface ExportSheet {
+  name: string;
+  data: Record<string, unknown>[];
+  columns: ExportColumn[];
+}
+
 interface ExportButtonProps {
   data: Record<string, unknown>[];
   filename?: string;
   columns?: ExportColumn[];
   sheetName?: string;
+  extraSheets?: ExportSheet[];
 }
 
 function safeSpreadsheetValue(value: unknown): string | number | boolean {
@@ -59,12 +67,7 @@ function exportCSV(data: Record<string, unknown>[], columns: ExportColumn[], fil
   downloadBlob(blob, `${filename}.csv`);
 }
 
-function exportExcel(
-  data: Record<string, unknown>[],
-  columns: ExportColumn[],
-  filename: string,
-  sheetName: string,
-) {
+function buildWorksheet(data: Record<string, unknown>[], columns: ExportColumn[]) {
   const rows = buildRows(data, columns);
   const worksheet = XLSX.utils.aoa_to_sheet([
     columns.map((column) => column.label),
@@ -79,8 +82,21 @@ function exportExcel(
     return { wch: Math.min(Math.max(longest + 2, 10), 40) };
   });
 
+  return worksheet;
+}
+
+export function exportExcel(
+  data: Record<string, unknown>[],
+  columns: ExportColumn[],
+  filename: string,
+  sheetName: string,
+  extraSheets: ExportSheet[] = [],
+) {
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31) || "Data");
+  XLSX.utils.book_append_sheet(workbook, buildWorksheet(data, columns), sheetName.slice(0, 31) || "Data");
+  for (const sheet of extraSheets) {
+    XLSX.utils.book_append_sheet(workbook, buildWorksheet(sheet.data, sheet.columns), sheet.name.slice(0, 31) || "Data");
+  }
   XLSX.writeFile(workbook, `${filename}.xlsx`);
 }
 
@@ -98,6 +114,7 @@ export function ExportButton({
   filename = "export",
   columns,
   sheetName = "Data",
+  extraSheets,
 }: ExportButtonProps) {
   const cols = columns || (data.length > 0
     ? Object.keys(data[0]).map((key) => ({ key, label: key }))
@@ -116,7 +133,7 @@ export function ExportButton({
           <Download className="mr-2 h-4 w-4" />
           Export CSV
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => exportExcel(data, cols, filename, sheetName)}>
+        <DropdownMenuItem onClick={() => exportExcel(data, cols, filename, sheetName, extraSheets)}>
           <FileSpreadsheet className="mr-2 h-4 w-4" />
           Export Excel (.xlsx)
         </DropdownMenuItem>
