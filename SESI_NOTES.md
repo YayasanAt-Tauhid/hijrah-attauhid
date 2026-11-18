@@ -1,3 +1,15 @@
+# Catatan Sesi — Seragam: TK bisa diisi, lima stel, filter tahun ajaran dan gelombang (18 November 2026)
+
+- **Permintaan user:** tab Ukuran Seragam siswa TK tidak bisa diedit; lalu semua lembaga dijadikan lima stel; halaman `/akademik/seragam` difilter seperti SPMB.
+- **Akar masalah:** `UniformSizeFields` mengunci semua kolom bila lembaga bukan SD/SMP/SMA/MTA; TK sengaja belum didukung (catatan 21 Oktober 2026). Terbukti di data produksi: siswa tersebut berlembaga TK, jenis kelamin P, `ukuran_seragam` kosong.
+- **Perubahan:** TK terbuka dengan nama diisi manual; `UNIFORM_SLOT_COUNT = 5` (stel 5 tanpa nama bawaan, data lama 4 stel dilengkapi slot kosong tanpa backfill); "lengkap" = 5 stel terisi; kolom/ekspor "Stel 5"; filter Tahun ajaran tujuan dan Gelombang di halaman Seragam (kunci query gelombang dibagi dengan SPMB).
+- **Migrasi `supabase/migrations/20261118030000_siswa_seragam_lima_stel.sql` (sha256 `374208fa1542c62423c6918f39cd11bbafd3f1dfb455bf5c49a63b4b1289455c`):** aturan bentuk `siswa_detail_ukuran_seragam_shape` dari tepat 4 menjadi 4 atau 5 stel. Dry-run produksi (BEGIN…ROLLBACK): 5, 4, dan NULL diterima; 6 stel, 3 stel, dan ukuran tanpa nama ditolak; pasca-rollback aturan lama utuh.
+- **DITERAPKAN 18 Nov 2026 04:05:05 UTC (11:05 WIB)** atas persetujuan eksplisit user: checksum cocok, `psql --single-transaction`, exit 0. Verifikasi: aturan tervalidasi, 1.239 baris `siswa_detail` dan 96 data seragam (semua 4 stel) tidak berubah.
+- **Rollback:** definisi aturan lama di `~/backups/constraint-seragam-lama-20261118.txt` (VM `hijrah-attauhid`); hanya bisa dikembalikan bila belum ada data 5 stel.
+- **Tes:** 60 tes seragam lulus; lint file yang diubah bersih (14 error `any` lama di `FormSiswa.tsx`); `tsc` 187 error, sama sebelum dan sesudah, semuanya di file route karena `routeTree.gen.ts` tidak ada di worktree. Suite penuh tidak dijalankan; satu file (`rekapKasirExcel.test.ts`) gagal karena `exceljs` tidak terpasang di server.
+- **Belum diverifikasi:** deploy Cloudflare setelah push ke `main` dan tampilan di aplikasi sungguhan (login browser bawaan tidak dilakukan). Siswa TK dengan seragam terisi masih tampil "Data seragam TK belum tersedia" di daftar dan tidak dihitung di statistik (keputusan lama, belum diubah). Statistik per lembaga kini punya kolom "Stel 5 (nama belum diisi)".
+- **File sementara di VM `hijrah-attauhid` `~/backups/` (tanpa data siswa; dibiarkan untuk dihapus user):** `20261118030000_siswa_seragam_lima_stel.sql`, `uji-seragam-lima-stel.sql`, `constraint-seragam-lama-20261118.txt`.
+
 # Catatan Sesi — SPMB: wajib unggah bukti dari orang tua saat mengundurkan diri (17 November 2026)
 
 - **Permintaan user:** dialog "Tandai mengundurkan diri" di `/akademik/spmb` sebelumnya hanya meminta alasan dan tanggal efektif; tambahkan upload bukti dari orang tua. Keputusan user: bukti **wajib**.

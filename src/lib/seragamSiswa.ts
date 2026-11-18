@@ -2,6 +2,7 @@ import {
   defaultUniformSizes,
   readUniformSizes,
   uniformDepartment,
+  UNIFORM_SLOT_COUNT,
   type UniformSize,
 } from "@/lib/ukuranSeragam";
 
@@ -47,7 +48,10 @@ export type SeragamSiswaRow = {
   lembaga: string;
   kelasId: string;
   kelas: string;
-  /** Empat stel: nama jenis (nama bawaan melabeli stel kosong) dan ukuran tersimpan. */
+  /** Tahun ajaran dan gelombang pendaftaran SPMB (kosong bila siswa tidak punya data SPMB). */
+  tahunAjaranId: string;
+  gelombangId: string;
+  /** Lima stel: nama jenis (nama bawaan melabeli stel kosong) dan ukuran tersimpan. */
   stel: UniformSize[];
   /** Jumlah stel yang nama dan ukurannya sama-sama tersimpan. */
   terisi: number;
@@ -79,7 +83,7 @@ export function buildSeragamSiswaRows(list: SeragamSiswaSource[], departemen: De
     const saved = readUniformSizes(detail.ukuran_seragam);
     const terisi = code === "TK" ? 0 : saved.filter((item) => item.jenis.trim() && item.ukuran.trim()).length;
     const stel = code === "TK" ? saved : defaultUniformSizes(detail.ukuran_seragam, code, gender);
-    const kelengkapan: SeragamKelengkapan = code === "TK" ? "tidak_tersedia" : terisi === 4 ? "lengkap" : "belum_lengkap";
+    const kelengkapan: SeragamKelengkapan = code === "TK" ? "tidak_tersedia" : terisi === UNIFORM_SLOT_COUNT ? "lengkap" : "belum_lengkap";
 
     rows.push({
       id: siswa.id,
@@ -93,6 +97,8 @@ export function buildSeragamSiswaRows(list: SeragamSiswaSource[], departemen: De
       lembaga,
       kelasId: kelasAktif?.id || "",
       kelas: kelasAktif?.nama || "-",
+      tahunAjaranId: String(detail.tahun_ajaran_id || ""),
+      gelombangId: String(detail.spmb_gelombang_id || ""),
       stel,
       terisi,
       kelengkapan,
@@ -108,6 +114,9 @@ export type SeragamSiswaFilters = {
   jenisKelamin: string;
   status: string;
   kelengkapan: string;
+  /** Sama seperti filter Tahun ajaran tujuan dan Gelombang di halaman SPMB. */
+  tahunId: string;
+  gelombangId: string;
 };
 
 export function filterSeragamSiswaRows(rows: SeragamSiswaRow[], filters: SeragamSiswaFilters): SeragamSiswaRow[] {
@@ -119,6 +128,8 @@ export function filterSeragamSiswaRows(rows: SeragamSiswaRow[], filters: Seragam
     if (filters.jenisKelamin !== "all" && row.jenisKelaminKode !== filters.jenisKelamin) return false;
     if (filters.status !== "all" && row.status !== filters.status) return false;
     if (filters.kelengkapan !== "all" && row.kelengkapan !== filters.kelengkapan) return false;
+    if (filters.tahunId !== "all" && row.tahunAjaranId !== filters.tahunId) return false;
+    if (filters.gelombangId !== "all" && row.gelombangId !== filters.gelombangId) return false;
     return true;
   });
 }
@@ -145,6 +156,7 @@ export const SERAGAM_EXPORT_COLUMNS = [
   { key: "stel2", label: "Stel 2" },
   { key: "stel3", label: "Stel 3" },
   { key: "stel4", label: "Stel 4" },
+  { key: "stel5", label: "Stel 5" },
   { key: "kelengkapan", label: "Kelengkapan" },
 ];
 
@@ -160,6 +172,7 @@ export function seragamExportRows(rows: SeragamSiswaRow[]): Record<string, strin
     stel2: seragamStelLabel(row.stel[1]),
     stel3: seragamStelLabel(row.stel[2]),
     stel4: seragamStelLabel(row.stel[3]),
+    stel5: seragamStelLabel(row.stel[4]),
     kelengkapan: seragamKelengkapanLabel(row.kelengkapan),
   }));
 }

@@ -23,7 +23,7 @@ describe("statistik seragam", () => {
       expect(detail.getByRole("rowheader", { name: size, exact: true })).toBeInTheDocument();
       expect(detail.queryByRole("columnheader", { name: size, exact: true })).not.toBeInTheDocument();
     }
-    expect(detail.getByRole("columnheader", { name: "SMP", exact: true })).toHaveAttribute("colspan", "9");
+    expect(detail.getByRole("columnheader", { name: "SMP", exact: true })).toHaveAttribute("colspan", "11");
     expect(detail.getByRole("columnheader", { name: "Ikhwan", exact: true })).toBeInTheDocument();
     expect(detail.getByRole("columnheader", { name: "Gamis Ungu Khusus", exact: true })).toBeInTheDocument();
     expect(screen.getByText("1 pendaftar TK belum dihitung karena data seragam TK belum tersedia.")).toBeInTheDocument();

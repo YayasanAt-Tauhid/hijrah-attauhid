@@ -5,10 +5,12 @@ const mocks = vi.hoisted(() => ({
   siswa: [] as Array<Record<string, unknown>>,
   loading: false,
   navigate: vi.fn(),
+  waves: [{ id: "g1", nama: "Gelombang 1" }, { id: "g2", nama: "Gelombang 2" }] as Array<{ id: string; nama: string }>,
 }));
 
 vi.mock("@/hooks/useSiswaSeragam", () => ({
   useSiswaSeragamList: () => ({ data: mocks.siswa, isLoading: mocks.loading }),
+  useSpmbGelombang: () => ({ data: mocks.waves }),
 }));
 vi.mock("@/hooks/useAkademikData", () => ({
   useDepartemen: () => ({ data: [
@@ -16,6 +18,7 @@ vi.mock("@/hooks/useAkademikData", () => ({
     { id: "smp", nama: "SMP", kode: "SMP" },
     { id: "tk", nama: "TK", kode: "TK" },
   ] }),
+  useTahunAjaran: () => ({ data: [{ id: "ta1", nama: "2026/2027" }, { id: "ta2", nama: "2025/2026" }] }),
 }));
 vi.mock("@/lib/router-compat", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("@/components/shared/ExportButton", () => ({
@@ -31,6 +34,7 @@ const FULL = [
   { jenis: "Putih Merah", ukuran: "M" },
   { jenis: "Coklat", ukuran: "L" },
   { jenis: "Gamis Biru", ukuran: "XL" },
+  { jenis: "Pramuka", ukuran: "XXL" },
 ];
 
 const row = (over: Record<string, unknown>) => ({
@@ -42,9 +46,9 @@ beforeEach(() => {
   mocks.loading = false;
   mocks.navigate.mockClear();
   mocks.siswa = [
-    row({ id: "a", nama: "Ahmad Aktif", nis: "2538001", siswa_detail: { ukuran_seragam: FULL },
+    row({ id: "a", nama: "Ahmad Aktif", nis: "2538001", siswa_detail: { ukuran_seragam: FULL, tahun_ajaran_id: "ta1", spmb_gelombang_id: "g1" },
       kelas_siswa: [{ aktif: true, kelas: { id: "k1", nama: "1A", departemen_id: "sd" } }] }),
-    row({ id: "b", nama: "Bilal Calon", nis: "2538002", status: "diterima", departemen_id: "smp" }),
+    row({ id: "b", nama: "Bilal Calon", nis: "2538002", status: "diterima", departemen_id: "smp", siswa_detail: { tahun_ajaran_id: "ta2", spmb_gelombang_id: "g2" } }),
     row({ id: "c", nama: "Citra Alumni", status: "alumni" }),
     row({ id: "d", nama: "Dina TK", departemen_id: "tk", jenis_kelamin: "P" }),
   ];
@@ -103,6 +107,26 @@ describe("halaman Seragam Siswa", () => {
     fireEvent.change(screen.getByLabelText("Kelengkapan"), { target: { value: "belum_lengkap" } });
     expect(screen.getByText("Bilal Calon")).toBeTruthy();
     expect(screen.queryByText("Ahmad Aktif")).toBeNull();
+  });
+
+  it("menyaring tahun ajaran tujuan dan gelombang seperti di SPMB", () => {
+    render(<SeragamSiswa />);
+    expect(within(screen.getByLabelText("Tahun ajaran tujuan")).getByRole("option", { name: "2026/2027" })).toBeTruthy();
+    expect(within(screen.getByLabelText("Gelombang")).getByRole("option", { name: "Gelombang 2" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Tahun ajaran tujuan"), { target: { value: "ta2" } });
+    expect(screen.getByText("Bilal Calon")).toBeTruthy();
+    expect(screen.queryByText("Ahmad Aktif")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Tahun ajaran tujuan"), { target: { value: "all" } });
+    fireEvent.change(screen.getByLabelText("Gelombang"), { target: { value: "g1" } });
+    expect(screen.getByText("Ahmad Aktif")).toBeTruthy();
+    expect(screen.queryByText("Bilal Calon")).toBeNull();
+    expect(screen.getByText("1 siswa")).toBeTruthy();
+  });
+
+  it("menampilkan kolom kelima stel, termasuk isinya", () => {
+    render(<SeragamSiswa />);
+    expect(screen.getByRole("columnheader", { name: /Stel 5/ })).toBeTruthy();
+    expect(screen.getByText("Pramuka: XXL")).toBeTruthy();
   });
 
   it("ekspor mengikuti hasil filter", () => {

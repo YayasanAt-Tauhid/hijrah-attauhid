@@ -1,4 +1,4 @@
-import { readUniformSizes, uniformDepartment, UNIFORM_TYPES, UNIFORM_SIZES } from "@/lib/ukuranSeragam";
+import { readUniformSizes, uniformDepartment, UNIFORM_TYPES, UNIFORM_SIZES, UNIFORM_SLOT_COUNT } from "@/lib/ukuranSeragam";
 
 type Registration = Record<string, unknown>;
 type Department = { id: string; nama: string; kode?: string };
@@ -36,12 +36,12 @@ export function summarizeUniforms(rows: Registration[], departments: Department[
       if (group) group.jumlah++;
       else groups.set(key, { id: key, lembaga: label, jenisKelamin: gender, jenis, ukuran, jumlah: 1 });
     });
-    if (filled === 4) complete++;
+    if (filled === UNIFORM_SLOT_COUNT) complete++;
   }
   const rekap = [...groups.values()].sort((a, b) =>
     a.lembaga.localeCompare(b.lembaga, "id") || a.jenisKelamin.localeCompare(b.jenisKelamin, "id")
     || a.jenis.localeCompare(b.jenis, "id") || a.ukuran.localeCompare(b.ukuran, "id", { numeric: true }));
-  return { eligible, unavailable, complete, incomplete: eligible - complete, recorded, missing: eligible * 4 - recorded, rekap };
+  return { eligible, unavailable, complete, incomplete: eligible - complete, recorded, missing: eligible * UNIFORM_SLOT_COUNT - recorded, rekap };
 }
 
 // Satu baris per lembaga/jenis kelamin/jenis; ukuran menjadi kolom.

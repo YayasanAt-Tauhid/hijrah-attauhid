@@ -1,8 +1,8 @@
 import { useId, useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
 import { useNavigate } from "@/lib/router-compat";
-import { useSiswaSeragamList } from "@/hooks/useSiswaSeragam";
-import { useDepartemen } from "@/hooks/useAkademikData";
+import { useSiswaSeragamList, useSpmbGelombang } from "@/hooks/useSiswaSeragam";
+import { useDepartemen, useTahunAjaran } from "@/hooks/useAkademikData";
 import { DataTable, type DataTableColumn } from "@/components/shared/DataTable";
 import { ExportButton } from "@/components/shared/ExportButton";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ const KELENGKAPAN_CLASS: Record<SeragamSiswaRow["kelengkapan"], string> = {
 
 const initialFilters: SeragamSiswaFilters = {
   search: "", lembagaId: "all", kelasId: "all", jenisKelamin: "all", status: "all", kelengkapan: "all",
+  tahunId: "all", gelombangId: "all",
 };
 
 function FilterSelect({ label, value, onChange, children }: {
@@ -49,6 +50,8 @@ export default function SeragamSiswa() {
   const navigate = useNavigate();
   const { data: siswaList = [], isLoading } = useSiswaSeragamList();
   const { data: departemenList = [] } = useDepartemen();
+  const { data: tahunList = [] } = useTahunAjaran();
+  const { data: gelombangList = [] } = useSpmbGelombang();
   const [filters, setFilters] = useState<SeragamSiswaFilters>(initialFilters);
   const set = (patch: Partial<SeragamSiswaFilters>) => setFilters((current) => ({ ...current, ...patch }));
 
@@ -93,7 +96,7 @@ export default function SeragamSiswa() {
         </span>
       ),
     },
-    stelColumn(0), stelColumn(1), stelColumn(2), stelColumn(3),
+    stelColumn(0), stelColumn(1), stelColumn(2), stelColumn(3), stelColumn(4),
     {
       key: "kelengkapan", label: "Kelengkapan",
       render: (_, row) => (
@@ -121,7 +124,7 @@ export default function SeragamSiswa() {
       <div>
         <h1 className="text-2xl font-bold text-foreground">Seragam Siswa</h1>
         <p className="text-sm text-muted-foreground">
-          Daftar nama siswa aktif dan calon diterima beserta ukuran empat stel seragamnya. Ukuran diisi dan diubah lewat form data siswa (tombol pensil).
+          Daftar nama siswa aktif dan calon diterima beserta ukuran lima stel seragamnya. Ukuran diisi dan diubah lewat form data siswa (tombol pensil).
         </p>
       </div>
 
@@ -138,6 +141,14 @@ export default function SeragamSiswa() {
           <option value="aktif">Aktif</option>
           <option value="diterima">Calon diterima</option>
         </FilterSelect>
+        <FilterSelect label="Tahun ajaran tujuan" value={filters.tahunId} onChange={(tahunId) => set({ tahunId })}>
+          <option value="all">Semua</option>
+          {tahunList.map((tahun: { id: string; nama: string }) => <option key={tahun.id} value={tahun.id}>{tahun.nama}</option>)}
+        </FilterSelect>
+        <FilterSelect label="Gelombang" value={filters.gelombangId} onChange={(gelombangId) => set({ gelombangId })}>
+          <option value="all">Semua</option>
+          {gelombangList.map((gelombang: { id: string; nama: string }) => <option key={gelombang.id} value={gelombang.id}>{gelombang.nama}</option>)}
+        </FilterSelect>
         <FilterSelect label="Lembaga" value={filters.lembagaId} onChange={(lembagaId) => set({ lembagaId, kelasId: "all" })}>
           <option value="all">Semua lembaga</option>
           {lembagaOptions.map(([id, nama]) => <option key={id} value={id}>{nama}</option>)}
@@ -153,7 +164,7 @@ export default function SeragamSiswa() {
         </FilterSelect>
         <FilterSelect label="Kelengkapan" value={filters.kelengkapan} onChange={(kelengkapan) => set({ kelengkapan })}>
           <option value="all">Semua</option>
-          <option value="lengkap">Lengkap (4 stel)</option>
+          <option value="lengkap">Lengkap (5 stel)</option>
           <option value="belum_lengkap">Belum lengkap</option>
           <option value="tidak_tersedia">Data seragam TK belum tersedia</option>
         </FilterSelect>

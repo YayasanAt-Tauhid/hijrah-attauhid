@@ -18,6 +18,7 @@ const FULL = [
   { jenis: "Putih Merah", ukuran: "M" },
   { jenis: "Coklat", ukuran: "L" },
   { jenis: "Gamis Biru", ukuran: "XL" },
+  { jenis: "Pramuka", ukuran: "XXL" },
 ];
 
 const siswa = (over: Partial<SeragamSiswaSource> & { id: string; nama: string }): SeragamSiswaSource => ({
@@ -81,10 +82,10 @@ describe("buildSeragamSiswaRows", () => {
       siswa({ id: "obj", nama: "A", siswa_detail: { ukuran_seragam: FULL } }),
       siswa({ id: "arr", nama: "B", siswa_detail: [{ ukuran_seragam: FULL }] }),
     ], departemen);
-    expect(rows.every((row) => row.kelengkapan === "lengkap" && row.terisi === 4)).toBe(true);
+    expect(rows.every((row) => row.kelengkapan === "lengkap" && row.terisi === 5)).toBe(true);
   });
 
-  it("lengkap hanya bila keempat stel punya nama dan ukuran tersimpan", () => {
+  it("lengkap hanya bila kelima stel punya nama dan ukuran tersimpan", () => {
     const rows = buildSeragamSiswaRows([
       siswa({ id: "full", nama: "Full", siswa_detail: { ukuran_seragam: FULL } }),
       siswa({ id: "part", nama: "Part", siswa_detail: { ukuran_seragam: [FULL[0], FULL[1], { jenis: "Coklat", ukuran: "" }, { jenis: "", ukuran: "" }] } }),
@@ -92,15 +93,18 @@ describe("buildSeragamSiswaRows", () => {
       siswa({ id: "bad", nama: "Bad", siswa_detail: { ukuran_seragam: "rusak" } }),
     ], departemen);
     const byId = Object.fromEntries(rows.map((row) => [row.id, row]));
-    expect(byId.full).toMatchObject({ kelengkapan: "lengkap", terisi: 4 });
+    expect(byId.full).toMatchObject({ kelengkapan: "lengkap", terisi: 5 });
     expect(byId.part).toMatchObject({ kelengkapan: "belum_lengkap", terisi: 2 });
     expect(byId.none).toMatchObject({ kelengkapan: "belum_lengkap", terisi: 0 });
+    const lama = buildSeragamSiswaRows([siswa({ id: "lama", nama: "Lama", siswa_detail: { ukuran_seragam: FULL.slice(0, 4) } })], departemen)[0];
+    expect(lama).toMatchObject({ kelengkapan: "belum_lengkap", terisi: 4 });
+    expect(lama.stel).toHaveLength(5);
     expect(byId.bad).toMatchObject({ kelengkapan: "belum_lengkap", terisi: 0 });
   });
 
   it("nama bawaan hanya melabeli stel kosong dan tidak dianggap ukuran tersimpan", () => {
     const [row] = buildSeragamSiswaRows([siswa({ id: "1", nama: "A", jenis_kelamin: "L" })], departemen);
-    expect(row.stel.map((item) => item.jenis)).toEqual(["Olah raga", "Putih Merah", "Coklat", "Gamis Biru"]);
+    expect(row.stel.map((item) => item.jenis)).toEqual(["Olah raga", "Putih Merah", "Coklat", "Gamis Biru", ""]);
     expect(row.stel.every((item) => item.ukuran === "")).toBe(true);
     expect(row.terisi).toBe(0);
   });
@@ -134,12 +138,13 @@ describe("buildSeragamSiswaRows", () => {
 describe("filterSeragamSiswaRows", () => {
   const rows = buildSeragamSiswaRows([
     siswa({ id: "1", nama: "Ahmad Fauzi", nis: "2538001", status: "aktif", jenis_kelamin: "L", departemen_id: "sd",
-      siswa_detail: { ukuran_seragam: FULL }, kelas_siswa: [{ aktif: true, kelas: { id: "k1", nama: "1A", departemen_id: "sd" } }] }),
+      siswa_detail: { ukuran_seragam: FULL, tahun_ajaran_id: "ta1", spmb_gelombang_id: "g1" }, kelas_siswa: [{ aktif: true, kelas: { id: "k1", nama: "1A", departemen_id: "sd" } }] }),
     siswa({ id: "2", nama: "Aisyah", nis: "2538002", status: "diterima", jenis_kelamin: "P", departemen_id: "smp",
+      siswa_detail: { tahun_ajaran_id: "ta2", spmb_gelombang_id: "g2" },
       kelas_siswa: [{ aktif: true, kelas: { id: "k7", nama: "7A", departemen_id: "smp" } }] }),
     siswa({ id: "3", nama: "Budi", nis: "2538003", status: "aktif", jenis_kelamin: "L", departemen_id: "tk" }),
   ], departemen);
-  const all = { search: "", lembagaId: "all", kelasId: "all", jenisKelamin: "all", status: "all", kelengkapan: "all" };
+  const all = { search: "", lembagaId: "all", kelasId: "all", jenisKelamin: "all", status: "all", kelengkapan: "all", tahunId: "all", gelombangId: "all" };
 
   it("tanpa filter mengembalikan semua baris", () => {
     expect(filterSeragamSiswaRows(rows, all)).toHaveLength(3);
@@ -165,6 +170,14 @@ describe("filterSeragamSiswaRows", () => {
     expect(filterSeragamSiswaRows(rows, { ...all, kelengkapan: "tidak_tersedia" }).map((row) => row.id)).toEqual(["3"]);
   });
 
+  it("menyaring tahun ajaran dan gelombang SPMB; siswa tanpa data SPMB tidak lolos filter itu", () => {
+    expect(rows.map((row) => [row.tahunAjaranId, row.gelombangId])).toEqual([["ta1", "g1"], ["ta2", "g2"], ["", ""]]);
+    expect(filterSeragamSiswaRows(rows, { ...all, tahunId: "ta1" }).map((row) => row.id)).toEqual(["1"]);
+    expect(filterSeragamSiswaRows(rows, { ...all, gelombangId: "g2" }).map((row) => row.id)).toEqual(["2"]);
+    expect(filterSeragamSiswaRows(rows, { ...all, tahunId: "ta1", gelombangId: "g2" })).toEqual([]);
+    expect(filterSeragamSiswaRows(rows, { ...all, tahunId: "ta2", status: "diterima" }).map((row) => row.id)).toEqual(["2"]);
+  });
+
   it("menggabungkan beberapa filter sekaligus", () => {
     expect(filterSeragamSiswaRows(rows, { ...all, status: "aktif", jenisKelamin: "L", kelengkapan: "lengkap" }).map((row) => row.id)).toEqual(["1"]);
     expect(filterSeragamSiswaRows(rows, { ...all, status: "diterima", lembagaId: "sd" })).toEqual([]);
@@ -185,7 +198,7 @@ describe("seragamStelLabel dan seragamExportRows", () => {
     ], departemen);
     expect(seragamExportRows(rows)).toEqual([{
       nama: "Ahmad", nis: "2538001", lembaga: "SD", kelas: "1A", jenisKelamin: "Ikhwan", status: "Aktif",
-      stel1: "Olah raga: S", stel2: "Putih Merah: M", stel3: "Coklat: L", stel4: "Gamis Biru: XL",
+      stel1: "Olah raga: S", stel2: "Putih Merah: M", stel3: "Coklat: L", stel4: "Gamis Biru: XL", stel5: "Pramuka: XXL",
       kelengkapan: "Lengkap",
     }]);
   });

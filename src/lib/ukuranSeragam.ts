@@ -1,4 +1,5 @@
-// Empat jenis per lembaga mengikuti klarifikasi pengguna 21 Oktober 2026.
+// Empat nama bawaan per lembaga mengikuti klarifikasi pengguna 21 Oktober 2026.
+// Sejak 18 November 2026 ada lima slot (stel); slot kelima tidak punya nama bawaan.
 export const UNIFORM_TYPES: Record<string, string[]> = {
   "SD/L": ["Olah raga", "Putih Merah", "Coklat", "Gamis Biru"],
   "SD/P": ["Olah raga", "Putih Merah", "Coklat", "Gamis Biru"],
@@ -9,7 +10,8 @@ export const UNIFORM_TYPES: Record<string, string[]> = {
 };
 export const UNIFORM_SIZES = ["S", "M", "L", "XL", "XXL", "3XL", "4XL", "ALL SIZE"];
 export type UniformSize = { jenis: string; ukuran: string };
-export const emptyUniformSizes = (): UniformSize[] => Array.from({ length: 4 }, () => ({ jenis: "", ukuran: "" }));
+export const UNIFORM_SLOT_COUNT = 5;
+export const emptyUniformSizes = (): UniformSize[] => Array.from({ length: UNIFORM_SLOT_COUNT }, () => ({ jenis: "", ukuran: "" }));
 
 export function uniformDepartment(dept?: { kode?: string | null; nama?: string | null }): string {
   const code = (dept?.kode || dept?.nama || "").trim().toUpperCase();

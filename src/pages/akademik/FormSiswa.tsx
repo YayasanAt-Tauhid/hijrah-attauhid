@@ -25,7 +25,7 @@ import { fetchSpmbVerificationState, saveSpmbVerificationFields, spmbVerificatio
 import { ArrowLeft, Save, Wand2, Pencil, Loader2 } from "lucide-react";
 import { PENGHASILAN_CHOICES } from "@/lib/penghasilanOrangtua";
 import { UniformSizeFields } from "@/components/akademik/UniformSizeFields";
-import { emptyUniformSizes, readUniformSizes, uniformDepartment, defaultUniformSizes, validateUniformSizes } from "@/lib/ukuranSeragam";
+import { emptyUniformSizes, readUniformSizes, uniformDepartment, defaultUniformSizes, validateUniformSizes, UNIFORM_SLOT_COUNT } from "@/lib/ukuranSeragam";
 import { getErrorMessage } from "@/lib/errorMessage";
 
 const optionalString = z.string().optional();
@@ -64,7 +64,7 @@ const siswaSchema = z.object({
   berat_badan_kg: optionalString,
   lingkar_kepala_cm: optionalString,
   ukuran_baju: optionalString,
-  ukuran_seragam: z.array(z.object({ jenis: z.string(), ukuran: z.string() })).length(4),
+  ukuran_seragam: z.array(z.object({ jenis: z.string(), ukuran: z.string() })).length(UNIFORM_SLOT_COUNT),
   penyakit_pernah_diderita: optionalString,
   jarak_rumah_km: optionalString,
   waktu_perjalanan_menit: optionalString,

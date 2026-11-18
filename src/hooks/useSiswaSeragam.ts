@@ -5,6 +5,18 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getAkademikManagedDepartemenIds } from "@/lib/akademikScope";
 import { SERAGAM_SISWA_STATUSES, type SeragamSiswaSource } from "@/lib/seragamSiswa";
 
+/** Daftar gelombang SPMB untuk filter; kunci query sama dengan halaman SPMB agar cache dipakai bersama. */
+export function useSpmbGelombang() {
+  return useQuery({
+    queryKey: ["spmb", "waves", "statistics"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("spmb_gelombang").select("id,nama").order("urutan");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+}
+
 /**
  * Daftar siswa aktif dan calon diterima beserta ukuran seragamnya.
  * Hak akses lembaga mengikuti useSiswaList: admin_tu hanya melihat lembaga yang dikelolanya.
@@ -23,7 +35,7 @@ export function useSiswaSeragamList() {
           .from("siswa")
           .select(`
             id, nis, nama, jenis_kelamin, status, departemen_id,
-            siswa_detail(ukuran_seragam, spmb_departemen_tujuan_id),
+            siswa_detail(ukuran_seragam, spmb_departemen_tujuan_id, tahun_ajaran_id, spmb_gelombang_id),
             kelas_siswa(id, aktif, kelas:kelas_id(id, nama, departemen_id))
           `)
           .in("status", [...SERAGAM_SISWA_STATUSES])

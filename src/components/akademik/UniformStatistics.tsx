@@ -42,12 +42,12 @@ export function UniformStatistics({ rows, departments }: {
       </div>
     </div>
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <StatsCard title="Ukuran lengkap (4 stel)" value={summary.complete} icon={CheckCircle2} color="success" />
+      <StatsCard title="Ukuran lengkap (5 stel)" value={summary.complete} icon={CheckCircle2} color="success" />
       <StatsCard title="Ukuran belum lengkap" value={summary.incomplete} icon={Clock} color="warning" />
       <StatsCard title="Stel tercatat" value={summary.recorded} icon={Shirt} color="info" />
       <StatsCard title="Stel belum ada ukuran" value={summary.missing} icon={AlertTriangle} color="warning" />
     </div>
-    <p className="text-sm text-muted-foreground">{summary.eligible} pendaftar dalam perhitungan kelengkapan empat stel. Ukuran yang belum diisi ditampilkan terpisah sebagai “Belum diisi” dan tidak termasuk “Total per jenis”.</p>
+    <p className="text-sm text-muted-foreground">{summary.eligible} pendaftar dalam perhitungan kelengkapan lima stel. Ukuran yang belum diisi ditampilkan terpisah sebagai “Belum diisi” dan tidak termasuk “Total per jenis”.</p>
     {summary.unavailable > 0 && <p className="text-sm text-muted-foreground">{summary.unavailable} pendaftar TK belum dihitung karena data seragam TK belum tersedia.</p>}
     <UniformTotals rows={matrix.rows} sizes={matrix.sizes} />
     <h3 className="font-semibold">Rincian per lembaga dan jenis kelamin</h3>

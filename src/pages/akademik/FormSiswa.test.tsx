@@ -55,7 +55,7 @@ it("memuat ukuran tersimpan, menyimpan empat stel bersama data siswa, dan memper
   fireEvent.click(screen.getByRole("button", { name: "Simpan Perubahan" }));
   await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1));
   const saved = mocks.update.mock.calls[0][0];
-  expect(saved.detail.ukuran_seragam).toEqual([mocks.sizes[0], { ...mocks.sizes[1], ukuran: "XXL" }, mocks.sizes[2], { jenis: "Gamis Biru", ukuran: "" }]);
+  expect(saved.detail.ukuran_seragam).toEqual([mocks.sizes[0], { ...mocks.sizes[1], ukuran: "XXL" }, mocks.sizes[2], { jenis: "Gamis Biru", ukuran: "" }, { jenis: "", ukuran: "" }]);
   expect(saved.detail.ukuran_baju).toBe("X3L");
 });
 it("perubahan data lain tidak menimpa ukuran seragam yang tersimpan", async () => {
@@ -72,6 +72,16 @@ it("menyimpan nama jenis seragam yang diedit meskipun ukuran belum diisi", async
   fireEvent.click(screen.getByRole("button", { name: "Simpan Perubahan" }));
   await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1));
   expect(mocks.update.mock.calls[0][0].detail.ukuran_seragam[3]).toEqual({ jenis: "Gamis Biru Pesanan", ukuran: "" });
+});
+it("menyimpan stel kelima yang diisi", async () => {
+  render(<FormSiswa />);
+  openUniformTab();
+  fireEvent.change(await screen.findByLabelText("Nama jenis seragam stel 5"), { target: { value: "Pramuka" } });
+  fireEvent.change(screen.getByLabelText("Ukuran stel 5"), { target: { value: "L" } });
+  fireEvent.click(screen.getByRole("button", { name: "Simpan Perubahan" }));
+  await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1));
+  expect(mocks.update.mock.calls[0][0].detail.ukuran_seragam).toHaveLength(5);
+  expect(mocks.update.mock.calls[0][0].detail.ukuran_seragam[4]).toEqual({ jenis: "Pramuka", ukuran: "L" });
 });
 it("ukuran tanpa nama ditolak sebelum mengirim data", async () => {
   render(<FormSiswa />);
@@ -91,7 +101,7 @@ it("siswa tanpa ukuran tersimpan mendapat empat nama bawaan yang bisa disimpan",
     fireEvent.change(screen.getByLabelText("Ukuran stel 3"), { target: { value: "L" } });
     fireEvent.click(screen.getByRole("button", { name: "Simpan Perubahan" }));
     await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1));
-    expect(mocks.update.mock.calls[0][0].detail.ukuran_seragam.map((item: { jenis: string }) => item.jenis)).toEqual(["Olah raga", "Putih Merah", "Coklat", "Gamis Biru"]);
+    expect(mocks.update.mock.calls[0][0].detail.ukuran_seragam.map((item: { jenis: string }) => item.jenis)).toEqual(["Olah raga", "Putih Merah", "Coklat", "Gamis Biru", ""]);
   } finally { mocks.detail.ukuran_seragam = original; }
 });
 

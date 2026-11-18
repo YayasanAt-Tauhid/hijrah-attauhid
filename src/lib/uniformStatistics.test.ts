@@ -5,22 +5,22 @@ const make = (dep: string, gender: string, sizes: unknown) => ({ departemen_id: 
 describe("rekap seragam SPMB", () => {
   it("menghitung pendaftar lengkap dan stel terpisah; tidak menganggap ukuran kosong sudah dipesan", () => {
     const rows = [
-      make("sd", "L", [{ jenis: "Olah raga", ukuran: "S" }, { jenis: "Putih Merah", ukuran: "M" }, { jenis: "Coklat", ukuran: "L" }, { jenis: "Gamis Biru", ukuran: "XL" }]),
+      make("sd", "L", [{ jenis: "Olah raga", ukuran: "S" }, { jenis: "Putih Merah", ukuran: "M" }, { jenis: "Coklat", ukuran: "L" }, { jenis: "Gamis Biru", ukuran: "XL" }, { jenis: "Pramuka", ukuran: "XXL" }]),
       make("smp", "P", [{ jenis: "Olah raga", ukuran: "M" }, { jenis: "Putih Biru Khusus", ukuran: "XL" }, { jenis: "Coklat", ukuran: "" }, { jenis: "Gamis Ungu", ukuran: "" }]),
       make("sd", "L", null),
     ];
     const result = summarizeUniforms(rows, departments);
-    expect(result).toMatchObject({ eligible: 3, complete: 1, incomplete: 2, recorded: 6, missing: 6 });
-    expect(result.rekap.reduce((sum, row) => sum + row.jumlah, 0)).toBe(12);
+    expect(result).toMatchObject({ eligible: 3, complete: 1, incomplete: 2, recorded: 7, missing: 8 });
+    expect(result.rekap.reduce((sum, row) => sum + row.jumlah, 0)).toBe(15);
     expect(result.rekap.find((row) => row.jenis === "Putih Biru Khusus")).toMatchObject({ ukuran: "XL", jumlah: 1 });
     expect(result.rekap.find((row) => row.jenis === "Gamis Ungu")).toMatchObject({ ukuran: "Belum diisi", jumlah: 1 });
   });
-  it("mengabaikan TK dalam kebutuhan empat stel dan tidak menggandakan ukuran_baju lama", () => {
+  it("mengabaikan TK dalam kebutuhan lima stel dan tidak menggandakan ukuran_baju lama", () => {
     const result = summarizeUniforms([
       make("tk", "L", null),
       { ...make("sd", "L", null), _spmbDetail: { ukuran_baju: "XL" } },
     ], departments);
-    expect(result).toMatchObject({ eligible: 1, unavailable: 1, complete: 0, recorded: 0, missing: 4 });
+    expect(result).toMatchObject({ eligible: 1, unavailable: 1, complete: 0, recorded: 0, missing: 5 });
     expect(result.rekap.every((row) => row.ukuran === "Belum diisi")).toBe(true);
   });
   it("mengelompokkan ejaan huruf/spasi tanpa menyatukan jenis, lembaga, dan jenis kelamin yang berbeda", () => {
@@ -68,7 +68,7 @@ describe("tabel silang ukuran seragam", () => {
     expect(customIndex).toBeGreaterThan(0);
     expect(matrix.rows.find((row) => row.lembaga === "SMP" && row.jenis === "Olah raga")?.["size_" + customIndex]).toBe(1);
     expect(matrix.rows.reduce((sum, row) => sum + row.jumlah, 0)).toBe(4);
-    expect(matrix.rows.reduce((sum, row) => sum + row.belumDiisi, 0)).toBe(16);
+    expect(matrix.rows.reduce((sum, row) => sum + row.belumDiisi, 0)).toBe(21);
   });
 });
 
@@ -83,11 +83,11 @@ describe("total jenis dan ukuran", () => {
     const totals=summarizeUniformSizeTotals(matrix.rows,matrix.sizes);
     const sport=totals.rows.find(row=>row.jenis.toLowerCase()==="olah raga");
     expect(sport).toMatchObject({jumlah:3,belumDiisi:1,size_0:1,size_1:1});
-    expect(totals.total).toMatchObject({jumlah:3,belumDiisi:13});
+    expect(totals.total).toMatchObject({jumlah:3,belumDiisi:17});
     const transposed=transposeUniformSizeTable(totals.rows,matrix.sizes);
     expect(transposed.rows.find(row=>row.ukuran==="S")?.jumlah).toBe(1);
     expect(transposed.rows.find(row=>row.ukuran==="JUMBO")?.jumlah).toBe(1);
-    expect(transposed.rows.find(row=>row.ukuran==="Belum diisi")?.jumlah).toBe(13);
+    expect(transposed.rows.find(row=>row.ukuran==="Belum diisi")?.jumlah).toBe(17);
     expect(transposed.total.jumlah).toBe(3);
     const sumSizes=transposed.rows.filter(row=>row.id!=="missing").reduce((sum,row)=>sum+row.jumlah,0);
     expect(sumSizes).toBe(transposed.total.jumlah);
