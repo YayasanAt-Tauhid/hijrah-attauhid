@@ -116,6 +116,13 @@ export default function SeragamSiswa() {
     },
     stelColumn(0), stelColumn(1), stelColumn(2), stelColumn(3), stelColumn(4),
     {
+      key: "ukuranBaju", label: "Ukuran Seragam SPMB", className: "min-w-[130px]",
+      render: (value) => {
+        const ukuran = String(value || "");
+        return ukuran ? <span className="whitespace-nowrap">{ukuran}</span> : <span className="text-muted-foreground">-</span>;
+      },
+    },
+    {
       key: "kelengkapan", label: "Kelengkapan",
       render: (_, row) => (
         <span className={`inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-xs ${KELENGKAPAN_CLASS[row.kelengkapan]}`}>

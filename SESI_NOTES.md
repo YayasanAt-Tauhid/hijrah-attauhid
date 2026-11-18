@@ -1,3 +1,11 @@
+# Catatan Sesi — Seragam: kolom Ukuran Seragam SPMB di /akademik/seragam (18 November 2026, sore)
+
+- **Permintaan user:** di `/akademik/seragam` tambah kolom ukuran seragam SPMB yang bukan jenis seragam. **Dikonfirmasi user:** yang dimaksud adalah `siswa_detail.ukuran_baju` (isian tunggal "Ukuran Baju" di formulir SPMB: S, M, L, XL, XXL, X3L, X4L, X5L), bukan salah satu dari lima stel.
+- **Perubahan:** hook `useSiswaSeragamList` ikut membaca `ukuran_baju`; `SeragamSiswaRow.ukuranBaju` (di-trim, kosong bila belum diisi); kolom "Ukuran Seragam SPMB" di antara Stel 5 dan Kelengkapan ("-" bila kosong); kolom yang sama di ekspor Excel/CSV sheet utama (nilai kosong ditulis "-", sama seperti stel). **Tanpa migrasi dan tanpa menyentuh data**, jadi rilis = deploy dari `main`.
+- **Sengaja tidak diubah:** "Kelengkapan" tetap 5 stel (`ukuran_baju` tidak dihitung sebagai stel), sheet "Rekap Seragam", statistik SPMB, dan filter (tidak ada filter baru).
+- **Tes:** TDD, 3 tes baru merah lalu hijau (pemetaan `ukuran_baju` objek/array/kosong, urutan kolom ekspor, kolom di halaman); satu tes lama bentuk baris ekspor diperbarui karena baris ekspor memang bertambah satu kunci. 125 tes terkait seragam lulus (16 berkas); eslint bersih di 5 berkas yang diubah; `tsc -p tsconfig.app.json` 0 error (sama dengan `main`).
+- **Belum diverifikasi:** deploy Cloudflare setelah push dan tampilan di aplikasi sungguhan. Isi kolom di produksi belum dicek (Rustbase MCP gagal tersambung saat sesi); siswa non-SPMB atau data lama kemungkinan tampil "-".
+
 # Catatan Sesi — Seragam: kolom/filter uang pangkal dan rekap seragam di Excel (18 November 2026, siang)
 
 - **Permintaan user:** di `/akademik/seragam` tambah kolom Nominal Uang Pangkal, Jumlah Dibayar, Sisa, Keterangan; filter dropdown status; rekapitulasi di ekspor Excel; terapkan di produksi dan push ke `main`. **Koreksi user (12:22 WIB): rekapitulasi yang dimaksud adalah rekap seragam, bukan uang pangkal.**

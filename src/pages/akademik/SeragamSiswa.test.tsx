@@ -54,7 +54,7 @@ beforeEach(() => {
   mocks.loading = false;
   mocks.navigate.mockClear();
   mocks.siswa = [
-    row({ id: "a", nama: "Ahmad Aktif", nis: "2538001", siswa_detail: { ukuran_seragam: FULL, tahun_ajaran_id: "ta1", spmb_gelombang_id: "g1" },
+    row({ id: "a", nama: "Ahmad Aktif", nis: "2538001", siswa_detail: { ukuran_seragam: FULL, ukuran_baju: "X3L", tahun_ajaran_id: "ta1", spmb_gelombang_id: "g1" },
       kelas_siswa: [{ aktif: true, kelas: { id: "k1", nama: "1A", departemen_id: "sd" } }] }),
     row({ id: "b", nama: "Bilal Calon", nis: "2538002", status: "diterima", departemen_id: "smp", siswa_detail: { tahun_ajaran_id: "ta2", spmb_gelombang_id: "g2" } }),
     row({ id: "c", nama: "Citra Alumni", status: "alumni" }),
@@ -82,6 +82,22 @@ describe("halaman Seragam Siswa", () => {
     expect(within(bilal).getAllByText(/: Belum diisi$/)).toHaveLength(4);
     expect(within(bilal).getByText("Calon diterima")).toBeTruthy();
     expect(within(bilal).getByText("Belum lengkap")).toBeTruthy();
+  });
+
+  it("menampilkan kolom Ukuran Seragam SPMB di antara Stel 5 dan Kelengkapan, '-' bila kosong", () => {
+    render(<SeragamSiswa />);
+    const headers = screen.getAllByRole("columnheader").map((header) => header.textContent?.trim() ?? "");
+    const index = headers.findIndex((text) => text.startsWith("Ukuran Seragam SPMB"));
+    expect(index).toBeGreaterThan(-1);
+    expect(headers[index - 1]).toMatch(/^Stel 5/);
+    expect(headers[index + 1]).toMatch(/^Kelengkapan/);
+
+    const cellText = (name: string) => {
+      const tr = screen.getByText(name).closest("tr") as HTMLElement;
+      return within(tr).getAllByRole("cell")[index].textContent?.trim();
+    };
+    expect(cellText("Ahmad Aktif")).toBe("X3L");
+    expect(cellText("Bilal Calon")).toBe("-");
   });
 
   it("menjelaskan bahwa data seragam TK belum tersedia", () => {

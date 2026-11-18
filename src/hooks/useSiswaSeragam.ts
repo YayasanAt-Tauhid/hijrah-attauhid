@@ -57,7 +57,7 @@ export function useSiswaSeragamList() {
           .from("siswa")
           .select(`
             id, nis, nama, jenis_kelamin, status, departemen_id,
-            siswa_detail(ukuran_seragam, spmb_departemen_tujuan_id, tahun_ajaran_id, spmb_gelombang_id),
+            siswa_detail(ukuran_seragam, ukuran_baju, spmb_departemen_tujuan_id, tahun_ajaran_id, spmb_gelombang_id),
             kelas_siswa(id, aktif, kelas:kelas_id(id, nama, departemen_id))
           `)
           .in("status", [...SERAGAM_SISWA_STATUSES])

@@ -56,6 +56,8 @@ export type SeragamSiswaRow = {
   gelombangId: string;
   /** Lima stel: nama jenis (nama bawaan melabeli stel kosong) dan ukuran tersimpan. */
   stel: UniformSize[];
+  /** Ukuran baju tunggal dari formulir SPMB (siswa_detail.ukuran_baju); kosong bila belum diisi. Bukan salah satu dari lima stel. */
+  ukuranBaju: string;
   /** Jumlah stel yang nama dan ukurannya sama-sama tersimpan. */
   terisi: number;
   kelengkapan: SeragamKelengkapan;
@@ -110,6 +112,7 @@ export function buildSeragamSiswaRows(
       tahunAjaranId: String(detail.tahun_ajaran_id || ""),
       gelombangId: String(detail.spmb_gelombang_id || ""),
       stel,
+      ukuranBaju: typeof detail.ukuran_baju === "string" ? detail.ukuran_baju.trim() : "",
       terisi,
       kelengkapan,
       uangPangkal: uangPangkal?.get(siswa.id) ?? null,
@@ -172,6 +175,7 @@ export const SERAGAM_EXPORT_COLUMNS = [
   { key: "stel3", label: "Stel 3" },
   { key: "stel4", label: "Stel 4" },
   { key: "stel5", label: "Stel 5" },
+  { key: "ukuranBaju", label: "Ukuran Seragam SPMB" },
   { key: "kelengkapan", label: "Kelengkapan" },
 ];
 
@@ -199,6 +203,7 @@ export function seragamExportRows(rows: SeragamSiswaRow[], options: { uangPangka
     stel3: seragamStelLabel(row.stel[2]),
     stel4: seragamStelLabel(row.stel[3]),
     stel5: seragamStelLabel(row.stel[4]),
+    ukuranBaju: row.ukuranBaju || "-",
     kelengkapan: seragamKelengkapanLabel(row.kelengkapan),
     ...(options.uangPangkal ? uangPangkalExportCells(row) : {}),
   }));

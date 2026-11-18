@@ -136,6 +136,40 @@ describe("buildSeragamSiswaRows", () => {
     expect(byId.p.terisi).toBe(0);
     expect(byId.x.jenisKelamin).toBe("-");
   });
+
+  it("memuat ukuran seragam SPMB (ukuran_baju) apa adanya, terpisah dari lima stel", () => {
+    const rows = buildSeragamSiswaRows([
+      siswa({ id: "obj", nama: "Obj", siswa_detail: { ukuran_baju: " X3L " } }),
+      siswa({ id: "arr", nama: "Arr", siswa_detail: [{ ukuran_baju: "M" }] }),
+      siswa({ id: "kosong", nama: "Kosong", siswa_detail: { ukuran_baju: "  " } }),
+      siswa({ id: "null", nama: "Null", siswa_detail: { ukuran_baju: null } }),
+      siswa({ id: "tanpa", nama: "Tanpa", siswa_detail: null }),
+    ], departemen);
+    const byId = Object.fromEntries(rows.map((row) => [row.id, row]));
+    expect(byId.obj.ukuranBaju).toBe("X3L");
+    expect(byId.arr.ukuranBaju).toBe("M");
+    expect(byId.kosong.ukuranBaju).toBe("");
+    expect(byId.null.ukuranBaju).toBe("");
+    expect(byId.tanpa.ukuranBaju).toBe("");
+    // Tidak mengubah stel maupun kelengkapan.
+    expect(byId.obj.terisi).toBe(0);
+    expect(byId.obj.kelengkapan).toBe("belum_lengkap");
+  });
+
+  it("mengekspor kolom Ukuran Seragam SPMB setelah Stel 5 dan sebelum Kelengkapan", () => {
+    const keys = SERAGAM_EXPORT_COLUMNS.map((column) => column.key);
+    expect(keys.indexOf("ukuranBaju")).toBe(keys.indexOf("stel5") + 1);
+    expect(keys.indexOf("kelengkapan")).toBe(keys.indexOf("ukuranBaju") + 1);
+    expect(SERAGAM_EXPORT_COLUMNS.find((column) => column.key === "ukuranBaju")?.label).toBe("Ukuran Seragam SPMB");
+    expect(seragamExportColumns(true).map((column) => column.key)).toContain("ukuranBaju");
+
+    const rows = buildSeragamSiswaRows([
+      siswa({ id: "a", nama: "A", siswa_detail: { ukuran_baju: "XL" } }),
+      siswa({ id: "b", nama: "B" }),
+    ], departemen);
+    const exported = seragamExportRows(rows);
+    expect(exported.map((item) => item.ukuranBaju)).toEqual(["XL", "-"]);
+  });
 });
 
 describe("filterSeragamSiswaRows", () => {
@@ -196,12 +230,13 @@ describe("seragamStelLabel dan seragamExportRows", () => {
 
   it("menyusun baris ekspor memakai kolom datar yang aman untuk Excel", () => {
     const rows = buildSeragamSiswaRows([
-      siswa({ id: "1", nama: "Ahmad", nis: "2538001", siswa_detail: { ukuran_seragam: FULL },
+      siswa({ id: "1", nama: "Ahmad", nis: "2538001", siswa_detail: { ukuran_seragam: FULL, ukuran_baju: "L" },
         kelas_siswa: [{ aktif: true, kelas: { id: "k1", nama: "1A", departemen_id: "sd" } }] }),
     ], departemen);
     expect(seragamExportRows(rows)).toEqual([{
       nama: "Ahmad", nis: "2538001", lembaga: "SD", kelas: "1A", jenisKelamin: "Ikhwan", status: "Aktif",
       stel1: "Olah raga: S", stel2: "Putih Merah: M", stel3: "Coklat: L", stel4: "Gamis Biru: XL", stel5: "Pramuka: XXL",
+      ukuranBaju: "L",
       kelengkapan: "Lengkap",
     }]);
   });
