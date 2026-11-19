@@ -17,7 +17,10 @@ type Props = {
   tahunAjaranId: string;
   tahunList: Opsi[];
   departemenList: Array<Opsi & { kode?: string | null }>;
+  /** Daftar harga LENGKAP untuk tahun ajaran ini; dipakai untuk semua logika (tabrakan, salin). */
   harga: HargaSeragamVendor[];
+  /** Filter lembaga halaman: hanya memengaruhi baris yang ditampilkan di tabel. */
+  lembagaId?: string;
   loading: boolean;
 };
 type Form = { id: string; aktif: boolean; departemen_id: string; jenis_kelamin: JenisKelaminHarga; nama_stel: string; ukuran: string; harga: string; catatan: string };
@@ -27,7 +30,18 @@ const FORM_KOSONG: Form = { id: "", aktif: true, departemen_id: "", jenis_kelami
 const JENIS_LABEL: Record<JenisKelaminHarga, string> = { L: "Ikhwan", P: "Akhwat", semua: "Semua" };
 const selectClass = "h-10 w-full rounded-md border border-input bg-background px-3 text-sm";
 
-export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departemenList, harga, loading }: Props) {
+/**
+ * Mengubah isian harga menjadi angka rupiah. Menerima "185000", "170.000" (titik ribuan), dan awalan "Rp".
+ * Selain itu (koma, desimal, huruf, minus) menghasilkan NaN agar validasi menolaknya, bukan menyimpan nilai salah.
+ */
+function parseHargaRupiah(input: string): number {
+  const bersih = input.trim().replace(/^rp\s*/i, "").trim();
+  if (/^\d{1,3}(\.\d{3})+$/.test(bersih)) return Number(bersih.replace(/\./g, ""));
+  if (/^\d+$/.test(bersih)) return Number(bersih);
+  return Number.NaN;
+}
+
+export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departemenList, harga, lembagaId, loading }: Props) {
   const simpan = useSimpanHargaSeragamVendor();
   const ubahAktif = useUbahAktifHarga();
   const salin = useSalinHargaSeragam();
@@ -43,7 +57,7 @@ export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departe
     return d?.kode || d?.nama || "-";
   };
 
-  const baris = harga.map((h) => ({
+  const baris = harga.filter((h) => !lembagaId || h.departemen_id === lembagaId).map((h) => ({
     ...h,
     lembaga: namaLembaga(h.departemen_id),
     jenisLabel: JENIS_LABEL[h.jenis_kelamin],
@@ -69,7 +83,7 @@ export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departe
       jenis_kelamin: form.jenis_kelamin,
       nama_stel: form.nama_stel.trim(),
       ukuran: normalizeUkuranList(form.ukuran.split(",")),
-      harga: Number(form.harga),
+      harga: parseHargaRupiah(form.harga),
       catatan: form.catatan.trim() || null,
       aktif: form.aktif,
     };

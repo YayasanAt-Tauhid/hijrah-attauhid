@@ -124,7 +124,8 @@ export default function BiayaSeragamSPMB() {
             tahunAjaranId={tahunAjaranId}
             tahunList={tahunList}
             departemenList={departemenList}
-            harga={harga.filter((h) => !lembagaId || h.departemen_id === lembagaId)}
+            harga={harga}
+            lembagaId={lembagaId || undefined}
             loading={hargaLoading}
           />
         </TabsContent>

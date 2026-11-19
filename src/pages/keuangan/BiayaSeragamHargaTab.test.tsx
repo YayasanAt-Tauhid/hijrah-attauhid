@@ -126,4 +126,86 @@ describe("tab Harga", () => {
     expect(mocks.salin.mock.calls[0][0][0]).toMatchObject({ tahun_ajaran_id: TA, departemen_id: "dept-sd", nama_stel: "Olah raga" });
     mocks.sumber.data = [];
   });
+
+  describe("filter lembaga hanya untuk tampilan", () => {
+    const SD = "dept-sd";
+    const hargaSd: HargaSeragamVendor = {
+      id: "h3", tahun_ajaran_id: TA, departemen_id: SD, jenis_kelamin: "semua", nama_stel: "Seragam SD Biru", ukuran: ["S"], harga: 120000, catatan: null, aktif: true,
+    };
+    const propsFilter = {
+      ...props,
+      departemenList: [...props.departemenList, { id: SD, nama: "SD", kode: "SD" }],
+      harga: [...harga, hargaSd],
+      lembagaId: TK,
+    };
+
+    afterEach(() => { mocks.sumber.data = []; });
+
+    it("hanya menampilkan baris lembaga yang dipilih", () => {
+      render(<BiayaSeragamHargaTab {...propsFilter} />);
+      expect(screen.getByText("Set Gamis Merah")).toBeInTheDocument();
+      expect(screen.queryByText("Seragam SD Biru")).not.toBeInTheDocument();
+    });
+
+    it("menolak salin ke lembaga lain yang sudah punya harga di tahun tujuan walau tidak tampil di tabel", async () => {
+      mocks.salin.mockResolvedValue(undefined);
+      mocks.sumber.data = [
+        { id: "s2", tahun_ajaran_id: "ta-2026", departemen_id: SD, jenis_kelamin: "L", nama_stel: "Olah raga", ukuran: [], harga: 100000, catatan: null, aktif: true },
+      ];
+      render(<BiayaSeragamHargaTab {...propsFilter} />);
+      fireEvent.click(screen.getByRole("button", { name: "Salin dari tahun lain" }));
+      const dialog = await screen.findByRole("dialog");
+      fireEvent.change(within(dialog).getByLabelText("Salin dari tahun ajaran"), { target: { value: "ta-2026" } });
+      fireEvent.change(within(dialog).getByLabelText("Lembaga"), { target: { value: SD } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Salin" }));
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent(/sudah punya harga|tidak ada yang bisa disalin/i);
+      expect(mocks.salin).not.toHaveBeenCalled();
+    });
+
+    it("tetap mendeteksi tabrakan dengan baris aktif lembaga lain yang tersaring dari tampilan", async () => {
+      render(<BiayaSeragamHargaTab {...propsFilter} />);
+      fireEvent.click(screen.getByRole("button", { name: "Tambah harga" }));
+      const dialog = await screen.findByRole("dialog");
+      fireEvent.change(within(dialog).getByLabelText("Lembaga"), { target: { value: SD } });
+      fireEvent.change(within(dialog).getByLabelText("Jenis kelamin"), { target: { value: "semua" } });
+      fireEvent.change(within(dialog).getByLabelText("Nama stel"), { target: { value: "seragam sd biru" } });
+      fireEvent.change(within(dialog).getByLabelText("Ukuran (pisahkan dengan koma, kosong = semua)"), { target: { value: "S" } });
+      fireEvent.change(within(dialog).getByLabelText("Harga (Rp)"), { target: { value: "120000" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Simpan" }));
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent(/bertabrakan/i);
+      expect(mocks.simpan).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("pengisian harga dengan titik ribuan", () => {
+    async function isiFormDenganHarga(isian: string) {
+      render(<BiayaSeragamHargaTab {...props} />);
+      fireEvent.click(screen.getByRole("button", { name: "Tambah harga" }));
+      const dialog = await screen.findByRole("dialog");
+      fireEvent.change(within(dialog).getByLabelText("Lembaga"), { target: { value: TK } });
+      fireEvent.change(within(dialog).getByLabelText("Nama stel"), { target: { value: "Stel Titik" } });
+      fireEvent.change(within(dialog).getByLabelText("Harga (Rp)"), { target: { value: isian } });
+      return dialog;
+    }
+
+    it.each([
+      ["170.000", 170000],
+      ["1.250.000", 1250000],
+      ["Rp 185.000", 185000],
+      ["185000", 185000],
+    ])("menerima %s sebagai %i", async (isian, nilai) => {
+      const dialog = await isiFormDenganHarga(isian);
+      fireEvent.click(within(dialog).getByRole("button", { name: "Simpan" }));
+      await waitFor(() => expect(mocks.simpan).toHaveBeenCalledTimes(1));
+      expect(mocks.simpan.mock.calls[0][0].harga).toBe(nilai);
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    });
+
+    it.each(["170,000", "17.5"])("menolak %s tanpa memanggil basis data", async (isian) => {
+      const dialog = await isiFormDenganHarga(isian);
+      fireEvent.click(within(dialog).getByRole("button", { name: "Simpan" }));
+      expect(await within(dialog).findByRole("alert")).toBeInTheDocument();
+      expect(mocks.simpan).not.toHaveBeenCalled();
+    });
+  });
 });
