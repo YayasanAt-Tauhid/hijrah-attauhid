@@ -87,6 +87,18 @@ describe("AppSidebar: menu Keuangan menurut izin", () => {
     expect(state.count).not.toHaveBeenCalled();
   });
 
+  it("Biaya Seragam SPMB tidak tampil untuk kasir bawaan, tampil untuk keuangan dan bendahara bawaan", () => {
+    state.path = "/keuangan/seragam-vendor";
+    as("kasir", DEFAULT_ROLE_PERMISSIONS.kasir);
+    expect(screen.queryByText("Biaya Seragam SPMB")).not.toBeInTheDocument();
+    cleanup();
+    as("keuangan", DEFAULT_ROLE_PERMISSIONS.keuangan);
+    expect(screen.getByText("Biaya Seragam SPMB")).toBeInTheDocument();
+    cleanup();
+    as("bendahara", DEFAULT_ROLE_PERMISSIONS.bendahara);
+    expect(screen.getByText("Biaya Seragam SPMB")).toBeInTheDocument();
+  });
+
   it("tanpa izin ajukan maupun setujui, menu Persetujuan Pembatalan tidak tampil", () => {
     state.path = "/keuangan/pembayaran";
     as("kasir", ["keuangan.pembayaran"]);
