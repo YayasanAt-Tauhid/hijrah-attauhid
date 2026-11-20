@@ -31,3 +31,35 @@ export function layakTampilDiPencarianPembayaran(input: LayakTampilInput): boole
   }
   return true;
 }
+
+export interface KelasSiswaRingkas {
+  aktif: boolean | null;
+  kelas: { nama: string } | null;
+}
+
+/** Nama kelas yang sedang aktif; kelas historis diabaikan. */
+export function kelasAktifNama(kelasSiswa: KelasSiswaRingkas[] | null | undefined): string | null {
+  const aktif = (kelasSiswa ?? []).find((ks) => ks.aktif && ks.kelas?.nama);
+  return aktif?.kelas?.nama ?? null;
+}
+
+export interface LabelSiswaInternalSpmbInput {
+  kelasNama?: string | null;
+  /** Kode lembaga asal (tempat siswa sekarang bersekolah), mis. SD. */
+  asalKode?: string | null;
+  /** Kode lembaga tujuan SPMB, mis. SMP. */
+  tujuanKode?: string | null;
+}
+
+/**
+ * Label hasil pencarian halaman Pembayaran SPMB untuk siswa internal (naik
+ * jenjang). Contoh: "Siswa internal · Kelas 6C · SD → SMP". Berguna supaya kasir
+ * dapat membedakan siswa internal dari calon baru dan dari nama kembar.
+ */
+export function labelSiswaInternalSpmb(input: LabelSiswaInternalSpmbInput): string {
+  const bagian = ["Siswa internal"];
+  if (input.kelasNama) bagian.push(`Kelas ${input.kelasNama}`);
+  if (input.asalKode) bagian.push(input.asalKode);
+  const label = bagian.join(" · ");
+  return input.tujuanKode ? `${label} → ${input.tujuanKode}` : label;
+}
