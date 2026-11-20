@@ -99,6 +99,11 @@ export interface SiswaPembayaranRingkas {
   status: string | null;
   angkatan_id: string | null;
   departemen_id: string | null;
+  /**
+   * True bila siswa internal (naik jenjang) yang pendaftaran SPMB-nya masih
+   * "calon". Hanya diisi pada mode pencarian halaman Pembayaran SPMB.
+   */
+  spmb_internal?: boolean;
   /** Nama ayah/ibu dan satu nomor HP, untuk membedakan siswa bernama sama. */
   orang_tua: OrangTuaRingkas;
   kelas_siswa: Array<{
@@ -158,7 +163,49 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
     // Satu query ilike per kolom (bukan satu string filter gabungan) supaya input
     // kasir yang mengandung koma/kurung tidak merusak filter PostgREST.
     const SEARCH_FIELDS = ["nama", "nis", "nisn", "id_santri_pihak3"] as const;
-    const buildQuery = (field: (typeof SEARCH_FIELDS)[number]) => {
+
+    // Halaman Pembayaran SPMB: siswa internal (naik jenjang, mis. SD 6C -> SMP)
+    // masih berstatus siswa 'aktif' di lembaga ASAL, sedangkan pendaftaran SPMB-nya
+    // 'calon' ke lembaga TUJUAN. Tanpa ini mereka tidak pernah ditemukan karena
+    // pencarian calon mensyaratkan siswa.status = 'calon' dan lembaga yang sama.
+    const internalSpmbIds: string[] = [];
+    if (status === "calon" && data?.departemen_id) {
+      // Kolom spmb_* belum ada di tipe Supabase yang digenerate; pola cast sempit
+      // yang sama dipakai di bawah untuk data orang tua.
+      interface InternalFilter {
+        eq(column: string, value: string | boolean): InternalFilter;
+        limit(n: number): PromiseLike<{
+          data: Array<{ siswa_id: string | null }> | null;
+          error: { message: string } | null;
+        }>;
+      }
+      const detailInternalClient = admin as unknown as {
+        from(table: string): { select(columns: string): InternalFilter };
+      };
+      const { data: internalRows, error: internalError } = await detailInternalClient
+        .from("siswa_detail")
+        .select("siswa_id")
+        .eq("spmb_siswa_internal", true)
+        .eq("spmb_status_pendaftaran", "calon")
+        .eq("spmb_departemen_tujuan_id", data.departemen_id)
+        .limit(500);
+      if (internalError) {
+        throw new Error("Gagal memeriksa siswa internal SPMB: " + internalError.message);
+      }
+      for (const row of internalRows ?? []) if (row.siswa_id) internalSpmbIds.push(row.siswa_id);
+    }
+    const internalSpmbSet = new Set(internalSpmbIds);
+
+    const buildQuery = (field: (typeof SEARCH_FIELDS)[number], internalOnly = false) => {
+      if (internalOnly) {
+        return admin
+          .from("siswa")
+          .select(select)
+          .ilike(field, "%" + identitySearch + "%")
+          .in("id", internalSpmbIds)
+          .eq("status", "aktif")
+          .limit(limit);
+      }
       let q = admin
         .from("siswa")
         .select(select)
@@ -173,7 +220,12 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
       return q;
     };
 
-    const results = await Promise.all(SEARCH_FIELDS.map((field) => buildQuery(field)));
+    const results = await Promise.all([
+      ...SEARCH_FIELDS.map((field) => buildQuery(field)),
+      ...(internalSpmbIds.length > 0
+        ? SEARCH_FIELDS.map((field) => buildQuery(field, true))
+        : []),
+    ]);
     for (const res of results) {
       if (res.error) throw new Error("Gagal mencari siswa: " + res.error.message);
     }
@@ -191,6 +243,7 @@ export const cariSiswaPembayaran = createServerFn({ method: "POST" })
         status: row.status ?? null,
         angkatan_id: row.angkatan_id ?? null,
         departemen_id: row.departemen_id ?? null,
+        ...(internalSpmbSet.has(row.id) ? { spmb_internal: true } : {}),
         orang_tua: { ayah: null, ibu: null, telepon: null },
         kelas_siswa: Array.isArray(row.kelas_siswa) ? row.kelas_siswa : [],
       });

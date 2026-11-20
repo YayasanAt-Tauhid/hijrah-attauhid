@@ -12,6 +12,7 @@ import { ReceiptOrientationSelect, type ReceiptPrintOrientation } from "@/compon
 import { supabase } from "@/integrations/supabase/client";
 import { useLembaga, useJenisPembayaran, usePembayaranBySiswa, formatRupiah } from "@/hooks/useKeuangan";
 import { cariSiswaPembayaran, prosesPembayaran } from "@/server/pembayaran";
+import { kelasAktifNama, labelSiswaInternalSpmb, type KelasSiswaRingkas } from "@/lib/pencarianSiswaPembayaran";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Printer, Search } from "lucide-react";
@@ -54,6 +55,19 @@ function PembayaranPMBContent() {
   } | null>(null);
 
   const { data: lembagaList } = useLembaga();
+
+  // Siswa internal (naik jenjang) ditandai agar kasir tidak salah memilih nama kembar.
+  const labelStatusSiswa = (
+    s: { spmb_internal?: boolean; departemen_id?: string | null; kelas_siswa?: KelasSiswaRingkas[] } | null | undefined,
+    fallback: string,
+  ) => {
+    if (!s?.spmb_internal) return fallback;
+    return labelSiswaInternalSpmb({
+      kelasNama: kelasAktifNama(s.kelas_siswa),
+      asalKode: lembagaList?.find((l) => l.id === s.departemen_id)?.kode ?? null,
+      tujuanKode: lembagaList?.find((l) => l.id === departemenId)?.kode ?? null,
+    });
+  };
   const { data: jenisList = [] } = useJenisPembayaran(departemenId || undefined);
   const { data: riwayat, isLoading: loadRiwayat } = usePembayaranBySiswa(selectedSiswa?.id);
 
@@ -291,7 +305,7 @@ function PembayaranPMBContent() {
                     <div className="h-8 w-8 rounded-full bg-accent/50 flex items-center justify-center text-xs font-bold">{s.nama?.[0]}</div>
                     <div>
                       <p className="text-sm font-medium">{s.nama}</p>
-                      <p className="text-xs text-muted-foreground">Status: Calon</p>
+                      <p className="text-xs text-muted-foreground">{labelStatusSiswa(s, "Status: Calon")}</p>
                     </div>
                   </button>
                 ))}
@@ -311,7 +325,7 @@ function PembayaranPMBContent() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-lg">{selectedSiswa.nama}</h3>
-                  <p className="text-sm text-muted-foreground">Status: Calon Murid</p>
+                  <p className="text-sm text-muted-foreground">{labelStatusSiswa(selectedSiswa, "Status: Calon Murid")}</p>
                   <p className="text-sm text-muted-foreground">
                     Tahun ajaran: {spmbRegistrationLoading
                       ? "Memuat..."
