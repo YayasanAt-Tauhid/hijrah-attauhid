@@ -22,12 +22,15 @@ type Props = {
   /** Filter lembaga halaman: hanya memengaruhi baris yang ditampilkan di tabel. */
   lembagaId?: string;
   loading: boolean;
+  /** Daftar harga gagal dimuat: semua aksi ubah/salin dikunci agar tidak memakai daftar kosong. */
+  error?: boolean;
 };
 type Form = { id: string; aktif: boolean; departemen_id: string; jenis_kelamin: JenisKelaminHarga; nama_stel: string; ukuran: string; harga: string; catatan: string };
 
 const rupiah = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
 const FORM_KOSONG: Form = { id: "", aktif: true, departemen_id: "", jenis_kelamin: "semua", nama_stel: "", ukuran: "", harga: "", catatan: "" };
 const JENIS_LABEL: Record<JenisKelaminHarga, string> = { L: "Ikhwan", P: "Akhwat", semua: "Semua" };
+const HARGA_MAKS = 100_000_000;
 const selectClass = "h-10 w-full rounded-md border border-input bg-background px-3 text-sm";
 
 /**
@@ -41,7 +44,7 @@ function parseHargaRupiah(input: string): number {
   return Number.NaN;
 }
 
-export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departemenList, harga, lembagaId, loading }: Props) {
+export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departemenList, harga, lembagaId, loading, error = false }: Props) {
   const simpan = useSimpanHargaSeragamVendor();
   const ubahAktif = useUbahAktifHarga();
   const salin = useSalinHargaSeragam();
@@ -51,6 +54,14 @@ export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departe
   const [sumberTahun, setSumberTahun] = useState("");
   const [salinLembaga, setSalinLembaga] = useState("");
   const sumber = useHargaSeragamVendor(sumberTahun);
+
+  // Selama daftar harga belum lengkap, logika tabrakan dan salin akan memakai daftar kosong, jadi semua aksi dikunci.
+  const siap = !loading && !error;
+  const pesanSiap = error ? "Harga vendor belum dapat dimuat." : loading ? "Harga tahun ajaran ini belum selesai dimuat." : "";
+  const pesanSumber = !sumberTahun
+    ? ""
+    : sumber.error ? "Harga tahun sumber belum dapat dimuat."
+      : sumber.isLoading ? "Harga tahun sumber belum selesai dimuat." : "";
 
   const namaLembaga = (id: string) => {
     const d = departemenList.find((item) => item.id === id);
@@ -75,15 +86,18 @@ export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departe
 
   async function kirim() {
     if (!form) return;
+    if (!siap) return setGalat(pesanSiap);
     if (!form.departemen_id) return setGalat("Pilih lembaga.");
     if (form.harga.trim() === "") return setGalat("Isi harga.");
+    const nilaiHarga = parseHargaRupiah(form.harga);
+    if (Number.isFinite(nilaiHarga) && nilaiHarga > HARGA_MAKS) return setGalat("Harga terlalu besar (maksimal Rp 100.000.000).");
     const input = {
       tahun_ajaran_id: tahunAjaranId,
       departemen_id: form.departemen_id,
       jenis_kelamin: form.jenis_kelamin,
       nama_stel: form.nama_stel.trim(),
       ukuran: normalizeUkuranList(form.ukuran.split(",")),
-      harga: parseHargaRupiah(form.harga),
+      harga: nilaiHarga,
       catatan: form.catatan.trim() || null,
       aktif: form.aktif,
     };
@@ -103,6 +117,8 @@ export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departe
 
   async function jalankanSalin() {
     setGalat("");
+    if (!siap) return setGalat(pesanSiap);
+    if (pesanSumber) return setGalat(pesanSumber);
     if (!sumberTahun) return setGalat("Pilih tahun ajaran sumber.");
     if (!salinLembaga) return setGalat("Pilih lembaga.");
     const bahan = salinanHarga(sumber.data ?? [], { tahunAjaranId, departemenId: salinLembaga, existing: harga });
@@ -128,11 +144,11 @@ export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departe
       key: "id", label: "Aksi",
       render: (_value, row) => (
         <div className="flex gap-2">
-          <Button type="button" size="sm" variant="outline" aria-label={`Ubah ${row.nama_stel}`} onClick={() => bukaForm(row)}>
+          <Button type="button" size="sm" variant="outline" aria-label={`Ubah ${row.nama_stel}`} disabled={!siap} onClick={() => bukaForm(row)}>
             <Pencil className="h-4 w-4" />
           </Button>
           <Button
-            type="button" size="sm" variant="outline"
+            type="button" size="sm" variant="outline" disabled={!siap}
             aria-label={`${row.aktif ? "Nonaktifkan" : "Aktifkan"} ${row.nama_stel}`}
             onClick={() => ubahAktif.mutateAsync({ id: row.id, aktif: !row.aktif }).catch((error) => setGalat(error instanceof Error ? error.message : "Gagal mengubah status."))}
           >
@@ -146,11 +162,12 @@ export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departe
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        <Button type="button" onClick={() => bukaForm()}><Plus className="mr-2 h-4 w-4" />Tambah harga</Button>
-        <Button type="button" variant="outline" onClick={() => { setGalat(""); setSumberTahun(""); setSalinLembaga(""); setSalinBuka(true); }}>
+        <Button type="button" disabled={!siap} onClick={() => bukaForm()}><Plus className="mr-2 h-4 w-4" />Tambah harga</Button>
+        <Button type="button" variant="outline" disabled={!siap} onClick={() => { setGalat(""); setSumberTahun(""); setSalinLembaga(""); setSalinBuka(true); }}>
           <Copy className="mr-2 h-4 w-4" />Salin dari tahun lain
         </Button>
       </div>
+      {pesanSiap && <p role={error ? "alert" : "status"} className="text-sm text-muted-foreground">{pesanSiap}</p>}
       {galat && !form && !salinBuka && <p role="alert" className="text-sm text-destructive">{galat}</p>}
 
       <DataTable
@@ -199,7 +216,7 @@ export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departe
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setForm(null)}>Batal</Button>
-            <Button type="button" onClick={kirim} disabled={simpan.isPending}>Simpan</Button>
+            <Button type="button" onClick={kirim} disabled={simpan.isPending || !siap}>Simpan</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -223,11 +240,11 @@ export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departe
               </select>
             </div>
             <p className="text-sm text-muted-foreground">Hanya baris aktif yang disalin, dan hanya bila tahun ajaran ini belum punya harga untuk lembaga tersebut.</p>
-            {galat && <p role="alert" className="text-sm text-destructive">{galat}</p>}
+            {(pesanSumber || galat) && <p role="alert" className="text-sm text-destructive">{pesanSumber || galat}</p>}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setSalinBuka(false)}>Batal</Button>
-            <Button type="button" onClick={jalankanSalin} disabled={salin.isPending}>Salin</Button>
+            <Button type="button" onClick={jalankanSalin} disabled={salin.isPending || !siap || pesanSumber !== ""}>Salin</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

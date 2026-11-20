@@ -50,6 +50,8 @@ export default function BiayaSeragamSPMB() {
     () => susunPesanan(rows, harga, { tahunAjaranId, lembagaId: lembagaId || undefined, gelombangId: gelombangId || undefined }),
     [rows, harga, tahunAjaranId, lembagaId, gelombangId],
   );
+  // Hitungan hanya bermakna setelah data uang pangkal selesai dimuat; sebelum itu semuanya tampak "0" dan menyesatkan.
+  const pangkalSiap = allowed && !pangkalLoading && !pangkalError;
   const rekap = useMemo(() => rekapVendor(pesanan.layak), [pesanan.layak]);
 
   const lembagaOptions = useMemo(
@@ -127,39 +129,45 @@ export default function BiayaSeragamSPMB() {
             harga={harga}
             lembagaId={lembagaId || undefined}
             loading={hargaLoading}
+            error={Boolean(hargaError)}
           />
         </TabsContent>
 
         <TabsContent value="pesanan" className="mt-4 space-y-4">
-          {allowed && (
+          {allowed && !pangkalError && (
             <>
-              <section aria-label="Ringkasan pesanan" className="flex flex-wrap gap-6 text-sm">
-                <p>{`Layak dipesan: ${pesanan.layak.length}`}</p>
-                <p>{`Belum memenuhi 25%: ${pesanan.belumMemenuhi}`}</p>
-                <p>{`Perlu dilengkapi: ${pesanan.denganMasalah}`}</p>
-              </section>
+              {pangkalSiap ? (
+                <section aria-label="Ringkasan pesanan" className="flex flex-wrap gap-6 text-sm">
+                  <p>{`Layak dipesan: ${pesanan.layak.length}`}</p>
+                  <p>{`Belum memenuhi 25%: ${pesanan.belumMemenuhi}`}</p>
+                  <p>{`Perlu dilengkapi: ${pesanan.denganMasalah}`}</p>
+                </section>
+              ) : (
+                <p className="text-sm text-muted-foreground">Ringkasan belum tersedia.</p>
+              )}
               {pangkalLoading && <p className="text-sm text-muted-foreground">Memuat data uang pangkal...</p>}
               <DataTable
                 columns={columns}
                 data={pesanan.layak}
                 searchable={false}
                 pageSize={25}
-                loading={siswaLoading}
+                loading={siswaLoading || pangkalLoading}
                 emptyMessage="Belum ada siswa yang layak dipesan untuk filter ini"
-                actions={<ExportButton
+                actions={pangkalSiap ? <ExportButton
                   data={pesananExportRows(pesanan.layak)}
                   columns={PESANAN_EXPORT_COLUMNS}
                   filename="pesanan-seragam-spmb"
                   sheetName="Daftar Pesanan"
                   extraSheets={[{ name: "Rekap Vendor", columns: REKAP_EXPORT_COLUMNS, data: rekapExportRows(rekap) }]}
-                />}
+                /> : undefined}
               />
             </>
           )}
         </TabsContent>
 
         <TabsContent value="rekap" className="mt-4 space-y-4">
-          {allowed && (
+          {allowed && !pangkalSiap && <p className="text-sm text-muted-foreground">Ringkasan belum tersedia.</p>}
+          {pangkalSiap && (
             <>
               <p className="text-sm font-medium">{`Total pembayaran vendor: ${rupiah(rekap.totalBayar)}`}</p>
               <div className="overflow-x-auto">

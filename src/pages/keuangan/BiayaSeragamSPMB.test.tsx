@@ -4,7 +4,7 @@ import type { UangPangkalInfo } from "@/lib/seragamUangPangkal";
 
 const TA = "ta-2027";
 const TK = "dept-tk";
-const mocks = vi.hoisted(() => ({ allowed: true }));
+const mocks = vi.hoisted(() => ({ allowed: true, pangkalLoading: false, pangkalError: null as unknown }));
 
 const pangkal = (paid: number): UangPangkalInfo => ({ total: 4000000, paid, remaining: 4000000 - paid, status: paid ? "sebagian" : "belum_bayar" });
 const kosong = [{ jenis: "", ukuran: "" }, { jenis: "", ukuran: "" }, { jenis: "", ukuran: "" }, { jenis: "", ukuran: "" }];
@@ -30,7 +30,7 @@ vi.mock("@/hooks/useSiswaSeragam", () => ({
     ],
   }),
   useSeragamUangPangkal: () => ({
-    allowed: mocks.allowed, isLoading: false, error: null,
+    allowed: mocks.allowed, isLoading: mocks.pangkalLoading, error: mocks.pangkalError,
     byStudent: new Map([["a", pangkal(1000000)], ["b", pangkal(400000)], ["c", pangkal(2000000)]]),
   }),
 }));
@@ -50,7 +50,7 @@ vi.mock("@/components/shared/ExportButton", () => ({
 import BiayaSeragamSPMB from "./BiayaSeragamSPMB";
 
 const ringkasan = () => screen.getByRole("region", { name: "Ringkasan pesanan" });
-beforeEach(() => { mocks.allowed = true; });
+beforeEach(() => { mocks.allowed = true; mocks.pangkalLoading = false; mocks.pangkalError = null; });
 afterEach(cleanup);
 
 describe("Biaya Seragam SPMB", () => {
@@ -89,6 +89,35 @@ describe("Biaya Seragam SPMB", () => {
     render(<BiayaSeragamSPMB />);
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Harga" }));
     expect(await screen.findByText("Isi tab harga")).toBeInTheDocument();
+  });
+
+  it("data uang pangkal masih memuat: tidak ada hitungan 0 palsu dan tidak ada ekspor", () => {
+    mocks.pangkalLoading = true;
+    render(<BiayaSeragamSPMB />);
+    expect(screen.queryByText(/Layak dipesan:/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Ringkasan pesanan" })).not.toBeInTheDocument();
+    expect(screen.getByText("Ringkasan belum tersedia.")).toBeInTheDocument();
+    expect(screen.queryByTestId("ekspor")).not.toBeInTheDocument();
+  });
+
+  it("data uang pangkal gagal dimuat: tidak ada hitungan, tidak ada daftar, peringatan tetap tampil", async () => {
+    mocks.pangkalError = new Error("gagal");
+    render(<BiayaSeragamSPMB />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Data uang pangkal belum dapat dimuat");
+    expect(screen.queryByText(/Layak dipesan:/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Ahmad")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("ekspor")).not.toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Rekap Vendor" }));
+    expect(await screen.findByText("Ringkasan belum tersedia.")).toBeInTheDocument();
+    expect(screen.queryByText(/Total pembayaran vendor:/)).not.toBeInTheDocument();
+  });
+
+  it("rekap vendor saat data uang pangkal memuat: tidak ada total pembayaran", async () => {
+    mocks.pangkalLoading = true;
+    render(<BiayaSeragamSPMB />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Rekap Vendor" }));
+    expect(await screen.findByText("Ringkasan belum tersedia.")).toBeInTheDocument();
+    expect(screen.queryByText(/Total pembayaran vendor:/)).not.toBeInTheDocument();
   });
 
   it("tanpa izin data uang pangkal: pesan peringatan dan tidak ada daftar", () => {

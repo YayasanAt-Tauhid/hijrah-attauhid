@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HargaSeragamVendor } from "@/lib/seragamVendor";
 
 const mocks = vi.hoisted(() => ({
-  simpan: vi.fn(), ubahAktif: vi.fn(), salin: vi.fn(), sumber: { data: [] as unknown[] },
+  simpan: vi.fn(), ubahAktif: vi.fn(), salin: vi.fn(),
+  sumber: { data: [] as unknown[], isLoading: false, error: null as unknown },
 }));
 vi.mock("@/hooks/useHargaSeragamVendor", () => ({
   useHargaSeragamVendor: () => mocks.sumber,
@@ -28,7 +29,14 @@ const props = {
   loading: false,
 };
 
-beforeEach(() => { vi.clearAllMocks(); mocks.simpan.mockResolvedValue(undefined); mocks.ubahAktif.mockResolvedValue(undefined); });
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.simpan.mockResolvedValue(undefined);
+  mocks.ubahAktif.mockResolvedValue(undefined);
+  mocks.sumber.data = [];
+  mocks.sumber.isLoading = false;
+  mocks.sumber.error = null;
+});
 afterEach(cleanup);
 
 describe("tab Harga", () => {
@@ -206,6 +214,85 @@ describe("tab Harga", () => {
       fireEvent.click(within(dialog).getByRole("button", { name: "Simpan" }));
       expect(await within(dialog).findByRole("alert")).toBeInTheDocument();
       expect(mocks.simpan).not.toHaveBeenCalled();
+    });
+
+    it("menerima tepat batas atas Rp 100.000.000", async () => {
+      const dialog = await isiFormDenganHarga("100.000.000");
+      fireEvent.click(within(dialog).getByRole("button", { name: "Simpan" }));
+      await waitFor(() => expect(mocks.simpan).toHaveBeenCalledTimes(1));
+      expect(mocks.simpan.mock.calls[0][0].harga).toBe(100000000);
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    });
+
+    it.each(["100.000.001", "999999999999999999"])("menolak %s karena melewati batas atas", async (isian) => {
+      const dialog = await isiFormDenganHarga(isian);
+      fireEvent.click(within(dialog).getByRole("button", { name: "Simpan" }));
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("Harga terlalu besar (maksimal Rp 100.000.000).");
+      expect(mocks.simpan).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("data harga belum siap (memuat atau gagal dimuat)", () => {
+    it("saat memuat: Tambah harga dan Salin dari tahun lain nonaktif", () => {
+      render(<BiayaSeragamHargaTab {...props} harga={[]} loading />);
+      expect(screen.getByRole("button", { name: "Tambah harga" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Salin dari tahun lain" })).toBeDisabled();
+      expect(screen.getByText("Harga tahun ajaran ini belum selesai dimuat.")).toBeInTheDocument();
+      expect(mocks.simpan).not.toHaveBeenCalled();
+      expect(mocks.salin).not.toHaveBeenCalled();
+    });
+
+    it("saat gagal dimuat: semua aksi nonaktif, termasuk Ubah dan Nonaktifkan/Aktifkan per baris", () => {
+      render(<BiayaSeragamHargaTab {...props} error />);
+      expect(screen.getByRole("button", { name: "Tambah harga" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Salin dari tahun lain" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Ubah Set Gamis Merah" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Nonaktifkan Set Gamis Merah" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Aktifkan Pramuka" })).toBeDisabled();
+      expect(screen.getByText("Harga vendor belum dapat dimuat.")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Nonaktifkan Set Gamis Merah" }));
+      expect(mocks.ubahAktif).not.toHaveBeenCalled();
+    });
+
+    it("dialog yang sudah terbuka: Simpan nonaktif bila data berubah menjadi gagal dimuat", async () => {
+      const { rerender } = render(<BiayaSeragamHargaTab {...props} />);
+      fireEvent.click(screen.getByRole("button", { name: "Tambah harga" }));
+      const dialog = await screen.findByRole("dialog");
+      fireEvent.change(within(dialog).getByLabelText("Lembaga"), { target: { value: TK } });
+      fireEvent.change(within(dialog).getByLabelText("Nama stel"), { target: { value: "Stel Baru" } });
+      fireEvent.change(within(dialog).getByLabelText("Harga (Rp)"), { target: { value: "150000" } });
+      rerender(<BiayaSeragamHargaTab {...props} error />);
+      const simpanTombol = within(await screen.findByRole("dialog")).getByRole("button", { name: "Simpan" });
+      expect(simpanTombol).toBeDisabled();
+      fireEvent.click(simpanTombol);
+      expect(mocks.simpan).not.toHaveBeenCalled();
+    });
+
+    it("tahun sumber salin masih memuat: Salin nonaktif dengan pesan yang jelas", async () => {
+      mocks.sumber.isLoading = true;
+      render(<BiayaSeragamHargaTab {...props} departemenList={[...props.departemenList, { id: "dept-sd", nama: "SD", kode: "SD" }]} />);
+      fireEvent.click(screen.getByRole("button", { name: "Salin dari tahun lain" }));
+      const dialog = await screen.findByRole("dialog");
+      fireEvent.change(within(dialog).getByLabelText("Salin dari tahun ajaran"), { target: { value: "ta-2026" } });
+      fireEvent.change(within(dialog).getByLabelText("Lembaga"), { target: { value: "dept-sd" } });
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("Harga tahun sumber belum selesai dimuat.");
+      expect(within(dialog).getByRole("button", { name: "Salin" })).toBeDisabled();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Salin" }));
+      expect(mocks.salin).not.toHaveBeenCalled();
+    });
+
+    it("tahun sumber gagal dimuat: pesan galat sumber, bukan pesan 'sumbernya kosong'", async () => {
+      mocks.sumber.error = new Error("gagal");
+      render(<BiayaSeragamHargaTab {...props} departemenList={[...props.departemenList, { id: "dept-sd", nama: "SD", kode: "SD" }]} />);
+      fireEvent.click(screen.getByRole("button", { name: "Salin dari tahun lain" }));
+      const dialog = await screen.findByRole("dialog");
+      fireEvent.change(within(dialog).getByLabelText("Salin dari tahun ajaran"), { target: { value: "ta-2026" } });
+      fireEvent.change(within(dialog).getByLabelText("Lembaga"), { target: { value: "dept-sd" } });
+      const alert = await within(dialog).findByRole("alert");
+      expect(alert).toHaveTextContent("Harga tahun sumber belum dapat dimuat.");
+      expect(alert).not.toHaveTextContent(/sumbernya kosong/i);
+      expect(within(dialog).getByRole("button", { name: "Salin" })).toBeDisabled();
+      expect(mocks.salin).not.toHaveBeenCalled();
     });
   });
 });
