@@ -75,3 +75,19 @@ Keduanya belum pernah dijurnal, tanpa pembayaran, tanpa baris verifikasi.
   Hasil terverifikasi: SPP Juli 2027 Rp500.000 non asrama (akun 4103) dan uang pangkal Rp10.100.000 non asrama, keduanya `terjadwal`
   tanpa jurnal; tarif lama dinonaktifkan dan tarif baru aktif; riwayat 2 baris; audit_keuangan 2 baris; tidak ada jurnal baru; jumlah tagihan siswa tetap 12.
 - Aplikasi (tombol) belum di-deploy.
+
+## Rustbase: role pemilik fungsi (20 November 2026)
+
+- Gejala: di Rustbase (`proj_kqylkreswang`) penerbitan ulang uang pangkal dan SPP selalu gagal dengan
+  "Snapshot SPP hanya dapat disesuaikan melalui alur kategori per periode".
+- Akar masalah: `guard_snapshot_spp_tagihan` hanya mengenali `current_user = 'postgres'`; di Rustbase fungsi
+  SECURITY DEFINER aplikasi dimiliki dan dijalankan sebagai `proj_kqylkreswang_admin`.
+- Perbaikan: `supabase/migrations/20261120073000_guard_snapshot_spp_role_rustbase.sql` menambahkan
+  `proj_kqylkreswang_admin` di dua pemeriksaan role. Sudah diterapkan di produksi 20 Nov 2026
+  (md5 definisi `6f53cb7eb13506032b039955e8528e93`); migration idempoten dan diuji dalam ROLLBACK
+  terhadap definisi lama (`2903697d…`) maupun yang sudah diperbaiki.
+- Kasus pemicu: Bariq Khairullah Taufiqurrahman (NIS 2703064), pindah asrama → non asrama TA 2027/2028:
+  uang pangkal SMP Rp13.100.000 → Rp10.100.000, SPP Juli 2027 Rp1.350.000 (4102) → Rp500.000 (4103);
+  link pembayaran cicilan yang masih aktif dibatalkan; pelaksana tercatat admin Muhammad Yusuf.
+- `guard_snapshot_spp_pembayaran` memakai pola yang sama (`current_user <> 'postgres'`), tetapi tidak ada
+  fungsi aplikasi yang mengubah `pembayaran.spp_kategori`; hanya backfill manual yang terdampak, jadi sengaja tidak diubah.
