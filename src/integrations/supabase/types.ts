@@ -4971,6 +4971,66 @@ export type Database = {
         }
         Relationships: []
       }
+      harga_seragam_vendor: {
+        Row: {
+          id: string
+          tahun_ajaran_id: string
+          departemen_id: string
+          jenis_kelamin: string
+          nama_stel: string
+          ukuran: string[]
+          harga: number
+          catatan: string | null
+          aktif: boolean
+          created_at: string
+          updated_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          tahun_ajaran_id: string
+          departemen_id: string
+          jenis_kelamin: string
+          nama_stel: string
+          ukuran?: string[]
+          harga: number
+          catatan?: string | null
+          aktif?: boolean
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          tahun_ajaran_id?: string
+          departemen_id?: string
+          jenis_kelamin?: string
+          nama_stel?: string
+          ukuran?: string[]
+          harga?: number
+          catatan?: string | null
+          aktif?: boolean
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "harga_seragam_vendor_tahun_ajaran_id_fkey"
+            columns: ["tahun_ajaran_id"]
+            isOneToOne: false
+            referencedRelation: "tahun_ajaran"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "harga_seragam_vendor_departemen_id_fkey"
+            columns: ["departemen_id"]
+            isOneToOne: false
+            referencedRelation: "departemen"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integration_api_usage: {
         Row: {
           id: number

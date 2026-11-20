@@ -19,7 +19,7 @@ describe("Admin TU navigation", () => {
     state.pathname = pathname; render(<AppLayout />);
     expect(screen.getByText("Protected content")).toBeInTheDocument();
   });
-  it.each(["/keuangan/pembayaran", "/keuangan/piutang", "/keuangan/monitoring-spmb/other", "/keuangan/monitoring-spmb-fake"])("keeps %s outside Admin TU navigation", pathname => {
+  it.each(["/keuangan/pembayaran", "/keuangan/piutang", "/keuangan/seragam-vendor", "/keuangan/monitoring-spmb/other", "/keuangan/monitoring-spmb-fake"])("keeps %s outside Admin TU navigation", pathname => {
     state.pathname = pathname; render(<AppLayout />);
     expect(screen.getByText("Redirect: /akademik")).toBeInTheDocument();
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();

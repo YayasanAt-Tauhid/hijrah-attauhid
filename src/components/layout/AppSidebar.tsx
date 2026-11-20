@@ -124,6 +124,7 @@ const menuItems: MenuItem[] = [
           { title: "Link Pembayaran", url: "/keuangan/link-pembayaran", roles: ["admin", "keuangan", "kasir"] },
           { title: "Persetujuan Pembatalan", url: "/keuangan/persetujuan-pembatalan", roles: ["admin", "keuangan", "kasir", "bendahara", "sekretaris_yayasan"], badge: "pengajuan-pembatalan" },
           { title: "Monitoring Pembayaran SPMB", url: "/keuangan/monitoring-spmb", roles: ["admin", "keuangan", "kasir", "admin_tu"] },
+          { title: "Biaya Seragam SPMB", url: "/keuangan/seragam-vendor", roles: ["admin", "keuangan"] },
           { title: "Rencana Tagihan Siswa Baru", url: "/keuangan/rencana-siswa-baru", roles: ["admin", "keuangan"] },
           { title: "Penerimaan Lain", url: "/keuangan/penerimaan-lain", roles: ["admin", "keuangan"] },
           { title: "Pengeluaran", url: "/keuangan/pengeluaran", roles: ["admin", "keuangan"] },
