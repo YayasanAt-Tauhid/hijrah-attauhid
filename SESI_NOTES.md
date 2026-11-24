@@ -19,6 +19,18 @@
   - Cek data: `siswa_detail.tahun_ajaran_id` siswa SPMB sama dengan tahun ajaran pada katalog harga; kode lembaga TK di produksi benar-benar "TK".
   - PR, merge, dan deploy dari `main`; tampilan halaman di aplikasi sungguhan belum dilihat.
 
+# Catatan Sesi — Seragam TK: isi data kosong dari Ukuran Baju SPMB (19 November 2026, pagi)
+
+- **Permintaan user:** untuk siswa TK yang data seragamnya (`siswa_detail.ukuran_seragam`) masih kosong, isi dengan ukuran seragam SPMB (`siswa_detail.ukuran_baju`). Pekerjaan data produksi saja; **tanpa perubahan kode dan tanpa migrasi skema**.
+- **Keadaan sebelum (read-only):** siswa TK berstatus aktif/diterima = 59; 3 sudah terisi, 56 kosong. Dari 56 kosong, 20 punya `ukuran_baju` (11 aktif, 9 diterima: L 10, XL 4, M 4, XXL 1, X4L 1); 36 tidak punya `ukuran_baju` sehingga tidak ada yang bisa disalin.
+- **Keputusan (disetujui user, "Lanjut"):** kelima stel diisi dengan ukuran yang sama, mengikuti pola 3 siswa TK yang sudah terisi. Nama stel TK: Set Gamis Merah, Set Gamis Hijau, Set Gamis Biru, Set Gamis Ungu, Olahraga (nama wajib ada karena aturan `siswa_detail_ukuran_seragam_shape` menolak ukuran tanpa nama; TK tidak punya nama bawaan). Putra dan putri diperlakukan sama. X4L ditulis 4XL sesuai `UNIFORM_SIZES`. Hanya mengisi yang `ukuran_seragam IS NULL`; `ukuran_baju` tidak diubah.
+- **DITERAPKAN di produksi (`proj_kqylkreswang`) 19 Nov 2026 pagi WIB** atas persetujuan user: sha256 skrip `af52bd7b3443d13e2bcf336ad99982471d0c7b1611f64c9613218e3d7e20974d`, dry-run `BEGIN…ROLLBACK` lulus (20 baris; data kembali 56 kosong/3 terisi), lalu satu transaksi dengan gerbang tepat 20 baris dan ukuran dalam daftar baku. Satu-satunya pemicu yang ikut jalan: `trg_integration_change_siswa_detail` (pencatat perubahan API integrasi).
+- **Verifikasi pasca (SQL):** 20 ID target semuanya terisi 5 stel dengan satu ukuran; TK aktif/diterima kini 23 terisi, 36 kosong.
+- **Rollback:** `UPDATE siswa_detail SET ukuran_seragam = NULL` pada ID di `~/backups/seragam-tk-id-pra-20261119.txt` (VM `hijrah-attauhid`; semua semula NULL). Skrip: `~/backups/isi-seragam-tk-20261119.sql`. Keduanya tanpa data pribadi selain UUID; boleh dihapus bila sudah tidak perlu.
+- **Belum diverifikasi:** tampilan di halaman `/akademik/seragam` pada aplikasi sungguhan (hanya diperiksa lewat database).
+- **Sisa/catatan:** 36 siswa TK tanpa `ukuran_baju` tetap kosong (perlu diisi manual lewat form siswa). 3 siswa TK lama memakai gaya nama stel lain (ada versi huruf besar HIJAU/BIRU/UNGU/MERAH/OLAHRAGA); tidak diseragamkan.
+- **Rencana yang belum jalan (belum disetujui, belum ada kode):** halaman "Biaya Seragam SPMB" (harga vendor per tahun ajaran, daftar pesanan siswa yang sudah bayar ≥25% uang pangkal, rekap vendor). Dasar: harga dari sekretaris mudir dalam ribuan rupiah (170 = Rp170.000); TK dihitung 5 stel, lembaga lain 4 stel untuk pesanan vendor; ambang 25% memakai `minimum = ceil(total/4)` yang sudah ada di `spmbPaymentMonitor`. Butuh tabel harga baru (migrasi, wajib dry-run dan konfirmasi sebelum produksi). Pemetaan "daftar harga vendor" ke nama stel (mis. "SD printing") belum dikonfirmasi user.
+
 # Catatan Sesi — Seragam: kolom Ukuran Seragam SPMB di /akademik/seragam (18 November 2026, sore)
 
 - **Permintaan user:** di `/akademik/seragam` tambah kolom ukuran seragam SPMB yang bukan jenis seragam. **Dikonfirmasi user:** yang dimaksud adalah `siswa_detail.ukuran_baju` (isian tunggal "Ukuran Baju" di formulir SPMB: S, M, L, XL, XXL, X3L, X4L, X5L), bukan salah satu dari lima stel.
