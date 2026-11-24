@@ -6608,6 +6608,26 @@ export type Database = {
         }
         Returns: Json
       }
+      ringkasan_tagihan_periode: {
+        Args: {
+          p_departemen_id?: string
+          p_tgl_akhir: string
+          p_tgl_awal: string
+        }
+        Returns: {
+          bruto: number
+          bulan: number
+          departemen_id: string
+          departemen_kode: string
+          jumlah_siswa: number
+          jumlah_tagihan: number
+          neto: number
+          potongan: number
+          sisa: number
+          tahun: number
+          terbayar: number
+        }[]
+      }
       saran_kelompok_keluarga: {
         Args: { p_limit?: number }
         Returns: {

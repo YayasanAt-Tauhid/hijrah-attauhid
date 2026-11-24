@@ -22,6 +22,7 @@ const routeMap: Record<string, string> = {
   "/keuangan/tunggakan": "Tunggakan",
   "/keuangan/laporan-siswa": "Laporan Per Siswa",
   "/keuangan/laporan-kelas": "Laporan Per Kelas",
+  "/keuangan/proyeksi-tagihan": "Proyeksi Tagihan SPP",
   "/keuangan/rekap-harian": "Rekap Harian",
   "/keuangan/laporan-pengeluaran": "Laporan Pengeluaran",
   "/keuangan/laporan": "Laporan Unit Pendidikan",
