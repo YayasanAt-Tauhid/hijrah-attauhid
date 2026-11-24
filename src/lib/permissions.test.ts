@@ -89,6 +89,7 @@ describe("permissionForPath", () => {
     ["/keuangan/pembayaran", "keuangan.pembayaran"],
     ["/keuangan/pembayaran-spmb", "keuangan.pembayaran"],
     ["/keuangan/monitoring-spmb", "keuangan.pembayaran"],
+    ["/keuangan/seragam-vendor", "keuangan.transaksi"],
     ["/keuangan/tabungan-pegawai", "keuangan.transaksi"],
     ["/keuangan/tabungan", "keuangan.transaksi"],
     ["/keuangan/tunggakan", "keuangan.rekap_kasir"],
