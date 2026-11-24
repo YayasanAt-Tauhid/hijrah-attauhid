@@ -95,6 +95,7 @@ describe("permissionForPath", () => {
     ["/keuangan/tunggakan", "keuangan.rekap_kasir"],
     ["/keuangan/laporan-siswa", "keuangan.laporan"],
     ["/keuangan/laporan", "keuangan.laporan"],
+    ["/keuangan/proyeksi-tagihan", "keuangan.laporan"],
     ["/keuangan/isak35/arus-kas", "keuangan.akuntansi"],
     ["/keuangan/jurnal", "keuangan.akuntansi"],
     ["/keuangan/audit-trail", "keuangan.pengaturan"],

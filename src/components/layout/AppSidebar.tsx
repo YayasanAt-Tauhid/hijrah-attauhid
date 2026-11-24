@@ -143,6 +143,7 @@ const menuItems: MenuItem[] = [
           { title: "Rekap Kasir Saya", url: "/keuangan/rekap-kasir", roles: ["admin", "keuangan", "kasir"] },
           { title: "Laporan Per Siswa", url: "/keuangan/laporan-siswa", roles: ["admin", "keuangan"] },
           { title: "Laporan Per Kelas", url: "/keuangan/laporan-kelas", roles: ["admin", "keuangan"] },
+          { title: "Proyeksi Tagihan SPP", url: "/keuangan/proyeksi-tagihan", roles: ["admin", "keuangan"] },
           { title: "Rekap Harian", url: "/keuangan/rekap-harian", roles: ["admin", "keuangan"] },
           { title: "Lap. Pengeluaran", url: "/keuangan/laporan-pengeluaran", roles: ["admin", "keuangan"] },
           { title: "Lap. Unit Pendidikan", url: "/keuangan/laporan", roles: ["admin", "keuangan"] },

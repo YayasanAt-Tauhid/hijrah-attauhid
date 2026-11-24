@@ -24,6 +24,7 @@ const links = [
   { label: "ISAK 35", url: "/keuangan/isak35" },
   { label: "Laporan Per Siswa", url: "/keuangan/laporan-siswa" },
   { label: "Laporan Per Kelas", url: "/keuangan/laporan-kelas" },
+  { label: "Proyeksi Tagihan SPP", url: "/keuangan/proyeksi-tagihan" },
   { label: "Lap. Pengeluaran", url: "/keuangan/laporan-pengeluaran" },
   { label: "Penerimaan Lain", url: "/keuangan/penerimaan-lain" },
   { label: "Rekap Harian", url: "/keuangan/rekap-harian" },

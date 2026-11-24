@@ -118,6 +118,7 @@ const PATH_PERMISSIONS: ReadonlyArray<readonly [string, PathPermission]> = [
   ["/keuangan/laporan", "keuangan.laporan"],
   ["/keuangan/laporan-siswa", "keuangan.laporan"],
   ["/keuangan/laporan-kelas", "keuangan.laporan"],
+  ["/keuangan/proyeksi-tagihan", "keuangan.laporan"],
   ["/keuangan/laporan-pengeluaran", "keuangan.laporan"],
   ["/keuangan/laporan-unit-usaha", "keuangan.laporan"],
   ["/keuangan/rekap-harian", "keuangan.laporan"],
