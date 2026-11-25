@@ -119,6 +119,35 @@ describe("susunPesanan: stel, harga, dan masalah data", () => {
   });
 });
 
+describe("susunPesanan: kelengkapan stel", () => {
+  it("stel terisi sebagian (kurang dari yang seharusnya) belum lengkap meski semua yang terisi berharga", () => {
+    const tk = row({ id: "a", stel: stel(["Set Gamis Merah", "S"], ["Set Gamis Merah", "M"]) });
+    const hasil = susunPesanan([tk], katalog, filter);
+    expect(hasil.layak[0].stelWajib).toBe(5);
+    expect(hasil.layak[0].stel.every((s) => s.status === "ok")).toBe(true);
+    expect(hasil.layak[0].masalah).toBe(true);
+    expect(hasil.denganMasalah).toBe(1);
+    expect(catatanMasalah(hasil.layak[0])).toBe("Baru 2 dari 5 stel diisi");
+  });
+  it("lembaga lain lengkap bila 4 stel berharga (stelWajib 4)", () => {
+    const sd = row({
+      id: "s", lembagaId: SD, lembaga: "SD",
+      stel: stel(["Olah raga", "M"], ["Olah raga", "M"], ["Olah raga", "M"], ["Olah raga", "M"]),
+    });
+    const [hasil] = susunPesanan([sd], katalog, filter).layak;
+    expect(hasil.stelWajib).toBe(4);
+    expect(hasil.masalah).toBe(false);
+    expect(catatanMasalah(hasil)).toBe("");
+  });
+  it("membawa kelas dan uang pangkal untuk daftar tindak lanjut", () => {
+    const r = row({ id: "a", kelas: "TK A", uangPangkal: pangkal(4000000, 1000000) });
+    const [hasil] = susunPesanan([r], katalog, filter).layak;
+    expect(hasil.kelas).toBe("TK A");
+    expect(hasil.uangPangkalTotal).toBe(4000000);
+    expect(hasil.uangPangkalDibayar).toBe(1000000);
+  });
+});
+
 describe("rekapVendor", () => {
   it("menggabungkan stel, ukuran, dan harga yang sama; memisahkan yang harganya belum ada", () => {
     const rows = [
@@ -145,14 +174,14 @@ describe("ekspor", () => {
   ];
   const [pesanan] = susunPesanan(rows, katalog, filter).layak;
   it("catatanMasalah menyebut harga/ukuran yang belum ada", () => {
-    expect(catatanMasalah(pesanan)).toBe("Harga belum ada: Olahraga (XL)");
+    expect(catatanMasalah(pesanan)).toBe("Baru 2 dari 5 stel diisi; Harga belum ada: Olahraga (XL)");
     const kosong = susunPesanan([row({ id: "k", stel: stel(["Set Gamis Biru", ""]) })], katalog, filter).layak[0];
-    expect(catatanMasalah(kosong)).toBe("Ukuran belum diisi: Set Gamis Biru");
+    expect(catatanMasalah(kosong)).toBe("Baru 1 dari 5 stel diisi; Ukuran belum diisi: Set Gamis Biru");
   });
   it("baris ekspor pesanan memuat stel, total, dan catatan", () => {
     expect(pesananExportRows([pesanan])).toEqual([{
       nama: "Ahmad", nis: "27.001", lembaga: "TK", jenisKelamin: "Ikhwan",
-      stel: "Set Gamis Merah (S); Olahraga (XL)", total: 170000, catatan: "Harga belum ada: Olahraga (XL)",
+      stel: "Set Gamis Merah (S); Olahraga (XL)", total: 170000, catatan: "Baru 2 dari 5 stel diisi; Harga belum ada: Olahraga (XL)",
     }]);
   });
   it("baris ekspor rekap diakhiri baris TOTAL dan memuat stel tanpa harga", () => {

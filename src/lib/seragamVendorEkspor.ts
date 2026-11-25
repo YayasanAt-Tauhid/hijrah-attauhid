@@ -2,7 +2,7 @@ import * as XLSX from "xlsx";
 import { safeSpreadsheetValue } from "@/lib/safeSpreadsheetValue";
 import { compareUkuran } from "@/lib/seragamVendor";
 import {
-  labelJenisKelamin, PESANAN_EXPORT_COLUMNS, pesananExportRows, REKAP_EXPORT_COLUMNS, rekapExportRows, rekapVendor,
+  catatanMasalah, labelJenisKelamin, PESANAN_EXPORT_COLUMNS, pesananExportRows, REKAP_EXPORT_COLUMNS, rekapExportRows, rekapVendor,
   type PesananResult, type PesananRow,
 } from "@/lib/seragamVendorPesanan";
 
@@ -15,15 +15,18 @@ export type BerkasEkspor = {
   /** Nama berkas tanpa ekstensi. */
   filename: string;
   sheets: SheetEkspor[];
-  /** Yang tidak ikut ke berkas vendor karena datanya belum lengkap; selalu nol untuk berkas internal. */
-  belumIkut: { stel: number; siswaTanpaStel: number };
+  /**
+   * Peringatan untuk berkas vendor: entri stel yang tidak ikut (harga/ukuran belum ada) dan siswa yang stelnya
+   * kurang dari yang seharusnya. Selalu nol untuk berkas internal.
+   */
+  belumIkut: { stel: number; siswaBelumLengkap: number };
 };
 
 const JUDUL = "Pesanan Seragam SPMB";
 
 const slug = (teks: string) => teks.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
-function namaBerkas(jenis: "vendor" | "internal", k: KonteksEkspor): string {
+function namaBerkas(jenis: "vendor" | "internal" | "belum-lengkap", k: KonteksEkspor): string {
   return ["pesanan-seragam", jenis, slug(k.tahunAjaran), slug(k.lembaga)].filter(Boolean).join("-");
 }
 
@@ -53,9 +56,9 @@ export function susunBerkasVendor(layak: readonly PesananRow[], konteks: Konteks
   const rekap = rekapVendor(layak);
   const nama: Array<{ lembaga: string; nama: string; jenisKelamin: string; stel: string; ukuran: string }> = [];
   let stelBelumIkut = 0;
-  let siswaTanpaStel = 0;
+  let siswaBelumLengkap = 0;
   for (const siswa of layak) {
-    if (siswa.stel.length === 0) siswaTanpaStel += 1;
+    if (siswa.stel.length < siswa.stelWajib) siswaBelumLengkap += 1;
     for (const item of siswa.stel) {
       if (item.status !== "ok") {
         stelBelumIkut += 1;
@@ -74,7 +77,7 @@ export function susunBerkasVendor(layak: readonly PesananRow[], konteks: Konteks
   const blok = blokJudul(JUDUL, konteks);
   return {
     filename: namaBerkas("vendor", konteks),
-    belumIkut: { stel: stelBelumIkut, siswaTanpaStel },
+    belumIkut: { stel: stelBelumIkut, siswaBelumLengkap },
     sheets: [
       buatSheet("Rekap", [
         ...blok,
@@ -100,7 +103,7 @@ export function susunBerkasInternal(pesanan: PesananResult, konteks: KonteksEksp
   ];
   return {
     filename: namaBerkas("internal", konteks),
-    belumIkut: { stel: 0, siswaTanpaStel: 0 },
+    belumIkut: { stel: 0, siswaBelumLengkap: 0 },
     sheets: [
       buatSheet("Ringkasan", [
         ...blok,
@@ -115,13 +118,41 @@ export function susunBerkasInternal(pesanan: PesananResult, konteks: KonteksEksp
   };
 }
 
-/** Peringatan untuk pengguna bila berkas vendor tidak memuat semua siswa/stel; null bila lengkap. */
+/** Peringatan untuk pengguna bila berkas vendor belum memuat pesanan yang utuh; null bila lengkap. */
 export function pesanBelumIkut(belumIkut: BerkasEkspor["belumIkut"]): string | null {
   const bagian: string[] = [];
-  if (belumIkut.stel > 0) bagian.push(`${belumIkut.stel} entri stel (harga atau ukuran belum ada)`);
-  if (belumIkut.siswaTanpaStel > 0) bagian.push(`${belumIkut.siswaTanpaStel} siswa tanpa stel`);
+  if (belumIkut.stel > 0) bagian.push(`${belumIkut.stel} entri stel tidak ikut (harga atau ukuran belum ada)`);
+  if (belumIkut.siswaBelumLengkap > 0) bagian.push(`${belumIkut.siswaBelumLengkap} siswa stelnya belum lengkap`);
   if (bagian.length === 0) return null;
-  return `Belum ikut di berkas vendor: ${bagian.join(" dan ")}. Lengkapi dulu sebelum diserahkan ke vendor.`;
+  return `Berkas vendor belum lengkap: ${bagian.join(" dan ")}. Lengkapi dulu sebelum diserahkan ke vendor.`;
+}
+
+/** Siswa yang sudah layak dipesan (bayar ≥ 25%) tetapi stelnya belum lengkap. */
+export function siswaBelumLengkap(layak: readonly PesananRow[]): PesananRow[] {
+  return layak.filter((r) => r.masalah);
+}
+
+/** Daftar tindak lanjut untuk internal yayasan: siapa yang stelnya perlu dilengkapi dan apa yang kurang. */
+export function susunBerkasBelumLengkap(layak: readonly PesananRow[], konteks: KonteksEkspor): BerkasEkspor {
+  const daftar = siswaBelumLengkap(layak).sort((a, b) =>
+    a.lembaga.localeCompare(b.lembaga, "id") || a.nama.localeCompare(b.nama, "id") || a.siswaId.localeCompare(b.siswaId));
+  const blok = blokJudul(`${JUDUL} (Internal Yayasan): Daftar Belum Lengkap`, konteks);
+  return {
+    filename: namaBerkas("belum-lengkap", konteks),
+    belumIkut: { stel: 0, siswaBelumLengkap: 0 },
+    sheets: [
+      buatSheet("Belum Lengkap", [
+        ...blok.slice(0, -1),
+        ["Jumlah siswa", daftar.length],
+        [],
+        ["Lembaga", "Kelas", "Nama", "NIS", "Jenis Kelamin", "Uang Pangkal (Rp)", "Dibayar (Rp)", "Stel Terisi", "Keterangan"],
+        ...daftar.map((r) => [
+          r.lembaga, r.kelas === "-" ? "" : r.kelas, r.nama, r.nis, labelJenisKelamin(r.jenisKelaminKode), r.uangPangkalTotal, r.uangPangkalDibayar,
+          `${r.stel.length} dari ${r.stelWajib}`, catatanMasalah(r),
+        ]),
+      ]),
+    ],
+  };
 }
 
 export function buatWorkbook(berkas: BerkasEkspor): XLSX.WorkBook {

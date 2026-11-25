@@ -6,12 +6,19 @@ const TA = "ta-2027";
 const TK = "dept-tk";
 const mocks = vi.hoisted(() => ({
   role: "keuangan" as string,
-  allowed: true, pangkalLoading: false, pangkalError: null as unknown,
+  allowed: true, pangkalLoading: false, pangkalError: null as unknown, lengkap: false,
   unduh: vi.fn(), warning: vi.fn(), success: vi.fn(),
 }));
 
 const pangkal = (paid: number): UangPangkalInfo => ({ total: 4000000, paid, remaining: 4000000 - paid, status: paid ? "sebagian" : "belum_bayar" });
 const kosong = [{ jenis: "", ukuran: "" }, { jenis: "", ukuran: "" }, { jenis: "", ukuran: "" }, { jenis: "", ukuran: "" }];
+const siswaLengkap = (id: string, nama: string) => ({
+  id, nama, nis: "", jenis_kelamin: "L", status: "diterima", departemen_id: TK, kelas_siswa: [],
+  siswa_detail: {
+    ukuran_seragam: Array.from({ length: 5 }, () => ({ jenis: "Set Gamis Merah", ukuran: "S" })),
+    spmb_departemen_tujuan_id: TK, tahun_ajaran_id: TA, spmb_gelombang_id: "g1",
+  },
+});
 const siswa = (id: string, nama: string, stel: { jenis: string; ukuran: string }) => ({
   id, nama, nis: "", jenis_kelamin: "L", status: "diterima", departemen_id: TK, kelas_siswa: [],
   siswa_detail: {
@@ -27,7 +34,7 @@ vi.mock("@/hooks/useSiswaSeragam", () => ({
   useSpmbGelombang: () => ({ data: [{ id: "g1", nama: "Gelombang 1" }] }),
   useSiswaSeragamList: () => ({
     isLoading: false,
-    data: [
+    data: mocks.lengkap ? [siswaLengkap("a", "Ahmad")] : [
       siswa("a", "Ahmad", { jenis: "Set Gamis Merah", ukuran: "S" }),
       siswa("b", "Budi", { jenis: "Set Gamis Merah", ukuran: "S" }),
       siswa("c", "Candra", { jenis: "Set Gamis Hijau", ukuran: "S" }),
@@ -65,7 +72,7 @@ import BiayaSeragamSPMB from "./BiayaSeragamSPMB";
 const ringkasan = () => screen.getByRole("region", { name: "Ringkasan pesanan" });
 beforeEach(() => {
   mocks.role = "keuangan";
-  mocks.allowed = true; mocks.pangkalLoading = false; mocks.pangkalError = null;
+  mocks.allowed = true; mocks.pangkalLoading = false; mocks.pangkalError = null; mocks.lengkap = false;
   mocks.unduh.mockClear(); mocks.warning.mockClear(); mocks.success.mockClear();
 });
 afterEach(cleanup);
@@ -75,7 +82,8 @@ describe("Biaya Seragam SPMB", () => {
     render(<BiayaSeragamSPMB />);
     expect(within(ringkasan()).getByText("Layak dipesan: 2")).toBeInTheDocument();
     expect(within(ringkasan()).getByText("Belum memenuhi 25%: 1")).toBeInTheDocument();
-    expect(within(ringkasan()).getByText("Perlu dilengkapi: 1")).toBeInTheDocument();
+    // Candra: harga belum ada. Ahmad: baru 1 dari 5 stel TK diisi.
+    expect(within(ringkasan()).getByText("Perlu dilengkapi: 2")).toBeInTheDocument();
   });
 
   it("daftar pesanan memuat siswa layak dengan total, dan menandai harga yang belum ada; siswa <25% tidak tampil", () => {
@@ -84,7 +92,7 @@ describe("Biaya Seragam SPMB", () => {
     expect(screen.getByText("Candra")).toBeInTheDocument();
     expect(screen.queryByText("Budi")).not.toBeInTheDocument();
     expect(screen.getAllByText("Rp 170.000").length).toBeGreaterThan(0);
-    expect(screen.getByText("Harga belum ada: Set Gamis Hijau (S)")).toBeInTheDocument();
+    expect(screen.getByText(/Harga belum ada: Set Gamis Hijau \(S\)/)).toBeInTheDocument();
   });
 
   it("rekap vendor menampilkan total pembayaran dan stel tanpa harga terpisah", async () => {
@@ -183,6 +191,28 @@ describe("Biaya Seragam SPMB", () => {
       expect(berkas.filename).toBe("pesanan-seragam-internal-2027-2028-semua-lembaga");
       expect(berkas.sheets.map((s: { name: string }) => s.name)).toEqual(["Ringkasan", "Daftar Pesanan", "Rekap Vendor"]);
       expect(mocks.warning).not.toHaveBeenCalled();
+    });
+
+    it("daftar belum lengkap: diunduh hanya berisi siswa layak yang stelnya belum lengkap", () => {
+      render(<BiayaSeragamSPMB />);
+      klikEkspor("Daftar belum lengkap (internal)");
+      expect(mocks.unduh).toHaveBeenCalledTimes(1);
+      const berkas = mocks.unduh.mock.calls[0][0];
+      expect(berkas.filename).toBe("pesanan-seragam-belum-lengkap-2027-2028-semua-lembaga");
+      expect(berkas.sheets.map((s: { name: string }) => s.name)).toEqual(["Belum Lengkap"]);
+      const nama = berkas.sheets[0].rows.map((r: unknown[]) => r[2]);
+      expect(nama).toContain("Ahmad");
+      expect(nama).toContain("Candra");
+      expect(nama).not.toContain("Budi");
+      expect(mocks.success.mock.calls[0][0]).toContain("2 siswa");
+    });
+
+    it("daftar belum lengkap: bila semua lengkap tidak ada berkas, hanya pemberitahuan", () => {
+      mocks.lengkap = true;
+      render(<BiayaSeragamSPMB />);
+      klikEkspor("Daftar belum lengkap (internal)");
+      expect(mocks.unduh).not.toHaveBeenCalled();
+      expect(mocks.success.mock.calls[0][0]).toContain("sudah lengkap");
     });
 
     it("tidak ada menu Export selama data uang pangkal memuat", () => {
