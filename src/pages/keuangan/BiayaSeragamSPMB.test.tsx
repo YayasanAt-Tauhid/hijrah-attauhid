@@ -5,6 +5,7 @@ import type { UangPangkalInfo } from "@/lib/seragamUangPangkal";
 const TA = "ta-2027";
 const TK = "dept-tk";
 const mocks = vi.hoisted(() => ({
+  role: "keuangan" as string,
   allowed: true, pangkalLoading: false, pangkalError: null as unknown,
   unduh: vi.fn(), warning: vi.fn(), success: vi.fn(),
 }));
@@ -43,7 +44,10 @@ vi.mock("@/hooks/useHargaSeragamVendor", () => ({
     data: [{ id: "h1", tahun_ajaran_id: TA, departemen_id: TK, jenis_kelamin: "L", nama_stel: "Set Gamis Merah", ukuran: ["S", "M"], harga: 170000, catatan: null, aktif: true }],
   }),
 }));
-vi.mock("./BiayaSeragamHargaTab", () => ({ default: () => <div>Isi tab harga</div> }));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ role: mocks.role }) }));
+vi.mock("./BiayaSeragamHargaTab", () => ({
+  default: (p: { bacaSaja?: boolean }) => <div data-baca-saja={String(Boolean(p.bacaSaja))}>Isi tab harga</div>,
+}));
 vi.mock("@/components/shared/ExportButton", () => ({
   ExportButton: (p: { data: unknown[]; extraSheets?: Array<{ name: string }> }) => (
     <div data-testid="ekspor" data-jumlah={p.data.length} data-sheet={p.extraSheets?.map((s) => s.name).join(",")} />
@@ -60,6 +64,7 @@ import BiayaSeragamSPMB from "./BiayaSeragamSPMB";
 
 const ringkasan = () => screen.getByRole("region", { name: "Ringkasan pesanan" });
 beforeEach(() => {
+  mocks.role = "keuangan";
   mocks.allowed = true; mocks.pangkalLoading = false; mocks.pangkalError = null;
   mocks.unduh.mockClear(); mocks.warning.mockClear(); mocks.success.mockClear();
 });
@@ -95,6 +100,19 @@ describe("Biaya Seragam SPMB", () => {
     const ekspor = screen.getByTestId("ekspor");
     expect(ekspor).toHaveAttribute("data-jumlah", "2");
     expect(ekspor).toHaveAttribute("data-sheet", "Rekap Vendor");
+  });
+
+  it.each([["admin_tu", "true"], ["keuangan", "false"], ["admin", "false"]])("tab Harga untuk %s: bacaSaja=%s", async (role, bacaSaja) => {
+    mocks.role = role;
+    render(<BiayaSeragamSPMB />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Harga" }));
+    expect(await screen.findByText("Isi tab harga")).toHaveAttribute("data-baca-saja", bacaSaja);
+  });
+
+  it("admin TU tetap bisa melihat daftar pesanan dan mengekspor", () => {
+    mocks.role = "admin_tu";
+    render(<BiayaSeragamSPMB />);
+    expect(screen.getByRole("button", { name: /Export/ })).toBeInTheDocument();
   });
 
   it("tab Harga memuat komponen harga", async () => {
