@@ -1,12 +1,21 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { Download, FileSpreadsheet } from "lucide-react";
+import { toast } from "sonner";
 import { DataTable, type DataTableColumn } from "@/components/shared/DataTable";
 import { ExportButton } from "@/components/shared/ExportButton";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDepartemen, useTahunAjaran } from "@/hooks/useAkademikData";
 import { useHargaSeragamVendor } from "@/hooks/useHargaSeragamVendor";
 import { useSeragamUangPangkal, useSiswaSeragamList, useSpmbGelombang } from "@/hooks/useSiswaSeragam";
 import { buildSeragamSiswaRows } from "@/lib/seragamSiswa";
+import {
+  pesanBelumIkut, susunBerkasInternal, susunBerkasVendor, unduhBerkasXlsx, type KonteksEkspor,
+} from "@/lib/seragamVendorEkspor";
 import {
   catatanMasalah, PESANAN_EXPORT_COLUMNS, pesananExportRows, REKAP_EXPORT_COLUMNS, rekapExportRows,
   rekapVendor, susunPesanan, type PesananRow,
@@ -59,6 +68,25 @@ export default function BiayaSeragamSPMB() {
     [departemenList],
   );
 
+  // Dibentuk saat tombol ditekan agar tanggal cetak selalu hari itu.
+  const bangunKonteks = (): KonteksEkspor => ({
+    tahunAjaran: tahunList.find((x: { id: string; nama: string }) => x.id === tahunAjaranId)?.nama ?? "-",
+    lembaga: lembagaOptions.find((l) => l.id === lembagaId)?.label ?? "Semua lembaga",
+    gelombang: gelombangList.find((g: { id: string; nama: string }) => g.id === gelombangId)?.nama ?? "Semua gelombang",
+    tanggalCetak: new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
+  });
+  const eksporVendor = () => {
+    const berkas = susunBerkasVendor(pesanan.layak, bangunKonteks());
+    unduhBerkasXlsx(berkas);
+    const peringatan = pesanBelumIkut(berkas.belumIkut);
+    if (peringatan) toast.warning(peringatan);
+    else toast.success("Berkas untuk vendor diunduh.");
+  };
+  const eksporInternal = () => {
+    unduhBerkasXlsx(susunBerkasInternal(pesanan, bangunKonteks()));
+    toast.success("Berkas internal diunduh.");
+  };
+
   const columns: DataTableColumn<PesananRow>[] = [
     { key: "nama", label: "Nama", sortable: true },
     { key: "nis", label: "NIS" },
@@ -104,6 +132,28 @@ export default function BiayaSeragamSPMB() {
           <option value="">Semua gelombang</option>
           {gelombangList.map((g: { id: string; nama: string }) => <option key={g.id} value={g.id}>{g.nama}</option>)}
         </Filter>
+        {pangkalSiap && (
+          <div className="ml-auto">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={pesanan.layak.length === 0}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={eksporVendor}>
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Berkas untuk vendor (.xlsx)
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={eksporInternal}>
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Berkas internal yayasan (.xlsx)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
       </div>
 
       {!allowed && (
