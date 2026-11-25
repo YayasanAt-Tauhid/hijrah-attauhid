@@ -15,11 +15,11 @@ import { AppLayout } from "./AppLayout";
 
 beforeEach(() => { state.role = "admin_tu"; state.departemenId = "tk"; state.pathname = "/keuangan/monitoring-spmb"; });
 describe("Admin TU navigation", () => {
-  it.each(["/keuangan/monitoring-spmb", "/keuangan/monitoring-spmb/", "/akademik/spmb"])("allows %s", pathname => {
+  it.each(["/keuangan/monitoring-spmb", "/keuangan/monitoring-spmb/", "/keuangan/seragam-vendor", "/keuangan/seragam-vendor/", "/akademik/spmb"])("allows %s", pathname => {
     state.pathname = pathname; render(<AppLayout />);
     expect(screen.getByText("Protected content")).toBeInTheDocument();
   });
-  it.each(["/keuangan/pembayaran", "/keuangan/piutang", "/keuangan/seragam-vendor", "/keuangan/monitoring-spmb/other", "/keuangan/monitoring-spmb-fake"])("keeps %s outside Admin TU navigation", pathname => {
+  it.each(["/keuangan/pembayaran", "/keuangan/piutang", "/keuangan/seragam-vendor/lain", "/keuangan/monitoring-spmb/other", "/keuangan/monitoring-spmb-fake"])("keeps %s outside Admin TU navigation", pathname => {
     state.pathname = pathname; render(<AppLayout />);
     expect(screen.getByText("Redirect: /akademik")).toBeInTheDocument();
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
@@ -30,6 +30,27 @@ describe("Admin TU navigation", () => {
   });
   it("keeps other staff navigation unchanged", () => {
     state.role = "keuangan"; state.pathname = "/keuangan/pembayaran"; render(<AppLayout />);
+    expect(screen.getByText("Protected content")).toBeInTheDocument();
+  });
+});
+
+describe("Keuangan di Akademik: hanya daftar siswa dan detailnya", () => {
+  beforeEach(() => { state.role = "keuangan"; });
+  it.each(["/akademik/siswa", "/akademik/siswa/", "/akademik/siswa/abc-123"])("allows %s", pathname => {
+    state.pathname = pathname; render(<AppLayout />);
+    expect(screen.getByText("Protected content")).toBeInTheDocument();
+  });
+  it.each(["/akademik", "/akademik/siswa/tambah", "/akademik/siswa/abc-123/edit", "/akademik/spmb", "/akademik/mutasi"])("redirects %s ke daftar siswa", pathname => {
+    state.pathname = pathname; render(<AppLayout />);
+    expect(screen.getByText("Redirect: /akademik/siswa")).toBeInTheDocument();
+    expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+  });
+  it("tidak mengubah akses halaman Keuangan", () => {
+    state.pathname = "/keuangan/seragam-vendor"; render(<AppLayout />);
+    expect(screen.getByText("Protected content")).toBeInTheDocument();
+  });
+  it("peran admin tetap bebas di Akademik", () => {
+    state.role = "admin"; state.pathname = "/akademik/siswa/tambah"; render(<AppLayout />);
     expect(screen.getByText("Protected content")).toBeInTheDocument();
   });
 });

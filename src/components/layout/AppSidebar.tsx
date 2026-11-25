@@ -23,6 +23,9 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 
+/** Peran yang melihat seluruh menu Akademik; keuangan hanya mendapat Daftar Siswa (baca saja). */
+const AKADEMIK_PENUH: UserRole[] = ["admin", "admin_tu", "kepala_sekolah", "guru"];
+
 interface SubMenuItem {
   title: string;
   url: string;
@@ -54,24 +57,25 @@ const menuItems: MenuItem[] = [
   },
   {
     title: "Akademik", url: "/akademik", icon: GraduationCap,
-    roles: ["admin", "admin_tu", "kepala_sekolah", "guru"],
+    roles: [...AKADEMIK_PENUH, "keuangan"],
     subGroups: [
       {
         title: "Data Siswa",
         icon: Users,
         items: [
           { title: "Daftar Siswa", url: "/akademik/siswa" },
-          { title: "Seragam Siswa", url: "/akademik/seragam" },
-          { title: "Data Alumni", url: "/akademik/alumni" },
-          { title: "SPMB", url: "/akademik/spmb" },
-          { title: "Statistik SPMB", url: "/akademik/spmb/statistik" },
-          { title: "Konfigurasi SPMB", url: "/akademik/spmb-konfigurasi" },
-          { title: "Mutasi Siswa", url: "/akademik/mutasi" },
-          { title: "Statistik Siswa", url: "/akademik/statistik" },
+          { title: "Seragam Siswa", url: "/akademik/seragam", roles: AKADEMIK_PENUH },
+          { title: "Data Alumni", url: "/akademik/alumni", roles: AKADEMIK_PENUH },
+          { title: "SPMB", url: "/akademik/spmb", roles: AKADEMIK_PENUH },
+          { title: "Statistik SPMB", url: "/akademik/spmb/statistik", roles: AKADEMIK_PENUH },
+          { title: "Konfigurasi SPMB", url: "/akademik/spmb-konfigurasi", roles: AKADEMIK_PENUH },
+          { title: "Mutasi Siswa", url: "/akademik/mutasi", roles: AKADEMIK_PENUH },
+          { title: "Statistik Siswa", url: "/akademik/statistik", roles: AKADEMIK_PENUH },
         ],
       },
       {
         title: "Kegiatan Belajar",
+        roles: AKADEMIK_PENUH,
         icon: CalendarDays,
         items: [
           { title: "Jadwal Pelajaran", url: "/akademik/jadwal" },
@@ -83,6 +87,7 @@ const menuItems: MenuItem[] = [
       },
       {
         title: "Penilaian & Rapor",
+        roles: AKADEMIK_PENUH,
         icon: ClipboardCheck,
         items: [
           { title: "Penilaian", url: "/akademik/penilaian" },
@@ -93,6 +98,7 @@ const menuItems: MenuItem[] = [
       },
       {
         title: "Referensi",
+        roles: AKADEMIK_PENUH,
         icon: Database,
         items: [
           { title: "Referensi Akademik", url: "/akademik/referensi" },
@@ -124,7 +130,7 @@ const menuItems: MenuItem[] = [
           { title: "Link Pembayaran", url: "/keuangan/link-pembayaran", roles: ["admin", "keuangan", "kasir"] },
           { title: "Persetujuan Pembatalan", url: "/keuangan/persetujuan-pembatalan", roles: ["admin", "keuangan", "kasir", "bendahara", "sekretaris_yayasan"], badge: "pengajuan-pembatalan" },
           { title: "Monitoring Pembayaran SPMB", url: "/keuangan/monitoring-spmb", roles: ["admin", "keuangan", "kasir", "admin_tu"] },
-          { title: "Biaya Seragam SPMB", url: "/keuangan/seragam-vendor", roles: ["admin", "keuangan"] },
+          { title: "Biaya Seragam SPMB", url: "/keuangan/seragam-vendor", roles: ["admin", "keuangan", "admin_tu"] },
           { title: "Rencana Tagihan Siswa Baru", url: "/keuangan/rencana-siswa-baru", roles: ["admin", "keuangan"] },
           { title: "Penerimaan Lain", url: "/keuangan/penerimaan-lain", roles: ["admin", "keuangan"] },
           { title: "Pengeluaran", url: "/keuangan/pengeluaran", roles: ["admin", "keuangan"] },

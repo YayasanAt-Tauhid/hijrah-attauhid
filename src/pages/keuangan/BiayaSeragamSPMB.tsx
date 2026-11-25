@@ -22,6 +22,8 @@ import {
   rekapVendor, susunPesanan, type PesananRow,
 } from "@/lib/seragamVendorPesanan";
 import BiayaSeragamHargaTab from "./BiayaSeragamHargaTab";
+import { useAuth } from "@/contexts/AuthContext";
+import { hargaSeragamBacaSaja } from "@/lib/aksesHalaman";
 
 const rupiah = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
 const selectClass = "h-10 min-w-[180px] rounded-md border border-input bg-background px-3 text-sm";
@@ -37,6 +39,7 @@ function Filter({ label, value, onChange, children }: { label: string; value: st
 }
 
 export default function BiayaSeragamSPMB() {
+  const { role } = useAuth();
   const { data: tahunList = [] } = useTahunAjaran();
   const { data: departemenList = [] } = useDepartemen();
   const { data: gelombangList = [] } = useSpmbGelombang();
@@ -194,6 +197,7 @@ export default function BiayaSeragamSPMB() {
             lembagaId={lembagaId || undefined}
             loading={hargaLoading}
             error={Boolean(hargaError)}
+            bacaSaja={hargaSeragamBacaSaja(role)}
           />
         </TabsContent>
 

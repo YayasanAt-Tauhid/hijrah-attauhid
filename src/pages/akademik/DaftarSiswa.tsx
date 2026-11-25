@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@/lib/router-compat";
+import { useAuth } from "@/contexts/AuthContext";
+import { bolehKelolaSiswa } from "@/lib/aksesHalaman";
 import { useSiswaList, useDeleteSiswa, SiswaWithRelations } from "@/hooks/useSiswa";
 import { useDepartemen, useTingkat, useKelas, useTahunAjaran, useAngkatan } from "@/hooks/useAkademikData";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
@@ -40,6 +42,9 @@ function labelAsrama(value: string | null | undefined) {
 export default function DaftarSiswa() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { role } = useAuth();
+  // Keuangan hanya membaca data siswa; tambah, impor, ubah, dan hapus disembunyikan.
+  const bisaKelola = bolehKelolaSiswa(role);
   const { data: siswaList = [], isLoading } = useSiswaList();
   const { data: departemenList = [] } = useDepartemen();
   const { data: tingkatList = [] } = useTingkat();
@@ -106,12 +111,16 @@ export default function DaftarSiswa() {
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/akademik/siswa/${row.id}`)} title="Lihat data lengkap">
             <Eye className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/akademik/siswa/${row.id}/edit`)} title="Edit data lengkap">
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(row as any)} title="Hapus siswa" aria-label="Hapus siswa">
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          {bisaKelola && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/akademik/siswa/${row.id}/edit`)} title="Edit data lengkap">
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {bisaKelola && (
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(row as any)} title="Hapus siswa" aria-label="Hapus siswa">
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       ),
     },
@@ -168,10 +177,12 @@ export default function DaftarSiswa() {
           <h1 className="text-2xl font-bold text-foreground">Data Siswa</h1>
           <p className="text-sm text-muted-foreground">Kelola data master, akademik, dan riwayat SPMB siswa</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowImport(true)}><Upload className="h-4 w-4 mr-2" /> Import Data Siswa</Button>
-          <Button onClick={() => navigate("/akademik/siswa/tambah")}><Plus className="h-4 w-4 mr-2" /> Tambah Siswa</Button>
-        </div>
+        {bisaKelola && (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowImport(true)}><Upload className="h-4 w-4 mr-2" /> Import Data Siswa</Button>
+            <Button onClick={() => navigate("/akademik/siswa/tambah")}><Plus className="h-4 w-4 mr-2" /> Tambah Siswa</Button>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
