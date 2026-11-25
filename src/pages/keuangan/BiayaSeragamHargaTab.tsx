@@ -24,6 +24,8 @@ type Props = {
   loading: boolean;
   /** Daftar harga gagal dimuat: semua aksi ubah/salin dikunci agar tidak memakai daftar kosong. */
   error?: boolean;
+  /** Hanya melihat harga: tombol tambah, salin, ubah, dan nonaktifkan disembunyikan (admin TU). */
+  bacaSaja?: boolean;
 };
 type Form = { id: string; aktif: boolean; departemen_id: string; jenis_kelamin: JenisKelaminHarga; nama_stel: string; ukuran: string; harga: string; catatan: string };
 
@@ -44,7 +46,7 @@ function parseHargaRupiah(input: string): number {
   return Number.NaN;
 }
 
-export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departemenList, harga, lembagaId, loading, error = false }: Props) {
+export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departemenList, harga, lembagaId, loading, error = false, bacaSaja = false }: Props) {
   const simpan = useSimpanHargaSeragamVendor();
   const ubahAktif = useUbahAktifHarga();
   const salin = useSalinHargaSeragam();
@@ -133,7 +135,7 @@ export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departe
     }
   }
 
-  const columns: DataTableColumn<Baris>[] = [
+  const semuaKolom: DataTableColumn<Baris>[] = [
     { key: "lembaga", label: "Lembaga" },
     { key: "jenisLabel", label: "Jenis kelamin" },
     { key: "nama_stel", label: "Nama stel" },
@@ -158,15 +160,20 @@ export default function BiayaSeragamHargaTab({ tahunAjaranId, tahunList, departe
       ),
     },
   ];
+  const columns = bacaSaja ? semuaKolom.filter((kolom) => kolom.key !== "id") : semuaKolom;
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" disabled={!siap} onClick={() => bukaForm()}><Plus className="mr-2 h-4 w-4" />Tambah harga</Button>
-        <Button type="button" variant="outline" disabled={!siap} onClick={() => { setGalat(""); setSumberTahun(""); setSalinLembaga(""); setSalinBuka(true); }}>
-          <Copy className="mr-2 h-4 w-4" />Salin dari tahun lain
-        </Button>
-      </div>
+      {bacaSaja ? (
+        <p role="status" className="text-sm text-muted-foreground">Anda hanya dapat melihat harga seragam vendor; perubahan dilakukan oleh admin atau keuangan.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" disabled={!siap} onClick={() => bukaForm()}><Plus className="mr-2 h-4 w-4" />Tambah harga</Button>
+          <Button type="button" variant="outline" disabled={!siap} onClick={() => { setGalat(""); setSumberTahun(""); setSalinLembaga(""); setSalinBuka(true); }}>
+            <Copy className="mr-2 h-4 w-4" />Salin dari tahun lain
+          </Button>
+        </div>
+      )}
       {pesanSiap && <p role={error ? "alert" : "status"} className="text-sm text-muted-foreground">{pesanSiap}</p>}
       {galat && !form && !salinBuka && <p role="alert" className="text-sm text-destructive">{galat}</p>}
 

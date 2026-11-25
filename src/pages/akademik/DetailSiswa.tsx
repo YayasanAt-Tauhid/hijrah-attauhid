@@ -1,5 +1,7 @@
 import { nisHistoryClient } from "@/lib/nisHistory";
 import { useParams, useNavigate } from "@/lib/router-compat";
+import { useAuth } from "@/contexts/AuthContext";
+import { bolehKelolaSiswa } from "@/lib/aksesHalaman";
 import { useSiswaDetail, useSiswaDetailOrangtua } from "@/hooks/useSiswa";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 export default function DetailSiswa() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { role } = useAuth();
   const { data: siswa, isLoading } = useSiswaDetail(id || "");
   const { data: detailRaw } = useSiswaDetailOrangtua(id || "");
   const detail = detailRaw as Record<string, any> | null | undefined;
@@ -131,9 +134,11 @@ export default function DetailSiswa() {
           <Button variant="outline" size="sm" onClick={() => window.print()}>
             <Printer className="h-4 w-4 mr-2" /> Print
           </Button>
-          <Button size="sm" onClick={() => navigate(`/akademik/siswa/${id}/edit`)}>
-            <Pencil className="h-4 w-4 mr-2" /> Edit Data Lengkap
-          </Button>
+          {bolehKelolaSiswa(role) && (
+            <Button size="sm" onClick={() => navigate(`/akademik/siswa/${id}/edit`)}>
+              <Pencil className="h-4 w-4 mr-2" /> Edit Data Lengkap
+            </Button>
+          )}
         </div>
       </div>
 

@@ -13,6 +13,7 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: {} }));
 vi.mock("@/lib/nisHistory", () => ({ nisHistoryClient: {} }));
 vi.mock("@/components/akademik/SiswaSpmbDetail", () => ({ SiswaSpmbDetail: () => null }));
 
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ role: "admin" }) }));
 import DetailSiswa from "./DetailSiswa";
 
 const siswa = (over: Record<string, unknown>) => ({

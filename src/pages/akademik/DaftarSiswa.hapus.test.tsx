@@ -27,6 +27,7 @@ vi.mock("xlsx", () => ({
   writeFile: vi.fn(),
 }));
 
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ role: "admin" }) }));
 import DaftarSiswa from "./DaftarSiswa";
 import { SiswaPunyaRiwayatError } from "@/lib/siswaDeletion";
 

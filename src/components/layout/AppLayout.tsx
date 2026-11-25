@@ -3,6 +3,7 @@ import { AppSidebar } from "./AppSidebar";
 import { TopNavbar } from "./TopNavbar";
 import { Navigate, Outlet, useLocation } from "@tanstack/react-router";
 import { useAuth } from "@/contexts/AuthContext";
+import { adminTuBolehBuka, keuanganBolehBukaAkademik } from "@/lib/aksesHalaman";
 
 export function AppLayout() {
   const { role, departemenId } = useAuth();
@@ -10,10 +11,16 @@ export function AppLayout() {
 
   if (role === "admin_tu") {
     if (!departemenId) return <Navigate to="/unauthorized" replace />;
-    if (!location.pathname.startsWith("/akademik")
-      && location.pathname.replace(/\/+$/, "") !== "/keuangan/monitoring-spmb") {
+    if (!adminTuBolehBuka(location.pathname)) {
       return <Navigate to="/akademik" replace />;
     }
+  }
+
+  // Keuangan hanya membaca daftar siswa di Akademik; halaman Akademik lain tertutup.
+  if (role === "keuangan"
+    && location.pathname.startsWith("/akademik")
+    && !keuanganBolehBukaAkademik(location.pathname)) {
+    return <Navigate to="/akademik/siswa" replace />;
   }
 
   return (

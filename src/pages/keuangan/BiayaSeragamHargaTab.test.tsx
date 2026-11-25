@@ -296,3 +296,23 @@ describe("tab Harga", () => {
     });
   });
 });
+
+describe("tab Harga: mode baca saja (admin TU)", () => {
+  it("menampilkan harga tetapi tanpa tombol tambah, salin, ubah, dan nonaktifkan", () => {
+    render(<BiayaSeragamHargaTab {...props} bacaSaja />);
+    expect(screen.getByText("Set Gamis Merah")).toBeInTheDocument();
+    expect(screen.getByText("Rp 170.000")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Tambah harga/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Salin dari tahun lain/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Ubah / })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Nonaktifkan|Aktifkan/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/hanya dapat melihat harga/i)).toBeInTheDocument();
+  });
+
+  it("tanpa bacaSaja semua tombol tetap ada", () => {
+    render(<BiayaSeragamHargaTab {...props} />);
+    expect(screen.getByRole("button", { name: /Tambah harga/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Salin dari tahun lain/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ubah Set Gamis Merah" })).toBeInTheDocument();
+  });
+});
