@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 import {
-  buatWorkbook, pesanBelumIkut, susunBerkasInternal, susunBerkasVendor, type KonteksEkspor, type SheetEkspor,
+  buatWorkbook, pesanBelumIkut, siswaBelumLengkap, susunBerkasBelumLengkap, susunBerkasInternal, susunBerkasVendor,
+  type KonteksEkspor, type SheetEkspor,
 } from "./seragamVendorEkspor";
 import { rekapVendor, type PesananResult, type PesananRow, type PesananStel } from "./seragamVendorPesanan";
 
@@ -18,11 +19,15 @@ function tanpaHarga(slot: number, nama: string, ukuran: string): PesananStel {
 function tanpaUkuran(slot: number, nama: string): PesananStel {
   return { slot, nama, ukuran: "", namaVendor: null, harga: null, status: "ukuran_belum_diisi" };
 }
+/** stelWajib bawaan = jumlah stel yang diberikan (lengkap), kecuali daftar kosong (4) atau diatur sendiri. */
 function siswa(patch: Partial<PesananRow> & Pick<PesananRow, "siswaId" | "nama" | "stel">): PesananRow {
-  const total = patch.stel.reduce((sum, s) => sum + (s.harga ?? 0), 0);
+  const stelWajib = patch.stelWajib ?? (patch.stel.length || 4);
   return {
-    nis: "", lembagaId: "dept-tk", lembaga: "TK", jenisKelaminKode: "L", total,
-    masalah: patch.stel.length === 0 || patch.stel.some((s) => s.status !== "ok"), ...patch,
+    nis: "", lembagaId: "dept-tk", lembaga: "TK", kelas: "-", jenisKelaminKode: "L", stelWajib,
+    uangPangkalTotal: 4000000, uangPangkalDibayar: 1000000,
+    total: patch.stel.reduce((sum, s) => sum + (s.harga ?? 0), 0),
+    masalah: patch.stel.length < stelWajib || patch.stel.some((s) => s.status !== "ok"),
+    ...patch,
   };
 }
 
@@ -42,6 +47,14 @@ const rahma = siswa({
   siswaId: "r", nama: "Rahma", nis: "66666", lembagaId: "dept-sd", lembaga: "SD", jenisKelaminKode: "P",
   stel: [ok(1, "Putih Merah", "L", 150000)],
 });
+/** Stel terisi sebagian: 1 dari 4 yang seharusnya, dan yang terisi berharga. */
+const eko = siswa({
+  siswaId: "e", nama: "Eko", nis: "77777", stel: [ok(1, "Set Gamis Merah", "S", 170000)], stelWajib: 4,
+});
+const anwar = siswa({
+  siswaId: "w", nama: "Anwar", nis: "88888", lembagaId: "dept-sd", lembaga: "SD", kelas: "1A", jenisKelaminKode: "P",
+  stel: [ok(1, "Putih Merah", "L", 150000)], stelWajib: 4,
+});
 const semua = [ahmad, siti, candra, dewi, rahma];
 
 const sheet = (berkas: { sheets: SheetEkspor[] }, name: string) => {
@@ -49,7 +62,7 @@ const sheet = (berkas: { sheets: SheetEkspor[] }, name: string) => {
   if (!s) throw new Error(`sheet ${name} tidak ada`);
   return s;
 };
-/** Baris data = baris setelah baris judul kolom (yang sel pertamanya `kolomPertama`). */
+/** Baris data = baris setelah baris judul kolom (yang sel pertamanya `kolomPertama` dan punya lebih dari 2 kolom). */
 const dataRows = (s: SheetEkspor, kolomPertama: string) => {
   const idx = s.rows.findIndex((r) => r[0] === kolomPertama && r.length > 2);
   if (idx < 0) throw new Error(`baris judul kolom "${kolomPertama}" tidak ada di sheet ${s.name}`);
@@ -93,17 +106,23 @@ describe("susunBerkasVendor", () => {
     expect(rekap.totalBayar).toBe(880000);
   });
 
-  it("entri tanpa harga atau tanpa ukuran, dan siswa tanpa stel, tidak ikut dan dihitung", () => {
+  it("entri tanpa harga atau tanpa ukuran tidak ikut dan dihitung; siswa tanpa stel dihitung belum lengkap", () => {
     const berkas = susunBerkasVendor(semua, konteks);
-    expect(berkas.belumIkut).toEqual({ stel: 2, siswaTanpaStel: 1 });
+    expect(berkas.belumIkut).toEqual({ stel: 2, siswaBelumLengkap: 1 });
     const nama = dataRows(sheet(berkas, "Daftar Nama"), "Lembaga");
     expect(nama.some((r) => r.includes("Set Gamis Biru"))).toBe(false);
     expect(nama.some((r) => r.includes("Set Gamis Ungu"))).toBe(false);
     expect(nama.some((r) => r.includes("Dewi"))).toBe(false);
   });
 
+  it("siswa dengan stel terisi sebagian dihitung belum lengkap, tetapi stel yang berharga tetap masuk", () => {
+    const berkas = susunBerkasVendor([ahmad, eko], konteks);
+    expect(berkas.belumIkut).toEqual({ stel: 0, siswaBelumLengkap: 1 });
+    expect(dataRows(sheet(berkas, "Daftar Nama"), "Lembaga")).toContainEqual(["TK", "Eko", "Ikhwan", "Set Gamis Merah", "S"]);
+  });
+
   it("belumIkut nol bila semua entri lengkap", () => {
-    expect(susunBerkasVendor([ahmad, siti, rahma], konteks).belumIkut).toEqual({ stel: 0, siswaTanpaStel: 0 });
+    expect(susunBerkasVendor([ahmad, siti, rahma], konteks).belumIkut).toEqual({ stel: 0, siswaBelumLengkap: 0 });
   });
 
   it("Daftar Nama: satu baris per stel, urut lembaga, stel, ukuran (S sebelum XL), lalu nama; jenis kelamin Ikhwan/Akhwat", () => {
@@ -148,7 +167,7 @@ describe("susunBerkasVendor", () => {
     const berkas = susunBerkasVendor([], konteks);
     expect(dataRows(sheet(berkas, "Rekap"), "Lembaga")).toEqual([["TOTAL", "", "", 0, "", 0]]);
     expect(dataRows(sheet(berkas, "Daftar Nama"), "Lembaga")).toEqual([]);
-    expect(berkas.belumIkut).toEqual({ stel: 0, siswaTanpaStel: 0 });
+    expect(berkas.belumIkut).toEqual({ stel: 0, siswaBelumLengkap: 0 });
   });
 });
 
@@ -194,6 +213,71 @@ describe("susunBerkasInternal", () => {
   });
 });
 
+describe("siswaBelumLengkap dan susunBerkasBelumLengkap", () => {
+  const layak = [ahmad, siti, candra, dewi, rahma, eko, anwar];
+
+  it("siswaBelumLengkap: tanpa stel, stel kurang, atau ada stel tanpa harga/ukuran; yang lengkap tidak ikut", () => {
+    expect(siswaBelumLengkap(layak).map((r) => r.nama)).toEqual(["Candra", "Dewi", "Eko", "Anwar"]);
+    expect(siswaBelumLengkap([ahmad, siti, rahma])).toEqual([]);
+  });
+
+  it("satu sheet internal berisi hanya siswa belum lengkap, urut lembaga lalu nama, dengan keterangan apa yang kurang", () => {
+    const berkas = susunBerkasBelumLengkap(layak, konteks);
+    expect(berkas.sheets.map((s) => s.name)).toEqual(["Belum Lengkap"]);
+    const s = berkas.sheets[0];
+    expect(s.rows[0]).toEqual(["Pesanan Seragam SPMB (Internal Yayasan): Daftar Belum Lengkap"]);
+    expect(s.rows).toContainEqual(["Tahun ajaran", "2027/2028"]);
+    expect(s.rows).toContainEqual(["Tanggal cetak", "25 November 2026"]);
+    expect(s.rows).toContainEqual(["Jumlah siswa", 4]);
+    expect(s.rows).toContainEqual([
+      "Lembaga", "Kelas", "Nama", "NIS", "Jenis Kelamin", "Uang Pangkal (Rp)", "Dibayar (Rp)", "Stel Terisi", "Keterangan",
+    ]);
+    expect(dataRows(s, "Lembaga")).toEqual([
+      ["SD", "1A", "Anwar", "88888", "Akhwat", 4000000, 1000000, "1 dari 4", "Baru 1 dari 4 stel diisi"],
+      ["TK", "", "Candra", "33333", "Ikhwan", 4000000, 1000000, "3 dari 3",
+        "Harga belum ada: Set Gamis Biru (L); Ukuran belum diisi: Set Gamis Ungu"],
+      ["TK", "", "Dewi", "44444", "Akhwat", 4000000, 1000000, "0 dari 4", "Belum ada stel yang diisi"],
+      ["TK", "", "Eko", "77777", "Ikhwan", 4000000, 1000000, "1 dari 4", "Baru 1 dari 4 stel diisi"],
+    ]);
+    expect(berkas.filename).toBe("pesanan-seragam-belum-lengkap-2027-2028-tk");
+    expect(berkas.belumIkut).toEqual({ stel: 0, siswaBelumLengkap: 0 });
+  });
+
+  it('siswa yang belum punya kelas (placeholder "-") tampil kosong, bukan "\'-"', () => {
+    const baris = dataRows(susunBerkasBelumLengkap([dewi], konteks).sheets[0], "Lembaga")[0];
+    expect(baris[1]).toBe("");
+  });
+
+  it("semua lengkap: berkas valid dengan jumlah nol dan tanpa baris data", () => {
+    const berkas = susunBerkasBelumLengkap([ahmad, siti, rahma], konteks);
+    expect(berkas.sheets[0].rows).toContainEqual(["Jumlah siswa", 0]);
+    expect(dataRows(berkas.sheets[0], "Lembaga")).toEqual([]);
+  });
+
+  it("nama berawalan = diamankan", () => {
+    const jahat = siswa({ siswaId: "z", nama: "=cmd", stel: [], stelWajib: 4 });
+    expect(dataRows(susunBerkasBelumLengkap([jahat], konteks).sheets[0], "Lembaga")[0][2]).toBe("'=cmd");
+  });
+});
+
+describe("pesanBelumIkut", () => {
+  const akhir = "Lengkapi dulu sebelum diserahkan ke vendor.";
+  it("null bila semua lengkap", () => {
+    expect(pesanBelumIkut({ stel: 0, siswaBelumLengkap: 0 })).toBeNull();
+  });
+  it("menyebut entri stel yang tidak ikut dan siswa yang stelnya belum lengkap bila keduanya ada", () => {
+    expect(pesanBelumIkut({ stel: 2, siswaBelumLengkap: 1 }))
+      .toBe(`Berkas vendor belum lengkap: 2 entri stel tidak ikut (harga atau ukuran belum ada) dan 1 siswa stelnya belum lengkap. ${akhir}`);
+  });
+  it("hanya entri stel", () => {
+    expect(pesanBelumIkut({ stel: 3, siswaBelumLengkap: 0 }))
+      .toBe(`Berkas vendor belum lengkap: 3 entri stel tidak ikut (harga atau ukuran belum ada). ${akhir}`);
+  });
+  it("hanya siswa dengan stel belum lengkap", () => {
+    expect(pesanBelumIkut({ stel: 0, siswaBelumLengkap: 1 })).toBe(`Berkas vendor belum lengkap: 1 siswa stelnya belum lengkap. ${akhir}`);
+  });
+});
+
 describe("buatWorkbook", () => {
   it("sheet dan isi sel sama dengan berkas; judul ada di sel A1", () => {
     const berkas = susunBerkasVendor(semua, konteks);
@@ -202,23 +286,5 @@ describe("buatWorkbook", () => {
     expect(wb.Sheets["Rekap"]["A1"].v).toBe("Pesanan Seragam SPMB");
     const baris = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets["Daftar Nama"], { header: 1, blankrows: false });
     expect(baris).toContainEqual(["TK", "Siti", "Akhwat", "Set Gamis Merah", "XL"]);
-  });
-});
-
-describe("pesanBelumIkut", () => {
-  const akhir = "Lengkapi dulu sebelum diserahkan ke vendor.";
-  it("null bila semua lengkap", () => {
-    expect(pesanBelumIkut({ stel: 0, siswaTanpaStel: 0 })).toBeNull();
-  });
-  it("menyebut entri stel dan siswa tanpa stel bila keduanya ada", () => {
-    expect(pesanBelumIkut({ stel: 2, siswaTanpaStel: 1 }))
-      .toBe(`Belum ikut di berkas vendor: 2 entri stel (harga atau ukuran belum ada) dan 1 siswa tanpa stel. ${akhir}`);
-  });
-  it("hanya entri stel", () => {
-    expect(pesanBelumIkut({ stel: 3, siswaTanpaStel: 0 }))
-      .toBe(`Belum ikut di berkas vendor: 3 entri stel (harga atau ukuran belum ada). ${akhir}`);
-  });
-  it("hanya siswa tanpa stel", () => {
-    expect(pesanBelumIkut({ stel: 0, siswaTanpaStel: 1 })).toBe(`Belum ikut di berkas vendor: 1 siswa tanpa stel. ${akhir}`);
   });
 });

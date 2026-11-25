@@ -23,9 +23,15 @@ export type PesananRow = {
   nis: string;
   lembagaId: string;
   lembaga: string;
+  kelas: string;
   jenisKelaminKode: string;
   stel: PesananStel[];
+  /** Jumlah stel yang seharusnya dipesan: TK 5, lembaga lain 4. */
+  stelWajib: number;
+  uangPangkalTotal: number;
+  uangPangkalDibayar: number;
   total: number;
+  /** Belum lengkap: stel kurang dari yang seharusnya, atau ada stel tanpa ukuran/harga. */
   masalah: boolean;
 };
 
@@ -72,10 +78,11 @@ export function susunPesanan(
         : { slot, nama, ukuran, namaVendor: null, harga: null, status: "harga_belum_ada" });
     });
     layak.push({
-      siswaId: row.id, nama: row.nama, nis: row.nis, lembagaId: row.lembagaId, lembaga: row.lembaga,
-      jenisKelaminKode: row.jenisKelaminKode, stel,
+      siswaId: row.id, nama: row.nama, nis: row.nis, lembagaId: row.lembagaId, lembaga: row.lembaga, kelas: row.kelas,
+      jenisKelaminKode: row.jenisKelaminKode, stel, stelWajib: jumlah,
+      uangPangkalTotal: row.uangPangkal.total, uangPangkalDibayar: row.uangPangkal.paid,
       total: stel.reduce((sum, s) => sum + (s.harga ?? 0), 0),
-      masalah: stel.length === 0 || stel.some((s) => s.status !== "ok"),
+      masalah: stel.length < jumlah || stel.some((s) => s.status !== "ok"),
     });
   }
   layak.sort((a, b) => a.lembaga.localeCompare(b.lembaga, "id") || a.nama.localeCompare(b.nama, "id") || a.siswaId.localeCompare(b.siswaId));
@@ -129,6 +136,7 @@ export function rekapVendor(layak: readonly PesananRow[]): RekapVendor {
 export function catatanMasalah(row: PesananRow): string {
   const bagian: string[] = [];
   if (row.stel.length === 0) bagian.push("Belum ada stel yang diisi");
+  else if (row.stel.length < row.stelWajib) bagian.push(`Baru ${row.stel.length} dari ${row.stelWajib} stel diisi`);
   const tanpaHarga = row.stel.filter((s) => s.status === "harga_belum_ada").map((s) => `${s.nama} (${s.ukuran})`);
   if (tanpaHarga.length) bagian.push(`Harga belum ada: ${tanpaHarga.join(", ")}`);
   const tanpaUkuran = row.stel.filter((s) => s.status === "ukuran_belum_diisi").map((s) => s.nama);

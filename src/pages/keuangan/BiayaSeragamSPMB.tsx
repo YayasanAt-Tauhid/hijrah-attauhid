@@ -14,7 +14,8 @@ import { useHargaSeragamVendor } from "@/hooks/useHargaSeragamVendor";
 import { useSeragamUangPangkal, useSiswaSeragamList, useSpmbGelombang } from "@/hooks/useSiswaSeragam";
 import { buildSeragamSiswaRows } from "@/lib/seragamSiswa";
 import {
-  pesanBelumIkut, susunBerkasInternal, susunBerkasVendor, unduhBerkasXlsx, type KonteksEkspor,
+  pesanBelumIkut, siswaBelumLengkap, susunBerkasBelumLengkap, susunBerkasInternal, susunBerkasVendor, unduhBerkasXlsx,
+  type KonteksEkspor,
 } from "@/lib/seragamVendorEkspor";
 import {
   catatanMasalah, PESANAN_EXPORT_COLUMNS, pesananExportRows, REKAP_EXPORT_COLUMNS, rekapExportRows,
@@ -86,6 +87,15 @@ export default function BiayaSeragamSPMB() {
     unduhBerkasXlsx(susunBerkasInternal(pesanan, bangunKonteks()));
     toast.success("Berkas internal diunduh.");
   };
+  const eksporBelumLengkap = () => {
+    const jumlah = siswaBelumLengkap(pesanan.layak).length;
+    if (jumlah === 0) {
+      toast.success("Semua siswa yang sudah membayar minimal 25% stelnya sudah lengkap.");
+      return;
+    }
+    unduhBerkasXlsx(susunBerkasBelumLengkap(pesanan.layak, bangunKonteks()));
+    toast.success(`Daftar ${jumlah} siswa yang belum lengkap diunduh.`);
+  };
 
   const columns: DataTableColumn<PesananRow>[] = [
     { key: "nama", label: "Nama", sortable: true },
@@ -149,6 +159,10 @@ export default function BiayaSeragamSPMB() {
                 <DropdownMenuItem onSelect={eksporInternal}>
                   <FileSpreadsheet className="mr-2 h-4 w-4" />
                   Berkas internal yayasan (.xlsx)
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={eksporBelumLengkap}>
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Daftar belum lengkap (internal)
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
