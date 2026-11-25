@@ -5,6 +5,7 @@ import {
   DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import * as XLSX from "xlsx";
+import { safeSpreadsheetValue } from "@/lib/safeSpreadsheetValue";
 
 export interface ExportColumn {
   key: string;
@@ -24,26 +25,6 @@ interface ExportButtonProps {
   columns?: ExportColumn[];
   sheetName?: string;
   extraSheets?: ExportSheet[];
-}
-
-function safeSpreadsheetValue(value: unknown): string | number | boolean {
-  if (value == null) return "";
-  if (typeof value === "number" || typeof value === "boolean") return value;
-  if (value instanceof Date) return value.toISOString();
-
-  let text: string;
-  if (typeof value === "object") {
-    try {
-      text = JSON.stringify(value);
-    } catch {
-      text = String(value);
-    }
-  } else {
-    text = String(value);
-  }
-
-  // Hindari formula injection saat file dibuka di Excel/LibreOffice.
-  return /^[=+\-@]/.test(text) ? `'${text}` : text;
 }
 
 function buildRows(data: Record<string, unknown>[], columns: ExportColumn[]) {

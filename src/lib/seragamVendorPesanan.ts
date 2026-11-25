@@ -146,12 +146,16 @@ export const PESANAN_EXPORT_COLUMNS = [
   { key: "catatan", label: "Catatan" },
 ];
 
+export function labelJenisKelamin(kode: string): string {
+  return kode === "L" ? "Ikhwan" : kode === "P" ? "Akhwat" : "-";
+}
+
 export function pesananExportRows(rows: readonly PesananRow[]): Record<string, string | number>[] {
   return rows.map((row) => ({
     nama: row.nama,
     nis: row.nis,
     lembaga: row.lembaga,
-    jenisKelamin: row.jenisKelaminKode === "L" ? "Ikhwan" : row.jenisKelaminKode === "P" ? "Akhwat" : "-",
+    jenisKelamin: labelJenisKelamin(row.jenisKelaminKode),
     stel: row.stel.map((s) => `${s.namaVendor ?? s.nama} (${s.ukuran || "-"})`).join("; "),
     total: row.total,
     catatan: catatanMasalah(row),

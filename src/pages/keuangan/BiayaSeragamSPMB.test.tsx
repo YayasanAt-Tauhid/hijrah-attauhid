@@ -4,7 +4,10 @@ import type { UangPangkalInfo } from "@/lib/seragamUangPangkal";
 
 const TA = "ta-2027";
 const TK = "dept-tk";
-const mocks = vi.hoisted(() => ({ allowed: true, pangkalLoading: false, pangkalError: null as unknown }));
+const mocks = vi.hoisted(() => ({
+  allowed: true, pangkalLoading: false, pangkalError: null as unknown,
+  unduh: vi.fn(), warning: vi.fn(), success: vi.fn(),
+}));
 
 const pangkal = (paid: number): UangPangkalInfo => ({ total: 4000000, paid, remaining: 4000000 - paid, status: paid ? "sebagian" : "belum_bayar" });
 const kosong = [{ jenis: "", ukuran: "" }, { jenis: "", ukuran: "" }, { jenis: "", ukuran: "" }, { jenis: "", ukuran: "" }];
@@ -47,10 +50,19 @@ vi.mock("@/components/shared/ExportButton", () => ({
   ),
 }));
 
+vi.mock("sonner", () => ({ toast: { warning: mocks.warning, success: mocks.success } }));
+vi.mock("@/lib/seragamVendorEkspor", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/seragamVendorEkspor")>()),
+  unduhBerkasXlsx: mocks.unduh,
+}));
+
 import BiayaSeragamSPMB from "./BiayaSeragamSPMB";
 
 const ringkasan = () => screen.getByRole("region", { name: "Ringkasan pesanan" });
-beforeEach(() => { mocks.allowed = true; mocks.pangkalLoading = false; mocks.pangkalError = null; });
+beforeEach(() => {
+  mocks.allowed = true; mocks.pangkalLoading = false; mocks.pangkalError = null;
+  mocks.unduh.mockClear(); mocks.warning.mockClear(); mocks.success.mockClear();
+});
 afterEach(cleanup);
 
 describe("Biaya Seragam SPMB", () => {
@@ -125,5 +137,40 @@ describe("Biaya Seragam SPMB", () => {
     render(<BiayaSeragamSPMB />);
     expect(screen.getByRole("alert")).toHaveTextContent("Anda tidak memiliki izin melihat data uang pangkal SPMB.");
     expect(screen.queryByText("Ahmad")).not.toBeInTheDocument();
+  });
+
+  describe("menu Export (berkas vendor dan internal)", () => {
+    const klikEkspor = (nama: string) => {
+      fireEvent.keyDown(screen.getByRole("button", { name: /Export/ }), { key: "Enter" });
+      fireEvent.click(screen.getByRole("menuitem", { name: nama }));
+    };
+
+    it("berkas vendor: diunduh dengan nama dari tahun ajaran dan lembaga, lalu peringatan karena satu stel belum berharga", () => {
+      render(<BiayaSeragamSPMB />);
+      klikEkspor("Berkas untuk vendor (.xlsx)");
+      expect(mocks.unduh).toHaveBeenCalledTimes(1);
+      const berkas = mocks.unduh.mock.calls[0][0];
+      expect(berkas.filename).toBe("pesanan-seragam-vendor-2027-2028-semua-lembaga");
+      expect(berkas.sheets.map((s: { name: string }) => s.name)).toEqual(["Rekap", "Daftar Nama"]);
+      expect(mocks.warning).toHaveBeenCalledTimes(1);
+      expect(mocks.warning.mock.calls[0][0]).toContain("1 entri stel");
+      expect(mocks.success).not.toHaveBeenCalled();
+    });
+
+    it("berkas internal: tiga sheet dan tanpa peringatan", () => {
+      render(<BiayaSeragamSPMB />);
+      klikEkspor("Berkas internal yayasan (.xlsx)");
+      expect(mocks.unduh).toHaveBeenCalledTimes(1);
+      const berkas = mocks.unduh.mock.calls[0][0];
+      expect(berkas.filename).toBe("pesanan-seragam-internal-2027-2028-semua-lembaga");
+      expect(berkas.sheets.map((s: { name: string }) => s.name)).toEqual(["Ringkasan", "Daftar Pesanan", "Rekap Vendor"]);
+      expect(mocks.warning).not.toHaveBeenCalled();
+    });
+
+    it("tidak ada menu Export selama data uang pangkal memuat", () => {
+      mocks.pangkalLoading = true;
+      render(<BiayaSeragamSPMB />);
+      expect(screen.queryByRole("button", { name: /Export/ })).not.toBeInTheDocument();
+    });
   });
 });
