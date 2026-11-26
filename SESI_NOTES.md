@@ -1057,3 +1057,10 @@ Pada rencana siswa baru, SPP awal sudah tersedia di RPC, tetapi aksesnya tersemb
 - Batas Dari/Sampai kini dikirim dengan zona WIB (`+07:00`); sebelumnya tanpa zona waktu sehingga tergantung zona waktu database. Logika ada di `src/lib/onlinePaymentFilter.ts`. Tidak ada migrasi atau perubahan data.
 - Catatan: `paid_at` diisi saat aplikasi menerima notifikasi lunas dari Midtrans (`src/server/midtransNotification.ts`), bukan waktu settlement dari Midtrans; selisih biasanya detik sampai menit. Kartu statistik di atas tabel tidak ikut terfilter (tidak diubah).
 - Belum dikerjakan: halaman redirect Midtrans (pembayaran berhasil/gagal) untuk kolom "Redirection URL" di dashboard Midtrans akun aplikasi baru; rencana: satu halaman publik dinamis-ringan `/pembayaran/selesai` yang hanya membaca `transaction_status` dari alamat, tanpa query database dan tanpa data pribadi. Menunggu persetujuan pemilik.
+
+## Hotfix Online Payment: daftar kosong karena `nullslast` (26 November 2026)
+
+- Gejala: setelah PR #263 deploy, `/keuangan/online-payment` menampilkan tabel kosong padahal data produksi ada (257 transaksi, policy akses `keuangan_baca_transaksi_midtrans*` ada; dicek hanya baca).
+- Penyebab: #263 memanggil `.order(kolom, { ascending: false, nullsFirst: false })` sehingga klien mengirim `order=created_at.desc.nullslast`. Parser `order` Rustbase (`src/rest/filter.rs`, `parse_order`) hanya mengenali akhiran `.asc`/`.desc`; `.nullslast` membuat seluruh teks dianggap nama kolom, permintaan gagal, dan halaman tampil kosong. Tes mock tidak menangkapnya karena tidak memakai parser Rustbase.
+- Perbaikan: `nullsFirst` dihapus. Tidak perlu: `created_at` tak pernah kosong, dan mode Tanggal dibayar sudah membuang `paid_at` kosong lewat `.not("paid_at","is",null)`. Tes kini menuntut opsi urutan persis `{ ascending: false }`.
+- ATURAN: untuk query ke Rustbase, jangan pakai `nullsFirst`/`nullslast`/`nulls` pada `.order()`. Sisa pemakaian di `src/pages/kepegawaian/DUK.tsx` (urut `golongan_terakhir`) kemungkinan memicu galat yang sama; belum diverifikasi atau diubah.
