@@ -1069,4 +1069,10 @@ Pada rencana siswa baru, SPP awal sudah tersedia di RPC, tetapi aksesnya tersemb
 
 - Penyebab sama dengan Online Payment: `DUK.tsx` memakai `.order("golongan_terakhir", { ascending: false, nullsFirst: false })` sehingga klien mengirim `order=golongan_terakhir.desc.nullslast`, yang tidak dikenali parser `order` Rustbase (dianggap nama kolom). Kesimpulan dari membaca kode Rustbase; belum dicoba langsung ke API produksi (kunci layanan tidak terbaca dari sesi ini).
 - Perbaikan: server hanya `{ ascending: false }`; pegawai tanpa golongan dipindah ke akhir di klien (sort stabil). Tes: `src/pages/kepegawaian/DUK.render.test.tsx`.
-- Data produksi (hanya baca, 26 Nov 2026): 174 pegawai aktif, SEMUA `golongan_terakhir` kosong. Jadi urutan golongan belum berarti apa-apa sampai golongan diisi; urutan saat ini = urutan bawaan database. Komentar lama di kode ("golongan desc, lalu masa kerja desc") tidak pernah diimplementasikan (tidak ada urutan kedua menurut masa kerja); belum diubah, menunggu keputusan pemilik.
+- Data produksi (hanya baca, 26 Nov 2026): 174 pegawai aktif, SEMUA `golongan_terakhir` kosong. Jadi urutan golongan belum berarti apa-apa sampai golongan diisi; urutan saat ini = urutan bawaan database. Komentar lama di kode ("golongan desc, lalu masa kerja desc") dulunya tidak pernah diimplementasikan; sudah ditambahkan di PR berikutnya (lihat bawah).
+
+## DUK: urutan kedua menurut masa kerja (26 November 2026)
+
+- Atas persetujuan pemilik: DUK kini diurutkan golongan menurun, lalu masa kerja terlama (`tanggal_masuk` menaik; ASC menaruh NULL di akhir secara bawaan di Postgres, jadi tanpa `nullslast`). Dua `.order()` berantai dikirim sebagai `order=golongan_terakhir.desc,tanggal_masuk.asc` dan didukung parser Rustbase (dipecah per koma); pola berantai ini juga sudah dipakai halaman lain (mis. `diskon.ts`).
+- Pegawai tanpa golongan tetap dipindah ke akhir di klien dengan sort stabil, sehingga urutan masa kerja di dalam kelompok itu terjaga. Karena semua 174 pegawai aktif belum punya golongan, urutan saat ini praktis murni menurut masa kerja.
+- Pegawai tanpa `tanggal_masuk` berada di akhir kelompoknya.

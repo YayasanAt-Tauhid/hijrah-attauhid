@@ -23,7 +23,10 @@ export default function DUK() {
         .eq("status", "aktif")
         // Jangan pakai nullsFirst: Rustbase hanya mengenali asc/desc, "nullslast" dianggap nama kolom
         // dan daftar jadi kosong. Pegawai tanpa golongan dipindah ke akhir di klien (lihat di bawah).
-        .order("golongan_terakhir", { ascending: false });
+        .order("golongan_terakhir", { ascending: false })
+        // Urutan kedua: masa kerja terlama di atas (TMT masuk paling awal). ASC menaruh NULL di akhir
+        // secara bawaan, jadi tidak perlu nullslast.
+        .order("tanggal_masuk", { ascending: true });
 
       if (filterLembaga === "yayasan") q = q.is("departemen_id", null);
       else if (filterLembaga !== "all") q = q.eq("departemen_id", filterLembaga);
