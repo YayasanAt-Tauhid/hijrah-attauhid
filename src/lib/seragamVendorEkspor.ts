@@ -26,7 +26,7 @@ const JUDUL = "Pesanan Seragam SPMB";
 
 const slug = (teks: string) => teks.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
-function namaBerkas(jenis: "vendor" | "internal" | "belum-lengkap", k: KonteksEkspor): string {
+export function namaBerkas(jenis: "vendor" | "internal" | "belum-lengkap", k: KonteksEkspor): string {
   return ["pesanan-seragam", jenis, slug(k.tahunAjaran), slug(k.lembaga)].filter(Boolean).join("-");
 }
 
@@ -52,9 +52,16 @@ function buatSheet(name: string, rows: unknown[][]): SheetEkspor {
   };
 }
 
-export function susunBerkasVendor(layak: readonly PesananRow[], konteks: KonteksEkspor): BerkasEkspor {
-  const rekap = rekapVendor(layak);
-  const nama: Array<{ lembaga: string; nama: string; jenisKelamin: string; stel: string; ukuran: string }> = [];
+export type NamaVendor = { lembaga: string; nama: string; jenisKelamin: string; stel: string; ukuran: string };
+
+/**
+ * Daftar nama yang ikut ke vendor (hanya stel berstatus ok), terurut lembaga, stel, ukuran, lalu nama, beserta
+ * hitungan yang tidak ikut. Dipakai bersama oleh berkas Excel dan PDF vendor supaya isinya selalu sama.
+ */
+export function kumpulkanNamaVendor(layak: readonly PesananRow[]): {
+  nama: NamaVendor[]; stelBelumIkut: number; siswaBelumLengkap: number;
+} {
+  const nama: NamaVendor[] = [];
   let stelBelumIkut = 0;
   let siswaBelumLengkap = 0;
   for (const siswa of layak) {
@@ -73,6 +80,12 @@ export function susunBerkasVendor(layak: readonly PesananRow[], konteks: Konteks
   nama.sort((a, b) =>
     a.lembaga.localeCompare(b.lembaga, "id") || a.stel.localeCompare(b.stel, "id")
     || compareUkuran(a.ukuran, b.ukuran) || a.nama.localeCompare(b.nama, "id"));
+  return { nama, stelBelumIkut, siswaBelumLengkap };
+}
+
+export function susunBerkasVendor(layak: readonly PesananRow[], konteks: KonteksEkspor): BerkasEkspor {
+  const rekap = rekapVendor(layak);
+  const { nama, stelBelumIkut, siswaBelumLengkap } = kumpulkanNamaVendor(layak);
 
   const blok = blokJudul(JUDUL, konteks);
   return {
