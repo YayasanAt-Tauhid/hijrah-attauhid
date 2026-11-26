@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UangPangkalInfo } from "@/lib/seragamUangPangkal";
 
@@ -7,7 +7,7 @@ const TK = "dept-tk";
 const mocks = vi.hoisted(() => ({
   role: "keuangan" as string,
   allowed: true, pangkalLoading: false, pangkalError: null as unknown, lengkap: false, campur: false,
-  unduh: vi.fn(), warning: vi.fn(), success: vi.fn(),
+  unduh: vi.fn(), unduhPdf: vi.fn(), warning: vi.fn(), success: vi.fn(), error: vi.fn(),
 }));
 
 const pangkal = (paid: number): UangPangkalInfo => ({ total: 4000000, paid, remaining: 4000000 - paid, status: paid ? "sebagian" : "belum_bayar" });
@@ -65,7 +65,11 @@ vi.mock("@/components/shared/ExportButton", () => ({
   ),
 }));
 
-vi.mock("sonner", () => ({ toast: { warning: mocks.warning, success: mocks.success } }));
+vi.mock("sonner", () => ({ toast: { warning: mocks.warning, success: mocks.success, error: mocks.error } }));
+vi.mock("@/lib/seragamVendorPdf", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/seragamVendorPdf")>()),
+  unduhBerkasPdf: mocks.unduhPdf,
+}));
 vi.mock("@/lib/seragamVendorEkspor", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/seragamVendorEkspor")>()),
   unduhBerkasXlsx: mocks.unduh,
@@ -78,6 +82,7 @@ beforeEach(() => {
   mocks.role = "keuangan";
   mocks.allowed = true; mocks.pangkalLoading = false; mocks.pangkalError = null; mocks.lengkap = false; mocks.campur = false;
   mocks.unduh.mockClear(); mocks.warning.mockClear(); mocks.success.mockClear();
+  mocks.unduhPdf.mockReset(); mocks.unduhPdf.mockResolvedValue(undefined); mocks.error.mockClear();
 });
 afterEach(cleanup);
 
@@ -207,6 +212,29 @@ describe("Biaya Seragam SPMB", () => {
       expect(mocks.warning).toHaveBeenCalledTimes(1);
       expect(mocks.warning.mock.calls[0][0]).toContain("1 entri stel");
       expect(mocks.success).not.toHaveBeenCalled();
+    });
+
+    it("berkas vendor PDF: model per lembaga dengan nama berkas sama seperti Excel, lalu peringatan yang sama", async () => {
+      render(<BiayaSeragamSPMB />);
+      klikEkspor("Berkas untuk vendor (.pdf)");
+      await waitFor(() => expect(mocks.unduhPdf).toHaveBeenCalledTimes(1));
+      const model = mocks.unduhPdf.mock.calls[0][0];
+      expect(model.filename).toBe("pesanan-seragam-vendor-2027-2028-semua-lembaga");
+      expect(model.lembaga.map((l: { lembaga: string }) => l.lembaga)).toEqual(["TK"]);
+      expect(mocks.unduh).not.toHaveBeenCalled();
+      await waitFor(() => expect(mocks.warning).toHaveBeenCalledTimes(1));
+      expect(mocks.warning.mock.calls[0][0]).toContain("1 entri stel");
+      expect(mocks.success).not.toHaveBeenCalled();
+    });
+
+    it("berkas vendor PDF: bila pembuatan PDF gagal, tampil pesan galat dan tidak ada pesan berhasil", async () => {
+      mocks.unduhPdf.mockRejectedValue(new Error("gagal"));
+      render(<BiayaSeragamSPMB />);
+      klikEkspor("Berkas untuk vendor (.pdf)");
+      await waitFor(() => expect(mocks.error).toHaveBeenCalledTimes(1));
+      expect(mocks.error.mock.calls[0][0]).toContain("PDF");
+      expect(mocks.success).not.toHaveBeenCalled();
+      expect(mocks.warning).not.toHaveBeenCalled();
     });
 
     it("berkas internal: tiga sheet dan tanpa peringatan", () => {

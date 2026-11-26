@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Download, FileSpreadsheet } from "lucide-react";
+import { Download, FileSpreadsheet, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { DataTable, type DataTableColumn } from "@/components/shared/DataTable";
 import { ExportButton } from "@/components/shared/ExportButton";
@@ -17,6 +17,7 @@ import {
   pesanBelumIkut, siswaBelumLengkap, susunBerkasBelumLengkap, susunBerkasInternal, susunBerkasVendor, unduhBerkasXlsx,
   type KonteksEkspor,
 } from "@/lib/seragamVendorEkspor";
+import { susunPdfVendor, unduhBerkasPdf } from "@/lib/seragamVendorPdf";
 import {
   catatanMasalah, labelJenisKelamin, PESANAN_EXPORT_COLUMNS, pesananExportRows, REKAP_EXPORT_COLUMNS, rekapExportRows,
   rekapVendor, susunPesanan, type PesananRow,
@@ -85,6 +86,18 @@ export default function BiayaSeragamSPMB() {
     const peringatan = pesanBelumIkut(berkas.belumIkut);
     if (peringatan) toast.warning(peringatan);
     else toast.success("Berkas untuk vendor diunduh.");
+  };
+  const eksporVendorPdf = async () => {
+    const model = susunPdfVendor(pesanan.layak, bangunKonteks());
+    try {
+      await unduhBerkasPdf(model);
+    } catch {
+      toast.error("PDF untuk vendor gagal dibuat. Coba lagi, atau gunakan berkas vendor .xlsx.");
+      return;
+    }
+    const peringatan = pesanBelumIkut(model.belumIkut);
+    if (peringatan) toast.warning(peringatan);
+    else toast.success("PDF untuk vendor diunduh.");
   };
   const eksporInternal = () => {
     unduhBerkasXlsx(susunBerkasInternal(pesanan, bangunKonteks()));
@@ -159,6 +172,10 @@ export default function BiayaSeragamSPMB() {
                 <DropdownMenuItem onSelect={eksporVendor}>
                   <FileSpreadsheet className="mr-2 h-4 w-4" />
                   Berkas untuk vendor (.xlsx)
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={eksporVendorPdf}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Berkas untuk vendor (.pdf)
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={eksporInternal}>
                   <FileSpreadsheet className="mr-2 h-4 w-4" />
