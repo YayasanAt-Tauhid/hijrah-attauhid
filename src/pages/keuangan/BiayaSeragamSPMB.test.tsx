@@ -6,7 +6,7 @@ const TA = "ta-2027";
 const TK = "dept-tk";
 const mocks = vi.hoisted(() => ({
   role: "keuangan" as string,
-  allowed: true, pangkalLoading: false, pangkalError: null as unknown, lengkap: false, campur: false,
+  allowed: true, pangkalLoading: false, pangkalError: null as unknown, lengkap: false, campur: false, kustom: false,
   unduh: vi.fn(), unduhPdf: vi.fn(), warning: vi.fn(), success: vi.fn(), error: vi.fn(),
 }));
 
@@ -34,7 +34,9 @@ vi.mock("@/hooks/useSiswaSeragam", () => ({
   useSpmbGelombang: () => ({ data: [{ id: "g1", nama: "Gelombang 1" }] }),
   useSiswaSeragamList: () => ({
     isLoading: false,
-    data: mocks.campur ? [
+    data: mocks.kustom ? [
+      siswa("a", "Ahmad", { jenis: "Set Gamis Merah", ukuran: "KUSTOM (S) | Lebar badan 3XL" }),
+    ] : mocks.campur ? [
       siswa("a", "Ahmad", { jenis: "Set Gamis Merah", ukuran: "S" }),
       siswa("p", "Putri", { jenis: "Set Gamis Merah", ukuran: "S" }, "P"),
     ] : mocks.lengkap ? [siswaLengkap("a", "Ahmad")] : [
@@ -80,7 +82,7 @@ import BiayaSeragamSPMB from "./BiayaSeragamSPMB";
 const ringkasan = () => screen.getByRole("region", { name: "Ringkasan pesanan" });
 beforeEach(() => {
   mocks.role = "keuangan";
-  mocks.allowed = true; mocks.pangkalLoading = false; mocks.pangkalError = null; mocks.lengkap = false; mocks.campur = false;
+  mocks.allowed = true; mocks.pangkalLoading = false; mocks.pangkalError = null; mocks.lengkap = false; mocks.campur = false; mocks.kustom = false;
   mocks.unduh.mockClear(); mocks.warning.mockClear(); mocks.success.mockClear();
   mocks.unduhPdf.mockReset(); mocks.unduhPdf.mockResolvedValue(undefined); mocks.error.mockClear();
 });
@@ -120,6 +122,13 @@ describe("Biaya Seragam SPMB", () => {
     const barisPutri = screen.getByText("Putri").closest("tr") as HTMLElement;
     expect(within(barisAhmad).getByText("Ikhwan")).toBeInTheDocument();
     expect(within(barisPutri).getByText("Akhwat")).toBeInTheDocument();
+  });
+
+  it("daftar pesanan menampilkan catatan ukuran kustom di samping stelnya, harga tetap seperti ukuran dasar", () => {
+    mocks.kustom = true;
+    render(<BiayaSeragamSPMB />);
+    const baris = screen.getByText("Ahmad").closest("tr") as HTMLElement;
+    expect(within(baris).getByText(/Set Gamis Merah \(KUSTOM \(S\): Lebar badan 3XL\) — Rp 170\.000/)).toBeInTheDocument();
   });
 
   it("rekap vendor memisahkan ikhwan dan akhwat meski stel, ukuran, dan harganya sama", async () => {

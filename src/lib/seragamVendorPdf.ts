@@ -102,6 +102,15 @@ const KOLOM_NAMA: Kolom[] = [
   { label: "Stel", lebar: 50 },
   { label: "Ukuran", lebar: 34 },
 ];
+/** Dipakai hanya untuk lembaga yang punya catatan ukuran kustom. */
+const KOLOM_NAMA_CATATAN: Kolom[] = [
+  { label: "No.", lebar: 8 },
+  { label: "Nama", lebar: 44 },
+  { label: "Jenis Kelamin", lebar: 24 },
+  { label: "Stel", lebar: 36 },
+  { label: "Ukuran", lebar: 26 },
+  { label: "Catatan", lebar: 42 },
+];
 
 /** Gambar satu tabel (dengan judul seksi); pindah halaman bila perlu dan mengulang kepala tabel. Mengembalikan y akhir. */
 function gambarTabel(
@@ -233,12 +242,15 @@ export async function buatPdfVendor(model: PdfVendorModel, opsi: { kompres?: boo
         { sel: ["TOTAL", "", "", String(l.totalJumlah), "", angka(l.totalBayar)], tebal: true },
       ],
     });
+    const adaCatatan = l.nama.some((n) => n.catatan);
     gambarTabel(doc, {
       judul: "Daftar Nama",
-      kolom: KOLOM_NAMA,
+      kolom: adaCatatan ? KOLOM_NAMA_CATATAN : KOLOM_NAMA,
       y,
       halamanLanjutan,
-      baris: l.nama.map((n, i): BarisTabel => ({ sel: [String(i + 1), n.nama, n.jenisKelamin, n.stel, n.ukuran] })),
+      baris: l.nama.map((n, i): BarisTabel => ({
+        sel: [String(i + 1), n.nama, n.jenisKelamin, n.stel, n.ukuran, ...(adaCatatan ? [n.catatan] : [])],
+      })),
     });
   });
 

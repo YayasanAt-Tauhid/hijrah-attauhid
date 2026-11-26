@@ -1,7 +1,7 @@
 import type { SeragamSiswaRow } from "@/lib/seragamSiswa";
 import { uniformDepartment } from "@/lib/ukuranSeragam";
 import {
-  cariHarga, compareUkuran, jumlahStelPesanan, layakDipesan, normalizeNamaStel, normalizeUkuran,
+  cariHarga, catatanUkuran, compareUkuran, jumlahStelPesanan, layakDipesan, normalizeNamaStel, normalizeUkuran,
   type HargaSeragamVendor,
 } from "@/lib/seragamVendor";
 
@@ -15,7 +15,14 @@ export type PesananStel = {
   namaVendor: string | null;
   harga: number | null;
   status: PesananStelStatus;
+  /** Catatan pada ukuran kustom (mis. "Lebar badan 3XL"); tidak ada bila kosong. */
+  catatan?: string;
 };
+
+/** Teks stel untuk daftar pesanan: "Nama (ukuran)" atau "Nama (ukuran: catatan)". */
+export function labelStelPesanan(s: PesananStel): string {
+  return `${s.namaVendor ?? s.nama} (${s.ukuran || "-"}${s.catatan ? `: ${s.catatan}` : ""})`;
+}
 
 export type PesananRow = {
   siswaId: string;
@@ -73,9 +80,11 @@ export function susunPesanan(
         tahunAjaranId: filter.tahunAjaranId, lembagaId: row.lembagaId,
         jenisKelamin: row.jenisKelaminKode, nama, ukuran,
       });
-      stel.push(cocok
+      const butir: PesananStel = cocok
         ? { slot, nama, ukuran, namaVendor: cocok.nama_stel, harga: cocok.harga, status: "ok" }
-        : { slot, nama, ukuran, namaVendor: null, harga: null, status: "harga_belum_ada" });
+        : { slot, nama, ukuran, namaVendor: null, harga: null, status: "harga_belum_ada" };
+      const catatan = catatanUkuran(item.ukuran);
+      stel.push(catatan ? { ...butir, catatan } : butir);
     });
     layak.push({
       siswaId: row.id, nama: row.nama, nis: row.nis, lembagaId: row.lembagaId, lembaga: row.lembaga, kelas: row.kelas,
@@ -177,7 +186,7 @@ export function pesananExportRows(rows: readonly PesananRow[]): Record<string, s
     nis: row.nis,
     lembaga: row.lembaga,
     jenisKelamin: labelJenisKelamin(row.jenisKelaminKode),
-    stel: row.stel.map((s) => `${s.namaVendor ?? s.nama} (${s.ukuran || "-"})`).join("; "),
+    stel: row.stel.map(labelStelPesanan).join("; "),
     total: row.total,
     catatan: catatanMasalah(row),
   }));

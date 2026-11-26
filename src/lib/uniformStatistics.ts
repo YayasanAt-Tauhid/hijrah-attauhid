@@ -1,3 +1,4 @@
+import { normalizeUkuran } from "@/lib/seragamVendor";
 import { readUniformSizes, uniformDepartment, UNIFORM_TYPES, UNIFORM_SIZES, UNIFORM_SLOT_COUNT } from "@/lib/ukuranSeragam";
 
 type Registration = Record<string, unknown>;
@@ -25,7 +26,8 @@ export function summarizeUniforms(rows: Registration[], departments: Department[
     let filled = 0;
     entries.forEach((item, index) => {
       const savedName = item.jenis.trim().replace(/\s+/g, " ");
-      const savedSize = item.ukuran.trim().replace(/\s+/g, " ").toUpperCase();
+      // normalizeUkuran juga membuang catatan ukuran kustom, sehingga "KUSTOM (XL) | catatan" dihitung sebagai KUSTOM (XL).
+      const savedSize = normalizeUkuran(item.ukuran);
       const valid = Boolean(savedName && savedSize);
       // Nama bawaan hanya melabeli entri kosong, bukan bukti ukuran sudah dicatat.
       const jenis = savedName || defaultNames[index] || "Stel " + (index + 1) + " (nama belum diisi)";

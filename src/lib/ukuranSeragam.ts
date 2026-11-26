@@ -40,7 +40,8 @@ export function validateUniformSizes(values: UniformSize[]): string | null {
   for (const [index, item] of values.entries()) {
     if (item.ukuran && !item.jenis.trim()) return "Isi nama jenis seragam stel " + (index + 1) + ".";
     if (item.jenis.length > 80) return "Nama jenis seragam maksimal 80 karakter.";
-    if (item.ukuran.length > 32) return "Ukuran seragam maksimal 32 karakter.";
+    // 80, bukan 32: ukuran kustom boleh membawa catatan ("KUSTOM (XL) | Lebar badan 3XL").
+    if (item.ukuran.length > 80) return "Ukuran seragam maksimal 80 karakter.";
   }
   return null;
 }

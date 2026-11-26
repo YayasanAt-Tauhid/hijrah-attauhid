@@ -33,6 +33,16 @@ describe("rekap seragam SPMB", () => {
     expect(result.rekap.filter((row) => row.ukuran === "3XL")).toHaveLength(3);
     expect(result.recorded).toBe(4);
   });
+  it("ukuran kustom dengan catatan dihitung sebagai KUSTOM (XL), bukan kolom ukuran baru per catatan", () => {
+    const result = summarizeUniforms([
+      make("sd", "L", [{ jenis: "Olah raga", ukuran: "KUSTOM (XL) | Lebar badan 3XL, pakai ukuran XL" }]),
+      make("sd", "L", [{ jenis: "Olah raga", ukuran: "kustom(xl) | Lengan panjang" }]),
+      make("sd", "L", [{ jenis: "Olah raga", ukuran: "KUSTOM (XL)" }]),
+    ], departments);
+    const kustom = result.rekap.filter((row) => row.jenis === "Olah raga");
+    expect(kustom.map((row) => [row.ukuran, row.jumlah])).toEqual([["KUSTOM (XL)", 3]]);
+    expect(buildUniformSizeTable(result.rekap).sizes.filter((size) => size.startsWith("KUSTOM"))).toEqual(["KUSTOM (XL)"]);
+  });
   it("mempertahankan ukuran khusus dan menangani data kosong/tidak valid", () => {
     const result = summarizeUniforms([
       make("sd", "P", [{ jenis: "Khimar Khusus", ukuran: "jumbo" }]),

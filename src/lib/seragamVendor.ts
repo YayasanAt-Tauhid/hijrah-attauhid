@@ -40,8 +40,23 @@ export function ukuranDasarKustom(value: string): string | null {
   return UKURAN_DASAR_KUSTOM.includes(dasar) ? dasar : null;
 }
 
+/**
+ * Ukuran kustom boleh diberi catatan setelah "|", mis. "KUSTOM (XL) | Lebar badan 3XL". Catatan hanya dikenali bila
+ * bagian depannya ukuran kustom yang sah; selain itu nilainya dibiarkan utuh (tidak dikenal, seperti sebelumnya).
+ */
+function pecahCatatan(value: string): { ukuran: string; catatan: string } {
+  const i = value.indexOf("|");
+  if (i < 0) return { ukuran: value, catatan: "" };
+  const depan = value.slice(0, i);
+  if (!ukuranDasarKustom(depan)) return { ukuran: value, catatan: "" };
+  return { ukuran: depan, catatan: value.slice(i + 1).trim().replace(/\s+/g, " ") };
+}
+
+/** Catatan pada ukuran kustom (kapitalisasi dijaga); kosong bila tidak ada. */
+export const catatanUkuran = (value: string): string => pecahCatatan(value).catatan;
+
 export function normalizeUkuran(value: string): string {
-  const v = value.trim().replace(/\s+/g, " ").toUpperCase();
+  const v = pecahCatatan(value).ukuran.trim().replace(/\s+/g, " ").toUpperCase();
   const dasar = ukuranDasarKustom(v);
   if (dasar) return `KUSTOM (${dasar})`;
   return UKURAN_ALIAS[v] ?? v;

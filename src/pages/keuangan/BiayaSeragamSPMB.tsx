@@ -19,7 +19,7 @@ import {
 } from "@/lib/seragamVendorEkspor";
 import { susunPdfVendor, unduhBerkasPdf } from "@/lib/seragamVendorPdf";
 import {
-  catatanMasalah, labelJenisKelamin, PESANAN_EXPORT_COLUMNS, pesananExportRows, REKAP_EXPORT_COLUMNS, rekapExportRows,
+  catatanMasalah, labelJenisKelamin, labelStelPesanan, PESANAN_EXPORT_COLUMNS, pesananExportRows, REKAP_EXPORT_COLUMNS, rekapExportRows,
   rekapVendor, susunPesanan, type PesananRow,
 } from "@/lib/seragamVendorPesanan";
 import BiayaSeragamHargaTab from "./BiayaSeragamHargaTab";
@@ -124,7 +124,7 @@ export default function BiayaSeragamSPMB() {
         <ul className="space-y-0.5">
           {row.stel.map((s) => (
             <li key={s.slot} className="text-sm">
-              {s.namaVendor ?? s.nama} ({s.ukuran || "-"}){s.harga !== null ? ` — ${rupiah(s.harga)}` : ""}
+              {labelStelPesanan(s)}{s.harga !== null ? ` — ${rupiah(s.harga)}` : ""}
             </li>
           ))}
         </ul>
