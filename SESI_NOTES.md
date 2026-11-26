@@ -1063,4 +1063,10 @@ Pada rencana siswa baru, SPP awal sudah tersedia di RPC, tetapi aksesnya tersemb
 - Gejala: setelah PR #263 deploy, `/keuangan/online-payment` menampilkan tabel kosong padahal data produksi ada (257 transaksi, policy akses `keuangan_baca_transaksi_midtrans*` ada; dicek hanya baca).
 - Penyebab: #263 memanggil `.order(kolom, { ascending: false, nullsFirst: false })` sehingga klien mengirim `order=created_at.desc.nullslast`. Parser `order` Rustbase (`src/rest/filter.rs`, `parse_order`) hanya mengenali akhiran `.asc`/`.desc`; `.nullslast` membuat seluruh teks dianggap nama kolom, permintaan gagal, dan halaman tampil kosong. Tes mock tidak menangkapnya karena tidak memakai parser Rustbase.
 - Perbaikan: `nullsFirst` dihapus. Tidak perlu: `created_at` tak pernah kosong, dan mode Tanggal dibayar sudah membuang `paid_at` kosong lewat `.not("paid_at","is",null)`. Tes kini menuntut opsi urutan persis `{ ascending: false }`.
-- ATURAN: untuk query ke Rustbase, jangan pakai `nullsFirst`/`nullslast`/`nulls` pada `.order()`. Sisa pemakaian di `src/pages/kepegawaian/DUK.tsx` (urut `golongan_terakhir`) kemungkinan memicu galat yang sama; belum diverifikasi atau diubah.
+- ATURAN: untuk query ke Rustbase, jangan pakai `nullsFirst`/`nullslast`/`nulls` pada `.order()`. Pemakaian lain di `src/pages/kepegawaian/DUK.tsx` sudah diperbaiki (lihat bagian DUK di bawah).
+
+## Hotfix DUK: daftar kosong karena `nullslast` (26 November 2026)
+
+- Penyebab sama dengan Online Payment: `DUK.tsx` memakai `.order("golongan_terakhir", { ascending: false, nullsFirst: false })` sehingga klien mengirim `order=golongan_terakhir.desc.nullslast`, yang tidak dikenali parser `order` Rustbase (dianggap nama kolom). Kesimpulan dari membaca kode Rustbase; belum dicoba langsung ke API produksi (kunci layanan tidak terbaca dari sesi ini).
+- Perbaikan: server hanya `{ ascending: false }`; pegawai tanpa golongan dipindah ke akhir di klien (sort stabil). Tes: `src/pages/kepegawaian/DUK.render.test.tsx`.
+- Data produksi (hanya baca, 26 Nov 2026): 174 pegawai aktif, SEMUA `golongan_terakhir` kosong. Jadi urutan golongan belum berarti apa-apa sampai golongan diisi; urutan saat ini = urutan bawaan database. Komentar lama di kode ("golongan desc, lalu masa kerja desc") tidak pernah diimplementasikan (tidak ada urutan kedua menurut masa kerja); belum diubah, menunggu keputusan pemilik.

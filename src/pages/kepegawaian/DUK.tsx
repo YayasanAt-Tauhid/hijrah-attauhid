@@ -21,7 +21,9 @@ export default function DUK() {
         .from("pegawai")
         .select("id, nama, nip, jabatan, golongan_terakhir, tanggal_masuk, tanggal_lahir, tanggal_pensiun, status, departemen:departemen_id(nama, kode)")
         .eq("status", "aktif")
-        .order("golongan_terakhir", { ascending: false, nullsFirst: false });
+        // Jangan pakai nullsFirst: Rustbase hanya mengenali asc/desc, "nullslast" dianggap nama kolom
+        // dan daftar jadi kosong. Pegawai tanpa golongan dipindah ke akhir di klien (lihat di bawah).
+        .order("golongan_terakhir", { ascending: false });
 
       if (filterLembaga === "yayasan") q = q.is("departemen_id", null);
       else if (filterLembaga !== "all") q = q.eq("departemen_id", filterLembaga);
@@ -29,8 +31,12 @@ export default function DUK() {
       const { data, error } = await q;
       if (error) throw error;
 
-      // Sort: golongan desc, then masa kerja desc
-      return (data || []).map((p, idx: number) => ({
+      // Postgres menaruh NULL lebih dulu pada DESC; pindahkan yang tanpa golongan ke akhir
+      // (sort stabil: urutan relatif di tiap kelompok tetap).
+      const urut = [...(data || [])].sort(
+        (a, b) => Number(a.golongan_terakhir == null) - Number(b.golongan_terakhir == null),
+      );
+      return urut.map((p, idx: number) => ({
         ...p,
         urutan: idx + 1,
         masa_kerja: p.tanggal_masuk ? differenceInYears(new Date(), new Date(p.tanggal_masuk)) : null,
