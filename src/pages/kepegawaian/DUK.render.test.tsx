@@ -52,11 +52,14 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("DUK", () => {
-  it("mengurutkan golongan dengan opsi persis { ascending: false } (tanpa nullsFirst/nullslast)", async () => {
+  it("urut golongan menurun lalu masa kerja terlama (tanggal_masuk menaik), opsi hanya ascending (tanpa nullsFirst/nullslast)", async () => {
     tampil();
     await screen.findByText("Budi");
     const urut = m.calls.filter((c) => c[1] === "order");
-    expect(urut).toEqual([["pegawai", "order", "golongan_terakhir", { ascending: false }]]);
+    expect(urut).toEqual([
+      ["pegawai", "order", "golongan_terakhir", { ascending: false }],
+      ["pegawai", "order", "tanggal_masuk", { ascending: true }],
+    ]);
   });
 
   it("pegawai tanpa golongan di akhir; yang bergolongan tetap urut golongan; nomor berurutan", async () => {
