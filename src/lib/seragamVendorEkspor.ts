@@ -52,7 +52,7 @@ function buatSheet(name: string, rows: unknown[][]): SheetEkspor {
   };
 }
 
-export type NamaVendor = { lembaga: string; nama: string; jenisKelamin: string; stel: string; ukuran: string };
+export type NamaVendor = { lembaga: string; nama: string; jenisKelamin: string; stel: string; ukuran: string; catatan: string };
 
 /**
  * Daftar nama yang ikut ke vendor (hanya stel berstatus ok), terurut lembaga, stel, ukuran, lalu nama, beserta
@@ -73,7 +73,7 @@ export function kumpulkanNamaVendor(layak: readonly PesananRow[]): {
       }
       nama.push({
         lembaga: siswa.lembaga, nama: siswa.nama, jenisKelamin: labelJenisKelamin(siswa.jenisKelaminKode),
-        stel: item.namaVendor ?? item.nama, ukuran: item.ukuran,
+        stel: item.namaVendor ?? item.nama, ukuran: item.ukuran, catatan: item.catatan ?? "",
       });
     }
   }
@@ -88,6 +88,7 @@ export function susunBerkasVendor(layak: readonly PesananRow[], konteks: Konteks
   const { nama, stelBelumIkut, siswaBelumLengkap } = kumpulkanNamaVendor(layak);
 
   const blok = blokJudul(JUDUL, konteks);
+  const adaCatatan = nama.some((n) => n.catatan);
   return {
     filename: namaBerkas("vendor", konteks),
     belumIkut: { stel: stelBelumIkut, siswaBelumLengkap },
@@ -100,8 +101,8 @@ export function susunBerkasVendor(layak: readonly PesananRow[], konteks: Konteks
       ]),
       buatSheet("Daftar Nama", [
         ...blok,
-        ["Lembaga", "Nama", "Jenis Kelamin", "Stel", "Ukuran"],
-        ...nama.map((n) => [n.lembaga, n.nama, n.jenisKelamin, n.stel, n.ukuran]),
+        ["Lembaga", "Nama", "Jenis Kelamin", "Stel", "Ukuran", ...(adaCatatan ? ["Catatan"] : [])],
+        ...nama.map((n) => [n.lembaga, n.nama, n.jenisKelamin, n.stel, n.ukuran, ...(adaCatatan ? [n.catatan] : [])]),
       ]),
     ],
   };

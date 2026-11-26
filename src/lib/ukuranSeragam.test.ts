@@ -35,4 +35,11 @@ describe("lima stel seragam", () => {
     expect(defaultUniformSizes(null, "TK", "L")).toEqual(emptyUniformSizes());
     expect(uniformDepartment({ nama: "SMP At-Tauhid" })).toBe("SMP");
   });
+  it("menerima ukuran kustom dengan catatan sampai 80 karakter, menolak yang lebih panjang", () => {
+    const kustom = "KUSTOM (XL) | Lebar badan 3XL, pakai ukuran XL";
+    expect(kustom.length).toBeGreaterThan(32);
+    expect(validateUniformSizes([{ jenis: "Putih Merah", ukuran: kustom }])).toBeNull();
+    expect(validateUniformSizes([{ jenis: "Putih Merah", ukuran: "x".repeat(80) }])).toBeNull();
+    expect(validateUniformSizes([{ jenis: "Putih Merah", ukuran: "x".repeat(81) }])).toContain("80 karakter");
+  });
 });

@@ -199,6 +199,22 @@ describe("rekapVendor", () => {
     expect(rekap.totalBayar).toBe(370000);
   });
 
+  it("catatan ukuran kustom: dibawa di stel, rekap tetap bergabung, tampil di teks Daftar Pesanan", () => {
+    const rows = [
+      row({ id: "kst1", stel: stel(["Set Gamis Merah", "KUSTOM (XL) | Lebar badan 3XL"]) }),
+      row({ id: "kst2", stel: stel(["Set Gamis Merah", "KUSTOM (XL) | Lengan panjang"]) }),
+      row({ id: "std", stel: stel(["Set Gamis Merah", "XL"]) }),
+    ];
+    const { layak } = susunPesanan(rows, katalog, filter);
+    const stelDari = (id: string) => layak.find((r) => r.siswaId === id)!.stel[0];
+    expect(stelDari("kst1")).toMatchObject({ ukuran: "KUSTOM (XL)", catatan: "Lebar badan 3XL", harga: 185000, status: "ok" });
+    expect(stelDari("std").catatan).toBeUndefined();
+    expect(rekapVendor(layak).baris.map((b) => [b.ukuran, b.jumlah])).toEqual([["XL", 1], ["KUSTOM (XL)", 2]]);
+    const teks = (nama: string) => pesananExportRows(layak).find((r) => r.nama === nama)!.stel;
+    expect(teks("kst1")).toBe("Set Gamis Merah (KUSTOM (XL): Lebar badan 3XL)");
+    expect(teks("std")).toBe("Set Gamis Merah (XL)");
+  });
+
   it("urut menurut lembaga, stel, jenis kelamin (Ikhwan dulu), lalu ukuran", () => {
     const bersama = [
       ...katalog,

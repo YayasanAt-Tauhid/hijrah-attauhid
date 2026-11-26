@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  cariBentrok, cariHarga, hargaBertabrakan, jumlahStelPesanan, layakDipesan, normalizeNamaStel,
+  cariBentrok, cariHarga, catatanUkuran, hargaBertabrakan, jumlahStelPesanan, layakDipesan, normalizeNamaStel,
   normalizeUkuran, normalizeUkuranList, pesanGalatHarga, salinanHarga, ukuranDasarKustom, validasiHarga,
   type HargaSeragamVendor, type JenisKelaminHarga,
 } from "./seragamVendor";
@@ -99,6 +99,34 @@ describe("ukuran kustom: KUSTOM (XL) = dibuat khusus, berharga seperti XL", () =
     expect(cariHarga([harga({ ...xl, tahun_ajaran_id: "ta-lain" })], q)).toBeNull();
   });
 });
+describe("catatan pada ukuran kustom: KUSTOM (XL) | catatan", () => {
+  const q = { tahunAjaranId: TA, lembagaId: TK, jenisKelamin: "L", nama: "Set Gamis Merah", ukuran: "KUSTOM (XL)" };
+  const xl = harga({ id: "xl", ukuran: ["L", "XL"], harga: 185000 });
+  it("catatanUkuran mengambil teks setelah | apa adanya: kapitalisasi dijaga, spasi dirapikan", () => {
+    expect(catatanUkuran("KUSTOM (XL) | Lebar badan 3XL, pakai ukuran XL")).toBe("Lebar badan 3XL, pakai ukuran XL");
+    expect(catatanUkuran("kustom(xl)|  lebar   badan  3XL ")).toBe("lebar badan 3XL");
+    expect(catatanUkuran("KUSTOM (XL) | a | b")).toBe("a | b");
+  });
+  it("catatanUkuran kosong bila tidak ada catatan atau bagian depannya bukan ukuran kustom yang sah", () => {
+    expect(catatanUkuran("KUSTOM (XL)")).toBe("");
+    expect(catatanUkuran("KUSTOM (XL) |   ")).toBe("");
+    expect(catatanUkuran("XL | catatan")).toBe("");
+    expect(catatanUkuran("KUSTOM (ABC) | catatan")).toBe("");
+    expect(catatanUkuran("")).toBe("");
+  });
+  it("normalizeUkuran membuang catatan sehingga hasilnya tetap KUSTOM (XL)", () => {
+    expect(normalizeUkuran("KUSTOM (XL) | Lebar badan 3XL")).toBe("KUSTOM (XL)");
+    expect(normalizeUkuran("kustom ( x3l ) | x")).toBe("KUSTOM (3XL)");
+  });
+  it("ukuran biasa yang diberi | tidak dianggap kustom: diperlakukan seperti sebelumnya (tak dikenal)", () => {
+    expect(normalizeUkuran("XL | catatan")).toBe("XL | CATATAN");
+    expect(cariHarga([xl], { ...q, ukuran: "XL | catatan" })).toBeNull();
+  });
+  it("cariHarga: harga KUSTOM (XL) dengan catatan sama dengan XL", () => {
+    expect(cariHarga([xl], { ...q, ukuran: "KUSTOM (XL) | Lebar badan 3XL" })?.harga).toBe(185000);
+  });
+});
+
 describe("cariHarga", () => {
   const q = { tahunAjaranId: TA, lembagaId: TK, jenisKelamin: "L", nama: "Set Gamis Merah", ukuran: "S" };
   it("cocok menurut tahun, lembaga, nama, jenis kelamin, dan ukuran", () => {

@@ -140,6 +140,25 @@ describe("susunBerkasVendor", () => {
     ]);
   });
 
+  it("Daftar Nama: kolom Catatan muncul hanya bila ada catatan ukuran kustom; Rekap tidak berubah", () => {
+    const kiko = siswa({
+      siswaId: "k", nama: "Kiko", stel: [{ ...ok(1, "Set Gamis Merah", "KUSTOM (XL)", 185000), catatan: "Lebar badan 3XL" }],
+    });
+    const berkas = susunBerkasVendor([ahmad, kiko], konteks);
+    const s = sheet(berkas, "Daftar Nama");
+    expect(s.rows).toContainEqual(["Lembaga", "Nama", "Jenis Kelamin", "Stel", "Ukuran", "Catatan"]);
+    expect(dataRows(s, "Lembaga")).toEqual([
+      ["TK", "Ahmad", "Ikhwan", "Set Gamis Hijau", "M", ""],
+      ["TK", "Ahmad", "Ikhwan", "Set Gamis Merah", "S", ""],
+      ["TK", "Kiko", "Ikhwan", "Set Gamis Merah", "KUSTOM (XL)", "Lebar badan 3XL"],
+    ]);
+    const rekap = dataRows(sheet(berkas, "Rekap"), "Lembaga");
+    expect(rekap.every((r) => r.length === 7)).toBe(true);
+    expect(rekap).toContainEqual(["TK", "Set Gamis Merah", "Ikhwan", "KUSTOM (XL)", 1, 185000, 185000]);
+    // tanpa catatan: kolom Catatan tidak ada sama sekali
+    expect(sheet(susunBerkasVendor([ahmad], konteks), "Daftar Nama").rows.flat()).not.toContain("Catatan");
+  });
+
   it("memakai nama stel menurut vendor bila berbeda dari ejaan di data siswa", () => {
     const beda = siswa({
       siswaId: "b", nama: "Bima",

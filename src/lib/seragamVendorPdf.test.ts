@@ -170,3 +170,28 @@ describe("amanPdf: karakter di luar Latin-1", () => {
     expect(doc.output()).toContain("Nur 'Aini'");
   });
 });
+
+describe("catatan ukuran kustom di PDF", () => {
+  const kiko = siswa({
+    siswaId: "k", nama: "Kiko",
+    stel: [{ ...ok(1, "Set Gamis Merah", "KUSTOM (XL)", 185000), catatan: "Lebar badan 3XL" }],
+  });
+
+  it("model Daftar Nama membawa catatan per nama", () => {
+    const tk = susunPdfVendor([kiko, ahmad], konteks).lembaga[0];
+    expect(tk.nama.find((n) => n.nama === "Kiko")?.catatan).toBe("Lebar badan 3XL");
+    expect(tk.nama.find((n) => n.nama === "Ahmad")?.catatan).toBe("");
+  });
+
+  it("kolom Catatan hanya muncul di lembaga yang punya catatan, dan teksnya tercetak", async () => {
+    const doc = await buatPdfVendor(susunPdfVendor([kiko, rahma], konteks), { kompres: false });
+    const isi = doc.output();
+    expect(isi).toContain("Lebar badan 3XL");
+    expect(isi.split("Catatan").length - 1).toBe(1); // hanya halaman TK; halaman SD tanpa catatan tidak punya kolomnya
+  });
+
+  it("tanpa catatan sama sekali: tidak ada kolom Catatan", async () => {
+    const doc = await buatPdfVendor(susunPdfVendor([ahmad, rahma], konteks), { kompres: false });
+    expect(doc.output()).not.toContain("Catatan");
+  });
+});
