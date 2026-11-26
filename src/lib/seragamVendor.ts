@@ -26,8 +26,24 @@ export type HargaKunci = Pick<HargaSeragamVendor, "tahun_ajaran_id" | "departeme
 
 const UKURAN_ALIAS: Record<string, string> = { X3L: "3XL", X4L: "4XL", X5L: "5XL" };
 
+const UKURAN_DASAR_KUSTOM = UNIFORM_SIZES.filter((u) => u !== "ALL SIZE");
+const POLA_KUSTOM = /^KUSTOM\s*\(\s*([^()]*?)\s*\)$/;
+
+/**
+ * Ukuran kustom ditulis "KUSTOM (XL)": dijahit khusus, tetapi dihargai seperti ukuran dasar di dalam kurung.
+ * Mengembalikan ukuran dasarnya, atau null bila bukan notasi kustom yang sah (dasar harus ukuran baku selain ALL SIZE).
+ */
+export function ukuranDasarKustom(value: string): string | null {
+  const cocok = POLA_KUSTOM.exec(value.trim().replace(/\s+/g, " ").toUpperCase());
+  if (!cocok) return null;
+  const dasar = UKURAN_ALIAS[cocok[1]] ?? cocok[1];
+  return UKURAN_DASAR_KUSTOM.includes(dasar) ? dasar : null;
+}
+
 export function normalizeUkuran(value: string): string {
   const v = value.trim().replace(/\s+/g, " ").toUpperCase();
+  const dasar = ukuranDasarKustom(v);
+  if (dasar) return `KUSTOM (${dasar})`;
   return UKURAN_ALIAS[v] ?? v;
 }
 
@@ -70,6 +86,8 @@ export type CariHargaInput = {
 export function cariHarga(harga: readonly HargaSeragamVendor[], q: CariHargaInput): HargaSeragamVendor | null {
   const nama = normalizeNamaStel(q.nama);
   const ukuran = normalizeUkuran(q.ukuran);
+  // Ukuran kustom dicari harganya lewat ukuran dasar; tampilan dan rekap tetap memakai ukuran kustomnya.
+  const ukuranPatokan = ukuranDasarKustom(ukuran) ?? ukuran;
   let best: HargaSeragamVendor | null = null;
   let bestScore = -1;
   for (const h of harga) {
@@ -77,7 +95,7 @@ export function cariHarga(harga: readonly HargaSeragamVendor[], q: CariHargaInpu
     if (normalizeNamaStel(h.nama_stel) !== nama) continue;
     if (h.jenis_kelamin !== "semua" && h.jenis_kelamin !== q.jenisKelamin) continue;
     const ukuranHarga = normalizeUkuranList(h.ukuran);
-    if (ukuranHarga.length > 0 && !ukuranHarga.includes(ukuran)) continue;
+    if (ukuranHarga.length > 0 && !ukuranHarga.includes(ukuranPatokan)) continue;
     const score = (h.jenis_kelamin !== "semua" ? 1 : 0) + (ukuranHarga.length > 0 ? 1 : 0);
     if (score > bestScore || (score === bestScore && best !== null && h.id < best.id)) {
       best = h;

@@ -6,7 +6,7 @@ const TA = "ta-2027";
 const TK = "dept-tk";
 const mocks = vi.hoisted(() => ({
   role: "keuangan" as string,
-  allowed: true, pangkalLoading: false, pangkalError: null as unknown, lengkap: false,
+  allowed: true, pangkalLoading: false, pangkalError: null as unknown, lengkap: false, campur: false,
   unduh: vi.fn(), warning: vi.fn(), success: vi.fn(),
 }));
 
@@ -19,8 +19,8 @@ const siswaLengkap = (id: string, nama: string) => ({
     spmb_departemen_tujuan_id: TK, tahun_ajaran_id: TA, spmb_gelombang_id: "g1",
   },
 });
-const siswa = (id: string, nama: string, stel: { jenis: string; ukuran: string }) => ({
-  id, nama, nis: "", jenis_kelamin: "L", status: "diterima", departemen_id: TK, kelas_siswa: [],
+const siswa = (id: string, nama: string, stel: { jenis: string; ukuran: string }, jenisKelamin = "L") => ({
+  id, nama, nis: "", jenis_kelamin: jenisKelamin, status: "diterima", departemen_id: TK, kelas_siswa: [],
   siswa_detail: {
     ukuran_seragam: [stel, ...kosong], spmb_departemen_tujuan_id: TK, tahun_ajaran_id: TA, spmb_gelombang_id: "g1",
   },
@@ -34,7 +34,10 @@ vi.mock("@/hooks/useSiswaSeragam", () => ({
   useSpmbGelombang: () => ({ data: [{ id: "g1", nama: "Gelombang 1" }] }),
   useSiswaSeragamList: () => ({
     isLoading: false,
-    data: mocks.lengkap ? [siswaLengkap("a", "Ahmad")] : [
+    data: mocks.campur ? [
+      siswa("a", "Ahmad", { jenis: "Set Gamis Merah", ukuran: "S" }),
+      siswa("p", "Putri", { jenis: "Set Gamis Merah", ukuran: "S" }, "P"),
+    ] : mocks.lengkap ? [siswaLengkap("a", "Ahmad")] : [
       siswa("a", "Ahmad", { jenis: "Set Gamis Merah", ukuran: "S" }),
       siswa("b", "Budi", { jenis: "Set Gamis Merah", ukuran: "S" }),
       siswa("c", "Candra", { jenis: "Set Gamis Hijau", ukuran: "S" }),
@@ -42,13 +45,14 @@ vi.mock("@/hooks/useSiswaSeragam", () => ({
   }),
   useSeragamUangPangkal: () => ({
     allowed: mocks.allowed, isLoading: mocks.pangkalLoading, error: mocks.pangkalError,
-    byStudent: new Map([["a", pangkal(1000000)], ["b", pangkal(400000)], ["c", pangkal(2000000)]]),
+    byStudent: new Map([["a", pangkal(1000000)], ["b", pangkal(400000)], ["c", pangkal(2000000)], ["p", pangkal(1000000)]]),
   }),
 }));
 vi.mock("@/hooks/useHargaSeragamVendor", () => ({
   useHargaSeragamVendor: () => ({
     isLoading: false, error: null,
-    data: [{ id: "h1", tahun_ajaran_id: TA, departemen_id: TK, jenis_kelamin: "L", nama_stel: "Set Gamis Merah", ukuran: ["S", "M"], harga: 170000, catatan: null, aktif: true }],
+    // Skenario campuran: satu baris "semua" membuat ikhwan dan akhwat berharga sama, supaya terlihat bila rekap menggabungkannya.
+    data: [{ id: "h1", tahun_ajaran_id: TA, departemen_id: TK, jenis_kelamin: mocks.campur ? "semua" : "L", nama_stel: "Set Gamis Merah", ukuran: ["S", "M"], harga: 170000, catatan: null, aktif: true }],
   }),
 }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ role: mocks.role }) }));
@@ -72,7 +76,7 @@ import BiayaSeragamSPMB from "./BiayaSeragamSPMB";
 const ringkasan = () => screen.getByRole("region", { name: "Ringkasan pesanan" });
 beforeEach(() => {
   mocks.role = "keuangan";
-  mocks.allowed = true; mocks.pangkalLoading = false; mocks.pangkalError = null; mocks.lengkap = false;
+  mocks.allowed = true; mocks.pangkalLoading = false; mocks.pangkalError = null; mocks.lengkap = false; mocks.campur = false;
   mocks.unduh.mockClear(); mocks.warning.mockClear(); mocks.success.mockClear();
 });
 afterEach(cleanup);
@@ -101,6 +105,28 @@ describe("Biaya Seragam SPMB", () => {
     expect(await screen.findByText("Total pembayaran vendor: Rp 170.000")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Harga belum ada" })).toBeInTheDocument();
     expect(screen.getByText("Set Gamis Hijau")).toBeInTheDocument();
+  });
+
+  it("daftar pesanan memuat kolom Jenis kelamin (Ikhwan/Akhwat)", () => {
+    mocks.campur = true;
+    render(<BiayaSeragamSPMB />);
+    expect(screen.getByRole("columnheader", { name: /Jenis kelamin/ })).toBeInTheDocument();
+    const barisAhmad = screen.getByText("Ahmad").closest("tr") as HTMLElement;
+    const barisPutri = screen.getByText("Putri").closest("tr") as HTMLElement;
+    expect(within(barisAhmad).getByText("Ikhwan")).toBeInTheDocument();
+    expect(within(barisPutri).getByText("Akhwat")).toBeInTheDocument();
+  });
+
+  it("rekap vendor memisahkan ikhwan dan akhwat meski stel, ukuran, dan harganya sama", async () => {
+    mocks.campur = true;
+    render(<BiayaSeragamSPMB />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Rekap Vendor" }));
+    expect(await screen.findByText("Total pembayaran vendor: Rp 340.000")).toBeInTheDocument();
+    const baris = screen.getAllByRole("row").filter((r) => within(r).queryByText("Set Gamis Merah"));
+    expect(baris).toHaveLength(2);
+    expect(within(baris[0]).getByText("Ikhwan")).toBeInTheDocument();
+    expect(within(baris[1]).getByText("Akhwat")).toBeInTheDocument();
+    for (const b of baris) expect(within(b).getByText("1")).toBeInTheDocument();
   });
 
   it("ekspor Excel membawa daftar pesanan dan sheet Rekap Vendor", () => {

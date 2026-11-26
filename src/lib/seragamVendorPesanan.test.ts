@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  catatanMasalah, pesananExportRows, rekapExportRows, rekapVendor, susunPesanan,
+  catatanMasalah, pesananExportRows, REKAP_EXPORT_COLUMNS, rekapExportRows, rekapVendor, susunPesanan,
 } from "./seragamVendorPesanan";
 import type { HargaSeragamVendor } from "./seragamVendor";
 import type { SeragamSiswaRow } from "./seragamSiswa";
@@ -166,6 +166,66 @@ describe("rekapVendor", () => {
     expect(rekap.totalJumlah).toBe(3);
     expect(rekap.totalBayar).toBe(525000);
   });
+
+  it("memisahkan ikhwan dan akhwat pada stel, ukuran, dan harga yang sama; Ikhwan lebih dulu", () => {
+    const bersama = [...katalog, harga({ id: "tk-ungu-semua", nama_stel: "Set Gamis Ungu", jenis_kelamin: "semua", ukuran: ["XL"], harga: 200000 })];
+    const rows = [
+      row({ id: "p1", jenisKelaminKode: "P", jenisKelamin: "Akhwat", stel: stel(["Set Gamis Ungu", "XL"]) }),
+      row({ id: "l1", stel: stel(["Set Gamis Ungu", "XL"]) }),
+      row({ id: "l2", stel: stel(["Set Gamis Ungu", "XL"]) }),
+    ];
+    const rekap = rekapVendor(susunPesanan(rows, bersama, filter).layak);
+    expect(rekap.baris.map((b) => [b.namaStel, b.jenisKelaminKode, b.ukuran, b.hargaSatuan, b.jumlah, b.subtotal])).toEqual([
+      ["Set Gamis Ungu", "L", "XL", 200000, 2, 400000],
+      ["Set Gamis Ungu", "P", "XL", 200000, 1, 200000],
+    ]);
+    expect(rekap.totalJumlah).toBe(3);
+    expect(rekap.totalBayar).toBe(600000);
+  });
+
+  it("ukuran KUSTOM (XL): harga sama dengan XL, tetapi tampil sebagai baris sendiri setelah XL", () => {
+    const rows = [
+      row({ id: "std", stel: stel(["Set Gamis Merah", "XL"]) }),
+      row({ id: "kst", stel: stel(["Set Gamis Merah", "kustom(xl)"]) }),
+    ];
+    const { layak } = susunPesanan(rows, katalog, filter);
+    const kustom = layak.find((r) => r.siswaId === "kst")!.stel[0];
+    expect(kustom).toMatchObject({ ukuran: "KUSTOM (XL)", harga: 185000, status: "ok" });
+    const rekap = rekapVendor(layak);
+    expect(rekap.baris.map((b) => [b.ukuran, b.hargaSatuan, b.jumlah])).toEqual([
+      ["XL", 185000, 1],
+      ["KUSTOM (XL)", 185000, 1],
+    ]);
+    expect(rekap.totalBayar).toBe(370000);
+  });
+
+  it("urut menurut lembaga, stel, jenis kelamin (Ikhwan dulu), lalu ukuran", () => {
+    const bersama = [
+      ...katalog,
+      harga({ id: "tk-merah-xl-p", jenis_kelamin: "P", ukuran: ["XL"], harga: 190000 }),
+      harga({ id: "tk-merah-s-p", jenis_kelamin: "P", ukuran: ["S"], harga: 160000 }),
+    ];
+    const rows = [
+      row({ id: "p-xl", jenisKelaminKode: "P", jenisKelamin: "Akhwat", stel: stel(["Set Gamis Merah", "XL"]) }),
+      row({ id: "l-xl", stel: stel(["Set Gamis Merah", "XL"]) }),
+      row({ id: "p-s", jenisKelaminKode: "P", jenisKelamin: "Akhwat", stel: stel(["Set Gamis Merah", "S"]) }),
+      row({ id: "l-s", stel: stel(["Set Gamis Merah", "S"]) }),
+    ];
+    const rekap = rekapVendor(susunPesanan(rows, bersama, filter).layak);
+    expect(rekap.baris.map((b) => [b.jenisKelaminKode, b.ukuran])).toEqual([["L", "S"], ["L", "XL"], ["P", "S"], ["P", "XL"]]);
+  });
+
+  it("stel tanpa harga juga dipisah menurut jenis kelamin", () => {
+    const rows = [
+      row({ id: "p", jenisKelaminKode: "P", jenisKelamin: "Akhwat", stel: stel(["Set Gamis Hijau", "S"]) }),
+      row({ id: "l", stel: stel(["Set Gamis Hijau", "S"]) }),
+    ];
+    const rekap = rekapVendor(susunPesanan(rows, katalog, filter).layak);
+    expect(rekap.tanpaHarga.map((b) => [b.namaStel, b.jenisKelaminKode, b.ukuran, b.jumlah])).toEqual([
+      ["Set Gamis Hijau", "L", "S", 1],
+      ["Set Gamis Hijau", "P", "S", 1],
+    ]);
+  });
 });
 
 describe("ekspor", () => {
@@ -184,10 +244,15 @@ describe("ekspor", () => {
       stel: "Set Gamis Merah (S); Olahraga (XL)", total: 170000, catatan: "Baru 2 dari 5 stel diisi; Harga belum ada: Olahraga (XL)",
     }]);
   });
-  it("baris ekspor rekap diakhiri baris TOTAL dan memuat stel tanpa harga", () => {
+  it("baris ekspor rekap diakhiri baris TOTAL dan memuat stel tanpa harga, masing-masing dengan jenis kelamin", () => {
     const hasil = rekapExportRows(rekapVendor([pesanan]));
-    expect(hasil[0]).toMatchObject({ lembaga: "TK", stel: "Set Gamis Merah", ukuran: "S", jumlah: 1, hargaSatuan: 170000, subtotal: 170000 });
-    expect(hasil[1]).toMatchObject({ stel: "Olahraga", ukuran: "XL", hargaSatuan: "Harga belum ada", subtotal: "" });
+    expect(hasil[0]).toMatchObject({ lembaga: "TK", stel: "Set Gamis Merah", jenisKelamin: "Ikhwan", ukuran: "S", jumlah: 1, hargaSatuan: 170000, subtotal: 170000 });
+    expect(hasil[1]).toMatchObject({ stel: "Olahraga", jenisKelamin: "Ikhwan", ukuran: "XL", hargaSatuan: "Harga belum ada", subtotal: "" });
     expect(hasil[hasil.length - 1]).toMatchObject({ lembaga: "TOTAL", jumlah: 1, subtotal: 170000 });
+  });
+  it("kolom ekspor rekap: Jenis Kelamin tepat setelah Stel", () => {
+    expect(REKAP_EXPORT_COLUMNS.map((c) => c.label)).toEqual([
+      "Lembaga", "Stel", "Jenis Kelamin", "Ukuran", "Jumlah", "Harga Satuan (Rp)", "Subtotal (Rp)",
+    ]);
   });
 });

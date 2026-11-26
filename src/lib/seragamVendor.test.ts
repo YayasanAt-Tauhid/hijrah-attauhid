@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cariBentrok, cariHarga, hargaBertabrakan, jumlahStelPesanan, layakDipesan, normalizeNamaStel,
-  normalizeUkuran, normalizeUkuranList, pesanGalatHarga, salinanHarga, validasiHarga,
+  normalizeUkuran, normalizeUkuranList, pesanGalatHarga, salinanHarga, ukuranDasarKustom, validasiHarga,
   type HargaSeragamVendor, type JenisKelaminHarga,
 } from "./seragamVendor";
 import type { UangPangkalInfo } from "./seragamUangPangkal";
@@ -66,6 +66,39 @@ describe("layakDipesan (ambang 25% = ceil(total/4))", () => {
   });
 });
 
+describe("ukuran kustom: KUSTOM (XL) = dibuat khusus, berharga seperti XL", () => {
+  const q = { tahunAjaranId: TA, lembagaId: TK, jenisKelamin: "L", nama: "Set Gamis Merah", ukuran: "KUSTOM (XL)" };
+  const xl = harga({ id: "xl", ukuran: ["L", "XL"], harga: 185000 });
+  it("normalizeUkuran merapikan notasi kustom dan alias ukuran dasarnya", () => {
+    expect(normalizeUkuran("kustom(xl)")).toBe("KUSTOM (XL)");
+    expect(normalizeUkuran(" Kustom ( x3l ) ")).toBe("KUSTOM (3XL)");
+    expect(normalizeUkuran("KUSTOM  (XL)")).toBe("KUSTOM (XL)");
+  });
+  it("ukuranDasarKustom: mengembalikan ukuran dasar, null bila bukan notasi kustom yang sah", () => {
+    expect(ukuranDasarKustom("KUSTOM (XL)")).toBe("XL");
+    expect(ukuranDasarKustom("kustom(3xl)")).toBe("3XL");
+    expect(ukuranDasarKustom("XL")).toBeNull();
+    expect(ukuranDasarKustom("KUSTOM")).toBeNull();
+    expect(ukuranDasarKustom("KUSTOM (ALL SIZE)")).toBeNull();
+    expect(ukuranDasarKustom("KUSTOM (ABC)")).toBeNull();
+  });
+  it("cariHarga memakai baris ukuran dasar: harga KUSTOM (XL) sama dengan XL", () => {
+    expect(cariHarga([xl], q)?.harga).toBe(185000);
+    expect(cariHarga([xl], { ...q, ukuran: "xl" })?.harga).toBe(185000);
+  });
+  it("tidak cocok bila ukuran dasarnya tidak ada di baris harga", () => {
+    expect(cariHarga([harga()], q)).toBeNull();
+    expect(cariHarga([xl], { ...q, ukuran: "KUSTOM (S)" })).toBeNull();
+  });
+  it("baris tanpa pembatas ukuran tetap berlaku untuk ukuran kustom; notasi tak sah tidak dicocokkan", () => {
+    expect(cariHarga([harga({ ukuran: [], harga: 200000 })], q)?.harga).toBe(200000);
+    expect(cariHarga([xl], { ...q, ukuran: "KUSTOM (ABC)" })).toBeNull();
+  });
+  it("aturan lain tetap: jenis kelamin dan tahun ajaran harus cocok", () => {
+    expect(cariHarga([xl], { ...q, jenisKelamin: "P" })).toBeNull();
+    expect(cariHarga([harga({ ...xl, tahun_ajaran_id: "ta-lain" })], q)).toBeNull();
+  });
+});
 describe("cariHarga", () => {
   const q = { tahunAjaranId: TA, lembagaId: TK, jenisKelamin: "L", nama: "Set Gamis Merah", ukuran: "S" };
   it("cocok menurut tahun, lembaga, nama, jenis kelamin, dan ukuran", () => {
