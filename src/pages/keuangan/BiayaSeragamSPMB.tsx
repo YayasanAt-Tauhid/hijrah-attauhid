@@ -18,7 +18,7 @@ import {
   type KonteksEkspor,
 } from "@/lib/seragamVendorEkspor";
 import {
-  catatanMasalah, PESANAN_EXPORT_COLUMNS, pesananExportRows, REKAP_EXPORT_COLUMNS, rekapExportRows,
+  catatanMasalah, labelJenisKelamin, PESANAN_EXPORT_COLUMNS, pesananExportRows, REKAP_EXPORT_COLUMNS, rekapExportRows,
   rekapVendor, susunPesanan, type PesananRow,
 } from "@/lib/seragamVendorPesanan";
 import BiayaSeragamHargaTab from "./BiayaSeragamHargaTab";
@@ -104,6 +104,7 @@ export default function BiayaSeragamSPMB() {
     { key: "nama", label: "Nama", sortable: true },
     { key: "nis", label: "NIS" },
     { key: "lembaga", label: "Lembaga", sortable: true },
+    { key: "jenisKelaminKode", label: "Jenis kelamin", render: (value) => labelJenisKelamin(String(value)) },
     {
       key: "stel", label: "Stel dan harga",
       render: (_value, row) => (
@@ -242,19 +243,20 @@ export default function BiayaSeragamSPMB() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left">
-                      <th className="py-2 pr-4">Lembaga</th><th className="pr-4">Stel</th><th className="pr-4">Ukuran</th>
+                      <th className="py-2 pr-4">Lembaga</th><th className="pr-4">Stel</th><th className="pr-4">Jenis kelamin</th><th className="pr-4">Ukuran</th>
                       <th className="pr-4 text-right">Jumlah</th><th className="pr-4 text-right">Harga satuan</th><th className="text-right">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rekap.baris.map((b) => (
-                      <tr key={`${b.lembagaId}|${b.namaStel}|${b.ukuran}|${b.hargaSatuan}`} className="border-b">
-                        <td className="py-2 pr-4">{b.lembaga}</td><td className="pr-4">{b.namaStel}</td><td className="pr-4">{b.ukuran}</td>
+                      <tr key={`${b.lembagaId}|${b.namaStel}|${b.jenisKelaminKode}|${b.ukuran}|${b.hargaSatuan}`} className="border-b">
+                        <td className="py-2 pr-4">{b.lembaga}</td><td className="pr-4">{b.namaStel}</td>
+                        <td className="pr-4">{labelJenisKelamin(b.jenisKelaminKode)}</td><td className="pr-4">{b.ukuran}</td>
                         <td className="pr-4 text-right">{b.jumlah}</td><td className="pr-4 text-right">{rupiah(b.hargaSatuan)}</td><td className="text-right">{rupiah(b.subtotal)}</td>
                       </tr>
                     ))}
                     {rekap.baris.length === 0 && (
-                      <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">Belum ada stel berharga untuk dipesan</td></tr>
+                      <tr><td colSpan={7} className="py-6 text-center text-muted-foreground">Belum ada stel berharga untuk dipesan</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -266,8 +268,9 @@ export default function BiayaSeragamSPMB() {
                   <table className="w-full text-sm">
                     <tbody>
                       {rekap.tanpaHarga.map((b) => (
-                        <tr key={`${b.lembagaId}|${b.namaStel}|${b.ukuran}`} className="border-b">
+                        <tr key={`${b.lembagaId}|${b.namaStel}|${b.jenisKelaminKode}|${b.ukuran}`} className="border-b">
                           <td className="py-2 pr-4">{b.lembaga}</td><td className="pr-4">{b.namaStel}</td>
+                          <td className="pr-4">{labelJenisKelamin(b.jenisKelaminKode)}</td>
                           <td className="pr-4">{b.ukuran}</td><td className="text-right">{b.jumlah} stel</td>
                         </tr>
                       ))}

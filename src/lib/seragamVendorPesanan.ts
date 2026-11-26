@@ -90,13 +90,21 @@ export function susunPesanan(
 }
 
 export type RekapBaris = {
-  lembagaId: string; lembaga: string; namaStel: string; ukuran: string; hargaSatuan: number; jumlah: number; subtotal: number;
+  lembagaId: string; lembaga: string; namaStel: string; jenisKelaminKode: string; ukuran: string;
+  hargaSatuan: number; jumlah: number; subtotal: number;
 };
-export type RekapTanpaHarga = { lembagaId: string; lembaga: string; namaStel: string; ukuran: string; jumlah: number };
+export type RekapTanpaHarga = {
+  lembagaId: string; lembaga: string; namaStel: string; jenisKelaminKode: string; ukuran: string; jumlah: number;
+};
 export type RekapVendor = { baris: RekapBaris[]; tanpaHarga: RekapTanpaHarga[]; totalJumlah: number; totalBayar: number };
 
-const urutRekap = (a: { lembaga: string; namaStel: string; ukuran: string }, b: { lembaga: string; namaStel: string; ukuran: string }) =>
-  a.lembaga.localeCompare(b.lembaga, "id") || a.namaStel.localeCompare(b.namaStel, "id") || compareUkuran(a.ukuran, b.ukuran);
+/** Ikhwan (L) lebih dulu, lalu Akhwat (P); nilai lain di belakang. */
+const urutanJenisKelamin = (kode: string) => (kode === "L" ? 0 : kode === "P" ? 1 : 2);
+
+type KunciUrutRekap = { lembaga: string; namaStel: string; jenisKelaminKode: string; ukuran: string };
+const urutRekap = (a: KunciUrutRekap, b: KunciUrutRekap) =>
+  a.lembaga.localeCompare(b.lembaga, "id") || a.namaStel.localeCompare(b.namaStel, "id")
+  || urutanJenisKelamin(a.jenisKelaminKode) - urutanJenisKelamin(b.jenisKelaminKode) || compareUkuran(a.ukuran, b.ukuran);
 
 export function rekapVendor(layak: readonly PesananRow[]): RekapVendor {
   const berharga = new Map<string, RekapBaris>();
@@ -105,22 +113,27 @@ export function rekapVendor(layak: readonly PesananRow[]): RekapVendor {
     for (const item of siswa.stel) {
       if (item.status === "ok" && item.harga !== null) {
         const namaStel = item.namaVendor ?? item.nama;
-        const key = [siswa.lembagaId, normalizeNamaStel(namaStel), item.ukuran, item.harga].join("|");
+        const key = [siswa.lembagaId, normalizeNamaStel(namaStel), siswa.jenisKelaminKode, item.ukuran, item.harga].join("|");
         const ada = berharga.get(key);
         if (ada) {
           ada.jumlah += 1;
           ada.subtotal += item.harga;
         } else {
           berharga.set(key, {
-            lembagaId: siswa.lembagaId, lembaga: siswa.lembaga, namaStel, ukuran: item.ukuran,
-            hargaSatuan: item.harga, jumlah: 1, subtotal: item.harga,
+            lembagaId: siswa.lembagaId, lembaga: siswa.lembaga, namaStel, jenisKelaminKode: siswa.jenisKelaminKode,
+            ukuran: item.ukuran, hargaSatuan: item.harga, jumlah: 1, subtotal: item.harga,
           });
         }
       } else if (item.status === "harga_belum_ada") {
-        const key = [siswa.lembagaId, normalizeNamaStel(item.nama), item.ukuran].join("|");
+        const key = [siswa.lembagaId, normalizeNamaStel(item.nama), siswa.jenisKelaminKode, item.ukuran].join("|");
         const ada = tanpa.get(key);
         if (ada) ada.jumlah += 1;
-        else tanpa.set(key, { lembagaId: siswa.lembagaId, lembaga: siswa.lembaga, namaStel: item.nama, ukuran: item.ukuran, jumlah: 1 });
+        else {
+          tanpa.set(key, {
+            lembagaId: siswa.lembagaId, lembaga: siswa.lembaga, namaStel: item.nama,
+            jenisKelaminKode: siswa.jenisKelaminKode, ukuran: item.ukuran, jumlah: 1,
+          });
+        }
       }
     }
   }
@@ -173,6 +186,7 @@ export function pesananExportRows(rows: readonly PesananRow[]): Record<string, s
 export const REKAP_EXPORT_COLUMNS = [
   { key: "lembaga", label: "Lembaga" },
   { key: "stel", label: "Stel" },
+  { key: "jenisKelamin", label: "Jenis Kelamin" },
   { key: "ukuran", label: "Ukuran" },
   { key: "jumlah", label: "Jumlah" },
   { key: "hargaSatuan", label: "Harga Satuan (Rp)" },
@@ -182,11 +196,13 @@ export const REKAP_EXPORT_COLUMNS = [
 export function rekapExportRows(rekap: RekapVendor): Record<string, string | number>[] {
   return [
     ...rekap.baris.map((b) => ({
-      lembaga: b.lembaga, stel: b.namaStel, ukuran: b.ukuran, jumlah: b.jumlah, hargaSatuan: b.hargaSatuan, subtotal: b.subtotal,
+      lembaga: b.lembaga, stel: b.namaStel, jenisKelamin: labelJenisKelamin(b.jenisKelaminKode), ukuran: b.ukuran,
+      jumlah: b.jumlah, hargaSatuan: b.hargaSatuan, subtotal: b.subtotal,
     })),
     ...rekap.tanpaHarga.map((b) => ({
-      lembaga: b.lembaga, stel: b.namaStel, ukuran: b.ukuran, jumlah: b.jumlah, hargaSatuan: "Harga belum ada", subtotal: "",
+      lembaga: b.lembaga, stel: b.namaStel, jenisKelamin: labelJenisKelamin(b.jenisKelaminKode), ukuran: b.ukuran,
+      jumlah: b.jumlah, hargaSatuan: "Harga belum ada", subtotal: "",
     })),
-    { lembaga: "TOTAL", stel: "", ukuran: "", jumlah: rekap.totalJumlah, hargaSatuan: "", subtotal: rekap.totalBayar },
+    { lembaga: "TOTAL", stel: "", jenisKelamin: "", ukuran: "", jumlah: rekap.totalJumlah, hargaSatuan: "", subtotal: rekap.totalBayar },
   ];
 }

@@ -93,15 +93,17 @@ describe("susunBerkasVendor", () => {
     expect(sel.some((t) => t.includes("belum ada") || t.includes("belum diisi"))).toBe(false);
   });
 
-  it("Rekap: baris per lembaga/stel/ukuran dan total sama dengan rekapVendor", () => {
+  it("Rekap: baris per lembaga/stel/jenis kelamin/ukuran dan total sama dengan rekapVendor", () => {
     const berkas = susunBerkasVendor(semua, konteks);
     const rekap = rekapVendor(semua);
-    const rows = dataRows(sheet(berkas, "Rekap"), "Lembaga");
-    expect(rows).toContainEqual(["TK", "Set Gamis Merah", "S", 2, 170000, 340000]);
-    expect(rows).toContainEqual(["TK", "Set Gamis Merah", "XL", 1, 220000, 220000]);
-    expect(rows).toContainEqual(["TK", "Set Gamis Hijau", "M", 1, 170000, 170000]);
-    expect(rows).toContainEqual(["SD", "Putih Merah", "L", 1, 150000, 150000]);
-    expect(rows[rows.length - 1]).toEqual(["TOTAL", "", "", rekap.totalJumlah, "", rekap.totalBayar]);
+    const s = sheet(berkas, "Rekap");
+    expect(s.rows).toContainEqual(["Lembaga", "Stel", "Jenis Kelamin", "Ukuran", "Jumlah", "Harga Satuan (Rp)", "Subtotal (Rp)"]);
+    const rows = dataRows(s, "Lembaga");
+    expect(rows).toContainEqual(["TK", "Set Gamis Merah", "Ikhwan", "S", 2, 170000, 340000]);
+    expect(rows).toContainEqual(["TK", "Set Gamis Merah", "Akhwat", "XL", 1, 220000, 220000]);
+    expect(rows).toContainEqual(["TK", "Set Gamis Hijau", "Ikhwan", "M", 1, 170000, 170000]);
+    expect(rows).toContainEqual(["SD", "Putih Merah", "Akhwat", "L", 1, 150000, 150000]);
+    expect(rows[rows.length - 1]).toEqual(["TOTAL", "", "", "", rekap.totalJumlah, "", rekap.totalBayar]);
     expect(rekap.totalJumlah).toBe(5);
     expect(rekap.totalBayar).toBe(880000);
   });
@@ -145,7 +147,7 @@ describe("susunBerkasVendor", () => {
     });
     const berkas = susunBerkasVendor([beda], konteks);
     expect(dataRows(sheet(berkas, "Daftar Nama"), "Lembaga")).toEqual([["TK", "Bima", "Ikhwan", "Set Gamis Merah", "S"]]);
-    expect(dataRows(sheet(berkas, "Rekap"), "Lembaga")[0]).toEqual(["TK", "Set Gamis Merah", "S", 1, 170000, 170000]);
+    expect(dataRows(sheet(berkas, "Rekap"), "Lembaga")[0]).toEqual(["TK", "Set Gamis Merah", "Ikhwan", "S", 1, 170000, 170000]);
   });
 
   it("nama berawalan = + - @ diberi apostrof agar tidak dibaca sebagai rumus", () => {
@@ -165,7 +167,7 @@ describe("susunBerkasVendor", () => {
 
   it("daftar kosong tetap menghasilkan berkas valid dengan total nol", () => {
     const berkas = susunBerkasVendor([], konteks);
-    expect(dataRows(sheet(berkas, "Rekap"), "Lembaga")).toEqual([["TOTAL", "", "", 0, "", 0]]);
+    expect(dataRows(sheet(berkas, "Rekap"), "Lembaga")).toEqual([["TOTAL", "", "", "", 0, "", 0]]);
     expect(dataRows(sheet(berkas, "Daftar Nama"), "Lembaga")).toEqual([]);
     expect(berkas.belumIkut).toEqual({ stel: 0, siswaBelumLengkap: 0 });
   });
@@ -202,8 +204,8 @@ describe("susunBerkasInternal", () => {
 
   it("Rekap Vendor memuat baris 'Harga belum ada' dan total", () => {
     const rows = dataRows(sheet(susunBerkasInternal(pesanan, konteks), "Rekap Vendor"), "Lembaga");
-    expect(rows.some((r) => r[1] === "Set Gamis Biru" && r[4] === "Harga belum ada")).toBe(true);
-    expect(rows[rows.length - 1]).toEqual(["TOTAL", "", "", 5, "", 880000]);
+    expect(rows.some((r) => r[1] === "Set Gamis Biru" && r[2] === "Ikhwan" && r[5] === "Harga belum ada")).toBe(true);
+    expect(rows[rows.length - 1]).toEqual(["TOTAL", "", "", "", 5, "", 880000]);
   });
 
   it("nama berawalan = juga diamankan di berkas internal", () => {

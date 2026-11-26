@@ -82,8 +82,8 @@ export function susunBerkasVendor(layak: readonly PesananRow[], konteks: Konteks
       buatSheet("Rekap", [
         ...blok,
         REKAP_EXPORT_COLUMNS.map((c) => c.label),
-        ...rekap.baris.map((b) => [b.lembaga, b.namaStel, b.ukuran, b.jumlah, b.hargaSatuan, b.subtotal]),
-        ["TOTAL", "", "", rekap.totalJumlah, "", rekap.totalBayar],
+        ...rekap.baris.map((b) => [b.lembaga, b.namaStel, labelJenisKelamin(b.jenisKelaminKode), b.ukuran, b.jumlah, b.hargaSatuan, b.subtotal]),
+        ["TOTAL", "", "", "", rekap.totalJumlah, "", rekap.totalBayar],
       ]),
       buatSheet("Daftar Nama", [
         ...blok,
