@@ -14,6 +14,7 @@ import { StatsCard } from "@/components/shared/StatsCard";
 import { DataTable, DataTableColumn } from "@/components/shared/DataTable";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { KOLOM_TANGGAL_LABEL, susunFilterTanggal, type KolomTanggalFilter } from "@/lib/onlinePaymentFilter";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import {
@@ -48,21 +49,24 @@ export default function OnlinePayment() {
   const [searchTerm, setSearchTerm] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [dateField, setDateField] = useState<KolomTanggalFilter>("created_at");
   const [detailId, setDetailId] = useState<string | null>(null);
 
   // Fetch all transactions
   const { data: transaksiList, isLoading } = useQuery({
-    queryKey: ["transaksi_midtrans_admin", filterStatus, searchTerm, dateFrom, dateTo],
+    queryKey: ["transaksi_midtrans_admin", filterStatus, searchTerm, dateFrom, dateTo, dateField],
     queryFn: async () => {
+      const f = susunFilterTanggal(dateField, dateFrom, dateTo);
       let q = supabase
         .from("transaksi_midtrans")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order(f.kolom, { ascending: false, nullsFirst: false });
 
       if (filterStatus !== "all") q = q.eq("status", filterStatus);
       if (searchTerm) q = q.ilike("order_id", `%${searchTerm}%`);
-      if (dateFrom) q = q.gte("created_at", `${dateFrom}T00:00:00`);
-      if (dateTo) q = q.lte("created_at", `${dateTo}T23:59:59`);
+      if (f.hanyaTerisi) q = q.not(f.kolom, "is", null);
+      if (f.gte) q = q.gte(f.kolom, f.gte);
+      if (f.lte) q = q.lte(f.kolom, f.lte);
 
       const { data, error } = await q.limit(500);
       if (error) throw error;
@@ -117,7 +121,11 @@ export default function OnlinePayment() {
       render: (v) => <span className="font-mono text-xs">{v as string}</span>,
     },
     {
-      key: "created_at", label: "Tanggal", sortable: true,
+      key: "created_at", label: "Dibuat", sortable: true,
+      render: (v) => v ? format(new Date(v as string), "dd MMM yyyy HH:mm", { locale: idLocale }) : "-",
+    },
+    {
+      key: "paid_at", label: "Dibayar", sortable: true,
       render: (v) => v ? format(new Date(v as string), "dd MMM yyyy HH:mm", { locale: idLocale }) : "-",
     },
     {
@@ -140,10 +148,6 @@ export default function OnlinePayment() {
           </Badge>
         );
       },
-    },
-    {
-      key: "paid_at", label: "Dibayar",
-      render: (v) => v ? format(new Date(v as string), "dd MMM yyyy HH:mm", { locale: idLocale }) : "-",
     },
     {
       key: "_aksi", label: "",
@@ -201,6 +205,16 @@ export default function OnlinePayment() {
               <SelectItem value="paid">Lunas</SelectItem>
               <SelectItem value="failed">Gagal</SelectItem>
               <SelectItem value="expired">Expired</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Filter tanggal berdasarkan</Label>
+          <Select value={dateField} onValueChange={(v) => setDateField(v as KolomTanggalFilter)}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="created_at">{KOLOM_TANGGAL_LABEL.created_at}</SelectItem>
+              <SelectItem value="paid_at">{KOLOM_TANGGAL_LABEL.paid_at}</SelectItem>
             </SelectContent>
           </Select>
         </div>
