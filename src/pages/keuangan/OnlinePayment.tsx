@@ -60,7 +60,9 @@ export default function OnlinePayment() {
       let q = supabase
         .from("transaksi_midtrans")
         .select("*")
-        .order(f.kolom, { ascending: false, nullsFirst: false });
+        // Jangan pakai nullsFirst: Rustbase hanya mengenali asc/desc, "nullslast" dianggap nama kolom.
+        // Tidak perlu juga: created_at tidak pernah kosong, dan mode paid_at sudah membuang paid_at kosong.
+        .order(f.kolom, { ascending: false });
 
       if (filterStatus !== "all") q = q.eq("status", filterStatus);
       if (searchTerm) q = q.ilike("order_id", `%${searchTerm}%`);

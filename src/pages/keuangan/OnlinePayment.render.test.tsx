@@ -1,5 +1,7 @@
 // Uji render Online Payment: kolom Dibuat/Dibayar bersebelahan dan filter tanggal berdasarkan
 // created_at atau paid_at (batas hari WIB, urutan mengikuti kolom, paid_at kosong tidak ikut).
+// Urutan HANYA asc/desc: Rustbase tidak mengenali "nullslast"/"nullsfirst" dan memperlakukannya sebagai
+// nama kolom sehingga daftar kosong (galat produksi 26 Nov 2026).
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -72,7 +74,7 @@ describe("Online Payment: filter tanggal", () => {
     tampil();
     await screen.findByText("HAT-1");
     const daftar = panggilanDaftar();
-    expect(daftar).toContainEqual(["transaksi_midtrans", "order", "created_at", { ascending: false, nullsFirst: false }]);
+    expect(daftar).toContainEqual(["transaksi_midtrans", "order", "created_at", { ascending: false }]);
     expect(daftar.some((c) => c[1] === "not")).toBe(false);
   });
 
@@ -103,7 +105,7 @@ describe("Online Payment: filter tanggal", () => {
       expect(d).toContainEqual(["transaksi_midtrans", "gte", "paid_at", "2026-11-25T00:00:00+07:00"]);
       expect(d).toContainEqual(["transaksi_midtrans", "lte", "paid_at", "2026-11-26T23:59:59.999+07:00"]);
       expect(d).toContainEqual(["transaksi_midtrans", "not", "paid_at", "is", null]);
-      expect(d).toContainEqual(["transaksi_midtrans", "order", "paid_at", { ascending: false, nullsFirst: false }]);
+      expect(d).toContainEqual(["transaksi_midtrans", "order", "paid_at", { ascending: false }]);
       expect(d.some((c) => c[1] === "gte" && c[2] === "created_at")).toBe(false);
     });
   });
