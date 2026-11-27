@@ -6,7 +6,6 @@ import { useNavigate } from "@/lib/router-compat";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,10 +20,15 @@ import {
 } from "@/components/ui/form";
 import { toast } from "sonner";
 import { Save, Eye, EyeOff, UserPlus } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { PortalHero } from "@/components/portal/PortalHero";
+import { inisialNama, labelHubungan, labelKelas } from "@/lib/portalAnak";
 import { getNamaOrtuDariAnak } from "@/lib/ortu";
 import { JENIS_IDENTITAS_ANAK, metaIdentitasAnak } from "@/lib/identitasAnak";
 import { portalOrtuTambahAnak } from "@/server/portalOrtu";
 import { getErrorMessage } from "@/lib/errorMessage";
+
+const kartu = "overflow-hidden rounded-[1.125rem] border bg-card shadow-sm";
 
 const tambahAnakSchema = z.object({
   hubungan: z.enum(["ayah", "ibu", "wali"]),
@@ -108,6 +112,7 @@ export default function PortalProfil() {
     defaultValues: { hubungan: "wali", jenis_identitas: "nis", nis: "", nama_siswa: "", tanggal_lahir_siswa: "" },
   });
   const [tambahAnakError, setTambahAnakError] = useState<string | null>(null);
+  const [tambahAnakOpen, setTambahAnakOpen] = useState(false);
 
   const tambahAnakMutation = useMutation({
     mutationFn: (data: TambahAnakForm) => portalOrtuTambahAnak({ data: {
@@ -119,6 +124,7 @@ export default function PortalProfil() {
       toast.success(`${res.nama} berhasil dihubungkan ke akun Anda`);
       tambahAnakForm.reset({ hubungan: "wali", jenis_identitas: "nis", nis: "", nama_siswa: "", tanggal_lahir_siswa: "" });
       setTambahAnakError(null);
+      setTambahAnakOpen(false);
       queryClient.invalidateQueries({ queryKey: ["portal-anak-profil", user?.id] });
     },
     onError: (err: any) => {
@@ -169,94 +175,129 @@ export default function PortalProfil() {
     }
   };
 
+  const emailTampil = profile?.email || user?.email || "";
+  const namaTampil = namaOrtu || emailTampil.split("@")[0];
+
   return (
-    <div className="space-y-6 animate-fade-in max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-foreground">Profil Saya</h1>
+    <div className="mx-auto w-full max-w-3xl space-y-4 animate-fade-in">
+      <PortalHero
+        eyebrow="Profil Saya"
+        title={namaTampil}
+        subtitle={<span className="break-all">{emailTampil}</span>}
+        leading={
+          <span
+            aria-hidden="true"
+            className="grid h-[60px] w-[60px] shrink-0 place-items-center rounded-full bg-emerald-400 text-2xl font-extrabold text-emerald-950"
+          >
+            {inisialNama(namaTampil)}
+          </span>
+        }
+      />
 
       <Tabs defaultValue="profil">
-        <TabsList>
-          <TabsTrigger value="profil">Profil</TabsTrigger>
-          <TabsTrigger value="keamanan">Keamanan</TabsTrigger>
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-2xl bg-emerald-100 p-1">
+          <TabsTrigger
+            value="profil"
+            className="min-h-11 rounded-xl font-semibold text-emerald-900 data-[state=active]:bg-white data-[state=active]:font-bold data-[state=active]:text-emerald-800 data-[state=active]:shadow"
+          >
+            Profil
+          </TabsTrigger>
+          <TabsTrigger
+            value="keamanan"
+            className="min-h-11 rounded-xl font-semibold text-emerald-900 data-[state=active]:bg-white data-[state=active]:font-bold data-[state=active]:text-emerald-800 data-[state=active]:shadow"
+          >
+            Keamanan
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="profil" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Informasi Akun</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">
-                  Nama
-                </label>
-                <p className="text-sm mt-1">
+          <section aria-labelledby="profil-akun" className={kartu}>
+            <h2 id="profil-akun" className="px-4 pb-3 pt-3.5 text-base font-extrabold">Informasi akun</h2>
+            <dl className="divide-y border-t">
+              <div className="px-4 py-3">
+                <dt className="text-xs font-semibold text-muted-foreground">Nama</dt>
+                <dd className="mt-0.5 text-[15px] font-semibold">
                   {namaOrtu || (
-                    <span className="text-muted-foreground italic">
+                    <span className="font-normal italic text-muted-foreground">
                       Belum ada data nama — lengkapi data orang tua/wali di formulir siswa
                     </span>
                   )}
-                </p>
+                </dd>
               </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">
-                  Email
-                </label>
-                <p className="text-sm mt-1">{profile?.email || user?.email}</p>
+              <div className="px-4 py-3">
+                <dt className="text-xs font-semibold text-muted-foreground">Email</dt>
+                <dd className="mt-0.5 break-all text-[15px] font-semibold">{profile?.email || user?.email}</dd>
               </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">
-                  Role
-                </label>
-                <p className="text-sm mt-1 capitalize">{profile?.role}</p>
-              </div>
-            </CardContent>
-          </Card>
+            </dl>
+          </section>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Anak yang Terhubung</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {anakList.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Belum ada anak yang terhubung
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {anakList.map((item: any, idx: number) => {
-                    const siswa = item.siswa;
-                    const ak = siswa?.kelas_siswa?.find(
-                      (ks: any) => ks.aktif
-                    );
-                    return (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between rounded-lg border p-3"
+          <section aria-labelledby="profil-anak" className={kartu}>
+            <h2 id="profil-anak" className="px-4 pb-3 pt-3.5 text-base font-extrabold">Anak yang terhubung</h2>
+            {anakList.length === 0 ? (
+              <p className="border-t px-4 py-4 text-sm text-muted-foreground">Belum ada anak yang terhubung</p>
+            ) : (
+              <ul className="divide-y border-t">
+                {anakList.map((item: any, idx: number) => {
+                  const siswa = item.siswa;
+                  const ak = siswa?.kelas_siswa?.find((ks: any) => ks.aktif);
+                  const kelas = labelKelas(ak?.kelas?.nama);
+                  return (
+                    <li key={idx} className="flex items-center gap-3 px-4 py-3">
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "grid h-11 w-11 shrink-0 place-items-center rounded-full text-[15px] font-bold text-white",
+                          idx % 2 === 0 ? "bg-emerald-700" : "bg-teal-700",
+                        )}
                       >
-                        <div>
-                          <p className="font-medium text-sm">{siswa?.nama}</p>
-                          <p className="text-xs text-muted-foreground">
-                            NIS: {siswa?.nis || "-"} •{" "}
-                            {ak?.kelas?.departemen?.nama || "-"} —{" "}
-                            {ak?.kelas?.nama || "-"}
-                          </p>
-                        </div>
-                        <span className="text-xs text-muted-foreground capitalize">
-                          {item.hubungan}
-                        </span>
+                        {inisialNama(siswa?.nama || "")}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words text-[15px] font-bold leading-normal">
+                          {siswa?.nama}
+                          {kelas && (
+                            <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-emerald-100 px-2.5 align-[1px] text-xs font-semibold leading-normal text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
+                              {kelas}
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs leading-snug text-muted-foreground">
+                          {`${ak?.kelas?.departemen?.nama || "-"} · NIS ${siswa?.nis || "-"}`}
+                        </p>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                      {item.hubungan && (
+                        <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold text-foreground">
+                          {labelHubungan(item.hubungan)}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Hubungkan Anak Lain</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <section aria-labelledby="profil-hubungkan" className={kartu}>
+            <div className="flex items-center gap-3 p-4">
+              <span aria-hidden="true" className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-emerald-100 text-emerald-700">
+                <UserPlus className="h-[22px] w-[22px]" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 id="profil-hubungkan" className="text-[15px] font-bold leading-snug">Hubungkan anak lain</h2>
+                <p className="text-xs leading-snug text-muted-foreground">Tambahkan anak yang belum muncul di akun ini.</p>
+              </div>
+              <button
+                type="button"
+                aria-expanded={tambahAnakOpen}
+                aria-controls="form-tambah-anak"
+                onClick={() => setTambahAnakOpen((open) => !open)}
+                className="min-h-11 shrink-0 rounded-xl border border-emerald-700 bg-card px-4 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
+              >
+                {tambahAnakOpen ? "Tutup" : "Tambah"}
+              </button>
+            </div>
+            {tambahAnakOpen && (
+              <div id="form-tambah-anak" className="border-t p-4">
               <p className="text-sm text-muted-foreground mb-4">
                 Untuk verifikasi, isi data anak sesuai data yang tercatat di sekolah.
               </p>
@@ -355,16 +396,15 @@ export default function PortalProfil() {
                   </Button>
                 </form>
               </Form>
-            </CardContent>
-          </Card>
+              </div>
+            )}
+          </section>
         </TabsContent>
 
         <TabsContent value="keamanan" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Ganti Password</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <section aria-labelledby="profil-password" className={kartu}>
+            <h2 id="profil-password" className="px-4 pb-3 pt-3.5 text-base font-extrabold">Ganti Password</h2>
+            <div className="border-t p-4">
               <Form {...passwordForm}>
                 <form
                   onSubmit={passwordForm.handleSubmit(onChangePassword)}
@@ -461,8 +501,8 @@ export default function PortalProfil() {
                   </Button>
                 </form>
               </Form>
-            </CardContent>
-          </Card>
+            </div>
+          </section>
         </TabsContent>
       </Tabs>
     </div>

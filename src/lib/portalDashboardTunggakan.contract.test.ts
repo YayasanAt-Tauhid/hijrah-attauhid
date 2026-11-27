@@ -12,8 +12,9 @@ describe("portal dashboard tunggakan card", () => {
     expect(dashboard).toContain('.eq("menunggak", true)');
   });
 
-  it("labels the card as Tunggakan, not Tagihan Belum Bayar", () => {
-    expect(dashboard).toContain(">Tunggakan<");
+  it("describes the card as biaya sudah jatuh tempo, not Tagihan Belum Bayar or Tunggakan", () => {
+    expect(dashboard).toContain("biaya sudah jatuh tempo");
     expect(dashboard).not.toContain("Tagihan Belum Bayar");
+    expect(dashboard).not.toContain(">Tunggakan<");
   });
 });
