@@ -84,16 +84,13 @@ describe("label tampil tagihan — halaman Link Pembayaran untuk orang tua", () 
 describe("label tampil tagihan — portal orang tua", () => {
   it("memetakan nama_tampil dari view dan hanya memakainya untuk teks", () => {
     expect(portalTagihan).toContain("nama_tampil: string | null;");
-    expect(portalTagihan).toContain("? (t.nama_tampil ?? t.jenis_nama)");
-    expect(portalTagihan).toContain(": (t.nama_tampil ?? t.jenis_nama)}");
-    expect(portalTagihan).toContain("typeItems.length === 1 ? (typeFirst.nama_tampil ?? typeFirst.jenis_nama) : typeFirst.jenis_nama");
+    expect(portalTagihan).toContain("t.bulan === 0 ? (t.nama_tampil ?? t.jenis_nama) : `${t.jenis_nama} ${periode}`");
     expect(portalTagihan).toContain("nama_tampil: t.nama_tampil,");
   });
 
   it("logika portal tetap memakai jenis_nama", () => {
-    expect(portalTagihan).toContain("isSppPaymentName(t.jenis_nama)");
     expect(portalTagihan).toContain("isUangPangkalPaymentName(t.jenis_nama)");
-    expect(portalTagihan).toContain("Selesaikan {t.jenis_nama} {prerequisiteLabel(t, prerequisite)} terlebih dahulu");
+    expect(portalTagihan).toContain("Selesaikan ${t.jenis_nama} ${prerequisiteLabel(t, prerequisite)} terlebih dahulu");
     expect(portalTagihan).not.toMatch(/is(Spp|UangPangkal)PaymentName\([^)]*nama_tampil/);
   });
 

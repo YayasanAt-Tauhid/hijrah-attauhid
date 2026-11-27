@@ -41,10 +41,9 @@ describe("portal tagihan year-book compatibility", () => {
     );
   });
 
-  it("groups quick SPP selection by academic-year start, not financial-book id", () => {
-    expect(portal).toContain("const groupKey = item.tahun_ajaran_mulai;");
-    expect(portal).toContain(
-      "t.tahun_ajaran_mulai === tahunAjaranMulai",
-    );
+  it("orders and sequences bills by academic-year start, not financial-book id", () => {
+    expect(portal).toContain("const tA = a.tahun_ajaran_mulai || \"\";");
+    expect(portal).toContain("tahun_ajaran_mulai: t.tahun_ajaran_mulai,");
+    expect(portal).not.toMatch(/tahun_ajaran_mulai:\s*t\.tahun_ajaran_id/);
   });
 });
