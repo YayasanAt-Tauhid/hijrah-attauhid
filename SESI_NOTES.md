@@ -1,3 +1,11 @@
+# Catatan Sesi — Biaya Pendidikan: kartu anak tertutup dan tombol mata (27 November 2026)
+
+- **Permintaan user:** di `/portal/tagihan`, tombol "Lihat biaya pendidikan sampai akhir tahun ajaran" diganti tombol mata "Sampai akhir tahun ajaran", dan biaya tidak langsung terbuka: tampil setelah orang tua mengetuk nama anak. Rancangan disajikan dulu, user menyetujui ("terapkan ke produksi dan push ke main").
+- **Perilaku baru:** semua kartu anak tertutup sejak awal (Accordion tanpa `defaultValue`), juga bila hanya ada satu anak (konsisten dengan permintaan; pilihan "buka otomatis bila satu anak" ditawarkan tetapi tidak dipilih user). Lencana "N dipilih" dan bilah checkout tetap menampilkan pilihan saat kartu tertutup. Tombol mata (`Eye`/`EyeOff`) tetap membuka biaya bulan-bulan berikutnya per anak.
+- **Tidak diubah:** logika pilihan, urutan SPP, cicilan, isi keranjang, query, bilah checkout.
+- **Tes:** 3 tes baru (TDD, merah lalu hijau) di `PortalTagihan.test.tsx`; tes lama membuka kartu lewat helper `renderTerbuka`. Suite penuh 240 berkas, 2103 tes lulus; eslint 2 berkas bersih; tsc 189 galat identik baseline.
+- **Belum diverifikasi:** tampilan di browser dengan data produksi.
+
 # Catatan Sesi — Portal orang tua: tampilan menarik di semua halaman (27 November 2026)
 
 - **Permintaan user:** setelah halaman Biaya Pendidikan, halaman portal orang tua lain juga dibuat menarik (eye catching). Mockup 5 layar (artefak Design) dicek user lebih dulu, lalu disetujui tanpa koreksi ("terapkan ke produksi dan push ke main"). Hanya tampilan: tanpa migrasi, tanpa perubahan data, logika pembayaran/checkout tidak disentuh.

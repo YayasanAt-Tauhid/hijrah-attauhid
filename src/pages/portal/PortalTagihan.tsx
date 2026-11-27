@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { RupiahInput } from "@/components/shared/RupiahInput";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { ChevronDown, GraduationCap } from "lucide-react";
+import { Eye, EyeOff, GraduationCap } from "lucide-react";
 import { PortalHero } from "@/components/portal/PortalHero";
 import { inisialNama, labelKelas } from "@/lib/portalAnak";
 import { BULAN_ORDER_AKADEMIK } from "@/hooks/useKeuangan";
@@ -516,11 +516,8 @@ export default function PortalTagihan() {
             </CardContent>
           </Card>
         ) : (
-          <Accordion
-            type="multiple"
-            defaultValue={Array.from(grouped.keys())}
-            className="space-y-4"
-          >
+          // Kartu anak tertutup sejak awal; orang tua mengetuk nama untuk melihat biayanya.
+          <Accordion type="multiple" className="space-y-4">
             {Array.from(grouped.entries()).map(([siswaId, items]) => {
               const first = items[0];
               const allKeys = items.map(getKey);
@@ -607,11 +604,14 @@ export default function PortalTagihan() {
                             onClick={() => toggleLater(siswaId)}
                             className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border bg-muted/40 px-3.5 py-2.5 text-left text-sm font-semibold text-foreground hover:bg-muted"
                           >
-                            <span>Lihat biaya pendidikan sampai akhir tahun ajaran</span>
-                            <ChevronDown
-                              aria-hidden="true"
-                              className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform ${isLaterOpen ? "rotate-180" : ""}`}
-                            />
+                            <span className="flex items-center gap-2.5">
+                              {isLaterOpen ? (
+                                <EyeOff aria-hidden="true" className="h-5 w-5 shrink-0 text-emerald-700" />
+                              ) : (
+                                <Eye aria-hidden="true" className="h-5 w-5 shrink-0 text-emerald-700" />
+                              )}
+                              Sampai akhir tahun ajaran
+                            </span>
                           </button>
                           {isLaterOpen && (
                             <div className="space-y-1">{laterItems.map(renderBillRow)}</div>
