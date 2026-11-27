@@ -2,21 +2,29 @@ import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CalendarDays, CheckCircle, XCircle, Clock, AlertTriangle } from "lucide-react";
+import { CalendarCheck, CheckCircle, XCircle, Clock, AlertTriangle, type LucideIcon } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import { PortalHero } from "@/components/portal/PortalHero";
+import { AnakChips, AnakInfo } from "@/components/portal/AnakChips";
+import { ringkasPresensi, type PresensiStatus } from "@/lib/portalAkademik";
+import { cn } from "@/lib/utils";
 
-const statusConfig: Record<string, { label: string; icon: any; color: string }> = {
-  H: { label: "Hadir", icon: CheckCircle, color: "text-emerald-600" },
-  I: { label: "Izin", icon: Clock, color: "text-blue-600" },
-  S: { label: "Sakit", icon: AlertTriangle, color: "text-amber-600" },
-  A: { label: "Alpha", icon: XCircle, color: "text-destructive" },
+// Teks status selalu ditampilkan di samping ikon/warna agar tidak hanya
+// bergantung pada warna.
+const statusConfig: Record<PresensiStatus, { label: string; icon: LucideIcon; tint: string }> = {
+  H: { label: "Hadir", icon: CheckCircle, tint: "bg-emerald-100 text-emerald-800" },
+  I: { label: "Izin", icon: Clock, tint: "bg-blue-100 text-blue-800" },
+  S: { label: "Sakit", icon: AlertTriangle, tint: "bg-amber-100 text-amber-900" },
+  A: { label: "Alpha", icon: XCircle, tint: "bg-red-100 text-red-800" },
 };
+
+const URUTAN_STATUS: PresensiStatus[] = ["H", "I", "S", "A"];
+const kartu = "rounded-[1.125rem] border bg-card shadow-sm";
+
+// Keliling lingkaran r=42 pada kanvas 104px, untuk cincin persentase.
+const KELILING = 2 * Math.PI * 42;
 
 export default function PortalPresensi() {
   const { user } = useAuth();
@@ -51,124 +59,110 @@ export default function PortalPresensi() {
     enabled: !!effectiveSiswa,
   });
 
-  // Summary stats
-  const summary = useMemo(() => {
-    const counts = { H: 0, I: 0, S: 0, A: 0 };
-    presensi.forEach((p: any) => {
-      if (p.status && counts[p.status as keyof typeof counts] !== undefined) {
-        counts[p.status as keyof typeof counts]++;
-      }
-    });
-    return counts;
-  }, [presensi]);
+  const { counts, total, persenHadir } = useMemo(() => ringkasPresensi(presensi), [presensi]);
 
   const selectedAnak = anakList.find((a: any) => a.siswa_id === effectiveSiswa);
   const siswaInfo = selectedAnak?.siswa as any;
+  const pilihanAnak = anakList.map((a: any) => ({ id: a.siswa_id, nama: a.siswa?.nama ?? "-" }));
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Presensi Anak</h1>
-        <p className="text-sm text-muted-foreground">Lihat rekap kehadiran anak di sekolah</p>
-      </div>
+    <div className="mx-auto w-full max-w-3xl space-y-4 animate-fade-in">
+      <PortalHero
+        title="Presensi Anak"
+        subtitle="Rekap kehadiran anak di sekolah."
+        icon={CalendarCheck}
+      />
 
-      {anakList.length > 1 && (
-        <div>
-          <Label>Pilih Anak</Label>
-          <Select value={effectiveSiswa} onValueChange={setSelectedSiswa}>
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Pilih anak" />
-            </SelectTrigger>
-            <SelectContent>
-              {anakList.map((a: any) => (
-                <SelectItem key={a.siswa_id} value={a.siswa_id}>
-                  {a.siswa?.nama}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      {anakList.length > 1 ? (
+        <AnakChips anak={pilihanAnak} selectedId={effectiveSiswa} onSelect={setSelectedSiswa} />
+      ) : (
+        siswaInfo && <AnakInfo nama={siswaInfo.nama} nis={siswaInfo.nis} />
       )}
 
-      {siswaInfo && (
-        <Card>
-          <CardContent className="p-4">
-            <p className="font-semibold">{siswaInfo.nama}</p>
-            <p className="text-sm text-muted-foreground">
-              NIS: {siswaInfo.nis || "-"}
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {Object.entries(statusConfig).map(([key, cfg]) => {
-          const Icon = cfg.icon;
-          return (
-            <Card key={key}>
-              <CardContent className="flex items-center gap-3 p-4">
-                <Icon className={`h-5 w-5 ${cfg.color}`} />
-                <div>
-                  <p className="text-xl font-bold">{summary[key as keyof typeof summary]}</p>
-                  <p className="text-xs text-muted-foreground">{cfg.label}</p>
+      {/* Ringkasan */}
+      <section aria-label="Ringkasan presensi" className={cn(kartu, "space-y-3.5 p-4")}>
+        {total > 0 && (
+          <p className="text-[13px] font-bold text-muted-foreground">Dari {total} presensi terakhir</p>
+        )}
+        <div className="flex items-center gap-4">
+          <div className="relative h-[104px] w-[104px] shrink-0">
+            <svg width="104" height="104" viewBox="0 0 104 104" aria-hidden="true">
+              <circle cx="52" cy="52" r="42" fill="none" strokeWidth="12" className="stroke-emerald-100" />
+              <circle
+                cx="52"
+                cy="52"
+                r="42"
+                fill="none"
+                strokeWidth="12"
+                strokeLinecap="round"
+                className="stroke-emerald-700"
+                strokeDasharray={`${(persenHadir / 100) * KELILING} ${KELILING}`}
+                transform="rotate(-90 52 52)"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-2xl font-extrabold leading-none">{persenHadir}%</span>
+              <span className="mt-1 text-xs font-semibold text-muted-foreground">Kehadiran</span>
+            </div>
+          </div>
+          <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
+            {URUTAN_STATUS.map((key) => {
+              const cfg = statusConfig[key];
+              const Icon = cfg.icon;
+              return (
+                <div key={key} className={cn("flex items-center gap-2 rounded-xl px-2.5 py-2", cfg.tint)}>
+                  <Icon aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block text-xl font-extrabold leading-none tabular-nums">{counts[key]}</span>
+                    <span className="block text-xs font-semibold leading-snug">{cfg.label}</span>
+                  </span>
                 </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
 
       {/* Detail */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <CalendarDays className="h-5 w-5" /> Riwayat Presensi
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12" />)}
-            </div>
-          ) : presensi.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Belum ada data presensi</p>
-          ) : (
-            <div className="divide-y">
-              {presensi.map((p: any) => {
-                const cfg = statusConfig[p.status] || statusConfig.H;
-                const Icon = cfg.icon;
-                return (
-                  <div key={p.id} className="flex items-center justify-between py-3">
-                    <div className="flex items-center gap-3">
-                      <Icon className={`h-4 w-4 ${cfg.color}`} />
-                      <div>
-                        <p className="text-sm font-medium">
-                          {p.tanggal && format(new Date(p.tanggal), "EEEE, dd MMMM yyyy", { locale: idLocale })}
-                        </p>
-                        {p.keterangan && (
-                          <p className="text-xs text-muted-foreground">{p.keterangan}</p>
-                        )}
-                      </div>
-                    </div>
-                    <Badge
-                      variant="secondary"
-                      className={
-                        p.status === "H" ? "bg-emerald-100 text-emerald-700" :
-                        p.status === "A" ? "bg-red-100 text-red-700" :
-                        p.status === "S" ? "bg-amber-100 text-amber-700" :
-                        "bg-blue-100 text-blue-700"
-                      }
-                    >
-                      {cfg.label}
-                    </Badge>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <section aria-labelledby="presensi-riwayat" className="space-y-3">
+        <h2 id="presensi-riwayat" className="text-[17px] font-extrabold leading-tight">
+          Riwayat presensi
+        </h2>
+        {isLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 rounded-2xl" />)}
+          </div>
+        ) : presensi.length === 0 ? (
+          <p className={cn(kartu, "py-10 text-center text-sm text-muted-foreground")}>
+            Belum ada data presensi
+          </p>
+        ) : (
+          <ul className={cn(kartu, "divide-y overflow-hidden")}>
+            {presensi.map((p: any) => {
+              const cfg = statusConfig[p.status as PresensiStatus] || statusConfig.H;
+              const Icon = cfg.icon;
+              return (
+                <li key={p.id} className="flex items-center gap-3 px-4 py-3">
+                  <span aria-hidden="true" className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl", cfg.tint)}>
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold leading-snug">
+                      {p.tanggal && format(new Date(p.tanggal), "EEEE, dd MMMM yyyy", { locale: idLocale })}
+                    </span>
+                    {p.keterangan && (
+                      <span className="block text-xs leading-snug text-muted-foreground">{p.keterangan}</span>
+                    )}
+                  </span>
+                  <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold", cfg.tint)}>
+                    {cfg.label}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

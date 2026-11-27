@@ -5,12 +5,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { syncMidtransPaymentStatus, resumePendingMidtransPayment, cancelPendingMidtransPayment } from "@/server/payment";
 import { useMidtrans } from "@/hooks/useMidtrans";
 import { useSearchParams } from "@/lib/router-compat";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -18,22 +16,17 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { toast } from "sonner";
-import { Copy, Download, Loader2, CreditCard, XCircle } from "lucide-react";
+import { Ban, CheckCircle2, Clock, Copy, Download, History, Loader2, CreditCard, XCircle, type LucideIcon } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { PrintKuitansiGabungan } from "@/components/shared/PrintKuitansiGabungan";
 import { canDownloadReceipt, downloadReceiptPdf, type PortalReceipt } from "@/lib/receiptDownload";
 import { portalReceiptIdentity } from "@/lib/portalReceiptData";
 import { historyBillBalance, isPendingHistoryOutdated, type HistoryBillBalance } from "@/lib/paymentHistory";
+import { PortalHero } from "@/components/portal/PortalHero";
+import { labelMetode } from "@/lib/portalRiwayatLabel";
+import { cn } from "@/lib/utils";
 
 const formatRupiah = (n: number) =>
   new Intl.NumberFormat("id-ID", {
@@ -42,11 +35,12 @@ const formatRupiah = (n: number) =>
     minimumFractionDigits: 0,
   }).format(n);
 
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  paid: { label: "Pembayaran berhasil", variant: "default" },
-  pending: { label: "Menunggu", variant: "secondary" },
-  failed: { label: "Gagal", variant: "destructive" },
-  expired: { label: "Kedaluwarsa", variant: "outline" },
+// Status selalu berupa teks, bukan hanya warna.
+const statusConfig: Record<string, { label: string; icon: LucideIcon; tint: string }> = {
+  paid: { label: "Berhasil", icon: CheckCircle2, tint: "bg-emerald-100 text-emerald-800" },
+  pending: { label: "Menunggu", icon: Clock, tint: "bg-amber-100 text-amber-900" },
+  failed: { label: "Gagal", icon: XCircle, tint: "bg-red-100 text-red-800" },
+  expired: { label: "Kedaluwarsa", icon: Ban, tint: "bg-slate-200 text-slate-800" },
 };
 
 interface RiwayatItem {
@@ -328,166 +322,149 @@ export default function PortalRiwayat() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">
-          Riwayat Pembayaran
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Daftar seluruh transaksi pembayaran Anda, baik online maupun di kasir sekolah
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-3xl space-y-4 animate-fade-in">
+      <PortalHero
+        title="Riwayat Pembayaran"
+        subtitle="Semua pembayaran Anda, online maupun di kasir sekolah."
+        icon={History}
+      />
 
       {transaksi.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            Belum ada riwayat pembayaran
-          </CardContent>
-        </Card>
+        <p className="rounded-[1.125rem] border bg-card py-12 text-center text-sm text-muted-foreground shadow-sm">
+          Belum ada riwayat pembayaran
+        </p>
       ) : (
-        <Accordion type="single" collapsible defaultValue={highlightOrder || undefined}>
+        <Accordion type="single" collapsible defaultValue={highlightOrder || undefined} className="space-y-3">
           {transaksi.map((tx) => {
             const status = statusConfig[tx.status] || statusConfig.pending;
+            const StatusIcon = status.icon;
             const items = tx.items;
             const isHighlighted = tx.order_id === highlightOrder;
             const outdated = isPendingHistoryOutdated(tx.status, items);
+            const metode = labelMetode(tx.payment_type) || (tx.order_id ? "" : "Bayar di Kasir");
+            const bisaLanjut =
+              tx.status === "pending" && !outdated &&
+              !!tx.expired_at && new Date(tx.expired_at).getTime() > Date.now();
 
             return (
               <AccordionItem
                 key={tx.key}
                 value={tx.order_id || tx.key}
-                className={isHighlighted ? "ring-2 ring-emerald-500 rounded-lg" : ""}
+                className={cn(
+                  "overflow-hidden rounded-[1.125rem] border bg-card shadow-sm",
+                  isHighlighted && "ring-2 ring-emerald-500",
+                )}
               >
-                <Card className="mb-3">
-                  <AccordionTrigger className="px-5 py-4 hover:no-underline">
-                    <div className="flex min-w-0 flex-1 flex-col items-start justify-between gap-3 text-left sm:flex-row sm:items-center">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded">
-                            {tx.order_id || "Bayar di Kasir"}
-                          </span>
-                          {tx.order_id && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                copyOrderId(tx.order_id!);
-                              }}
-                              className="text-muted-foreground hover:text-foreground"
-                            >
-                              <Copy className="h-3 w-3" />
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {tx.tanggal &&
-                            format(
-                              new Date(tx.tanggal),
-                              "dd MMM yyyy HH:mm",
-                              { locale: idLocale }
-                            )}
-                          {tx.payment_type && (
-                            <Badge variant="outline" className="ml-2 text-[10px]">
-                              {tx.payment_type}
-                            </Badge>
-                          )}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <span className="font-semibold text-sm">
+                <AccordionTrigger className="gap-3 px-4 py-3.5 hover:no-underline">
+                  <span className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                    <span aria-hidden="true" className={cn("grid h-11 w-11 shrink-0 place-items-center rounded-2xl", status.tint)}>
+                      <StatusIcon className="h-[22px] w-[22px]" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="text-lg font-extrabold leading-tight tabular-nums">
                           {formatRupiah(tx.total_amount)}
                         </span>
-                        <Badge
-                          variant={status.variant}
-                          className={
-                            tx.status === "paid"
-                              ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                              : tx.status === "pending"
-                              ? "bg-amber-100 text-amber-800 border-amber-300"
-                              : ""
-                          }
-                        >
+                        <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold", status.tint)}>
                           {status.label}
-                        </Badge>
+                        </span>
+                      </span>
+                      <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                        {tx.tanggal && format(new Date(tx.tanggal), "dd MMM yyyy · HH.mm", { locale: idLocale })}
+                        {metode && ` · ${metode}`}
+                      </span>
+                      <span className="sr-only">{tx.order_id || "Bayar di Kasir"}</span>
+                    </span>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4">
+                  <div className="space-y-3 border-t pt-3">
+                    {tx.order_id && (
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                        <span>Nomor pesanan</span>
+                        <span className="rounded bg-muted px-2 py-0.5 font-mono text-xs text-foreground">
+                          {tx.order_id}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label="Salin nomor pesanan"
+                          onClick={() => copyOrderId(tx.order_id!)}
+                          className="grid h-11 w-11 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
                       </div>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-5 pb-4">
+                    )}
                     {outdated && (
-                      <p role="alert" className="mb-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                      <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                         Nominal transaksi lama ini sudah tidak sesuai dengan sisa tagihan atau tagihannya tidak dapat dibayar.
-                        Jangan membayar melalui transaksi ini. Buka menu Tagihan untuk melihat sisa terbaru.
+                        Jangan membayar melalui transaksi ini. Buka menu Biaya untuk melihat sisa terbaru.
                         Status pembayaran di Midtrans masih perlu dikonfirmasi.
                       </p>
                     )}
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Item</TableHead>
-                          <TableHead className="text-right">Jumlah transaksi</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {items.map((item) => (
-                          <TableRow key={item.id}>
-                            <TableCell className="text-sm">
-                              {item.nama_item}
-                              {item.balance && (
-                                <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                                  <p>Total tagihan: {formatRupiah(item.balance.nominal)}</p>
-                                  <p>Sudah dibayar: {formatRupiah(item.balance.paid)}</p>
-                                  <p className="font-medium text-foreground">
-                                    {item.balance.remaining === 0
-                                      ? "Tagihan lunas"
-                                      : `Sisa tagihan: ${formatRupiah(item.balance.remaining)}`}
-                                  </p>
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right text-sm">
+                    <ul className="space-y-2">
+                      {items.map((item) => (
+                        <li key={item.id} className="rounded-xl border bg-muted/40 px-3 py-2.5">
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="text-sm font-semibold leading-snug">{item.nama_item}</span>
+                            <span className="whitespace-nowrap text-sm font-bold tabular-nums">
                               {formatRupiah(item.jumlah)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                            </span>
+                          </div>
+                          {item.balance && (
+                            <div className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
+                              <p>Total tagihan: {formatRupiah(item.balance.nominal)}</p>
+                              <p>Sudah dibayar: {formatRupiah(item.balance.paid)}</p>
+                              <p className="font-medium text-foreground">
+                                {item.balance.remaining === 0
+                                  ? "Tagihan lunas"
+                                  : `Sisa tagihan: ${formatRupiah(item.balance.remaining)}`}
+                              </p>
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                     {items.some((item) => item.balance) && (
-                      <p className="mt-2 text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         Sisa tagihan di atas adalah kondisi saat ini, termasuk pembayaran setelah transaksi ini.
                       </p>
                     )}
+                    {bisaLanjut && (
+                      <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-[13px] leading-snug text-amber-900">
+                        {`Selesaikan sebelum ${format(new Date(tx.expired_at!), "dd MMM yyyy · HH.mm", { locale: idLocale })}.`}
+                      </p>
+                    )}
                     {tx.order_id && !tx.gateway_closed_at && tx.status !== "paid" && tx.has_snap_token && (
-                      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-                        {tx.status === "pending" && !outdated &&
-                          tx.expired_at && new Date(tx.expired_at).getTime() > Date.now() && (
-                          <Button size="sm" disabled={!!paymentAction} onClick={() => void lanjutkanPembayaran(tx)}>
+                      <div className="flex flex-col gap-2">
+                        {bisaLanjut && (
+                          <Button className="min-h-12 w-full rounded-xl bg-emerald-700 text-[15px] font-bold hover:bg-emerald-800" disabled={!!paymentAction} onClick={() => void lanjutkanPembayaran(tx)}>
                             {paymentAction === tx.order_id ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> :
                               <CreditCard className="mr-1.5 h-4 w-4" />}
                             Lanjutkan Pembayaran
                           </Button>
                         )}
-                        <Button variant="outline" size="sm" disabled={!!paymentAction} onClick={() => setCancelTarget(tx)}>
+                        <Button variant="outline" className="min-h-12 w-full rounded-xl text-[15px] font-semibold" disabled={!!paymentAction} onClick={() => setCancelTarget(tx)}>
                           <XCircle className="mr-1.5 h-4 w-4" />
                           Batalkan Pembayaran
                         </Button>
                       </div>
                     )}
                     {canDownloadReceipt(tx.status) && (
-                      <div className="mt-3 flex justify-end">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={!!downloadTarget}
-                          onClick={() => downloadKwitansi(tx)}
-                        >
-                          {downloadTarget?.key === tx.key
-                            ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                            : <Download className="mr-1.5 h-4 w-4" />}
-                          {downloadTarget?.key === tx.key ? "Menyiapkan PDF..." : "Download kwitansi"}
-                        </Button>
-                      </div>
+                      <Button
+                        variant="outline"
+                        className="min-h-12 w-full rounded-xl text-[15px] font-semibold"
+                        disabled={!!downloadTarget}
+                        onClick={() => downloadKwitansi(tx)}
+                      >
+                        {downloadTarget?.key === tx.key
+                          ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                          : <Download className="mr-1.5 h-4 w-4" />}
+                        {downloadTarget?.key === tx.key ? "Menyiapkan PDF..." : "Download kwitansi"}
+                      </Button>
                     )}
-                  </AccordionContent>
-                </Card>
+                  </div>
+                </AccordionContent>
               </AccordionItem>
             );
           })}

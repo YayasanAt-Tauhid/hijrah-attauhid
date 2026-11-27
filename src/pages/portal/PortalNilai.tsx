@@ -2,13 +2,15 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { GraduationCap } from "lucide-react";
+import { ChevronDown, GraduationCap } from "lucide-react";
+import { PortalHero } from "@/components/portal/PortalHero";
+import { AnakChips, AnakInfo } from "@/components/portal/AnakChips";
+import { formatRataRata, rataRataNilai } from "@/lib/portalAkademik";
+import { cn } from "@/lib/utils";
+
+const kartu = "rounded-[1.125rem] border bg-card shadow-sm";
+const NILAI_TUNTAS = 70;
 
 export default function PortalNilai() {
   const { user } = useAuth();
@@ -57,102 +59,95 @@ export default function PortalNilai() {
 
   const selectedAnak = anakList.find((a: any) => a.siswa_id === effectiveSiswa);
   const siswaInfo = selectedAnak?.siswa as any;
+  const pilihanAnak = anakList.map((a: any) => ({ id: a.siswa_id, nama: a.siswa?.nama ?? "-" }));
+  const periodeList = Object.entries(grouped) as [string, any[]][];
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Nilai Anak</h1>
-        <p className="text-sm text-muted-foreground">Lihat nilai akademik anak per semester</p>
-      </div>
+    <div className="mx-auto w-full max-w-3xl space-y-4 animate-fade-in">
+      <PortalHero
+        title="Nilai Anak"
+        subtitle="Nilai akademik anak per semester."
+        icon={GraduationCap}
+      />
 
-      {anakList.length > 1 && (
-        <div>
-          <Label>Pilih Anak</Label>
-          <Select value={effectiveSiswa} onValueChange={setSelectedSiswa}>
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Pilih anak" />
-            </SelectTrigger>
-            <SelectContent>
-              {anakList.map((a: any) => (
-                <SelectItem key={a.siswa_id} value={a.siswa_id}>
-                  {a.siswa?.nama}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {siswaInfo && (
-        <Card>
-          <CardContent className="p-4">
-            <p className="font-semibold">{siswaInfo.nama}</p>
-            <p className="text-sm text-muted-foreground">
-              NIS: {siswaInfo.nis || "-"}
-            </p>
-          </CardContent>
-        </Card>
+      {anakList.length > 1 ? (
+        <AnakChips anak={pilihanAnak} selectedId={effectiveSiswa} onSelect={setSelectedSiswa} />
+      ) : (
+        siswaInfo && <AnakInfo nama={siswaInfo.nama} nis={siswaInfo.nis} />
       )}
 
       {isLoading ? (
-        <div className="space-y-4">
-          {[1, 2].map((i) => <Skeleton key={i} className="h-48" />)}
+        <div className="space-y-3">
+          {[1, 2].map((i) => <Skeleton key={i} className="h-20 rounded-2xl" />)}
         </div>
-      ) : Object.keys(grouped).length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            Belum ada data nilai
-          </CardContent>
-        </Card>
+      ) : periodeList.length === 0 ? (
+        <p className={cn(kartu, "py-12 text-center text-sm text-muted-foreground")}>
+          Belum ada data nilai
+        </p>
       ) : (
-        Object.entries(grouped).map(([period, items]: [string, any]) => {
-          const avg = items.reduce((s: number, n: any) => s + (n.nilai || 0), 0) / items.length;
+        periodeList.map(([period, items], index) => {
+          const rata = formatRataRata(rataRataNilai(items.map((n) => n.nilai)));
           return (
-            <Card key={period}>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <GraduationCap className="h-4 w-4" />
-                    {period}
-                  </span>
-                  <Badge variant="secondary">
-                    Rata-rata: {avg.toFixed(1)}
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Mata Pelajaran</TableHead>
-                      <TableHead>Jenis Ujian</TableHead>
-                      <TableHead className="text-center">Nilai</TableHead>
-                      <TableHead>Keterangan</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {items.map((n: any) => (
-                      <TableRow key={n.id}>
-                        <TableCell className="font-medium">{n.mapel?.nama || "-"}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">
+            <details
+              key={`${effectiveSiswa}-${period}`}
+              open={index === 0}
+              className={cn(kartu, "group overflow-hidden")}
+            >
+              <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3.5 [&::-webkit-details-marker]:hidden">
+                <span
+                  aria-hidden="true"
+                  className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-emerald-700 text-[17px] font-extrabold tabular-nums text-white"
+                >
+                  {rata}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-extrabold leading-snug">{period}</span>
+                  <span className="block text-xs leading-snug text-muted-foreground">{`Rata-rata ${rata}`}</span>
+                </span>
+                <ChevronDown aria-hidden="true" className="h-6 w-6 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+              </summary>
+              <ul className="divide-y border-t">
+                {items.map((n: any) => {
+                  const ada = n.nilai !== null && n.nilai !== undefined;
+                  const tuntas = ada && n.nilai >= NILAI_TUNTAS;
+                  return (
+                    <li key={n.id} className="flex items-center gap-3 px-4 py-3">
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-bold leading-snug">
+                          {n.mapel?.nama || "-"}
+                          <span className="ml-2 inline-block rounded-full border px-2 align-[1px] text-[11px] font-semibold leading-relaxed text-muted-foreground">
                             {n.jenis_ujian || "-"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className={`font-bold ${(n.nilai || 0) >= 70 ? "text-emerald-600" : "text-destructive"}`}>
-                            {n.nilai ?? "-"}
                           </span>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {n.keterangan || "-"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                        </span>
+                        {n.keterangan && (
+                          <span className="block text-xs leading-snug text-muted-foreground">{n.keterangan}</span>
+                        )}
+                      </span>
+                      <span
+                        role="img"
+                        aria-label={
+                          !ada
+                            ? "Nilai belum tersedia"
+                            : tuntas
+                              ? `Nilai ${n.nilai}`
+                              : `Nilai ${n.nilai}, di bawah ${NILAI_TUNTAS}`
+                        }
+                        className={cn(
+                          "min-w-12 shrink-0 rounded-xl px-2 py-1.5 text-center text-xl font-extrabold leading-none tabular-nums",
+                          !ada
+                            ? "bg-muted text-muted-foreground"
+                            : tuntas
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-red-100 text-red-800",
+                        )}
+                      >
+                        {ada ? n.nilai : "-"}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </details>
           );
         })
       )}

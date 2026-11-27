@@ -2,8 +2,9 @@ import { Outlet, useNavigate, useLocation } from "@/lib/router-compat";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, LogOut, User, KeyRound, Home, FileText, CreditCard, History, CalendarDays, GraduationCap } from "lucide-react";
+import { Bell, LogOut, User, KeyRound, Home, Wallet, History, CalendarDays, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +19,7 @@ import { BrandLogo } from "@/components/shared/BrandLogo";
 
 const navItems = [
   { label: "Beranda", href: "/portal", icon: Home },
-  { label: "Tagihan", href: "/portal/tagihan", icon: FileText },
+  { label: "Biaya", href: "/portal/tagihan", icon: Wallet },
   { label: "Riwayat", href: "/portal/pembayaran", icon: History },
   { label: "Presensi", href: "/portal/presensi", icon: CalendarDays },
   { label: "Nilai", href: "/portal/nilai", icon: GraduationCap },
@@ -87,36 +88,49 @@ export default function PortalLayout() {
     navigate("/portal/login");
   };
 
+  const inisial = user?.email?.charAt(0).toUpperCase() || "U";
+
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-[#f4f7f5] dark:bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-emerald-700 text-white shadow-md">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
+      <header className="sticky top-0 z-50 bg-[#0f3d2e] text-white shadow-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 pb-2 pt-3 xl:h-16 xl:py-0">
           {/* Left */}
-          <div
-            className="flex items-center gap-2 cursor-pointer"
+          <button
+            type="button"
+            aria-label="Ke beranda portal"
+            className="flex min-w-0 items-center gap-2.5 rounded-lg text-left"
             onClick={() => navigate("/portal")}
           >
-            <BrandLogo className="h-9 w-9 rounded-lg bg-white" />
-            <span className="font-semibold text-sm hidden sm:inline">
-              Hijrah At-Tauhid <span className="font-normal opacity-80">| Portal Orang Tua</span>
+            <BrandLogo className="h-9 w-9 rounded-[10px] bg-white" />
+            <span className="min-w-0">
+              <span className="block text-sm font-bold leading-tight">Hijrah At-Tauhid</span>
+              <span className="block text-[11px] leading-tight text-emerald-200/80">Portal Orang Tua</span>
             </span>
-          </div>
+          </button>
 
-          {/* Center Nav */}
-          <nav className="hidden xl:flex items-center gap-1">
-            {navItems.map((item) => (
-              <Button
-                key={item.href}
-                variant="ghost"
-                size="sm"
-                className="text-white/90 hover:text-white hover:bg-white/10"
-                onClick={() => navigate(item.href)}
-              >
-                <item.icon className="h-4 w-4 mr-1.5" />
-                {item.label}
-              </Button>
-            ))}
+          {/* Center Nav (layar lebar) */}
+          <nav aria-label="Menu utama" className="hidden items-center gap-1 xl:flex">
+            {navItems.map((item) => {
+              const aktif = isActive(item.href);
+              return (
+                <button
+                  key={item.href}
+                  type="button"
+                  aria-current={aktif ? "page" : undefined}
+                  onClick={() => navigate(item.href)}
+                  className={cn(
+                    "flex h-10 items-center gap-1.5 rounded-xl px-3 text-sm transition-colors",
+                    aktif
+                      ? "bg-white font-bold text-emerald-800"
+                      : "font-semibold text-[#bfe3d1] hover:bg-white/10 hover:text-white",
+                  )}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </button>
+              );
+            })}
           </nav>
 
           {/* Right */}
@@ -127,13 +141,17 @@ export default function PortalLayout() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="relative text-white hover:bg-white/10"
+                  aria-label={unreadCount > 0 ? `Notifikasi, ${unreadCount} belum dibaca` : "Notifikasi"}
+                  className="relative h-11 w-11 rounded-xl bg-white/10 text-white hover:bg-white/20 hover:text-white"
                 >
                   <Bell className="h-5 w-5" />
                   {unreadCount > 0 && (
-                    <Badge className="absolute -top-1 -right-1 h-5 min-w-5 bg-red-500 text-[10px] px-1 border-0">
+                    <span
+                      aria-hidden="true"
+                      className="absolute right-1 top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white"
+                    >
                       {unreadCount > 9 ? "9+" : unreadCount}
-                    </Badge>
+                    </span>
                   )}
                 </Button>
               </DropdownMenuTrigger>
@@ -178,20 +196,19 @@ export default function PortalLayout() {
             {/* User Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-white hover:bg-white/10 gap-2"
+                <button
+                  type="button"
+                  aria-label="Menu akun"
+                  className="grid h-11 w-11 place-items-center rounded-full bg-emerald-400 text-[15px] font-extrabold text-emerald-950 hover:bg-emerald-300"
                 >
-                  <div className="h-7 w-7 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold">
-                    {user?.email?.charAt(0).toUpperCase() || "U"}
-                  </div>
-                  <span className="hidden sm:inline text-sm max-w-[120px] truncate">
-                    {user?.email?.split("@")[0]}
-                  </span>
-                </Button>
+                  {inisial}
+                </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <div className="max-w-[16rem] truncate px-2 py-1.5 text-xs text-muted-foreground">
+                  {user?.email}
+                </div>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate("/portal/profil")}>
                   <User className="h-4 w-4 mr-2" />
                   Profil Saya
@@ -211,20 +228,30 @@ export default function PortalLayout() {
         </div>
 
         {/* Mobile Nav */}
-        <nav className="xl:hidden grid grid-cols-6 items-center gap-1 border-t border-white/20 px-1 py-1">
-          {navItems.map((item) => (
-            <Button
-              key={item.href}
-              variant="ghost"
-              size="sm"
-              aria-current={isActive(item.href) ? "page" : undefined}
-              className={`min-w-0 text-white/80 hover:text-white hover:bg-white/10 flex-col h-auto px-1 py-1 gap-0.5 text-[10px] ${isActive(item.href) ? "bg-white/10 text-white" : ""}`}
-              onClick={() => navigate(item.href)}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </Button>
-          ))}
+        <nav
+          aria-label="Menu utama (ponsel)"
+          className="mx-auto grid max-w-7xl grid-cols-6 gap-0.5 px-2 pb-2.5 xl:hidden"
+        >
+          {navItems.map((item) => {
+            const aktif = isActive(item.href);
+            return (
+              <button
+                key={item.href}
+                type="button"
+                aria-current={aktif ? "page" : undefined}
+                onClick={() => navigate(item.href)}
+                className={cn(
+                  "flex min-h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-[14px] px-0.5 py-1 text-[11px] transition-colors",
+                  aktif
+                    ? "bg-white font-bold text-emerald-800"
+                    : "font-semibold text-[#bfe3d1] hover:bg-white/10 hover:text-white",
+                )}
+              >
+                <item.icon className="h-5 w-5" />
+                {item.label}
+              </button>
+            );
+          })}
         </nav>
       </header>
 

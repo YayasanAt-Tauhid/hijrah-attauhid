@@ -10,6 +10,8 @@ import { RupiahInput } from "@/components/shared/RupiahInput";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { ChevronDown, GraduationCap } from "lucide-react";
+import { PortalHero } from "@/components/portal/PortalHero";
+import { inisialNama, labelKelas } from "@/lib/portalAnak";
 import { BULAN_ORDER_AKADEMIK } from "@/hooks/useKeuangan";
 import { isUangPangkalPaymentName } from "@/lib/installment";
 import {
@@ -48,25 +50,6 @@ function labelBulanTA(bulan: number, tahunAjaranMulai: string): string {
   if (!tahunAjaranMulai || Number.isNaN(tahunMulai)) return nama;
   const tahunKalender = bulan >= 7 ? tahunMulai : tahunMulai + 1;
   return `${nama} ${tahunKalender}`;
-}
-
-// Dua huruf awal nama untuk lingkaran inisial pada kartu anak.
-function inisialNama(nama: string): string {
-  return nama
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((kata) => kata.charAt(0))
-    .join("")
-    .toUpperCase();
-}
-
-// Kelas ditampilkan di sebelah nama; kata "Kelas" tidak diulang bila data
-// sudah memuatnya.
-function labelKelas(kelas: string | null | undefined): string {
-  const nilai = (kelas ?? "").trim();
-  if (!nilai) return "";
-  return /^kelas\b/i.test(nilai) ? nilai : `Kelas ${nilai}`;
 }
 
 const formatRupiah = (n: number) =>
@@ -518,32 +501,12 @@ export default function PortalTagihan() {
 
   return (
     <div className={`animate-fade-in ${tagihan.length > 0 ? "pb-32 md:pb-0" : ""}`}>
-      <div className="relative overflow-hidden rounded-3xl bg-emerald-700 px-5 pb-14 pt-6 text-white shadow-sm">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-9 -top-11 h-36 w-36 rounded-full bg-white/10"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-16 right-14 h-28 w-28 rounded-full bg-white/[0.06]"
-        />
-        <div className="relative flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-[26px] font-extrabold leading-tight tracking-tight">
-              Biaya Pendidikan
-            </h1>
-            <p className="mt-2 text-sm leading-snug text-emerald-50/90">
-              Pilih biaya yang mau dibayar, lalu lanjut ke pembayaran.
-            </p>
-          </div>
-          <span
-            aria-hidden="true"
-            className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/15"
-          >
-            <GraduationCap className="h-6 w-6" />
-          </span>
-        </div>
-      </div>
+      <PortalHero
+        title="Biaya Pendidikan"
+        subtitle="Pilih biaya yang mau dibayar, lalu lanjut ke pembayaran."
+        icon={GraduationCap}
+        className="pb-14"
+      />
 
       <div className="relative -mt-10 px-1 sm:px-3">
         {tagihan.length === 0 ? (

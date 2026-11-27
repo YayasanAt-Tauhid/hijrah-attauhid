@@ -83,3 +83,23 @@ describe("Portal receipt eligibility", () => {
     open.mockRestore();
   });
 });
+
+describe("Portal riwayat tampilan", () => {
+  it("memakai judul, subjudul, dan label status yang ringkas", () => {
+    render(<PortalRiwayat />);
+    expect(screen.getByRole("heading", { level: 1, name: "Riwayat Pembayaran" })).toBeInTheDocument();
+    expect(screen.getByText("Semua pembayaran Anda, online maupun di kasir sekolah.")).toBeInTheDocument();
+    for (const label of ["Berhasil", "Menunggu", "Gagal", "Kedaluwarsa"]) {
+      expect(screen.getAllByText(label)).toHaveLength(1);
+    }
+    expect(screen.queryByText("Pembayaran berhasil")).not.toBeInTheDocument();
+  });
+
+  it("nominal transaksi tampil pada tiap kartu dan nomor pesanan tetap ada di pemicu", () => {
+    render(<PortalRiwayat />);
+    const pemicu = screen.getByRole("button", { name: /ORDER-paid/ });
+    expect(pemicu).toHaveTextContent(/450\.000/);
+    expect(pemicu).toHaveTextContent("Berhasil");
+  });
+});
+
