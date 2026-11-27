@@ -211,72 +211,6 @@ export default function PortalProfil() {
         </TabsList>
 
         <TabsContent value="profil" className="space-y-4 mt-4">
-          <section aria-labelledby="profil-akun" className={kartu}>
-            <h2 id="profil-akun" className="px-4 pb-3 pt-3.5 text-base font-extrabold">Informasi akun</h2>
-            <dl className="divide-y border-t">
-              <div className="px-4 py-3">
-                <dt className="text-xs font-semibold text-muted-foreground">Nama</dt>
-                <dd className="mt-0.5 text-[15px] font-semibold">
-                  {namaOrtu || (
-                    <span className="font-normal italic text-muted-foreground">
-                      Belum ada data nama — lengkapi data orang tua/wali di formulir siswa
-                    </span>
-                  )}
-                </dd>
-              </div>
-              <div className="px-4 py-3">
-                <dt className="text-xs font-semibold text-muted-foreground">Email</dt>
-                <dd className="mt-0.5 break-all text-[15px] font-semibold">{profile?.email || user?.email}</dd>
-              </div>
-            </dl>
-          </section>
-
-          <section aria-labelledby="profil-anak" className={kartu}>
-            <h2 id="profil-anak" className="px-4 pb-3 pt-3.5 text-base font-extrabold">Anak yang terhubung</h2>
-            {anakList.length === 0 ? (
-              <p className="border-t px-4 py-4 text-sm text-muted-foreground">Belum ada anak yang terhubung</p>
-            ) : (
-              <ul className="divide-y border-t">
-                {anakList.map((item: any, idx: number) => {
-                  const siswa = item.siswa;
-                  const ak = siswa?.kelas_siswa?.find((ks: any) => ks.aktif);
-                  const kelas = labelKelas(ak?.kelas?.nama);
-                  return (
-                    <li key={idx} className="flex items-center gap-3 px-4 py-3">
-                      <span
-                        aria-hidden="true"
-                        className={cn(
-                          "grid h-11 w-11 shrink-0 place-items-center rounded-full text-[15px] font-bold text-white",
-                          idx % 2 === 0 ? "bg-emerald-700" : "bg-teal-700",
-                        )}
-                      >
-                        {inisialNama(siswa?.nama || "")}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="break-words text-[15px] font-bold leading-normal">
-                          {siswa?.nama}
-                          {kelas && (
-                            <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-emerald-100 px-2.5 align-[1px] text-xs font-semibold leading-normal text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
-                              {kelas}
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-xs leading-snug text-muted-foreground">
-                          {`${ak?.kelas?.departemen?.nama || "-"} · NIS ${siswa?.nis || "-"}`}
-                        </p>
-                      </div>
-                      {item.hubungan && (
-                        <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold text-foreground">
-                          {labelHubungan(item.hubungan)}
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-
           <section aria-labelledby="profil-hubungkan" className={kartu}>
             <div className="flex items-center gap-3 p-4">
               <span aria-hidden="true" className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-emerald-100 text-emerald-700">
@@ -397,6 +331,72 @@ export default function PortalProfil() {
                 </form>
               </Form>
               </div>
+            )}
+          </section>
+
+          <section aria-labelledby="profil-akun" className={kartu}>
+            <h2 id="profil-akun" className="px-4 pb-3 pt-3.5 text-base font-extrabold">Informasi akun</h2>
+            <dl className="divide-y border-t">
+              <div className="px-4 py-3">
+                <dt className="text-xs font-semibold text-muted-foreground">Nama</dt>
+                <dd className="mt-0.5 text-[15px] font-semibold">
+                  {namaOrtu || (
+                    <span className="font-normal italic text-muted-foreground">
+                      Belum ada data nama — lengkapi data orang tua/wali di formulir siswa
+                    </span>
+                  )}
+                </dd>
+              </div>
+              <div className="px-4 py-3">
+                <dt className="text-xs font-semibold text-muted-foreground">Email</dt>
+                <dd className="mt-0.5 break-all text-[15px] font-semibold">{profile?.email || user?.email}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section aria-labelledby="profil-anak" className={kartu}>
+            <h2 id="profil-anak" className="px-4 pb-3 pt-3.5 text-base font-extrabold">Anak yang terhubung</h2>
+            {anakList.length === 0 ? (
+              <p className="border-t px-4 py-4 text-sm text-muted-foreground">Belum ada anak yang terhubung</p>
+            ) : (
+              <ul className="divide-y border-t">
+                {anakList.map((item: any, idx: number) => {
+                  const siswa = item.siswa;
+                  const ak = siswa?.kelas_siswa?.find((ks: any) => ks.aktif);
+                  const kelas = labelKelas(ak?.kelas?.nama);
+                  return (
+                    <li key={idx} className="flex items-center gap-3 px-4 py-3">
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "grid h-11 w-11 shrink-0 place-items-center rounded-full text-[15px] font-bold text-white",
+                          idx % 2 === 0 ? "bg-emerald-700" : "bg-teal-700",
+                        )}
+                      >
+                        {inisialNama(siswa?.nama || "")}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words text-[15px] font-bold leading-normal">
+                          {siswa?.nama}
+                          {kelas && (
+                            <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-emerald-100 px-2.5 align-[1px] text-xs font-semibold leading-normal text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
+                              {kelas}
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs leading-snug text-muted-foreground">
+                          {`${ak?.kelas?.departemen?.nama || "-"} · NIS ${siswa?.nis || "-"}`}
+                        </p>
+                      </div>
+                      {item.hubungan && (
+                        <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold text-foreground">
+                          {labelHubungan(item.hubungan)}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </section>
         </TabsContent>

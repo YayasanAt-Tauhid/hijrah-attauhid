@@ -78,6 +78,14 @@ describe("Profil orang tua", () => {
     expect(screen.getByRole("button", { name: "Hubungkan Anak" })).toBeInTheDocument();
   });
 
+  it("bagian Hubungkan anak lain berada paling atas, sebelum Informasi akun dan Anak yang terhubung", () => {
+    render(<PortalProfil />);
+    const urutan = screen
+      .getAllByRole("region")
+      .map((bagian) => within(bagian).getByRole("heading", { level: 2 }).textContent);
+    expect(urutan).toEqual(["Hubungkan anak lain", "Informasi akun", "Anak yang terhubung"]);
+  });
+
   it("tab Keamanan memuat formulir ganti password", () => {
     render(<PortalProfil />);
     const tabKeamanan = screen.getByRole("tab", { name: "Keamanan" });

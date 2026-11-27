@@ -1,3 +1,10 @@
+# Catatan Sesi — Profil: "Hubungkan anak lain" dipindah ke atas (27 November 2026)
+
+- **Permintaan user:** di `/portal/profil`, bagian "Hubungkan anak lain" dipindah ke atas, jangan paling bawah. Rancangan disajikan dulu (usulan: paling atas; alternatif: tepat di atas "Anak yang terhubung"); user menjawab "iya", dipakai usulan utama.
+- **Hasil:** urutan tab Profil kini Hubungkan anak lain, Informasi akun, Anak yang terhubung. Isi bagian dan logika form (tombol Tambah/Tutup) tidak berubah; hanya blok `<section>` dipindah.
+- **Tes:** 1 tes baru urutan bagian (merah lalu hijau) di `PortalProfil.test.tsx`. Suite penuh 240 berkas, 2104 tes lulus; eslint `PortalProfil.tsx` tetap 4 error `any` lama (tidak ada yang baru); tsc 189 galat identik baseline.
+- **Belum diverifikasi:** tampilan di browser dengan data produksi.
+
 # Catatan Sesi — Biaya Pendidikan: kartu anak tertutup dan tombol mata (27 November 2026)
 
 - **Permintaan user:** di `/portal/tagihan`, tombol "Lihat biaya pendidikan sampai akhir tahun ajaran" diganti tombol mata "Sampai akhir tahun ajaran", dan biaya tidak langsung terbuka: tampil setelah orang tua mengetuk nama anak. Rancangan disajikan dulu, user menyetujui ("terapkan ke produksi dan push ke main").
