@@ -33,7 +33,15 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const LIHAT_SELANJUTNYA = /Lihat biaya pendidikan sampai akhir tahun ajaran/;
+const LIHAT_SELANJUTNYA = /^Sampai akhir tahun ajaran$/;
+// Kartu anak tertutup sejak awal; tes di bawah yang menguji isi kartu membukanya dulu.
+const renderTerbuka = () => {
+  const hasil = render(<PortalTagihan />);
+  screen
+    .queryAllByRole("button", { name: /^Buka biaya pendidikan / })
+    .forEach((tombol) => fireEvent.click(tombol));
+  return hasil;
+};
 const lihatSelanjutnya = (index = 0) =>
   fireEvent.click(screen.getAllByRole("button", { name: LIHAT_SELANJUTNYA })[index]);
 const pilihSemua = (nama: string) =>
@@ -42,7 +50,7 @@ const tombolLanjut = () => screen.getByRole("button", { name: /Lanjut ke Pembaya
 
 describe("PortalTagihan layout and copy", () => {
   it("uses the Biaya Pendidikan wording and drops totals, due dates and the late badge", () => {
-    render(<PortalTagihan />);
+    renderTerbuka();
     expect(screen.getByRole("heading", { level: 1, name: "Biaya Pendidikan" })).toBeInTheDocument();
     expect(screen.queryByText(/Total tersedia/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Perlu dibayar sekarang/)).not.toBeInTheDocument();
@@ -55,7 +63,7 @@ describe("PortalTagihan layout and copy", () => {
   it("puts the class beside the student name and does not repeat the word Kelas", () => {
     mocks.rows[0].kelas_nama = "Kelas 9C";
     try {
-      render(<PortalTagihan />);
+      renderTerbuka();
       expect(screen.getByText("Kelas 9C")).toBeInTheDocument();
       expect(screen.queryByText("Kelas Kelas 9C")).not.toBeInTheDocument();
       expect(screen.getByText("Kelas 5C")).toBeInTheDocument();
@@ -66,7 +74,7 @@ describe("PortalTagihan layout and copy", () => {
   });
 
   it("shows arrears and bills due this month first and keeps later bills behind a per-child button", () => {
-    render(<PortalTagihan />);
+    renderTerbuka();
     expect(screen.getByRole("checkbox", { name: /Pilih SPP SMP/ })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /Pilih SPP SD November 2026/ })).toBeInTheDocument();
@@ -85,7 +93,7 @@ describe("PortalTagihan layout and copy", () => {
     );
 
     try {
-      render(<PortalTagihan />);
+      renderTerbuka();
       expect(screen.getByText("Anak Pertama")).toBeInTheDocument();
       expect(screen.getByText("Belum ada biaya yang jatuh tempo.")).toBeInTheDocument();
       expect(screen.queryByRole("checkbox", { name: /Pilih SPP SMP/ })).not.toBeInTheDocument();
@@ -99,7 +107,7 @@ describe("PortalTagihan layout and copy", () => {
   it("says plainly when there is nothing to pay", () => {
     const original = mocks.rows.splice(0);
     try {
-      render(<PortalTagihan />);
+      renderTerbuka();
       expect(screen.getByText(/Tidak ada biaya pendidikan yang belum dibayar/)).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /Lanjut ke Pembayaran/ })).not.toBeInTheDocument();
     } finally {
@@ -110,7 +118,7 @@ describe("PortalTagihan layout and copy", () => {
 
 describe("PortalTagihan selection and installment checkout", () => {
   it("keeps the checkout action visible but disabled before a bill is selected", () => {
-    render(<PortalTagihan />);
+    renderTerbuka();
     expect(screen.getByText("Belum ada biaya dipilih")).toBeInTheDocument();
     expect(tombolLanjut()).toBeDisabled();
 
@@ -129,7 +137,7 @@ describe("PortalTagihan selection and installment checkout", () => {
     });
 
     try {
-      render(<PortalTagihan />);
+      renderTerbuka();
       lihatSelanjutnya(0);
       fireEvent.click(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ }));
       expect(screen.getByLabelText("Bayar cicilan")).toHaveValue("1.500.000");
@@ -141,7 +149,7 @@ describe("PortalTagihan selection and installment checkout", () => {
   });
 
   it("keeps formatted installment amounts and selected items intact in the cart", () => {
-    render(<PortalTagihan />);
+    renderTerbuka();
     expect(screen.queryByLabelText("Bayar cicilan")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: /Pilih SPP SMP/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ }));
@@ -157,7 +165,7 @@ describe("PortalTagihan selection and installment checkout", () => {
   });
 
   it("selects each child's bills independently with the select-all checkbox", () => {
-    render(<PortalTagihan />);
+    renderTerbuka();
     expect(pilihSemua("Anak Pertama")).not.toBeChecked();
 
     fireEvent.click(pilihSemua("Anak Pertama"));
@@ -182,7 +190,7 @@ describe("PortalTagihan selection and installment checkout", () => {
   });
 
   it("only selects the bills that are shown and picks up later bills once they are opened", () => {
-    render(<PortalTagihan />);
+    renderTerbuka();
     fireEvent.click(pilihSemua("Anak Kedua"));
     expect(screen.getByRole("checkbox", { name: /Pilih SPP SD November 2026/ })).toBeChecked();
     expect(screen.getByText("Dipilih: 1 biaya · 1 anak")).toBeInTheDocument();
@@ -198,7 +206,7 @@ describe("PortalTagihan selection and installment checkout", () => {
   });
 
   it("preserves an installment amount when the bill is selected again", () => {
-    render(<PortalTagihan />);
+    renderTerbuka();
     fireEvent.click(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ }));
     fireEvent.change(screen.getByLabelText("Bayar cicilan"), { target: { value: "250.000" } });
     fireEvent.click(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ }));
@@ -208,7 +216,7 @@ describe("PortalTagihan selection and installment checkout", () => {
   });
 
   it("locks a month until the earlier month is selected and releases later months together", () => {
-    render(<PortalTagihan />);
+    renderTerbuka();
     lihatSelanjutnya();
     const november = screen.getByRole("checkbox", { name: /SPP SD November 2026/ });
     const january = screen.getByRole("checkbox", { name: /SPP SD Januari 2027/ });
@@ -247,7 +255,7 @@ describe("PortalTagihan selection and installment checkout", () => {
     });
 
     try {
-      render(<PortalTagihan />);
+      renderTerbuka();
       lihatSelanjutnya(0);
       const january = screen.getByRole("checkbox", { name: /SPP SMP Januari 2027/ });
       expect(january).toBeDisabled();
@@ -261,11 +269,57 @@ describe("PortalTagihan selection and installment checkout", () => {
   });
 
   it("does not proceed to checkout with a zero installment", () => {
-    render(<PortalTagihan />);
+    renderTerbuka();
     fireEvent.click(screen.getByRole("checkbox", { name: /Pilih UANG PANGKAL SMP/ }));
     fireEvent.change(screen.getByLabelText("Bayar cicilan"), { target: { value: "" } });
     fireEvent.click(tombolLanjut());
     expect(sessionStorage.getItem("keranjang_tagihan")).toBeNull();
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe("PortalTagihan kartu anak tertutup", () => {
+  const triggerAnak = (nama: string) =>
+    screen.getByRole("button", { name: new RegExp(`Buka biaya pendidikan ${nama}`) });
+
+  it("keeps every child's card closed until the parent taps the name", () => {
+    render(<PortalTagihan />);
+    expect(triggerAnak("Anak Pertama")).toHaveAttribute("aria-expanded", "false");
+    expect(triggerAnak("Anak Kedua")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("checkbox", { name: /Pilih SPP SMP/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Pilih SPP SD November 2026/ })).not.toBeInTheDocument();
+
+    fireEvent.click(triggerAnak("Anak Pertama"));
+    expect(triggerAnak("Anak Pertama")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("checkbox", { name: /Pilih SPP SMP/ })).toBeInTheDocument();
+    // Anak lain tetap tertutup.
+    expect(screen.queryByRole("checkbox", { name: /Pilih SPP SD November 2026/ })).not.toBeInTheDocument();
+  });
+
+  it("names the later-bills toggle 'Sampai akhir tahun ajaran' with an eye icon and keeps it hidden by default", () => {
+    render(<PortalTagihan />);
+    fireEvent.click(triggerAnak("Anak Kedua"));
+
+    const tombol = screen.getByRole("button", { name: "Sampai akhir tahun ajaran" });
+    expect(tombol).toHaveAttribute("aria-expanded", "false");
+    expect(tombol.querySelector("svg.lucide-eye")).not.toBeNull();
+    expect(screen.queryByText(/Lihat biaya pendidikan/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /SPP SD Januari 2027/ })).not.toBeInTheDocument();
+
+    fireEvent.click(tombol);
+    expect(tombol).toHaveAttribute("aria-expanded", "true");
+    expect(tombol.querySelector("svg.lucide-eye-off")).not.toBeNull();
+    expect(screen.getByRole("checkbox", { name: /SPP SD Januari 2027/ })).toBeInTheDocument();
+  });
+
+  it("still shows how many bills are selected on a closed card", () => {
+    render(<PortalTagihan />);
+    fireEvent.click(triggerAnak("Anak Kedua"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Pilih SPP SD November 2026/ }));
+    fireEvent.click(triggerAnak("Anak Kedua"));
+
+    expect(triggerAnak("Anak Kedua")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("1 dipilih")).toBeInTheDocument();
+    expect(screen.getByText(/Dipilih: 1 biaya · 1 anak/)).toBeInTheDocument();
   });
 });
